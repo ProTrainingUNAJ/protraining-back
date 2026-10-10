@@ -10,7 +10,9 @@
 | Seguimiento | `services/seguimiento` | 8084 | `seguimiento` (5436) |
 | Asistente | `services/asistente` | 8085 | `asistente` (5437) |
 
-Adentro de Docker, todos los servicios escuchan en el **8080**.
+Adelante está el **gateway** (`gateway/`, YARP) en el puerto **8000**: es la única entrada para el front.
+
+Adentro de Docker, todos los servicios y el gateway escuchan en el **8080**.
 
 Cada servicio tiene la misma estructura en capas (`Domain`, `Application`, `Infrastructure`, `API`) y ya trae:
 - `GET /health`: chequea la conexión a su base (200 si está bien, 503 si no). Lo usan el compose y el CI. `GET /api/health` sigue andando y devuelve el detalle en JSON.
@@ -31,10 +33,11 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Levanta los 5 servicios y sus 5 bases. Cada servicio espera a que su base esté sana, y si uno se cae, los demás siguen andando. Para probar:
+Levanta el gateway, los 5 servicios y sus 5 bases. Cada servicio espera a que su base esté sana, y si uno se cae, los demás siguen andando. Para probar:
 
 ```bash
-curl http://localhost:8082/health
+curl http://localhost:8082/health                     # Estructura directo
+curl http://localhost:8000/estructura/api/athletes   # Estructura por el gateway
 ```
 
 Para sumar el front (tiene que estar clonado al lado, en `../protraining-front`), queda en `http://localhost:3000`:
@@ -52,6 +55,27 @@ docker compose up -d --build estructura  # reconstruir un solo servicio
 docker compose down                      # bajar todo (los datos quedan en los volúmenes)
 docker compose down -v                   # bajar todo y borrar las bases
 ```
+
+## Gateway
+
+`gateway/` es un proxy con YARP. Sólo reparte los pedidos y resuelve CORS; **no valida tokens** (eso lo hace cada servicio).
+
+| Ruta en el gateway | Va a |
+|---|---|
+| `/identidad/...` | Identidad (`/...`) |
+| `/estructura/...` | Estructura |
+| `/entrenamiento/...` | Entrenamiento |
+| `/seguimiento/...` | Seguimiento |
+| `/asistente/...` | Asistente |
+
+Le saca el prefijo: `localhost:8000/estructura/api/athletes` llega a Estructura como `/api/athletes`. Las rutas están en `gateway/appsettings.json`.
+
+- **CORS en un solo lugar**: lo resuelve el gateway, y no le pasa el header `Origin` a los servicios, así no se duplican los permisos.
+- **`X-Correlation-Id`**: si el pedido no lo trae, el gateway lo genera y se lo pasa al servicio. El mismo id aparece en los logs de los dos.
+- **Si el gateway se cae**, cada servicio sigue respondiendo directo en su puerto (8081-8085). Si se cae un servicio, sólo falla su ruta (502).
+- `GET /health` del gateway dice si el gateway está vivo.
+
+El front llama a `/api/<servicio>/...` y su nginx (o el Vite en desarrollo) le saca el `/api` y se lo pasa al gateway. Ejemplo: `/api/estructura/api/athletes` → gateway `/estructura/api/athletes` → Estructura `/api/athletes`.
 
 ## Correr un servicio con `dotnet run`
 
@@ -149,4 +173,5 @@ Reglas:
 
 1. Copiá `services/identidad` (es el más limpio) a `services/<servicio>` y renombrá el `.slnx`.
 2. Sumá al `docker-compose.yml` su base `db-<servicio>` con su volumen y el servicio con su `Database__Host`, `Database__Name`, su puerto y el `depends_on`.
-3. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/health`.
+3. Sumá su ruta y su cluster en `gateway/appsettings.json`, y el servicio a la lista del CI (`.github/workflows/ci.yml`).
+4. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/health`.

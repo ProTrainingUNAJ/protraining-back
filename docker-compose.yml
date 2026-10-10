@@ -135,6 +135,18 @@ services:
     depends_on:
       db-asistente: { condition: service_healthy }
 
+  # ---------- Gateway ----------
+  # Única entrada para el front: /identidad, /estructura, /entrenamiento, /seguimiento, /asistente.
+  # No depende de los servicios: si uno está caído, sólo falla su ruta.
+  gateway:
+    <<: *api
+    build: gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:3000
+    ports: ["8000:8080"]
+
   # ---------- Front (opcional: docker compose --profile front up) ----------
   front:
     profiles: [front]
