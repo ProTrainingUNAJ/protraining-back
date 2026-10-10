@@ -7,3 +7,4 @@ obj/
 .vscode/
 appsettings.Development.json
 *.db
+.env
