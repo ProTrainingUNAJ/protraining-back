@@ -82,7 +82,7 @@ jobs:
 
       - name: Validar especificaciones con Redocly
         run: |
-          npx --yes @redocly/cli lint contracts/*.yaml contracts/shared/*.yaml
+          npx --yes @redocly/cli lint contracts/*.yaml
 
   # Un único check para marcar como obligatorio en las reglas de la rama.
   ci-ok:

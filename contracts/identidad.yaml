@@ -267,7 +267,8 @@ components:
           type: string
           format: uuid
           nullable: true
-          example: null
+          description: Si el rol es Atleta, contiene su ID.
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 
     ConsentimientoTutorRequest:
       type: object
@@ -351,7 +352,8 @@ components:
           type: string
           format: uuid
           nullable: true
-          example: null
+          description: Si el rol es Atleta, contiene su ID.
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 
     ProblemDetails:
       type: object

@@ -279,7 +279,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          example: null
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 
     # -------------------------------------------------------------------------
     # 5. CHECK-IN (BIENESTAR DIARIO Y SEMÁFORO)
@@ -321,7 +321,7 @@ components:
           type: string
           nullable: true
           description: Justificación resumida si el semáforo está en Amarillo o Rojo.
-          example: null
+          example: "Sin alertas de sobrecarga"
         nivelEsfuerzo:
           type: integer
           minimum: 1
@@ -372,7 +372,7 @@ components:
           type: string
           nullable: true
           description: Zonas anatómicas seleccionadas en el mapa corporal si hay dolor.
-          example: null
+          example: "Isquiotibial derecho"
 
     # -------------------------------------------------------------------------
     # ESQUEMA ESTÁNDAR DE ERROR (RFC 7807 - ProblemDetails)

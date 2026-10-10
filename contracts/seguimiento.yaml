@@ -395,7 +395,7 @@ components:
         zonasDolor:
           type: string
           nullable: true
-          example: null
+          example: "Isquiotibial derecho"
 
     CheckInResponse:
       type: object
@@ -414,7 +414,7 @@ components:
         motivoSemaforo:
           type: string
           nullable: true
-          example: null
+          example: "Sin alertas de sobrecarga"
         checkIn:
           $ref: '#/components/schemas/CheckIn'
 
@@ -452,7 +452,7 @@ components:
         motivoSemaforo:
           type: string
           nullable: true
-          example: null
+          example: "Sin alertas de sobrecarga"
         horasSueno:
           type: number
           format: double
@@ -481,7 +481,7 @@ components:
         zonasDolor:
           type: string
           nullable: true
-          example: null
+          example: "Isquiotibial derecho"
 
     CargaDiariaRequest:
       type: object

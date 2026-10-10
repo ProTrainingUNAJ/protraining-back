@@ -1,0 +1,21 @@
+# Configuración de Redocly para ProTraining
+# Documentación: https://redocly.com/docs/cli/configuration/
+
+extends:
+  - recommended
+
+rules:
+  # Permitir http://localhost y nombres de red Docker en los servidores locales
+  no-server-example-com: off
+
+  # No exigir declaración de licencia de código abierto en APIs de microservicios
+  info-license: off
+
+  # Operaciones de infraestructura como /api/health devuelven 200 o 503
+  operation-4xx-response: off
+
+  # Permitir componentes y esquemas canónicos compartidos no directamente referenciados en paths
+  no-unused-components: off
+
+  # Validación estricta de esquemas
+  no-invalid-schema-examples: error

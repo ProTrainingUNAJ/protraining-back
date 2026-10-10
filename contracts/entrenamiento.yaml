@@ -224,7 +224,9 @@ paths:
                 atletaId:
                   type: string
                   format: uuid
-                  example: null
+                  nullable: true
+                  description: Opcional si se aplica a toda una categoría.
+                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 diaSemana:
                   type: string
                   enum: [Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo]
@@ -484,12 +486,12 @@ components:
           type: integer
           nullable: true
           description: Para trabajos por tiempo (ej. pasadas de 30 segundos).
-          example: null
+          example: 30
         distanciaMetrosMeta:
           type: integer
           nullable: true
           description: Para trabajos de fondo o pasadas (ej. 1000m).
-          example: null
+          example: 1000
         orden:
           type: integer
           minimum: 1
@@ -514,7 +516,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          example: null
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
         diaSemana:
           type: string
           enum: [Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo]
