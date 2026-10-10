@@ -1,0 +1,385 @@
+openapi: 3.0.3
+info:
+  title: ProTraining - Microservicio de Identidad
+  description: >
+    API v1 para la gestión de autenticación, control de accesos (RBAC), emisión
+    y validación de tokens JWT Bearer para preparadores físicos (PF) y atletas,
+    incluyendo el registro de consentimiento de tutores para atletas menores.
+  version: 1.1.0
+servers:
+  - url: http://localhost:8081
+    description: Entorno local / Docker Compose
+  - url: http://identidad:8080
+    description: Red interna de Docker entre microservicios
+
+tags:
+  - name: Autenticación
+    description: Endpoints para registro, inicio de sesión y validación de credenciales
+  - name: Menores y Consentimiento
+    description: Registro y gestión del consentimiento legal de tutores para atletas menores de edad
+  - name: Salud
+    description: Monitoreo de disponibilidad del servicio y base de datos
+
+paths:
+  /api/v1/auth/registro:
+    post:
+      tags:
+        - Autenticación
+      summary: Registrar un nuevo preparador físico (PF)
+      description: Permite dar de alta una nueva cuenta con rol de preparador físico y emite automáticamente un token JWT inicial.
+      operationId: registrarUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+      responses:
+        "201":
+          description: Cuenta registrada exitosamente y sesión iniciada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          description: Ya existe una cuenta registrada con el correo especificado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Autenticación
+      summary: Iniciar sesión en el sistema
+      description: Valida credenciales de email y contraseña y emite un token JWT con los claims correspondientes (AccountId, Rol y AtletaId si aplica).
+      operationId: iniciarSesion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Credenciales válidas. Devuelve el token JWT y los datos de la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: Credenciales inválidas (email inexistente o contraseña incorrecta).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Autenticación
+      summary: Consultar datos del usuario autenticado
+      description: Obtiene la información del perfil del usuario asociado al token JWT actual.
+      operationId: obtenerUsuarioActual
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Datos del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilUsuario'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/atletas/{atletaId}/consentimiento-tutor:
+    post:
+      tags:
+        - Menores y Consentimiento
+      summary: Registrar o actualizar consentimiento de tutor
+      description: >
+        Guarda la autorización del tutor legal para un atleta menor de 18 años,
+        especificando si habilita la preparación física y/o las recomendaciones de hábitos.
+      operationId: registrarConsentimientoTutor
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: atletaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentimientoTutorRequest'
+      responses:
+        "200":
+          description: Consentimiento guardado correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "Consentimiento parental registrado exitosamente."
+                  consentimiento:
+                    $ref: '#/components/schemas/ConsentimientoTutor'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/health:
+    get:
+      tags:
+        - Salud
+      summary: Chequeo de salud del servicio
+      description: Comprueba que el microservicio esté activo y que la conexión con su base de datos PostgreSQL sea correcta.
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Servicio saludable y base de datos conectada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Healthy"
+        "503":
+          description: Base de datos inaccesible o falla crítica.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Solicitud con datos inválidos o formato erróneo.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: No autenticado o token vencido / inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Recurso no encontrado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    RegistroRequest:
+      type: object
+      required:
+        - nombreCompleto
+        - email
+        - contrasena
+      properties:
+        nombreCompleto:
+          type: string
+          example: "Prof. Julián Antúnez"
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        contrasena:
+          type: string
+          format: password
+          minLength: 8
+          example: "PasswordSegura123!"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - contrasena
+      properties:
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        contrasena:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+
+    Sesion:
+      type: object
+      description: Objeto compartido de Sesión.
+      required:
+        - token
+        - tipoToken
+        - cuentaId
+        - nombreCompleto
+        - email
+        - rol
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        tipoToken:
+          type: string
+          example: "Bearer"
+        expiraEn:
+          type: integer
+          example: 86400
+        cuentaId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        nombreCompleto:
+          type: string
+          example: "Prof. Julián Antúnez"
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        rol:
+          type: string
+          enum: [PF, Atleta]
+          example: "PF"
+        atletaId:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+
+    ConsentimientoTutorRequest:
+      type: object
+      required:
+        - tutorNombre
+        - tutorEmail
+        - tutorTelefono
+        - habilitaPreparacionFisica
+      properties:
+        tutorNombre:
+          type: string
+          example: "Roberto Fernández"
+        tutorEmail:
+          type: string
+          format: email
+          example: "roberto.fernandez@email.com"
+        tutorTelefono:
+          type: string
+          example: "+54 11 4444-1234"
+        habilitaPreparacionFisica:
+          type: boolean
+          example: true
+        habilitaRecomendacionesHabitos:
+          type: boolean
+          example: false
+
+    ConsentimientoTutor:
+      type: object
+      required:
+        - tutorNombre
+        - tutorEmail
+        - tutorTelefono
+        - habilitaPreparacionFisica
+        - fechaConsentimiento
+      properties:
+        tutorNombre:
+          type: string
+          example: "Roberto Fernández"
+        tutorEmail:
+          type: string
+          format: email
+          example: "roberto.fernandez@email.com"
+        tutorTelefono:
+          type: string
+          example: "+54 11 4444-1234"
+        habilitaPreparacionFisica:
+          type: boolean
+          example: true
+        habilitaRecomendacionesHabitos:
+          type: boolean
+          example: false
+        fechaConsentimiento:
+          type: string
+          format: date-time
+          example: "2026-03-01T14:00:00Z"
+
+    PerfilUsuario:
+      type: object
+      required:
+        - cuentaId
+        - nombreCompleto
+        - email
+        - rol
+      properties:
+        cuentaId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        nombreCompleto:
+          type: string
+          example: "Prof. Julián Antúnez"
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        rol:
+          type: string
+          enum: [PF, Atleta]
+          example: "PF"
+        atletaId:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+
+    ProblemDetails:
+      type: object
+      required:
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          example: "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+        title:
+          type: string
+          example: "Error de solicitud"
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: "Las credenciales ingresadas son incorrectas."
+        instance:
+          type: string
+          example: "/api/v1/auth/login"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["El email no tiene un formato válido."]

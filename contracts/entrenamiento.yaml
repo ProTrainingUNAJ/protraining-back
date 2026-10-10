@@ -1,0 +1,717 @@
+openapi: 3.0.3
+info:
+  title: ProTraining - Microservicio de Entrenamiento
+  description: >
+    API v1 para la prescripción del entrenamiento de fuerza, catálogo de ejercicios
+    con animaciones y videos de YouTube, plantillas reutilizables, trazabilidad
+    de 1RM (testeado, reportado o estimado), trabajos sin pesas (por tiempo o distancia)
+    y resolución determinística de cargas en kg redondeadas a 2.5 kg.
+  version: 1.1.0
+servers:
+  - url: http://localhost:8083
+    description: Entorno local / Docker Compose
+  - url: http://entrenamiento:8080
+    description: Red interna de Docker entre microservicios
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Ejercicios
+    description: Catálogo general de ejercicios con videos, animaciones y grupos musculares
+  - name: Récords 1RM
+    description: Seguimiento de marcas máximas con trazabilidad formal de origen
+  - name: Rutinas y Plantillas
+    description: Planificación estructurada, plantillas reutilizables y trabajos por tiempo/distancia
+  - name: Ejecución y Cálculo de Cargas
+    description: Rutina del día con peso resuelto y registro de ejecuciones con recálculo Epley
+  - name: Salud
+    description: Monitoreo de disponibilidad del servicio y base de datos
+
+paths:
+  /api/v1/ejercicios:
+    get:
+      tags:
+        - Ejercicios
+      summary: Listar catálogo de ejercicios
+      description: Devuelve todos los ejercicios disponibles con sus animaciones y enlaces a videos instructivos de YouTube.
+      operationId: listarEjercicios
+      parameters:
+        - name: grupoMuscular
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtrar por grupo muscular (ej. Piernas, Pecho, Espalda, Core).
+      responses:
+        "200":
+          description: Catálogo obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ejercicio'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/atletas/{atletaId}/records:
+    get:
+      tags:
+        - Récords 1RM
+      summary: Obtener récords 1RM de un atleta
+      description: Lista las marcas máximas de fuerza del atleta, indicando su origen de trazabilidad (testeado, reportado o estimado).
+      operationId: obtenerRecordsAtleta
+      parameters:
+        - name: atletaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: soloVigentes
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: Lista de récords personales obtenida con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Récords 1RM
+      summary: Registrar o actualizar récord 1RM
+      description: Asigna una nueva marca máxima a un ejercicio con su origen de verificación.
+      operationId: guardarRecord
+      parameters:
+        - name: atletaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardarRecordRequest'
+      responses:
+        "200":
+          description: Récord guardado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rutinas:
+    post:
+      tags:
+        - Rutinas y Plantillas
+      summary: Crear rutina de entrenamiento
+      description: Asigna una planificación estructurada a una categoría o a un atleta individual, permitiendo ejercicios con carga o por tiempo/distancia.
+      operationId: crearRutina
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearRutinaRequest'
+      responses:
+        "201":
+          description: Rutina creada con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "Rutina creada y asignada exitosamente."
+                  rutinaId:
+                    type: string
+                    format: uuid
+                    example: "9a2f1b4c-3d5e-4f6a-b7c8-9d0e1f2a3b4c"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/plantillas-rutina:
+    get:
+      tags:
+        - Rutinas y Plantillas
+      summary: Listar plantillas de rutinas del preparador físico
+      description: Obtiene las planificaciones guardadas como plantillas maestras para reutilizar en otros grupos o temporadas.
+      operationId: listarPlantillasRutina
+      responses:
+        "200":
+          description: Lista de plantillas recuperadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlantillaRutina'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Rutinas y Plantillas
+      summary: Guardar una rutina como plantilla reutilizable
+      description: Permite guardar una estructura de entrenamiento como plantilla maestra.
+      operationId: crearPlantillaRutina
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearPlantillaRequest'
+      responses:
+        "201":
+          description: Plantilla creada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantillaRutina'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/plantillas-rutina/{plantillaId}/aplicar:
+    post:
+      tags:
+        - Rutinas y Plantillas
+      summary: Aplicar plantilla a una categoría o atleta
+      description: Clona y asigna la planificación de la plantilla a la categoría o deportista indicado.
+      operationId: aplicarPlantillaRutina
+      parameters:
+        - name: plantillaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - diaSemana
+              properties:
+                categoriaId:
+                  type: string
+                  format: uuid
+                  example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+                atletaId:
+                  type: string
+                  format: uuid
+                  example: null
+                diaSemana:
+                  type: string
+                  enum: [Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo]
+                  example: "Lunes"
+      responses:
+        "201":
+          description: Rutina asignada desde la plantilla con éxito.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/atletas/{atletaId}/rutina-hoy:
+    get:
+      tags:
+        - Ejecución y Cálculo de Cargas
+      summary: Rutina de hoy con el peso resuelto
+      description: >
+        Devuelve la planificación del día del atleta con el peso exacto a cargar en kg,
+        resuelto en función de su récord 1RM vigente y redondeado al múltiplo de 2.5 kg más cercano.
+        Si el atleta presenta lesiones activas, incluye una advertencia preventiva.
+      operationId: obtenerRutinaHoy
+      parameters:
+        - name: atletaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador del atleta
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutinaHoyResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          description: El atleta no existe o no es tuyo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/atletas/{atletaId}/ejecuciones:
+    post:
+      tags:
+        - Ejecución y Cálculo de Cargas
+      summary: Registrar ejecución de ejercicio y recalcular 1RM (Fórmula Epley)
+      description: >
+        Registra el peso levantado y las repeticiones completadas por el atleta.
+        Aplica la fórmula de Epley: `1RM_estimado = peso * (1 + repeticiones / 30)`.
+        Si la estimación supera el récord vigente, actualiza automáticamente la marca del atleta.
+      operationId: registrarEjecucion
+      parameters:
+        - name: atletaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarEjecucionRequest'
+      responses:
+        "200":
+          description: Ejecución registrada y evaluación de récord completada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrarEjecucionResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/health:
+    get:
+      tags:
+        - Salud
+      summary: Chequeo de salud del servicio
+      security: []
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Servicio saludable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Healthy"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Solicitud con datos inválidos o reglas de negocio incumplidas.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: Token de autenticación ausente o inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Recurso o atleta no encontrado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    Ejercicio:
+      type: object
+      required:
+        - id
+        - nombre
+        - grupoMuscular
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        nombre:
+          type: string
+          example: "Sentadilla Trasera"
+        grupoMuscular:
+          type: string
+          example: "Piernas"
+        descripcion:
+          type: string
+          nullable: true
+          example: "Sentadilla libre profunda con barra olímpica"
+        videoUrl:
+          type: string
+          nullable: true
+          description: Enlace al video explicativo de YouTube (reproducible embebido o externo).
+          example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+        animacionUrl:
+          type: string
+          nullable: true
+          description: URL del GIF/animación técnica del movimiento.
+          example: "https://cdn.protraining.app/exercises/squat.gif"
+
+    Record:
+      type: object
+      description: Objeto compartido de Récord 1RM con trazabilidad.
+      required:
+        - id
+        - atletaId
+        - ejercicioId
+        - ejercicioNombre
+        - peso1RmKg
+        - origen
+        - fechaAlcanzado
+        - esVigente
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e6f491c7-7489-4b68-b765-a81e9f1a21e4"
+        atletaId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        ejercicioId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        ejercicioNombre:
+          type: string
+          example: "Sentadilla Trasera"
+        peso1RmKg:
+          type: number
+          format: double
+          example: 140.0
+        origen:
+          type: string
+          enum: [TesteadoEnSesion, Reportado, EstimadoEpley]
+          example: "TesteadoEnSesion"
+        fechaAlcanzado:
+          type: string
+          format: date-time
+          example: "2026-10-01T15:30:00Z"
+        esVigente:
+          type: boolean
+          example: true
+
+    GuardarRecordRequest:
+      type: object
+      required:
+        - ejercicioId
+        - peso1RmKg
+        - origen
+      properties:
+        ejercicioId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        peso1RmKg:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 500
+          example: 142.5
+        origen:
+          type: string
+          enum: [TesteadoEnSesion, Reportado, EstimadoEpley]
+          example: "TesteadoEnSesion"
+
+    ItemRutinaRequest:
+      type: object
+      required:
+        - ejercicioId
+        - orden
+        - modalidad
+      properties:
+        ejercicioId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        modalidad:
+          type: string
+          enum: [CargaPorcentaje, TiempoSegundos, DistanciaMetros, RepeticionesFijas]
+          default: CargaPorcentaje
+          example: "CargaPorcentaje"
+        series:
+          type: integer
+          minimum: 1
+          example: 4
+        repeticiones:
+          type: integer
+          minimum: 1
+          example: 6
+        porcentaje:
+          type: number
+          format: double
+          minimum: 10
+          maximum: 100
+          description: Porcentaje del 1RM para calcular la carga (solo si modalidad es CargaPorcentaje).
+          example: 80.0
+        tiempoSegundosMeta:
+          type: integer
+          nullable: true
+          description: Para trabajos por tiempo (ej. pasadas de 30 segundos).
+          example: null
+        distanciaMetrosMeta:
+          type: integer
+          nullable: true
+          description: Para trabajos de fondo o pasadas (ej. 1000m).
+          example: null
+        orden:
+          type: integer
+          minimum: 1
+          example: 1
+
+    CrearRutinaRequest:
+      type: object
+      required:
+        - titulo
+        - diaSemana
+        - items
+      properties:
+        titulo:
+          type: string
+          example: "Fuerza Máxima - Día 1"
+        categoriaId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        atletaId:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        diaSemana:
+          type: string
+          enum: [Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo]
+          example: "Lunes"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemRutinaRequest'
+
+    PlantillaRutina:
+      type: object
+      required:
+        - id
+        - nombre
+        - objetivo
+        - cantidadEjercicios
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a8b7c6d5-e4f3-2a1b-0c9d-8e7f6a5b4c3d"
+        nombre:
+          type: string
+          example: "Pretemporada Bloque Fuerza Semana 1-4"
+        objetivo:
+          type: string
+          example: "Fuerza Máxima e Hipertrofia Funcional"
+        cantidadEjercicios:
+          type: integer
+          example: 6
+
+    CrearPlantillaRequest:
+      type: object
+      required:
+        - nombre
+        - objetivo
+        - items
+      properties:
+        nombre:
+          type: string
+          example: "Pretemporada Bloque Fuerza Semana 1-4"
+        objetivo:
+          type: string
+          example: "Fuerza Máxima"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemRutinaRequest'
+
+    EjercicioRutinaHoy:
+      type: object
+      required:
+        - nombre
+        - series
+        - repeticiones
+        - pesoKg
+      properties:
+        ejercicioId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        nombre:
+          type: string
+          example: "Sentadilla Trasera"
+        grupoMuscular:
+          type: string
+          example: "Piernas"
+        videoUrl:
+          type: string
+          nullable: true
+          example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+        series:
+          type: integer
+          example: 4
+        repeticiones:
+          type: integer
+          example: 6
+        porcentaje:
+          type: number
+          format: double
+          example: 80.0
+        pesoKg:
+          type: number
+          format: double
+          description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg).
+          example: 112.5
+        record1RmVigente:
+          type: number
+          format: double
+          example: 140.0
+
+    RutinaHoyResponse:
+      type: object
+      required:
+        - fecha
+        - ejercicios
+      properties:
+        atletaId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        nombreAtleta:
+          type: string
+          example: "Lucas Fernández"
+        fecha:
+          type: string
+          format: date
+          example: "2026-10-10"
+        tieneLesionesActivas:
+          type: boolean
+          example: false
+        rutinaAdaptadaPorAjuste:
+          type: boolean
+          description: Indica si el copiloto adaptó ejercicios hoy debido a molestias o dolores marcados en el check-in.
+          example: false
+        ejercicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/EjercicioRutinaHoy'
+
+    RegistrarEjecucionRequest:
+      type: object
+      required:
+        - ejercicioId
+        - pesoUtilizadoKg
+        - repeticionesRealizadas
+      properties:
+        ejercicioId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        pesoUtilizadoKg:
+          type: number
+          format: double
+          minimum: 1
+          example: 120.0
+        repeticionesRealizadas:
+          type: integer
+          minimum: 1
+          example: 6
+
+    RegistrarEjecucionResponse:
+      type: object
+      required:
+        - pesoUtilizadoKg
+        - repeticionesRealizadas
+        - estimado1RmEpley
+        - recordActualizado
+        - mensaje
+      properties:
+        pesoUtilizadoKg:
+          type: number
+          format: double
+          example: 120.0
+        repeticionesRealizadas:
+          type: integer
+          example: 6
+        estimado1RmEpley:
+          type: number
+          format: double
+          example: 144.0
+        recordAnterior1Rm:
+          type: number
+          format: double
+          example: 140.0
+        recordActualizado:
+          type: boolean
+          example: true
+        mensaje:
+          type: string
+          example: "¡Nuevo récord estimado de 144 kg según fórmula Epley!"
+
+    ProblemDetails:
+      type: object
+      required:
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          example: "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+        title:
+          type: string
+          example: "El atleta no existe o no es tuyo"
+        status:
+          type: integer
+          example: 404
+        detail:
+          type: string
+          example: "No se encontró el atleta con el ID proporcionado dentro de tu organización."
+        instance:
+          type: string
+          example: "/api/v1/atletas/3fa85f64-5717-4562-b3fc-2c963f66afa6/rutina-hoy"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
