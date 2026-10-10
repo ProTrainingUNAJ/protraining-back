@@ -1,4 +1,5 @@
 using System.Text.Json;
+using API.Extensions;
 using API.Middleware;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
@@ -8,9 +9,15 @@ using Application.UseCases.Athletes.UpdateAthleteCategory;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.None);
+builder.Host.UseSerilog((context, services, logger) => logger
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
@@ -33,6 +40,10 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddFrontendCors(builder.Configuration);
+builder.Services.AddJwtAuthentication(builder.Configuration);
+// Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
+builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<ListAthletesQueryHandler>();
 builder.Services.AddScoped<GetAthleteQueryHandler>();
 builder.Services.AddScoped<CreateAthleteCommandHandler>();
@@ -47,6 +58,8 @@ if (builder.Environment.IsDevelopment())
 }
 
 var app = builder.Build();
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -54,6 +67,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.Run();
