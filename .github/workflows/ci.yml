@@ -86,16 +86,27 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  contracts:
+    name: Validar contratos OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar especificaciones con Redocly
+        run: |
+          npx --yes @redocly/cli lint contracts/*.yaml
+
   # Un único check para marcar como obligatorio en las reglas de la rama.
   ci-ok:
     name: CI ok
     if: always()
-    needs: [build, smoke]
+    needs: [build, smoke, contracts]
     runs-on: ubuntu-latest
     steps:
       - name: Verificar que todo pasó
         run: |
-          if [ "${{ needs.build.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ]; then
-            echo "Falló build (${{ needs.build.result }}) o smoke (${{ needs.smoke.result }})."
+          if [ "${{ needs.build.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ] || [ "${{ needs.contracts.result }}" != "success" ]; then
+            echo "Falló build (${{ needs.build.result }}), smoke (${{ needs.smoke.result }}) o contracts (${{ needs.contracts.result }})."
             exit 1
           fi
+
