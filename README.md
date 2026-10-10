@@ -1,67 +1,98 @@
 # ProTraining · back
 
-API .NET 8 en capas (`Domain`, `Application`, `Infrastructure`, `API`). Es la plantilla de los 5 microservicios: Identidad, Estructura, Entrenamiento, Seguimiento y Asistente.
+5 microservicios .NET 8, cada uno con su propia base PostgreSQL:
 
-Ya trae:
-- `GET /api/health`: chequea la conexión a la base (200 si está bien, 503 si no).
+| Servicio | Carpeta | Puerto local | Base (puerto local) |
+|---|---|---|---|
+| Identidad | `services/identidad` | 8081 | `identidad` (5433) |
+| Estructura | `services/estructura` | 8082 | `estructura` (5434) |
+| Entrenamiento | `services/entrenamiento` | 8083 | `entrenamiento` (5435) |
+| Seguimiento | `services/seguimiento` | 8084 | `seguimiento` (5436) |
+| Asistente | `services/asistente` | 8085 | `asistente` (5437) |
+
+Adentro de Docker, todos los servicios escuchan en el **8080**.
+
+Cada servicio tiene la misma estructura en capas (`Domain`, `Application`, `Infrastructure`, `API`) y ya trae:
+- `GET /api/health`: chequea la conexión a su base (200 si está bien, 503 si no).
 - Errores como ProblemDetails en español.
 - Logs JSON con Serilog y el header `X-Correlation-Id` (si no viene, se genera; vuelve en la respuesta y sale en cada log como `CorrelationId`).
 - Resiliencia estándar en todos los `HttpClient` (reintentos, timeout y circuit breaker).
 - CORS con los orígenes desde la configuración.
 - JWT Bearer configurado, todavía sin exigirlo en los endpoints.
-- Swagger en `/swagger` (sólo en Development).
+- Swagger en `/swagger` (solo en Development).
 
-## Levantarlo local
+El CRUD de atletas (`/api/athletes`) es solo un ejemplo y está únicamente en Estructura.
 
-Requisitos: SDK de .NET 8 y un PostgreSQL 16.
+## Levantar todo con Docker
 
 ```bash
-# 1. Una base de prueba (opcional, si no tenés una)
-docker run -d --name protraining-db -p 5432:5432 \
-  -e POSTGRES_DB=protraining_demo -e POSTGRES_USER=protraining_app \
-  -e POSTGRES_PASSWORD=demo_app_cambiar_05 \
-  -v "$PWD/db:/docker-entrypoint-initdb.d" postgres:16-alpine
-
-# 2. Variables de entorno
 cp .env.example .env
-set -a; source .env; set +a
-
-# 3. Correr la API
-dotnet run --project API
+docker compose up -d --build
 ```
 
-Con Docker:
+Levanta los 5 servicios y sus 5 bases. Cada servicio espera a que su base esté sana, y si uno se cae, los demás siguen andando. Para probar:
 
 ```bash
-docker build -t protraining-api .
-docker run --rm -p 8080:8080 --env-file .env -e Database__Host=host.docker.internal protraining-api
-curl http://localhost:8080/api/health
+curl http://localhost:8082/api/health
 ```
 
-El contenedor siempre escucha en el puerto **8080**.
+Para sumar el front (tiene que estar clonado al lado, en `../protraining-front`), queda en `http://localhost:3000`:
 
-> El SDK de .NET 8 no lee `ProTraining.slnx`: para compilar o restaurar desde la terminal usá el proyecto, por ejemplo `dotnet build API/API.csproj`.
+```bash
+docker compose --profile front up -d --build
+```
+
+Comandos útiles:
+
+```bash
+docker compose ps                        # estado de todo
+docker compose logs -f estructura        # logs de un servicio
+docker compose up -d --build estructura  # reconstruir un solo servicio
+docker compose down                      # bajar todo (los datos quedan en los volúmenes)
+docker compose down -v                   # bajar todo y borrar las bases
+```
+
+## Correr un servicio con `dotnet run`
+
+Útil para debuggear. Levantá solo su base con Docker y pasale las variables:
+
+```bash
+docker compose up -d db-estructura
+
+export Database__Host=localhost Database__Port=5434 Database__Name=estructura \
+       Database__User=protraining_app Database__Password=demo_app_cambiar_05 \
+       Jwt__Key=clave_local_de_desarrollo_cambiar_32+ Jwt__Issuer=protraining-identidad Jwt__Audience=protraining
+
+dotnet run --project services/estructura/API
+```
+
+> El SDK de .NET 8 no lee los `.slnx`: para compilar o restaurar desde la terminal usá el proyecto, por ejemplo `dotnet build services/estructura/API/API.csproj`.
 
 ## Variables de entorno
 
-| Variable | Para qué | Ejemplo |
-|---|---|---|
-| `Database__Host` | Host de PostgreSQL | `localhost` |
-| `Database__Port` | Puerto de PostgreSQL | `5432` |
-| `Database__Name` | Nombre de la base | `protraining_demo` |
-| `Database__User` | Usuario de la app (no puede ser `root`) | `protraining_app` |
-| `Database__Password` | Contraseña | |
-| `Jwt__Key` | Clave para firmar y validar tokens (mínimo 32 caracteres) | |
-| `Jwt__Issuer` | Quién emite el token | `protraining-identidad` |
-| `Jwt__Audience` | Para quién es el token | `protraining` |
-| `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front | `http://localhost:5173` |
-| `Serilog__MinimumLevel__Default` | Nivel de log (opcional) | `Information` |
+En el `.env` (las usa el compose):
 
-Si falta una variable obligatoria, la API no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` real no se commitea.
+| Variable | Para qué |
+|---|---|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD` | Usuario y contraseña de las 5 bases |
+| `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
+| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
 
-## Crear un servicio nuevo a partir de la plantilla
+Lo que recibe cada servicio (el compose las arma solo):
 
-1. Copiá las carpetas `Domain`, `Application`, `Infrastructure` y `API`, más el `Dockerfile` y el `.dockerignore`, a `services/<servicio>/`.
-2. Borrá lo del ejemplo de atletas que no corresponda (entidad, configuración, repositorio, casos de uso, controller y sus registros en `Program.cs` y `DependencyInjection.cs`). El `/api/health`, los middlewares y la configuración se quedan.
-3. Dale al servicio su propia base: sus propias variables `Database__*`. Ningún servicio usa la base de otro.
-4. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/api/health`.
+| Variable | Para qué |
+|---|---|
+| `Database__Host`, `Database__Port`, `Database__Name` | Dónde está su base |
+| `Database__User`, `Database__Password` | Usuario de la app (no puede ser `root`) |
+| `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
+| `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
+| `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
+
+Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
+
+## Crear un servicio nuevo
+
+1. Copiá `services/identidad` (es el más limpio) a `services/<servicio>` y renombrá el `.slnx`.
+2. Sumá al `docker-compose.yml` su base `db-<servicio>` con su volumen y el servicio con su `Database__Host`, `Database__Name`, su puerto y el `depends_on`.
+3. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/api/health`.

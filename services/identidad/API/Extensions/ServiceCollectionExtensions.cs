@@ -1,0 +1,62 @@
+using System.Text;
+using API.Middleware;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+
+namespace API.Extensions;
+
+public static class ServiceCollectionExtensions
+{
+    public const string CorsPolicyName = "Frontend";
+
+    // Orígenes desde Cors:AllowedOrigins (en variables de entorno: Cors__AllowedOrigins__0, __1, ...).
+    public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
+    {
+        var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+
+        services.AddCors(options => options.AddPolicy(CorsPolicyName, policy =>
+            policy.WithOrigins(origins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .WithExposedHeaders(CorrelationIdMiddleware.HeaderName)));
+
+        return services;
+    }
+
+    // Deja configurado JWT Bearer; los endpoints todavía no lo exigen (no hay [Authorize]).
+    public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
+    {
+        string Required(string key) =>
+            !string.IsNullOrWhiteSpace(configuration[key])
+                ? configuration[key]!
+                : throw new InvalidOperationException(
+                    $"Falta la variable de configuración {key.Replace(":", "__")}.");
+
+        var key = Required("Jwt:Key");
+        if (Encoding.UTF8.GetByteCount(key) < 32)
+            throw new InvalidOperationException("Jwt__Key debe tener al menos 32 caracteres.");
+
+        var issuer = Required("Jwt:Issuer");
+        var audience = Required("Jwt:Audience");
+
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.MapInboundClaims = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = issuer,
+                    ValidateAudience = true,
+                    ValidAudience = audience,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(30)
+                };
+            });
+        services.AddAuthorization();
+
+        return services;
+    }
+}

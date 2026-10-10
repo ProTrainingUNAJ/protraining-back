@@ -1,0 +1,150 @@
+name: protraining
+
+# Cada servicio tiene su propia base. Ningún servicio usa la base de otro.
+
+x-db: &db
+  image: postgres:16-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+x-db-env: &db-env
+  POSTGRES_USER: ${POSTGRES_USER:?Falta POSTGRES_USER en el .env}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env}
+
+x-api: &api
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 15s
+
+x-api-env: &api-env
+  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+  Database__Port: "5432"
+  Database__User: ${POSTGRES_USER}
+  Database__Password: ${POSTGRES_PASSWORD}
+  Jwt__Key: ${JWT_KEY:?Falta JWT_KEY en el .env}
+  Jwt__Issuer: ${JWT_ISSUER:?Falta JWT_ISSUER en el .env}
+  Jwt__Audience: ${JWT_AUDIENCE:?Falta JWT_AUDIENCE en el .env}
+  Cors__AllowedOrigins__0: http://localhost:5173
+  Cors__AllowedOrigins__1: http://localhost:3000
+
+services:
+  # ---------- Bases ----------
+  db-identidad:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: identidad
+    ports: ["5433:5432"]
+    volumes: [db-identidad:/var/lib/postgresql/data]
+
+  db-estructura:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: estructura
+    ports: ["5434:5432"]
+    volumes:
+      - db-estructura:/var/lib/postgresql/data
+      - ./services/estructura/db:/docker-entrypoint-initdb.d:ro
+
+  db-entrenamiento:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: entrenamiento
+    ports: ["5435:5432"]
+    volumes: [db-entrenamiento:/var/lib/postgresql/data]
+
+  db-seguimiento:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: seguimiento
+    ports: ["5436:5432"]
+    volumes: [db-seguimiento:/var/lib/postgresql/data]
+
+  db-asistente:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: asistente
+    ports: ["5437:5432"]
+    volumes: [db-asistente:/var/lib/postgresql/data]
+
+  # ---------- Servicios ----------
+  identidad:
+    <<: *api
+    build: services/identidad
+    environment:
+      <<: *api-env
+      Database__Host: db-identidad
+      Database__Name: identidad
+    ports: ["8081:8080"]
+    depends_on:
+      db-identidad: { condition: service_healthy }
+
+  estructura:
+    <<: *api
+    build: services/estructura
+    environment:
+      <<: *api-env
+      Database__Host: db-estructura
+      Database__Name: estructura
+    ports: ["8082:8080"]
+    depends_on:
+      db-estructura: { condition: service_healthy }
+
+  entrenamiento:
+    <<: *api
+    build: services/entrenamiento
+    environment:
+      <<: *api-env
+      Database__Host: db-entrenamiento
+      Database__Name: entrenamiento
+    ports: ["8083:8080"]
+    depends_on:
+      db-entrenamiento: { condition: service_healthy }
+
+  seguimiento:
+    <<: *api
+    build: services/seguimiento
+    environment:
+      <<: *api-env
+      Database__Host: db-seguimiento
+      Database__Name: seguimiento
+    ports: ["8084:8080"]
+    depends_on:
+      db-seguimiento: { condition: service_healthy }
+
+  asistente:
+    <<: *api
+    build: services/asistente
+    environment:
+      <<: *api-env
+      Database__Host: db-asistente
+      Database__Name: asistente
+    ports: ["8085:8080"]
+    depends_on:
+      db-asistente: { condition: service_healthy }
+
+  # ---------- Front (opcional: docker compose --profile front up) ----------
+  front:
+    profiles: [front]
+    build: ../protraining-front
+    restart: unless-stopped
+    ports: ["3000:80"]
+
+volumes:
+  db-identidad:
+  db-estructura:
+  db-entrenamiento:
+  db-seguimiento:
+  db-asistente:
