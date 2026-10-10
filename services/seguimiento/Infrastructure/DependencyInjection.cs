@@ -45,4 +45,13 @@ public static class DependencyInjection
 
         return services;
     }
+
+    // Aplica las migraciones pendientes al arrancar. Si el servicio todavía no tiene migraciones, no hace nada.
+    public static async Task AplicarMigracionesAsync(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (context.Database.GetMigrations().Any())
+            await context.Database.MigrateAsync();
+    }
 }
