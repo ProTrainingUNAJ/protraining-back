@@ -28,6 +28,7 @@ paths:
       summary: Registrar un nuevo preparador físico (PF)
       description: Permite dar de alta una nueva cuenta con rol de preparador físico y emite automáticamente un token JWT inicial.
       operationId: registrarUsuario
+      security: []
       requestBody:
         required: true
         content:
@@ -57,6 +58,7 @@ paths:
       summary: Iniciar sesión en el sistema
       description: Valida credenciales de email y contraseña y emite un token JWT con los claims correspondientes (AccountId, Rol y AtletaId si aplica).
       operationId: iniciarSesion
+      security: []
       requestBody:
         required: true
         content:
@@ -147,6 +149,7 @@ paths:
       summary: Chequeo de salud del servicio
       description: Comprueba que el microservicio esté activo y que la conexión con su base de datos PostgreSQL sea correcta.
       operationId: healthCheck
+      security: []
       responses:
         "200":
           description: Servicio saludable y base de datos conectada.
