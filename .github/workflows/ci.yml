@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+# Si llega un push nuevo a la misma rama, se cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build y test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [identidad, estructura, entrenamiento, seguimiento, asistente]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # El SDK de .NET 8 no lee .slnx: se compila el proyecto de la API.
+      - name: Restore
+        run: dotnet restore services/${{ matrix.service }}/API/API.csproj
+
+      - name: Build
+        run: dotnet build services/${{ matrix.service }}/API/API.csproj --no-restore -c Release
+
+      # Corre los proyectos de tests del servicio (los que terminan en Tests.csproj), si hay.
+      - name: Test
+        run: |
+          tests=$(find services/${{ matrix.service }} -name '*Tests.csproj')
+          if [ -z "$tests" ]; then
+            echo "El servicio todavía no tiene proyectos de tests."
+            exit 0
+          fi
+          for project in $tests; do
+            dotnet test "$project" -c Release
+          done
+
+  smoke:
+    name: Smoke test (docker compose)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Levantar los servicios y sus bases
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Chequear /api/health de cada servicio
+        run: |
+          for port in 8081 8082 8083 8084 8085; do
+            echo "Puerto $port: $(curl -fsS http://localhost:$port/api/health)"
+          done
+
+      - name: Logs si algo falló
+        if: failure()
+        run: docker compose logs
+
+      - name: Bajar todo
+        if: always()
+        run: docker compose down -v
+
+  # Un único check para marcar como obligatorio en las reglas de la rama.
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar que todo pasó
+        run: |
+          if [ "${{ needs.build.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ]; then
+            echo "Falló build (${{ needs.build.result }}) o smoke (${{ needs.smoke.result }})."
+            exit 1
+          fi
