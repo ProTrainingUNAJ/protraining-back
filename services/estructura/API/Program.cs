@@ -1,6 +1,9 @@
 using System.Text.Json;
 using API.Extensions;
+using API.HealthChecks;
 using API.Middleware;
+using API.Services;
+using Application.Interfaces.Services;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
@@ -13,10 +16,12 @@ using Serilog;
 using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
+var servicio = builder.Configuration["Servicio"] ?? "API";
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
+    .Enrich.WithProperty("Servicio", servicio)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -50,14 +55,20 @@ builder.Services.AddScoped<CreateAthleteCommandHandler>();
 builder.Services.AddScoped<UpdateAthleteCategoryCommandHandler>();
 builder.Services.AddScoped<DeleteAthleteCommandHandler>();
 builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IUsuarioActual, UsuarioActual>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(options =>
+        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {servicio}", Version = "v1" }));
 }
 
 var app = builder.Build();
+await app.Services.AplicarMigracionesAsync();
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionMiddleware>();
@@ -73,4 +84,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 app.Run();

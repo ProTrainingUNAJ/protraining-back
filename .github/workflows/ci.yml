@@ -60,10 +60,10 @@ jobs:
           cp .env.example .env
           docker compose up -d --build --wait --wait-timeout 180
 
-      - name: Chequear /api/health de cada servicio
+      - name: Chequear /health de cada servicio
         run: |
           for port in 8081 8082 8083 8084 8085; do
-            echo "Puerto $port: $(curl -fsS http://localhost:$port/api/health)"
+            echo "Puerto $port: $(curl -fsS http://localhost:$port/health)"
           done
 
       - name: Logs si algo falló
