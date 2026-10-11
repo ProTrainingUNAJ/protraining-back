@@ -1,4 +1,4 @@
-namespace API.Requests;
+namespace Application.DTOs.Athletes;
 
 public sealed record CreateAthleteRequest(
     string? FirstName,

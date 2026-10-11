@@ -1,4 +1,4 @@
-using Application.DTOs;
+using Application.DTOs.Athletes;
 using Domain.Entities;
 
 namespace Application.Mappings;

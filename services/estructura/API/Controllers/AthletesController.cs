@@ -1,5 +1,4 @@
-using API.Requests;
-using Application.DTOs;
+using Application.DTOs.Athletes;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;

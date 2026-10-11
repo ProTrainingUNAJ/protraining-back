@@ -1,4 +1,4 @@
-namespace Application.DTOs;
+namespace Application.DTOs.Athletes;
 
 public sealed record AthleteDto(
     Guid Id,

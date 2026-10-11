@@ -1,4 +1,4 @@
-using Application.DTOs;
+using Application.DTOs.Athletes;
 using Application.Interfaces.Persistence;
 using Application.Mappings;
 using Domain.Entities;
