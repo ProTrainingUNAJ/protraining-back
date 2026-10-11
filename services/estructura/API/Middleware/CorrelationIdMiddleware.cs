@@ -25,8 +25,8 @@ public sealed class CorrelationIdMiddleware(RequestDelegate next)
         }
     }
 
-    // Se acepta el id que manda el cliente sólo si es corto y sin caracteres raros,
-    // para que no se pueda inyectar basura en los logs.
+    // The client's id is accepted only if it is short and has no odd characters,
+    // so nothing harmful can be injected into the logs.
     private static bool IsValid(string? value) =>
         !string.IsNullOrWhiteSpace(value)
         && value.Length <= 64

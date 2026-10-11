@@ -13,7 +13,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            // El cliente cerró la solicitud; no intentar enviar otra respuesta.
+            // The client closed the request; do not try to send another response.
         }
         catch (Exception exception)
         {

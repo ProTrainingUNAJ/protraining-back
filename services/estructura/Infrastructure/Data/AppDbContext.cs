@@ -7,12 +7,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual usuarioActual)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser currentUser)
     : DbContext(options)
 {
-    // EF lo vuelve a leer en cada consulta, así que siempre es el PF del pedido actual.
-    // Sin token es Guid.Empty y los filtros no devuelven nada.
-    private Guid PfIdActual => usuarioActual.PfId ?? Guid.Empty;
+    // EF reads it again on every query, so it is always the PF of the current request.
+    // Without a token it is Guid.Empty and the filters return nothing.
+    private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
     public DbSet<Athlete> Athletes => Set<Athlete>();
     public DbSet<DigitalConsent> DigitalConsents => Set<DigitalConsent>();
@@ -20,72 +20,72 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuari
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-        ConfigurarEntidadesBase(modelBuilder);
+        ConfigureBaseEntities(modelBuilder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        CompletarCamposBase();
+        SetBaseFields();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        CompletarCamposBase();
+        SetBaseFields();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    // Para toda entidad que hereda de EntidadBase: columnas comunes, índice por PF
-    // y el filtro global (sólo datos del PF del token y sin los borrados).
-    private void ConfigurarEntidadesBase(ModelBuilder modelBuilder)
+    // For every entity that inherits from BaseEntity: common columns, index by PF
+    // and the global filter (only the token's PF data, never the deleted rows).
+    private void ConfigureBaseEntities(ModelBuilder modelBuilder)
     {
-        var tipos = modelBuilder.Model.GetEntityTypes()
-            .Where(tipo => typeof(EntidadBase).IsAssignableFrom(tipo.ClrType) && tipo.BaseType is null)
-            .Select(tipo => tipo.ClrType)
+        var types = modelBuilder.Model.GetEntityTypes()
+            .Where(type => typeof(BaseEntity).IsAssignableFrom(type.ClrType) && type.BaseType is null)
+            .Select(type => type.ClrType)
             .ToList();
 
-        var crearFiltro = typeof(AppDbContext).GetMethod(nameof(FiltroPorPf), BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var createFilter = typeof(AppDbContext).GetMethod(nameof(FilterByPf), BindingFlags.NonPublic | BindingFlags.Instance)!;
 
-        foreach (var tipo in tipos)
+        foreach (var type in types)
         {
-            var entidad = modelBuilder.Entity(tipo);
-            entidad.HasKey(nameof(EntidadBase.Id));
-            entidad.Property(nameof(EntidadBase.Id)).HasColumnName("id").ValueGeneratedNever();
-            entidad.Property(nameof(EntidadBase.PfId)).HasColumnName("pf_id").IsRequired();
-            entidad.Property(nameof(EntidadBase.CreadoEn)).HasColumnName("creado_en").IsRequired();
-            entidad.Property(nameof(EntidadBase.BorradoEn)).HasColumnName("borrado_en");
-            entidad.HasIndex(nameof(EntidadBase.PfId));
-            entidad.HasQueryFilter((LambdaExpression)crearFiltro.MakeGenericMethod(tipo).Invoke(this, null)!);
+            var entity = modelBuilder.Entity(type);
+            entity.HasKey(nameof(BaseEntity.Id));
+            entity.Property(nameof(BaseEntity.Id)).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(nameof(BaseEntity.PfId)).HasColumnName("pf_id").IsRequired();
+            entity.Property(nameof(BaseEntity.CreatedAt)).HasColumnName("created_at").IsRequired();
+            entity.Property(nameof(BaseEntity.DeletedAt)).HasColumnName("deleted_at");
+            entity.HasIndex(nameof(BaseEntity.PfId));
+            entity.HasQueryFilter((LambdaExpression)createFilter.MakeGenericMethod(type).Invoke(this, null)!);
         }
     }
 
-    private Expression<Func<T, bool>> FiltroPorPf<T>() where T : EntidadBase =>
-        entidad => entidad.PfId == PfIdActual && entidad.BorradoEn == null;
+    private Expression<Func<T, bool>> FilterByPf<T>() where T : BaseEntity =>
+        entity => entity.PfId == CurrentPfId && entity.DeletedAt == null;
 
-    // Al crear: PfId del token y CreadoEn. Al borrar: borrado lógico (BorradoEn).
-    // PfId y CreadoEn no se pueden cambiar después.
-    private void CompletarCamposBase()
+    // On create: PfId from the token and CreatedAt. On delete: soft delete (DeletedAt).
+    // PfId and CreatedAt cannot be changed afterwards.
+    private void SetBaseFields()
     {
-        var ahora = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
 
-        foreach (var entrada in ChangeTracker.Entries<EntidadBase>())
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
-            switch (entrada.State)
+            switch (entry.State)
             {
                 case EntityState.Added:
-                    entrada.Property(entidad => entidad.PfId).CurrentValue = usuarioActual.PfId
+                    entry.Property(entity => entity.PfId).CurrentValue = currentUser.PfId
                         ?? throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token.");
-                    entrada.Property(entidad => entidad.CreadoEn).CurrentValue = ahora;
+                    entry.Property(entity => entity.CreatedAt).CurrentValue = now;
                     break;
 
                 case EntityState.Modified:
-                    entrada.Property(entidad => entidad.PfId).IsModified = false;
-                    entrada.Property(entidad => entidad.CreadoEn).IsModified = false;
+                    entry.Property(entity => entity.PfId).IsModified = false;
+                    entry.Property(entity => entity.CreatedAt).IsModified = false;
                     break;
 
                 case EntityState.Deleted:
-                    entrada.State = EntityState.Modified;
-                    entrada.Property(entidad => entidad.BorradoEn).CurrentValue = ahora;
+                    entry.State = EntityState.Modified;
+                    entry.Property(entity => entity.DeletedAt).CurrentValue = now;
                     break;
             }
         }

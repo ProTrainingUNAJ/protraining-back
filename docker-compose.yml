@@ -51,9 +51,7 @@ services:
       <<: *db-env
       POSTGRES_DB: estructura
     ports: ["5434:5432"]
-    volumes:
-      - db-estructura:/var/lib/postgresql/data
-      - ./services/estructura/db:/docker-entrypoint-initdb.d:ro
+    volumes: [db-estructura:/var/lib/postgresql/data]
 
   db-entrenamiento:
     <<: *db

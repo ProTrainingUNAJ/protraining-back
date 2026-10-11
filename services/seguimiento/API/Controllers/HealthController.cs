@@ -1,4 +1,4 @@
-using Application.DTOs;
+using Application.DTOs.Common;
 using Application.UseCases.Health.GetHealth;
 using Microsoft.AspNetCore.Mvc;
 

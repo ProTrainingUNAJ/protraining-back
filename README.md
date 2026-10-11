@@ -120,17 +120,17 @@ Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. N
 
 ### Entidad base
 
-Toda entidad hereda de `EntidadBase` (`Domain/Common/EntidadBase.cs`):
+Toda entidad hereda de `BaseEntity` (`Domain/Common/BaseEntity.cs`):
 
 | Campo | Columna | Quién lo completa |
 |---|---|---|
 | `Id` (Guid) | `id` | Se genera al crear la entidad |
 | `PfId` | `pf_id` | El `AppDbContext` al guardar, con el PF del token |
-| `CreadoEn` | `creado_en` | El `AppDbContext` al guardar (UTC) |
-| `BorradoEn` | `borrado_en` | El `AppDbContext` al borrar |
+| `CreatedAt` | `created_at` | El `AppDbContext` al guardar (UTC) |
+| `DeletedAt` | `deleted_at` | El `AppDbContext` al borrar |
 
 ```csharp
-public sealed class CheckIn : EntidadBase
+public sealed class CheckIn : BaseEntity
 {
     public Guid AtletaId { get; private set; }   // id de otro servicio: Guid, sin relación de base
     // ...
@@ -141,13 +141,13 @@ Las columnas se nombran en `snake_case` con `HasColumnName` en la configuración
 
 ### El PF del token
 
-Cada servicio lee el PF del claim **`pf_id`** del JWT (`IUsuarioActual`). Identidad tiene que poner ese claim al emitir el token: para un PF es su propio id, y para un atleta el id de su PF.
+Cada servicio lee el PF del claim **`pf_id`** del JWT (`ICurrentUser`). Identidad tiene que poner ese claim al emitir el token: para un PF es su propio id, y para un atleta el id de su PF.
 
 ### Lo que hace solo el `AppDbContext`
 
-- **Filtro global**: toda consulta sobre una entidad que hereda de `EntidadBase` trae sólo los datos del PF del token y nunca los borrados. Sin token no trae nada. No hace falta agregar `Where(x => x.PfId == ...)` a mano.
-- **Al crear**: completa `PfId` y `CreadoEn`. Sin PF en el token, no deja guardar y responde 401.
-- **Al borrar** (`Remove`): no borra la fila, completa `BorradoEn` (borrado lógico). `PfId` y `CreadoEn` no se pueden cambiar.
+- **Filtro global**: toda consulta sobre una entidad que hereda de `BaseEntity` trae sólo los datos del PF del token y nunca los borrados. Sin token no trae nada. No hace falta agregar `Where(x => x.PfId == ...)` a mano.
+- **Al crear**: completa `PfId` y `CreatedAt`. Sin PF en el token, no deja guardar y responde 401.
+- **Al borrar** (`Remove`): no borra la fila, completa `DeletedAt` (borrado lógico). `PfId` y `CreatedAt` no se pueden cambiar.
 - Si en algún caso puntual hace falta ver todo (por ejemplo, un proceso interno), se usa `IgnoreQueryFilters()` a conciencia.
 
 ### Migraciones
@@ -167,7 +167,31 @@ No necesita la base ni variables de entorno. Va a mostrar un aviso de que falta 
 Reglas:
 - Los cambios al modelo van por PR, **con una sola migración por PR**.
 - Si dos migraciones del mismo servicio chocan, el segundo en mergear borra la suya, hace pull de `develop` y la vuelve a generar.
-- **Estructura**: antes de crear su primera migración, hay que borrar el ejemplo de atletas (`Athlete`, su configuración y el `db/001-init.sql`), que no usa la entidad base.
+
+## Convenciones
+
+### Idioma
+
+- **Código en inglés**: clases, propiedades, métodos, variables, columnas, tablas, comentarios y configuración.
+- **Mensajes en español**: errores de la API (ProblemDetails), validaciones, excepciones y logs; todo lo que lee una persona. Si el front necesita otros idiomas, conviene que traduzca según el tipo de error y no el texto.
+- **Documentación en español**: README, documentación de cada servicio y PRs.
+- **`PfId`** (preparador físico) queda como término del dominio, igual que el claim `pf_id`.
+- Los nombres de los servicios y sus rutas siguen como están: `identidad`, `estructura`, `/api/estructura/...`.
+
+### Carpetas
+
+DTOs y requests van por módulo dentro de `Application/DTOs/`:
+
+```
+Application/
+  DTOs/
+    Common/      ← HealthDto y lo compartido
+    Auth/        ← LoginRequestDto, LoginResponseDto, UserDto
+    Athletes/    ← AthleteDto, CreateAthleteRequest
+  UseCases/
+    Auth/Login/
+    Athletes/CreateAthlete/
+```
 
 ## Crear un servicio nuevo
 

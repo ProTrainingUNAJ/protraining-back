@@ -3,7 +3,7 @@ using Domain.Exceptions;
 
 namespace Domain.Entities;
 
-public sealed class DigitalConsent : EntidadBase
+public sealed class DigitalConsent : BaseEntity
 {
     public Guid AthleteId { get; private set; }
     public bool IsSigned { get; private set; }
