@@ -8,7 +8,7 @@ using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.ListAthletes;
-using Application.UseCases.Athletes.UpdateAthleteCategory;
+using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
@@ -52,7 +52,7 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<ListAthletesQueryHandler>();
 builder.Services.AddScoped<GetAthleteQueryHandler>();
 builder.Services.AddScoped<CreateAthleteCommandHandler>();
-builder.Services.AddScoped<UpdateAthleteCategoryCommandHandler>();
+builder.Services.AddScoped<UpdateHabitsPermissionCommandHandler>();
 builder.Services.AddScoped<DeleteAthleteCommandHandler>();
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();

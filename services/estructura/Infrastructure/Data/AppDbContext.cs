@@ -14,9 +14,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuari
     // Sin token es Guid.Empty y los filtros no devuelven nada.
     private Guid PfIdActual => usuarioActual.PfId ?? Guid.Empty;
 
-    // Ejemplo de la plantilla: no hereda de EntidadBase, así que no tiene filtro por PF.
-    // Se reemplaza por el Atleta real en la #015.
     public DbSet<Athlete> Athletes => Set<Athlete>();
+    public DbSet<DigitalConsent> DigitalConsents => Set<DigitalConsent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
