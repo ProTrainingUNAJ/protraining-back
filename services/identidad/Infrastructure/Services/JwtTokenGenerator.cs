@@ -13,7 +13,7 @@ namespace Infrastructure.Services;
 /// </summary>
 public class JwtTokenGenerator(IConfiguration configuration) : IJwtTokenGenerator
 {
-    public string GenerateToken(Usuario user, string role)
+    public string GenerateToken(User user, string role)
     {
         var key = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("Falta la variable de configuración Jwt:Key.");
@@ -31,7 +31,7 @@ public class JwtTokenGenerator(IConfiguration configuration) : IJwtTokenGenerato
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-            new(JwtRegisteredClaimNames.Name, user.NombreCompleto),
+            new(JwtRegisteredClaimNames.Name, user.FullName),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("role", role),
             new("pf_id", pfId.ToString())

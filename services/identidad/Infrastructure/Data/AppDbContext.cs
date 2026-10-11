@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Infrastructure.Data;
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual usuarioActual)
-    : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<User, IdentityRole<Guid>, Guid>(options)
 {
     // EF lo vuelve a leer en cada consulta, así que siempre es el PF del pedido actual.
     // Sin token es Guid.Empty y los filtros no devuelven nada.
@@ -25,10 +25,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuari
         modelBuilder.HasDefaultSchema("db_identity");
         
              // 3. nombres de tablas de identity en minusculas
-        modelBuilder.Entity<Usuario>(b =>
+        modelBuilder.Entity<User>(b =>
              {
             b.ToTable("usuarios");
-            b.Property(u => u.NombreCompleto).HasMaxLength(200);
+            b.Property(u => u.FullName).HasMaxLength(200);
                  });
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
         modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("usuarios_roles");
