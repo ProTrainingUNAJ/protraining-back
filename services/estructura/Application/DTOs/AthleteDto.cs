@@ -1,3 +1,16 @@
 namespace Application.DTOs;
 
-public sealed record AthleteDto(long Id, string FullName, string Category, decimal Record1RmKg, bool Active);
+public sealed record AthleteDto(
+    Guid Id,
+    Guid? AccountId,
+    string FirstName,
+    string LastName,
+    string FullName,
+    string Email,
+    string Phone,
+    bool IsMinor,
+    string? EmergencyContact,
+    string? MedicalConditions,
+    bool Active,
+    bool AllowsHabitsRecommendations,
+    GuardianConsentDto? GuardianConsent);
