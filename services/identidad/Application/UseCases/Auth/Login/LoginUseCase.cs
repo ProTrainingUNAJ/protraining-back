@@ -9,7 +9,7 @@ namespace Application.UseCases.Auth.Login;
 /// caso de uso que valida las credenciales del usuario y emite su token JWT
 /// </summary>
 public class LoginUseCase(
-    UserManager<Usuario> userManager,
+    UserManager<User> userManager,
     IJwtTokenGenerator jwtTokenGenerator)
 {
     /// <summary>
@@ -21,7 +21,7 @@ public class LoginUseCase(
     {
         // 1. buscar al usuario por email
         var user = await userManager.FindByEmailAsync(request.Email);
-        if (user == null || !user.Activo)
+        if (user == null || !user.IsActive)
         {
             return null; // credenciales invalidas
         }
@@ -48,7 +48,7 @@ public class LoginUseCase(
             User: new UserDto(
                 user.Id,
                 user.Email!,
-                user.NombreCompleto,
+                user.FullName,
                 primaryRole,
                 user.PfId ?? user.Id
             )

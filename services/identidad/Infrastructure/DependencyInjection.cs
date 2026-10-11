@@ -44,7 +44,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)));
 
                // configuracion de ASP.NET Core Identity (PBKDF2)
-        services.AddIdentityCore<Usuario>(options =>
+        services.AddIdentityCore<User>(options =>
         {
                        // reglas de contraseña
             options.Password.RequireDigit = true;
