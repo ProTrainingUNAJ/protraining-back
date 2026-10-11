@@ -11,12 +11,12 @@ using Serilog;
 using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
-var servicio = builder.Configuration["Servicio"] ?? "API";
+var serviceName = builder.Configuration["Service"] ?? "API";
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .Enrich.WithProperty("Servicio", servicio)
+    .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -42,22 +42,22 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
+// Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IUsuarioActual, UsuarioActual>();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
-        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {servicio}", Version = "v1" }));
+        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {serviceName}", Version = "v1" }));
 }
 
 var app = builder.Build();
-await app.Services.AplicarMigracionesAsync();
+await app.Services.ApplyMigrationsAsync();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();

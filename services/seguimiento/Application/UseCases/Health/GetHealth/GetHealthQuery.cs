@@ -1,4 +1,4 @@
-using Application.DTOs;
+using Application.DTOs.Common;
 using Application.Interfaces.Services;
 
 namespace Application.UseCases.Health.GetHealth;

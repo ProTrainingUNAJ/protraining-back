@@ -9,7 +9,7 @@ public static class ServiceCollectionExtensions
 {
     public const string CorsPolicyName = "Frontend";
 
-    // Orígenes desde Cors:AllowedOrigins (en variables de entorno: Cors__AllowedOrigins__0, __1, ...).
+    // Origins from Cors:AllowedOrigins (as environment variables: Cors__AllowedOrigins__0, __1, ...).
     public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
     {
         var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -23,7 +23,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    // Deja configurado JWT Bearer; los endpoints todavía no lo exigen (no hay [Authorize]).
+    // Configures JWT Bearer; endpoints opt in with [Authorize].
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         string Required(string key) =>

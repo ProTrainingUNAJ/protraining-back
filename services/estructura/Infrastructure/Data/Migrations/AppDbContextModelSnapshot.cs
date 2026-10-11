@@ -38,13 +38,13 @@ namespace Infrastructure.Data.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("active");
 
-                    b.Property<DateTime?>("BorradoEn")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("borrado_en");
+                        .HasColumnName("created_at");
 
-                    b.Property<DateTime>("CreadoEn")
+                    b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("creado_en");
+                        .HasColumnName("deleted_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -113,17 +113,17 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("athlete_id");
 
-                    b.Property<DateTime?>("BorradoEn")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("borrado_en");
-
                     b.Property<DateTime>("ConsentDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("consent_date");
 
-                    b.Property<DateTime>("CreadoEn")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("creado_en");
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
 
                     b.Property<string>("GuardianEmail")
                         .HasMaxLength(150)

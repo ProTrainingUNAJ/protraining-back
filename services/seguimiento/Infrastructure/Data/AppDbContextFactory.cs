@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace Infrastructure.Data;
 
-// Lo usa sólo "dotnet ef" para crear migraciones, sin levantar la API ni pedir variables de entorno.
+// Used only by "dotnet ef" to create migrations, without starting the API or requiring environment variables.
 public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)
@@ -13,10 +13,10 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .UseNpgsql("Host=localhost")
             .Options;
 
-        return new AppDbContext(options, new SinUsuario());
+        return new AppDbContext(options, new NoUser());
     }
 
-    private sealed class SinUsuario : IUsuarioActual
+    private sealed class NoUser : ICurrentUser
     {
         public Guid? PfId => null;
     }
