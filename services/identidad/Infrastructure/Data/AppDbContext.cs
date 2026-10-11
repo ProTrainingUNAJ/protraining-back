@@ -2,12 +2,15 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Application.Interfaces.Services;
 using Domain.Common;
+using Domain.Entities;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual usuarioActual)
-    : DbContext(options)
+    : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>(options)
 {
     // EF lo vuelve a leer en cada consulta, así que siempre es el PF del pedido actual.
     // Sin token es Guid.Empty y los filtros no devuelven nada.
@@ -15,6 +18,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IUsuari
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+             // 1. obligatorio para identity: carga sus claves primarias
+        base.OnModelCreating(modelBuilder);
+        
+             // 2. esquema "db_identity"
+        modelBuilder.HasDefaultSchema("db_identity");
+        
+             // 3. nombres de tablas de identity en minusculas
+        modelBuilder.Entity<Usuario>(b =>
+             {
+            b.ToTable("usuarios");
+            b.Property(u => u.NombreCompleto).HasMaxLength(200);
+                 });
+        modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("usuarios_roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("usuarios_claims");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("usuarios_logins");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("roles_claims");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("usuarios_tokens");
+
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         ConfigurarEntidadesBase(modelBuilder);
     }
