@@ -16,6 +16,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<Athlete> Athletes => Set<Athlete>();
     public DbSet<DigitalConsent> DigitalConsents => Set<DigitalConsent>();
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<AthleteCategory> AthleteCategories => Set<AthleteCategory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
