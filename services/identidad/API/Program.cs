@@ -9,6 +9,7 @@ using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.Auth.Login;
 
 var builder = WebApplication.CreateBuilder(args);
 var servicio = builder.Configuration["Servicio"] ?? "API";
@@ -45,6 +46,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUsuarioActual, UsuarioActual>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
@@ -58,6 +60,13 @@ if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 await app.Services.AplicarMigracionesAsync();
+
+// solo en dev creamos roles y el usuario inicial de prueba
+if (app.Environment.IsDevelopment())
+{
+    await Infrastructure.Data.IdentityDataSeed.SeedAsync(app.Services);
+}
+
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
