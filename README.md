@@ -172,7 +172,9 @@ Reglas:
 
 ### Idioma
 
-- **Código en inglés**: clases, propiedades, métodos, variables, columnas, tablas, comentarios y configuración.
+- **Código en inglés**: clases, interfaces, propiedades, métodos, variables, parámetros y configuración.
+- **Comentarios en el código**: a definir con el equipo. Mientras tanto, cada uno como le resulte más claro.
+- **Base de datos**: los nombres de tablas y columnas no se normalizan; se respeta lo que ya tiene cada servicio.
 - **Mensajes en español**: errores de la API (ProblemDetails), validaciones, excepciones y logs; todo lo que lee una persona. Si el front necesita otros idiomas, conviene que traduzca según el tipo de error y no el texto.
 - **Documentación en español**: README, documentación de cada servicio y PRs.
 - **`PfId`** (preparador físico) queda como término del dominio, igual que el claim `pf_id`.
@@ -192,6 +194,19 @@ Application/
     Auth/Login/
     Athletes/CreateAthlete/
 ```
+
+## Comandos de IA para el equipo
+
+En `.agents/` hay dos comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
+
+- **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
+- **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
+
+Cómo se usan:
+- **Antigravity**: escribí `/convenciones` o `/documentar` en el chat del agente (son *workflows*, en `.agents/workflows/`).
+- **Otro asistente**: pedile "seguí las instrucciones de `.agents/skills/convenciones/SKILL.md`".
+
+Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. Si cambian las convenciones, se actualizan este README y ese archivo.
 
 ## Crear un servicio nuevo
 
