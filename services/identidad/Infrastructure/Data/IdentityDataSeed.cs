@@ -12,7 +12,7 @@ public static class IdentityDataSeed
     public static async Task SeedAsync(IServiceProvider serviceProvider)
     {
         using var scope = serviceProvider.CreateScope();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
 
         // 1. crear roles si no existen
@@ -31,13 +31,13 @@ public static class IdentityDataSeed
 
         if (existingUser == null)
         {
-            var pfUser = new Usuario
+            var pfUser = new User
             {
                 UserName = testEmail,
                 Email = testEmail,
-                NombreCompleto = "Prof. Alejandro Lopez",
+                FullName = "Prof. Alejandro Lopez",
                 EmailConfirmed = true,
-                Activo = true
+                IsActive = true
             };
 
             var result = await userManager.CreateAsync(pfUser, "ProTraining2026!");

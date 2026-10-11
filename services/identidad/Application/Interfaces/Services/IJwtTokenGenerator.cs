@@ -13,5 +13,5 @@ public interface IJwtTokenGenerator
     /// <param name="user">entidad del usuario autenticado.</param>
     /// <param name="role">rol principal del usuario (PreparadorFisico o Atleta).</param>
     /// <returns>El string del token JWT firmado.</returns>
-    string GenerateToken(Usuario user, string role);
+    string GenerateToken(User user, string role);
 }
