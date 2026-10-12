@@ -6,5 +6,5 @@ public sealed class OllamaOptions
 
     public string BaseUrl { get; set; } = "http://localhost:11434";
     public string Model { get; set; } = "llama3.2:1b";
-    public int TimeoutSeconds { get; set; } = 5;
+    public int TimeoutSeconds { get; set; } = 15;
 }
