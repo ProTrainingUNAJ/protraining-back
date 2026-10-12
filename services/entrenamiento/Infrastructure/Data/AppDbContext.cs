@@ -13,6 +13,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     // Without a token it is Guid.Empty and the filters return nothing.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
+    public DbSet<Domain.Entities.AthleteRecord> AthleteRecords { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
