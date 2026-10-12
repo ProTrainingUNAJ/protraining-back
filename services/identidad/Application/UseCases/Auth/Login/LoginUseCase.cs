@@ -2,6 +2,7 @@
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Application.Exceptions;
 
 namespace Application.UseCases.Auth.Login;
 
@@ -17,30 +18,44 @@ public class LoginUseCase(
     /// </summary>
     /// <param name="request">Credenciales enviadas (Email y Password).</param>
     /// <returns>LoginResponse con el JWT si es válido, o null si las credenciales son incorrectas.</returns>
-    public async Task<LoginResponseDto?> ExecuteAsync(LoginRequestDto request)
+    public async Task<LoginResponseDto> ExecuteAsync(LoginRequestDto request)
+
     {
         // 1. buscar al usuario por email
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user == null || !user.IsActive)
         {
-            return null; // credenciales invalidas
+            throw new InvalidCredentialsException();
         }
 
-        // 2. verificar la contraseña con el hasher seguro PBKDF2
+        // 2. verificar si la cuenta se encuentra bloqueada por intentos fallidos previos
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            throw new InvalidCredentialsException();
+        }
+
+
+        // 3. verificar la contraseña con el hasher seguro PBKDF2
         var isPasswordValid = await userManager.CheckPasswordAsync(user, request.Password);
         if (!isPasswordValid)
         {
-            return null; // Credenciales inválidas
+            // suma un intento fallido. Al llegar a 5, Identity bloquea la cuenta automáticamente por 15 minutos
+            await userManager.AccessFailedAsync(user);
+            throw new InvalidCredentialsException();
         }
 
-        // 3. obtener el rol del usuario (por defecto Atleta si no tiene)
+        // 4. si la contraseña fue correcta, reiniciar el contador de fallos a cero
+        await userManager.ResetAccessFailedCountAsync(user);
+
+
+        // 5. obtener el rol del usuario (por defecto Atleta si no tiene)
         var roles = await userManager.GetRolesAsync(user);
         var primaryRole = roles.FirstOrDefault() ?? "Atleta";
 
-        // 4. generar el JWT con claims unificados (sub, email, role, pf_id)
+        // 6. generar el JWT con claims unificados (sub, email, role, pf_id)
         var token = jwtTokenGenerator.GenerateToken(user, primaryRole);
 
-        // 5. retornar la respuesta con 1 hora de expiracion (3600 segundos)
+        // 7. retornar la respuesta con 1 hora de expiracion (3600 segundos)
         return new LoginResponseDto(
             AccessToken: token,
             TokenType: "Bearer",
