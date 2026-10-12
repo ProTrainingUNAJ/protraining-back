@@ -185,13 +185,23 @@ Reglas:
 
 ### Idioma
 
-- **Código en inglés**: clases, interfaces, propiedades, métodos, variables, parámetros y configuración.
-- **Comentarios en el código**: a definir con el equipo. Mientras tanto, cada uno como le resulte más claro.
-- **Base de datos**: los nombres de tablas y columnas no se normalizan; se respeta lo que ya tiene cada servicio.
-- **Mensajes en español**: errores de la API (ProblemDetails), validaciones, excepciones y logs; todo lo que lee una persona. Si el front necesita otros idiomas, conviene que traduzca según el tipo de error y no el texto.
-- **Documentación en español**: README, documentación de cada servicio y PRs.
-- **`PfId`** (preparador físico) queda como término del dominio, igual que el claim `pf_id`.
-- Los nombres de los servicios y sus rutas siguen como están: `identidad`, `estructura`, `/api/estructura/...`.
+**La regla: lo que lee una persona va en español; todo lo demás, en inglés.**
+
+| En **español** | En **inglés** |
+|---|---|
+| Textos de las pantallas del front | Carpetas y archivos (back y front) |
+| Mensajes de la API: errores (ProblemDetails), validaciones, excepciones | Clases, interfaces, métodos, propiedades, variables, parámetros |
+| Emails y notificaciones | Comentarios en el código |
+| Logs | Rutas de la API y campos del JSON (`/api/v1/athletes`, `firstName`) |
+| Documentación: README, Jira, PRs, notas de `/documentar` | Tablas y columnas de la base (en `snake_case`: `athletes`, `first_name`) |
+| | Claves de configuración y valores internos (enums) |
+
+**Las únicas excepciones** (quedan en español a propósito):
+- **`PfId` / `pf_id`** (preparador físico): término del dominio.
+- **Los nombres de los servicios**: carpetas `services/identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente` y sus rutas en el gateway (`/estructura/...`).
+- **Los roles**: `PreparadorFisico`, `Atleta`, `Tutor`.
+
+Todo lo nuevo sigue esta regla. Lo que ya existe y no la cumple se va corrigiendo en las tareas de cada uno.
 
 ### Carpetas
 
