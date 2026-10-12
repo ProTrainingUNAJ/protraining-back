@@ -101,7 +101,7 @@ namespace Infrastructure.Data.Migrations
 
                     b.ToTable("exercises", (string)null);
                     b.ToTable("athlete_records", (string)null);
-                });
+                }));
 #pragma warning restore 612, 618
         }
     }
