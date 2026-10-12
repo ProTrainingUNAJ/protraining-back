@@ -1,7 +1,9 @@
+using Application.DTOs.Athletes;
 using Application.DTOs.Categories;
 using Application.UseCases.Categories.CreateCategory;
 using Application.UseCases.Categories.DeleteCategory;
 using Application.UseCases.Categories.GetCategory;
+using Application.UseCases.Categories.ListAthletesByCategory;
 using Application.UseCases.Categories.ListCategories;
 using Application.UseCases.Categories.UpdateCategory;
 using Microsoft.AspNetCore.Authorization;
@@ -17,7 +19,8 @@ public sealed class CategoriesController(
     GetCategoryQueryHandler getHandler,
     CreateCategoryCommandHandler createHandler,
     UpdateCategoryCommandHandler updateHandler,
-    DeleteCategoryCommandHandler deleteHandler) : ControllerBase
+    DeleteCategoryCommandHandler deleteHandler,
+    ListAthletesByCategoryQueryHandler listAthletesHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CategoryDto>>> List(
@@ -57,4 +60,10 @@ public sealed class CategoriesController(
         await deleteHandler.HandleAsync(new DeleteCategoryCommand(id), cancellationToken);
         return NoContent();
     }
+
+    [HttpGet("{id:guid}/athletes")]
+    public async Task<ActionResult<IReadOnlyList<AthleteDto>>> ListAthletes(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await listAthletesHandler.HandleAsync(new ListAthletesByCategoryQuery(id), cancellationToken));
 }
