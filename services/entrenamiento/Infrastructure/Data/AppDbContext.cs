@@ -16,10 +16,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<Exercise> Exercises { get; set; }
 
-    public DbSet<Domain.Entities.AthleteRecord> AthleteRecords { get; set; }
+    public DbSet<AthleteRecord> AthleteRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("pg_trgm");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         ConfigureBaseEntities(modelBuilder);
     }
