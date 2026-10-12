@@ -67,7 +67,8 @@ curl http://localhost:11434/api/tags      # modelos instalados
 
 El Asistente no depende de Ollama para arrancar: si no está, el resto del sistema sigue andando.
 
-- **Modelo inicial para pruebas:** `llama3.2:1b` (se descarga automáticamente al levantar el perfil, con el servicio auxiliar `ollama-model`).
+- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
+- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
 - **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
 - **Memoria RAM requerida:**
   - En reposo (inactivo): ~200 MB.
@@ -122,6 +123,7 @@ En el `.env` (las usa el compose):
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
 | `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
+| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -132,6 +134,7 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
+| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
