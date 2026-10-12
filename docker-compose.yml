@@ -131,6 +131,7 @@ services:
       Database__Name: asistente
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
     ports: ["8085:8080"]
     depends_on:
       db-asistente: { condition: service_healthy }

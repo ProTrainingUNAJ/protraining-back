@@ -56,7 +56,7 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
-### Modelo local de IA (Ollama)
+### Modelo local de IA (Ollama) y Respaldo Resiliente
 
 El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
 
@@ -65,7 +65,12 @@ docker compose --profile ia up -d
 curl http://localhost:11434/api/tags      # modelos instalados
 ```
 
-El Asistente no depende de Ollama para arrancar: si no está, el resto del sistema sigue andando.
+El Asistente opera con una arquitectura resiliente de 3 niveles:
+1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
+2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
+3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
+
+El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
 
 - **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
 - **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
@@ -124,6 +129,7 @@ En el `.env` (las usa el compose):
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
 | `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
 | `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
+| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -135,6 +141,7 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
 | `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
+| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
