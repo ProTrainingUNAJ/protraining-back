@@ -38,7 +38,6 @@ Levanta el gateway, los 5 servicios y sus 5 bases. Cada servicio espera a que su
 ```bash
 curl http://localhost:8082/health                     # Estructura directo
 curl http://localhost:8000/estructura/api/athletes   # Estructura por el gateway
-curl http://localhost:11434/api/tags                  # Ollama directo (modelos instalados)
 ```
 
 Para sumar el front (tiene que estar clonado al lado, en `../protraining-front`), queda en `http://localhost:3000`:
@@ -59,9 +58,16 @@ docker compose down -v                   # bajar todo y borrar las bases
 
 ### Modelo local de IA (Ollama)
 
-El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos.
+El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
 
-- **Modelo inicial para pruebas:** `llama3.2:1b` (se descarga automáticamente al iniciar el compose con el servicio auxiliar `ollama-model`).
+```bash
+docker compose --profile ia up -d
+curl http://localhost:11434/api/tags      # modelos instalados
+```
+
+El Asistente no depende de Ollama para arrancar: si no está, el resto del sistema sigue andando.
+
+- **Modelo inicial para pruebas:** `llama3.2:1b` (se descarga automáticamente al levantar el perfil, con el servicio auxiliar `ollama-model`).
 - **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
 - **Memoria RAM requerida:**
   - En reposo (inactivo): ~200 MB.

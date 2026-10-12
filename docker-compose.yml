@@ -134,8 +134,11 @@ services:
     depends_on:
       db-asistente: { condition: service_healthy }
 
-  # ---------- Modelo local de IA (Ollama) ----------
+  # ---------- Modelo local de IA (opcional: docker compose --profile ia up) ----------
+  # Sólo lo levanta quien trabaja con IA. El Asistente no depende de Ollama para arrancar,
+  # y el CI no lo levanta (así no descarga la imagen ni el modelo en cada PR).
   ollama:
+    profiles: [ia]
     image: ollama/ollama:latest
     restart: unless-stopped
     ports: ["11434:11434"]
@@ -148,6 +151,7 @@ services:
       start_period: 5s
 
   ollama-model:
+    profiles: [ia]
     image: ollama/ollama:latest
     depends_on:
       ollama: { condition: service_healthy }
