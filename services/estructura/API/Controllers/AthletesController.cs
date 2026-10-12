@@ -1,9 +1,11 @@
 using Application.DTOs.Athletes;
+using Application.DTOs.Categories;
 using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.ListAthletes;
+using Application.UseCases.Athletes.ListCategoriesByAthlete;
 using Application.UseCases.Athletes.RemoveAthleteCategory;
 using Application.UseCases.Athletes.UpdateAthlete;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
@@ -23,7 +25,8 @@ public sealed class AthletesController(
     UpdateHabitsPermissionCommandHandler updateHabitsPermissionHandler,
     DeleteAthleteCommandHandler deleteHandler,
     AssignAthleteCategoryCommandHandler assignCategoryHandler,
-    RemoveAthleteCategoryCommandHandler removeCategoryHandler) : ControllerBase
+    RemoveAthleteCategoryCommandHandler removeCategoryHandler,
+    ListCategoriesByAthleteQueryHandler listCategoriesHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -107,4 +110,10 @@ public sealed class AthletesController(
             cancellationToken);
         return NoContent();
     }
+
+    [HttpGet("{id:guid}/categories")]
+    public async Task<ActionResult<IReadOnlyList<CategoryDto>>> ListCategories(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await listCategoriesHandler.HandleAsync(new ListCategoriesByAthleteQuery(id), cancellationToken));
 }

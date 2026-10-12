@@ -14,6 +14,31 @@ public sealed class AthleteCategoryRepository(AppDbContext context) : IAthleteCa
                 .Where(ac => ac.AthleteId == athleteId)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<Athlete>> ListAthletesByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteCategories
+                .AsNoTracking()
+                .Where(ac => ac.CategoryId == categoryId)
+                .Join(context.Athletes.Include(a => a.DigitalConsent),
+                    ac => ac.AthleteId,
+                    a => a.Id,
+                    (ac, a) => a)
+                .OrderBy(a => a.LastName)
+                .ThenBy(a => a.FirstName)
+                .ToListAsync(cancellationToken));
+
+    public async Task<IReadOnlyList<Category>> ListCategoriesByAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteCategories
+                .AsNoTracking()
+                .Where(ac => ac.AthleteId == athleteId)
+                .Join(context.Categories,
+                    ac => ac.CategoryId,
+                    c => c.Id,
+                    (ac, c) => c)
+                .OrderBy(c => c.Name)
+                .ToListAsync(cancellationToken));
+
     public async Task<AthleteCategory?> GetAsync(Guid athleteId, Guid categoryId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.AthleteCategories
