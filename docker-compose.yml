@@ -130,6 +130,7 @@ services:
       Database__Host: db-asistente
       Database__Name: asistente
       Ollama__BaseUrl: http://ollama:11434
+      Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
     ports: ["8085:8080"]
     depends_on:
       db-asistente: { condition: service_healthy }
@@ -139,7 +140,7 @@ services:
   # y el CI no lo levanta (así no descarga la imagen ni el modelo en cada PR).
   ollama:
     profiles: [ia]
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.40.3
     restart: unless-stopped
     ports: ["11434:11434"]
     volumes: [ollama:/root/.ollama]
@@ -152,12 +153,12 @@ services:
 
   ollama-model:
     profiles: [ia]
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.40.3
     depends_on:
       ollama: { condition: service_healthy }
     environment:
       - OLLAMA_HOST=ollama:11434
-    entrypoint: ["ollama", "pull", "llama3.2:1b"]
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.2:1b}"]
     restart: "no"
 
   # ---------- Gateway ----------
