@@ -65,7 +65,8 @@ public sealed class GeminiClient(
                 }
             };
 
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
+            var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://generativelanguage.googleapis.com" : _options.BaseUrl.TrimEnd('/');
+            var url = $"{baseUrl}/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
             using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
