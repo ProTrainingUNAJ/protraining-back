@@ -52,7 +52,12 @@ public static class ServiceCollectionExtensions
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.FromSeconds(30)
+                    ClockSkew = TimeSpan.FromSeconds(30),
+                    // Claims are kept with their JWT names (MapInboundClaims = false),
+                    // so tell ASP.NET Core which ones hold the user's name and role
+                    // ([Authorize(Roles = "...")] and User.Identity.Name depend on this).
+                    NameClaimType = "name",
+                    RoleClaimType = "role"
                 };
             });
         services.AddAuthorization();
