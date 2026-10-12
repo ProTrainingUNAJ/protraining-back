@@ -56,7 +56,7 @@ public sealed class OllamaClient(
                     isValid: false,
                     validationResult: "ErrorHttp",
                     athleteId: request.AthleteId,
-                    errorMessage: $"Ollama HTTP {response.StatusCode}"));
+                    errorMessage: $"Ollama HTTP {(int)response.StatusCode} ({response.StatusCode})"));
                 return null;
             }
 
@@ -101,7 +101,30 @@ public sealed class OllamaClient(
                 return null;
             }
 
-            var parsed = JsonSerializer.Deserialize<RawRoutineProposal>(rawText, JsonOptions);
+            var cleanedJson = CleanJson(rawText);
+            RawRoutineProposal? parsed;
+            try
+            {
+                parsed = JsonSerializer.Deserialize<RawRoutineProposal>(cleanedJson, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                stopwatch.Stop();
+                logger.LogWarning(ex, "El texto generado por Ollama no posee formato JSON válido. Activando respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "JsonInvalido",
+                    response: rawText,
+                    athleteId: request.AthleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: ex.Message));
+                return null;
+            }
+
             if (parsed == null || parsed.Exercises == null || parsed.Exercises.Count == 0)
             {
                 stopwatch.Stop();
@@ -203,6 +226,26 @@ public sealed class OllamaClient(
               ]
             }
             """;
+    }
+
+    private static string CleanJson(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[7..];
+        }
+        else if (trimmed.StartsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[3..];
+        }
+
+        if (trimmed.EndsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[..^3];
+        }
+
+        return trimmed.Trim();
     }
 
     private sealed class RawRoutineProposal
