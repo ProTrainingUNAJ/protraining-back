@@ -29,16 +29,25 @@ Para cada regla, buscá incumplimientos en lo que cambió. La fuente de verdad e
 
 | Qué | Idioma | Ejemplo bien | Ejemplo mal |
 |---|---|---|---|
+**La regla: lo que lee una persona va en español; todo lo demás, en inglés.**
+
+| Qué | Idioma | Ejemplo bien | Ejemplo mal |
+|---|---|---|---|
+| Carpetas y archivos (back y front) | **Inglés** | `src/pages/CheckIn/`, `Application/DTOs/Athletes/` | `src/paginas/`, `DTOs/Atletas/` |
 | Clases, interfaces, métodos, propiedades, variables, parámetros, enums | **Inglés** | `CheckInService`, `sleepHours` | `ServicioCheckIn`, `horasSueno` |
+| Comentarios en el código (incluidos los `///`) | **Inglés** | `// Only the token's PF data` | `// Solo los datos del PF` |
+| Rutas de la API y campos del JSON (código y contratos) | **Inglés** | `/api/v1/athletes`, `firstName` | `/api/v1/atletas`, `nombre` |
+| Tablas y columnas de la base (`snake_case`) | **Inglés** | `athletes`, `first_name` | `atletas`, `nombre` |
+| Textos de pantallas del front | **Español** | `"Guardar check-in"` | `"Save check-in"` |
 | Mensajes que lee una persona: excepciones, errores de la API (ProblemDetails), validaciones, logs | **Español** | `throw new DomainException("El atleta no existe.")` | `throw new DomainException("Athlete not found.")` |
 | Documentación (README, docs, descripción del PR) | **Español** | | |
 
-Excepciones que **no** son error:
-- `PfId` / `pf_id` (preparador físico) es un término del dominio y se queda así.
-- Los roles son datos y quedan en español: `"PreparadorFisico"`, `"Atleta"`, `"Tutor"`.
-- Los nombres de los servicios y sus carpetas quedan en español: `identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente`.
-- Los nombres de tablas y columnas de la base **no** se revisan.
-- Los **comentarios** (incluidos los `///` de documentación XML) **no** se marcan: el idioma de los comentarios está a definir con el equipo. Si querés, mencionalo en una sola línea de ⚠️, nunca uno por comentario.
+Las **únicas excepciones** (no son error):
+- `PfId` / `pf_id` (preparador físico), término del dominio.
+- Los nombres de los servicios: carpetas `services/identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente` y sus rutas en el gateway.
+- Los roles: `"PreparadorFisico"`, `"Atleta"`, `"Tutor"`.
+
+Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos comentarios en español, agrupalos en un solo punto con la lista de archivos.
 
 ### 2. Carpetas (cada servicio tiene `Domain`, `Application`, `Infrastructure`, `API`)
 

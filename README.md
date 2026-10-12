@@ -56,6 +56,31 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
+### Modelo local de IA (Ollama) y Respaldo Resiliente
+
+El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
+
+```bash
+docker compose --profile ia up -d
+curl http://localhost:11434/api/tags      # modelos instalados
+```
+
+El Asistente opera con una arquitectura resiliente de 3 niveles:
+1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
+2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
+3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
+
+El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
+
+- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
+- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
+- **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
+- **Memoria RAM requerida:**
+  - En reposo (inactivo): ~200 MB.
+  - En inferencia/ejecución: ~1.5 GB a 2.0 GB de RAM.
+  - *(Como referencia, el modelo `llama3.2:3b` requiere ~3.5 GB a 4 GB de RAM).*
+
+
 ## Gateway
 
 `gateway/` es un proxy con YARP. Sólo reparte los pedidos y resuelve CORS; **no valida tokens** (eso lo hace cada servicio).
@@ -103,6 +128,8 @@ En el `.env` (las usa el compose):
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
 | `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
+| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
+| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -113,6 +140,8 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
+| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
+| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
@@ -172,13 +201,23 @@ Reglas:
 
 ### Idioma
 
-- **Código en inglés**: clases, interfaces, propiedades, métodos, variables, parámetros y configuración.
-- **Comentarios en el código**: a definir con el equipo. Mientras tanto, cada uno como le resulte más claro.
-- **Base de datos**: los nombres de tablas y columnas no se normalizan; se respeta lo que ya tiene cada servicio.
-- **Mensajes en español**: errores de la API (ProblemDetails), validaciones, excepciones y logs; todo lo que lee una persona. Si el front necesita otros idiomas, conviene que traduzca según el tipo de error y no el texto.
-- **Documentación en español**: README, documentación de cada servicio y PRs.
-- **`PfId`** (preparador físico) queda como término del dominio, igual que el claim `pf_id`.
-- Los nombres de los servicios y sus rutas siguen como están: `identidad`, `estructura`, `/api/estructura/...`.
+**La regla: lo que lee una persona va en español; todo lo demás, en inglés.**
+
+| En **español** | En **inglés** |
+|---|---|
+| Textos de las pantallas del front | Carpetas y archivos (back y front) |
+| Mensajes de la API: errores (ProblemDetails), validaciones, excepciones | Clases, interfaces, métodos, propiedades, variables, parámetros |
+| Emails y notificaciones | Comentarios en el código |
+| Logs | Rutas de la API y campos del JSON (`/api/v1/athletes`, `firstName`) |
+| Documentación: README, Jira, PRs, notas de `/documentar` | Tablas y columnas de la base (en `snake_case`: `athletes`, `first_name`) |
+| | Claves de configuración y valores internos (enums) |
+
+**Las únicas excepciones** (quedan en español a propósito):
+- **`PfId` / `pf_id`** (preparador físico): término del dominio.
+- **Los nombres de los servicios**: carpetas `services/identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente` y sus rutas en el gateway (`/estructura/...`).
+- **Los roles**: `PreparadorFisico`, `Atleta`, `Tutor`.
+
+Todo lo nuevo sigue esta regla. Lo que ya existe y no la cumple se va corrigiendo en las tareas de cada uno.
 
 ### Carpetas
 

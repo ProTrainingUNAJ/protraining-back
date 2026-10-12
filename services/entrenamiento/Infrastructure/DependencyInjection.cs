@@ -1,10 +1,12 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
+using Infrastructure.Data.Seeders;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Infrastructure;
@@ -53,5 +55,9 @@ public static class DependencyInjection
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         if (context.Database.GetMigrations().Any())
             await context.Database.MigrateAsync();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
+        var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+
+        await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
     }
 }

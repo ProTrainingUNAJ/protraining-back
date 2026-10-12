@@ -2,6 +2,10 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
 using Infrastructure.Services;
+using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Gemini;
+using Infrastructure.Services.Ai.Ollama;
+using Infrastructure.Services.Ai.Rules;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +46,14 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+
+        services.Configure<OllamaOptions>(configuration.GetSection(OllamaOptions.SectionName));
+        services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
+
+        services.AddHttpClient<OllamaClient>();
+        services.AddHttpClient<GeminiClient>();
+        services.AddScoped<RuleBasedAiClient>();
+        services.AddScoped<IAiService, ResilientAiService>();
 
         return services;
     }

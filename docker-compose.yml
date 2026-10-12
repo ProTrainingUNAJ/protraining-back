@@ -129,9 +129,38 @@ services:
       <<: *api-env
       Database__Host: db-asistente
       Database__Name: asistente
+      Ollama__BaseUrl: http://ollama:11434
+      Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
     ports: ["8085:8080"]
     depends_on:
       db-asistente: { condition: service_healthy }
+
+  # ---------- Modelo local de IA (opcional: docker compose --profile ia up) ----------
+  # Sólo lo levanta quien trabaja con IA. El Asistente no depende de Ollama para arrancar,
+  # y el CI no lo levanta (así no descarga la imagen ni el modelo en cada PR).
+  ollama:
+    profiles: [ia]
+    image: ollama/ollama:0.40.3
+    restart: unless-stopped
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  ollama-model:
+    profiles: [ia]
+    image: ollama/ollama:0.40.3
+    depends_on:
+      ollama: { condition: service_healthy }
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.2:1b}"]
+    restart: "no"
 
   # ---------- Gateway ----------
   # Única entrada para el front: /identidad, /estructura, /entrenamiento, /seguimiento, /asistente.
@@ -158,3 +187,4 @@ volumes:
   db-entrenamiento:
   db-seguimiento:
   db-asistente:
+  ollama:

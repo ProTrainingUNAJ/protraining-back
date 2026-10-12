@@ -18,18 +18,11 @@ public class AuthController(LoginUseCase loginUseCase) : ControllerBase
     /// <returns>HTTP 200 con el JWT o HTTP 401 si las credenciales son invalidas.</returns>
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
         var response = await loginUseCase.ExecuteAsync(request);
-
-        if (response == null)
-        {
-            // HTTP 401 con mensaje genérico
-            return Unauthorized(new { message = "Email o contraseña incorrectos." });
-        }
-
-        // TTP 200 con JWT y expiración
         return Ok(response);
     }
+
 }

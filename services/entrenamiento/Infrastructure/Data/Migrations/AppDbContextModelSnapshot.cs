@@ -22,12 +22,16 @@ namespace Infrastructure.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.Exercise", b =>
             modelBuilder.Entity("Domain.Entities.AthleteRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AnimationUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("animation_url");
                     b.Property<Guid>("AthleteId")
                         .HasColumnType("uuid")
                         .HasColumnName("athlete_id");
@@ -44,18 +48,37 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
                     b.Property<Guid>("ExerciseId")
                         .HasColumnType("uuid")
                         .HasColumnName("exercise_id");
 
+                    b.Property<string>("Equipment")
+                        .HasColumnType("text")
+                        .HasColumnName("equipment");
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<string>("MuscleGroup")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("muscle_group");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
 
+                    b.Property<string>("VideoUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("video_url");
                     b.Property<int>("Source")
                         .HasColumnType("integer")
                         .HasColumnName("source");
@@ -65,10 +88,18 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("numeric(6,2)")
                         .HasColumnName("weight");
 
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("weight");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("MuscleGroup");
 
                     b.HasIndex("PfId");
 
+                    b.ToTable("exercises", (string)null);
                     b.ToTable("athlete_records", (string)null);
                 });
 #pragma warning restore 612, 618
