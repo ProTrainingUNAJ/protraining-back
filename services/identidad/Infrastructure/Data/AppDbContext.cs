@@ -16,6 +16,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     // Without a token it is Guid.Empty and the filters return nothing.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // 1. obligatorio para Identity: carga sus claves primarias
@@ -42,6 +44,31 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         ConfigureBaseEntities(modelBuilder);
+
+        // 4. configuracion de la tabla de tokens de refresco
+        modelBuilder.Entity<RefreshToken>(b =>
+        {
+            b.ToTable("refresh_tokens");
+            b.HasKey(rt => rt.Id);
+            b.Property(rt => rt.Id).HasColumnName("id");
+            b.Property(rt => rt.UserId).HasColumnName("user_id").IsRequired();
+            b.Property(rt => rt.Token).HasColumnName("token").HasMaxLength(200).IsRequired();
+            b.Property(rt => rt.DeviceId).HasColumnName("device_id").HasMaxLength(100).IsRequired();
+            b.Property(rt => rt.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            b.Property(rt => rt.CreatedAt).HasColumnName("created_at").IsRequired();
+            b.Property(rt => rt.IsRevoked).HasColumnName("is_revoked").IsRequired();
+            b.Property(rt => rt.RevokedAt).HasColumnName("revoked_at");
+            b.Property(rt => rt.ReplacedByToken).HasColumnName("replaced_by_token").HasMaxLength(200);
+
+            b.HasIndex(rt => rt.Token).IsUnique();
+            b.HasIndex(rt => new { rt.UserId, rt.DeviceId });
+
+            b.HasOne(rt => rt.User)
+                .WithMany()
+                .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 
 
