@@ -392,6 +392,7 @@ components:
         - tituloPropuesto
         - resumenJustificacion
         - ejercicios
+        - proveedorIa
       properties:
         atletaId:
           type: string
@@ -425,6 +426,11 @@ components:
               porcentajeSugerido:
                 type: number
                 example: 50.0
+        proveedorIa:
+          type: string
+          description: Proveedor de IA o motor que originó la propuesta (Ollama, Gemini o Reglas).
+          enum: [Ollama, Gemini, Reglas]
+          example: "Gemini"
 
     RecomendacionHabitosResponse:
       type: object
