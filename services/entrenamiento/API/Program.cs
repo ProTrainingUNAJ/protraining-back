@@ -1,14 +1,17 @@
-using System.Text.Json;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
+using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -47,6 +50,8 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
+builder.Services.AddScoped<ListExercisesQueryHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
