@@ -207,10 +207,10 @@ Reglas:
 |---|---|
 | Textos de las pantallas del front | Carpetas y archivos (back y front) |
 | Mensajes de la API: errores (ProblemDetails), validaciones, excepciones | Clases, interfaces, métodos, propiedades, variables, parámetros |
-| Emails y notificaciones | Comentarios en el código |
+| Emails y notificaciones | Claves de configuración y valores internos (enums) |
 | Logs | Rutas de la API y campos del JSON (`/api/v1/athletes`, `firstName`) |
 | Documentación: README, Jira, PRs, notas de `/documentar` | Tablas y columnas de la base (en `snake_case`: `athletes`, `first_name`) |
-| | Claves de configuración y valores internos (enums) |
+| Comentarios en el código, para que todo el equipo lo entienda | |
 
 **Las únicas excepciones** (quedan en español a propósito):
 - **`PfId` / `pf_id`** (preparador físico): término del dominio.
