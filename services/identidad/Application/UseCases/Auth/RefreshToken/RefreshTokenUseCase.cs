@@ -21,12 +21,13 @@ public class RefreshTokenUseCase(
         // 1. buscar el refresh token en la base de datos
         var existingToken = await refreshTokenRepository.GetByTokenAsync(request.RefreshToken, cancellationToken);
 
-        // 2. validar que el token exista, pertenezca al mismo deviceId y este activo (no revocado ni expirado)
+        // 2. validar que el token exista, pertenezca al mismo deviceId, este activo y el usuario no este bloqueado
         if (existingToken == null ||
             existingToken.DeviceId != request.DeviceId ||
             existingToken.IsRevoked ||
             existingToken.IsExpired ||
-            !existingToken.User.IsActive)
+            !existingToken.User.IsActive ||
+            await userManager.IsLockedOutAsync(existingToken.User))
         {
             throw new InvalidRefreshTokenException();
         }
