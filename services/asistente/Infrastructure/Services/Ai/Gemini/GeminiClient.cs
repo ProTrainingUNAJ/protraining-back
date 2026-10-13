@@ -66,13 +66,19 @@ public sealed class GeminiClient(
             };
 
             var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://generativelanguage.googleapis.com" : _options.BaseUrl.TrimEnd('/');
-            var url = $"{baseUrl}/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
-            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var url = $"{baseUrl}/v1beta/models/{_options.Model}:generateContent";
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, url);
+            requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            {
+                requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", _options.ApiKey);
+            }
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
-            var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            var response = await httpClient.SendAsync(requestMessage, timeoutCts.Token);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
@@ -101,7 +107,7 @@ public sealed class GeminiClient(
                     isValid: false,
                     validationResult: "ErrorHttp",
                     athleteId: request.AthleteId,
-                    errorMessage: $"Gemini HTTP {response.StatusCode}: {errorBody}"));
+                    errorMessage: $"Gemini HTTP {(int)response.StatusCode} ({response.StatusCode}): {errorBody}"));
                 return null;
             }
 
