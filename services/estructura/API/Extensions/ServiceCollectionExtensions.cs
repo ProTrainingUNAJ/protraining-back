@@ -2,6 +2,8 @@ using System.Text;
 using API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
+
 
 namespace API.Extensions;
 
@@ -60,8 +62,12 @@ public static class ServiceCollectionExtensions
                     RoleClaimType = "role"
                 };
             });
-        services.AddAuthorization();
-
+        services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+        });
         return services;
     }
 }
