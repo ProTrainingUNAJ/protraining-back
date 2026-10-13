@@ -1,9 +1,11 @@
 using Application.DTOs.Ai;
 using Application.UseCases.Ai.SuggestRoutine;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers;
 
+[Authorize(Roles = "PreparadorFisico")]
 [ApiController]
 [Route("api/v1/asistente")]
 public sealed class AsistenteController(SuggestRoutineUseCase suggestRoutineUseCase) : ControllerBase
