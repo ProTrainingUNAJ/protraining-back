@@ -15,7 +15,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Route("api/athletes")]
+[Route("api/v1/athletes")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class AthletesController(
     ListAthletesQueryHandler listHandler,
@@ -55,7 +55,7 @@ public sealed class AthletesController(
                 request.MedicalConditions),
             cancellationToken);
 
-        return Created($"/api/athletes/{athlete.Id}", athlete);
+        return Created($"/api/v1/athletes/{athlete.Id}", athlete);
     }
 
     [HttpPatch("{id:guid}/habits-permission")]

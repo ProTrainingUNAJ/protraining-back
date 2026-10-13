@@ -8,7 +8,7 @@ info:
     Genera alertas preventivas de fatiga/lesión, propone ajustes del día por molestias marcadas
     en el check-in, sugiere rutinas estructuradas y redacta recomendaciones de hábitos y alimentación
     sujetas a aprobación humana explícita del preparador físico en un solo clic.
-  version: 1.1.0
+  version: 1.2.0
 servers:
   - url: http://localhost:8085
     description: Entorno local / Docker Compose
@@ -19,39 +19,39 @@ security:
   - BearerAuth: []
 
 tags:
-  - name: Alertas Preventivas
+  - name: Preventive Alerts
     description: Detección proactiva de fatiga, sobrecarga y riesgo lesional
-  - name: Ajuste del Día
+  - name: Daily Adjustment
     description: Adaptaciones inmediatas de la sesión cuando el atleta marca dolor en el check-in
-  - name: Copiloto y Planificación
+  - name: Copilot and Planning
     description: Generación estructurada de propuestas de entrenamiento y descarga con IA
-  - name: Hábitos y Alimentación
+  - name: Habits and Nutrition
     description: Recomendaciones de descanso, hidratación y pautas alimentarias aprobadas por el PF
-  - name: Salud
+  - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
 paths:
-  /api/v1/alertas:
+  /api/v1/alerts:
     get:
       tags:
-        - Alertas Preventivas
+        - Preventive Alerts
       summary: Listar alertas preventivas generadas
       description: Devuelve las alertas calculadas por el motor analítico, permitiendo filtrar por estado de revisión o severidad.
-      operationId: listarAlertas
+      operationId: listAlerts
       parameters:
-        - name: soloNoRevisadas
+        - name: onlyUnreviewed
           in: query
           required: false
           schema:
             type: boolean
             default: true
           description: Si es true, retorna únicamente las alertas pendientes de acción por el PF.
-        - name: severidad
+        - name: severity
           in: query
           required: false
           schema:
             type: string
-            enum: [Baja, Media, Alta]
+            enum: [Low, Medium, High]
           description: Filtrar por severidad de la alerta.
       responses:
         "200":
@@ -61,19 +61,19 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/AlertaPreventiva'
+                  $ref: '#/components/schemas/PreventiveAlert'
         "401":
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/alertas/{alertaId}/revisar:
+  /api/v1/alerts/{alertId}/review:
     patch:
       tags:
-        - Alertas Preventivas
+        - Preventive Alerts
       summary: Marcar alerta preventiva como revisada
       description: Registra la intervención del preparador físico sobre la recomendación generada.
-      operationId: revisarAlerta
+      operationId: reviewAlert
       parameters:
-        - name: alertaId
+        - name: alertId
           in: path
           required: true
           schema:
@@ -87,25 +87,25 @@ paths:
               schema:
                 type: object
                 properties:
-                  mensaje:
+                  message:
                     type: string
                     example: "Alerta marcada como revisada exitosamente."
-                  alertaId:
+                  alertId:
                     type: string
                     format: uuid
                     example: "8e41bf39-3f04-4b95-a112-9c3f0c13bb10"
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/alertas/escanear:
+  /api/v1/alerts/scan:
     post:
       tags:
-        - Alertas Preventivas
+        - Preventive Alerts
       summary: Disparar escaneo preventivo inmediato
       description: >
         Ejecuta el ciclo de análisis heurístico y de IA sobre las sesiones, check-ins,
         partidos próximos del fixture y lesiones, alertando sobre situaciones críticas.
-      operationId: ejecutarEscaneoPreventivo
+      operationId: triggerPreventiveScan
       responses:
         "202":
           description: Análisis preventivo iniciado en segundo plano.
@@ -114,81 +114,81 @@ paths:
               schema:
                 type: object
                 properties:
-                  mensaje:
+                  message:
                     type: string
                     example: "Escaneo preventivo ejecutado correctamente. Se analizaron todos los atletas activos."
-                  alertasGeneradas:
+                  alertsGenerated:
                     type: integer
                     example: 2
         "401":
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/asistente/ajuste-dia:
+  /api/v1/assistant/today-adjustment:
     post:
       tags:
-        - Ajuste del Día
+        - Daily Adjustment
       summary: Proponer adaptación de la rutina de hoy ante reporte de dolor
       description: >
         Cruza la rutina planificada para hoy con el dolor o molestia reportado en el check-in.
         Si hay conflicto articular o muscular, sugiere sustituir o reducir ejercicios (ej. retirar saltos por dolor de rodilla).
         El PF valida y aprueba la adaptación en un solo clic.
-      operationId: proponerAjusteDia
+      operationId: suggestTodayAdjustment
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AjusteDiaRequest'
+              $ref: '#/components/schemas/TodayAdjustmentRequest'
       responses:
         "200":
           description: Propuesta de ajuste generada.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AjusteDiaResponse'
+                $ref: '#/components/schemas/TodayAdjustmentResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/asistente/sugerir-rutina:
+  /api/v1/assistant/suggest-routine:
     post:
       tags:
-        - Copiloto y Planificación
+        - Copilot and Planning
       summary: Generar propuesta estructurada de rutina con IA
       description: >
         Solicita al copiloto IA una recomendación de entrenamiento adaptada a un atleta o categoría,
         tomando en cuenta sus récords vigentes, check-ins recientes y antecedentes de lesión.
-      operationId: sugerirRutinaIA
+      operationId: suggestRoutineWithAi
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SugerenciaRutinaRequest'
+              $ref: '#/components/schemas/SuggestRoutineRequest'
       responses:
         "200":
           description: Propuesta de rutina generada en formato estructurado JSON.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SugerenciaRutinaResponse'
+                $ref: '#/components/schemas/SuggestRoutineResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas/{atletaId}/recomendacion-habitos:
+  /api/v1/athletes/{athleteId}/habits-recommendation:
     get:
       tags:
-        - Hábitos y Alimentación
+        - Habits and Nutrition
       summary: Obtener recomendación de hábitos y nutrición según objetivo
       description: >
         Genera consejos de descanso, hidratación y requerimiento proteico diario según el peso y objetivo del atleta
         (basado en reglas fijas; sin suplementos; si el atleta es menor requiere consentimiento del tutor).
-      operationId: obtenerRecomendacionHabitos
+      operationId: getHabitsRecommendation
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
@@ -200,19 +200,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecomendacionHabitosResponse'
+                $ref: '#/components/schemas/HabitsRecommendationResponse'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/recomendaciones-habitos/{recomendacionId}/aprobar:
+  /api/v1/habits-recommendations/{recommendationId}/approve:
     patch:
       tags:
-        - Hábitos y Alimentación
+        - Habits and Nutrition
       summary: Aprobar recomendación de hábitos por el preparador físico
       description: El PF autoriza con un solo clic que la recomendación sea visible para el atleta en su PWA.
-      operationId: aprobarRecomendacionHabitos
+      operationId: approveHabitsRecommendation
       parameters:
-        - name: recomendacionId
+        - name: recommendationId
           in: path
           required: true
           schema:
@@ -226,7 +226,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  mensaje:
+                  message:
                     type: string
                     example: "Recomendación de hábitos aprobada y visible para el atleta."
         "404":
@@ -235,7 +235,7 @@ paths:
   /api/health:
     get:
       tags:
-        - Salud
+        - Health
       summary: Chequeo de salud del servicio
       security: []
       operationId: healthCheck
@@ -279,197 +279,197 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
-    AlertaPreventiva:
+    PreventiveAlert:
       type: object
       required:
         - id
-        - atletaId
-        - nombreAtleta
-        - fechaGenerada
-        - severidad
-        - motivo
-        - sugerencia
-        - revisada
+        - athleteId
+        - athleteName
+        - generatedAt
+        - severity
+        - reason
+        - suggestion
+        - reviewed
       properties:
         id:
           type: string
           format: uuid
           example: "8e41bf39-3f04-4b95-a112-9c3f0c13bb10"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        nombreAtleta:
+        athleteName:
           type: string
           example: "Lucas Fernández"
-        fechaGenerada:
+        generatedAt:
           type: string
           format: date-time
           example: "2026-10-10T08:00:00Z"
-        severidad:
+        severity:
           type: string
-          enum: [Baja, Media, Alta]
-          example: "Alta"
-        motivo:
+          enum: [Low, Medium, High]
+          example: "High"
+        reason:
           type: string
           example: "Sobrecarga acumulada: 3 sesiones consecutivas con esfuerzo >= 8 y registro de descanso menor a 5 horas."
-        sugerencia:
+        suggestion:
           type: string
           example: "Programar una sesión de descarga o movilidad pasiva. Reducir volumen general un 30%."
-        revisada:
+        reviewed:
           type: boolean
           example: false
 
-    AjusteDiaRequest:
+    TodayAdjustmentRequest:
       type: object
       required:
-        - atletaId
-        - zonasDolorReportadas
+        - athleteId
+        - reportedPainZones
       properties:
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        zonasDolorReportadas:
+        reportedPainZones:
           type: string
           example: "Rodilla derecha, tendón rotuliano"
-        diasHastaProximoPartido:
+        daysUntilNextMatch:
           type: integer
           nullable: true
           example: 3
 
-    AjusteDiaResponse:
+    TodayAdjustmentResponse:
       type: object
       required:
-        - requiereAjuste
-        - motivo
-        - sugerenciaAjuste
+        - requiresAdjustment
+        - reason
+        - adjustmentSuggestion
       properties:
-        requiereAjuste:
+        requiresAdjustment:
           type: boolean
           example: true
-        motivo:
+        reason:
           type: string
           example: "Conflicto entre molestia en rodilla derecha y ejercicios de impacto planificados para hoy."
-        sugerenciaAjuste:
+        adjustmentSuggestion:
           type: string
           example: "Retirar los saltos al cajón y sustituir sentadilla pesada por prensa unilateral al 50% de 1RM."
-        ejerciciosModificados:
+        modifiedExercises:
           type: array
           items:
             type: object
             properties:
-              ejercicioOriginal:
+              originalExercise:
                 type: string
                 example: "Salto al cajón pliométrico"
-              ejercicioSustituto:
+              substituteExercise:
                 type: string
                 example: "Movilidad de tobillo y cadera sin carga"
 
-    SugerenciaRutinaRequest:
+    SuggestRoutineRequest:
       type: object
       required:
-        - atletaId
-        - objetivo
+        - athleteId
+        - goal
       properties:
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        objetivo:
+        goal:
           type: string
           example: "Descarga activa y recuperación funcional"
-        enfasisGruposMusculares:
+        muscleGroupEmphasis:
           type: array
           items:
             type: string
           example: ["Movilidad de cadera", "Core"]
 
-    SugerenciaRutinaResponse:
+    SuggestRoutineResponse:
       type: object
       required:
-        - atletaId
-        - tituloPropuesto
-        - resumenJustificacion
-        - ejercicios
-        - proveedorIa
+        - athleteId
+        - proposedTitle
+        - justificationSummary
+        - exercises
+        - aiProvider
       properties:
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        tituloPropuesto:
+        proposedTitle:
           type: string
           example: "Sesión de Descarga Adaptativa"
-        resumenJustificacion:
+        justificationSummary:
           type: string
           example: "Se redujo el volumen un 40% debido a reportes recientes de fatiga alta (RPE 8) y descanso insuficiente."
-        ejercicios:
+        exercises:
           type: array
           items:
             type: object
             required:
-              - ejercicioNombre
-              - series
-              - repeticiones
-              - porcentajeSugerido
+              - exerciseName
+              - sets
+              - reps
+              - suggestedPercentage
             properties:
-              ejercicioNombre:
+              exerciseName:
                 type: string
                 example: "Sentadilla Goblet con mancuerna"
-              series:
+              sets:
                 type: integer
                 example: 3
-              repeticiones:
+              reps:
                 type: integer
                 example: 10
-              porcentajeSugerido:
+              suggestedPercentage:
                 type: number
                 example: 50.0
-        proveedorIa:
+        aiProvider:
           type: string
-          description: Proveedor de IA o motor que originó la propuesta (Ollama, Gemini o Reglas).
-          enum: [Ollama, Gemini, Reglas]
+          description: Proveedor de IA o motor que originó la propuesta (Ollama, Gemini o Rules).
+          enum: [Ollama, Gemini, Rules]
           example: "Gemini"
 
-    RecomendacionHabitosResponse:
+    HabitsRecommendationResponse:
       type: object
       required:
         - id
-        - atletaId
-        - objetivoDeportivo
-        - requerimientoProteinaGramosDia
-        - composicionPlatoSugerida
-        - pautasHidratacionYSueño
-        - advertenciaLegal
-        - aprobadaPorPf
+        - athleteId
+        - athleticGoal
+        - dailyProteinRequirementGrams
+        - suggestedPlateComposition
+        - hydrationAndSleepGuidelines
+        - legalDisclaimer
+        - approvedByPf
       properties:
         id:
           type: string
           format: uuid
           example: "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        objetivoDeportivo:
+        athleticGoal:
           type: string
           example: "Aumento de masa muscular y recuperación"
-        requerimientoProteinaGramosDia:
+        dailyProteinRequirementGrams:
           type: number
           format: double
           description: Calculado por regla determinística en g/kg de peso corporal.
           example: 144.0
-        composicionPlatoSugerida:
+        suggestedPlateComposition:
           type: string
           example: "50% proteína magra (pollo, huevos, legumbres), 35% carbohidratos complejos, 15% grasas saludables."
-        pautasHidratacionYSueño:
+        hydrationAndSleepGuidelines:
           type: string
           example: "Consumir al menos 2.5 litros de agua y procurar 8 horas de sueño continuo."
-        advertenciaLegal:
+        legalDisclaimer:
           type: string
           example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista. ProTraining no promueve el consumo de suplementos."
-        aprobadaPorPf:
+        approvedByPf:
           type: boolean
           example: false
 
@@ -494,7 +494,7 @@ components:
           example: "No se encontró la entidad especificada."
         instance:
           type: string
-          example: "/api/v1/asistente/ajuste-dia"
+          example: "/api/v1/assistant/today-adjustment"
         errors:
           type: object
           additionalProperties:
