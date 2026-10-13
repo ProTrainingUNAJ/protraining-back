@@ -21,6 +21,10 @@ namespace Infrastructure.Data.Configurations
             builder.Property(e => e.AnimationUrl).HasColumnName("animation_url");
             builder.Property(e => e.VideoUrl).HasColumnName("video_url");
             builder.Property(e => e.Equipment).HasColumnName("equipment");
+            builder.Property(e => e.Images).HasColumnName("images");
+            builder.Property(e => e.PrimaryMuscles).HasColumnName("primary_muscles");
+            builder.Property(e => e.SecondaryMuscles).HasColumnName("secondary_muscles");
+
 
             builder.HasIndex(e => e.MuscleGroup);
         }

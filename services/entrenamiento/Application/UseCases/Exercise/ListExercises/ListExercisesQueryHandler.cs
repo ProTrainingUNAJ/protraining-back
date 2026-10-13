@@ -29,7 +29,10 @@ namespace Application.UseCases.Exercise.ListExercises
                 Description = e.Description,
                 AnimationUrl = e.AnimationUrl,
                 VideoUrl = e.VideoUrl,
-                Equipment = e.Equipment
+                Equipment = e.Equipment,
+                Images = e.Images,
+                PrimaryMuscles = e.PrimaryMuscles,
+                SecondaryMuscles = e.SecondaryMuscles,
             }).ToList();
 
             return exercisesDto;

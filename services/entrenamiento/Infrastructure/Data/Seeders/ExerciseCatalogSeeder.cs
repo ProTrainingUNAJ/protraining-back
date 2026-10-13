@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -36,28 +36,60 @@ namespace Infrastructure.Data.Seeders
                 {
                     var name = elem.GetProperty("name").GetString()!;
 
-                    var primaryMuscles = elem.TryGetProperty("primaryMuscles", out var m) && m.GetArrayLength() > 0
-                        ? m[0].GetString()!
-                        : "general";
-
                     var description = elem.TryGetProperty("instructions", out var inst)
                         ? string.Join(" ", inst.EnumerateArray().Select(s => s.GetString()))
                         : null;
 
-                    var imageUrl = elem.TryGetProperty("images", out var imgs) && imgs.GetArrayLength() > 0
-                        ? $"{FreeExerciseDbRawUrl}{imgs[0].GetString()}"
-                        : null;
-
                     var equipment = elem.TryGetProperty("equipment", out var eq) ? eq.GetString() : null;
+
+                    var images = new List<string>();
+
+                    if (elem.TryGetProperty("images", out var imgs))
+                    {
+                        foreach (var img in imgs.EnumerateArray())
+                        {
+                            var imgPath = img.GetString();
+                            if (!string.IsNullOrWhiteSpace(imgPath))
+                                images.Add($"{FreeExerciseDbRawUrl}{imgPath}");
+                        }
+                    }
+
+                    var primaryMuscles = new List<string>();
+
+                    if (elem.TryGetProperty("primaryMuscles", out var pm))
+                    {
+                        foreach (var m in pm.EnumerateArray())
+                        {
+                            var muscle = m.GetString();
+                            if (!string.IsNullOrWhiteSpace(muscle))
+                                primaryMuscles.Add(muscle);
+                        }
+                    }
+
+                    var secondaryMuscles = new List<string>();
+
+                    if (elem.TryGetProperty("secondaryMuscles", out var sm))
+                    {
+                        foreach (var m in sm.EnumerateArray())
+                        {
+                            var muscle = m.GetString();
+                            if (!string.IsNullOrWhiteSpace(muscle))
+                                secondaryMuscles.Add(muscle);
+                        }
+                    }
+
+                    // Mapear grupo muscular con el primer primaryMuscle
+                    var firstMuscle = primaryMuscles.FirstOrDefault() ?? "general";
 
                     exercises.Add(Exercise.Create(
                         name: name,
-                        muscleGroup: NormalizeMuscleGroup(primaryMuscles),
+                        muscleGroup: NormalizeMuscleGroup(firstMuscle),
                         description: description,
-                        animationUrl: imageUrl,
-                        equipment: equipment
-                        )
-                    );
+                        equipment: equipment,
+                        images: images,
+                        primaryMuscles: primaryMuscles,
+                        secondaryMuscles: secondaryMuscles
+                    ));
                 }
 
                 await context.Exercises.AddRangeAsync(exercises);
@@ -70,16 +102,34 @@ namespace Infrastructure.Data.Seeders
             }
         }
 
-        private static string NormalizeMuscleGroup(string rawMuscle) =>
-            rawMuscle.ToLowerInvariant().Trim() switch
-            {
-                var m when m.Contains("chest") || m.Contains("pectoral") => "Pecho",
-                var m when m.Contains("lat") || m.Contains("back") => "Espalda",
-                var m when m.Contains("quad") || m.Contains("hamstring") || m.Contains("leg") || m.Contains("calf") => "Piernas",
-                var m when m.Contains("shoulder") || m.Contains("delt") => "Hombros",
-                var m when m.Contains("bicep") || m.Contains("tricep") || m.Contains("arm") => "Brazos",
-                var m when m.Contains("abdom") || m.Contains("core") => "Core",
-                _ => "Cuerpo Completo"
-            };
+        private static readonly Dictionary<string, string> MuscleGroupMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Pecho (84)
+            ["chest"] = "Pecho",
+            // Espalda (114)
+            ["lats"] = "Espalda",
+            ["middle back"] = "Espalda",
+            ["lower back"] = "Espalda",
+            ["traps"] = "Espalda",
+            // Piernas (298)
+            ["quadriceps"] = "Piernas",
+            ["hamstrings"] = "Piernas",
+            ["calves"] = "Piernas",
+            ["glutes"] = "Piernas",
+            ["adductors"] = "Piernas",
+            ["abductors"] = "Piernas",
+            // Hombros (137)
+            ["shoulders"] = "Hombros",
+            ["neck"] = "Hombros",
+            // Brazos (151)
+            ["biceps"] = "Brazos",
+            ["triceps"] = "Brazos",
+            ["forearms"] = "Brazos",
+            // Core (93)
+            ["abdominals"] = "Core"
+        };
+
+        private static string NormalizeMuscleGroup(string muscle) =>
+            MuscleGroupMap.TryGetValue(muscle.Trim(), out var group) ? group : "Cuerpo Completo";
     }
 }
