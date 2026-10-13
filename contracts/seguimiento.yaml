@@ -163,6 +163,37 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{categoryId}/traffic-light-today:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Consultar semáforo tricolor de hoy por categoría
+      description: >
+        Pantalla central del preparador físico en el día a día. Consolida el estado tricolor de bienestar
+        (Green, Yellow, Red) de cada atleta de la división para la jornada actual, permitiendo detectar
+        rápidamente a quienes requieren atención o ajuste de cargas antes de iniciar la práctica.
+      operationId: getCategoryTrafficLightToday
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Semáforo de la categoría para el día de hoy obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteTrafficLightSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/group-benchmark:
     get:
       tags:
@@ -531,6 +562,39 @@ components:
           type: number
           format: double
           example: 90.6
+
+    AthleteTrafficLightSummary:
+      type: object
+      description: Estado de bienestar diario del atleta para el semáforo consolidado de la categoría.
+      required:
+        - athleteId
+        - athleteName
+        - trafficLight
+        - hasReportedToday
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          example: "Lucas Fernández"
+        trafficLight:
+          type: string
+          enum: [Green, Yellow, Red]
+          example: "Yellow"
+        trafficLightReason:
+          type: string
+          nullable: true
+          example: "Molestia muscular en rodilla reportada en check-in"
+        hasReportedToday:
+          type: boolean
+          example: true
+        reportedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-10T08:15:00Z"
 
     GroupBenchmarkResponse:
       type: object

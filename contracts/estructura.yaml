@@ -175,6 +175,32 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/guardian-consent:
+    get:
+      tags:
+        - Athletes
+      summary: Consultar consentimiento del tutor de un atleta
+      description: Retorna el estado y los datos del consentimiento parental registrado para el deportista menor de edad.
+      operationId: getAthleteGuardianConsent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Consentimiento obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardianConsent'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{id}/categories:
     get:
       tags:
@@ -733,6 +759,22 @@ components:
         allowsHabitsRecommendations:
           type: boolean
           example: true
+        categories:
+          type: array
+          description: Categorías o divisiones deportivas asignadas al deportista.
+          items:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                type: string
+                format: uuid
+                example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+              name:
+                type: string
+                example: "Primera División"
         guardianConsent:
           $ref: '#/components/schemas/GuardianConsent'
 

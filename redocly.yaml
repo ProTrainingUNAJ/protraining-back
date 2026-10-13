@@ -17,8 +17,6 @@ rules:
   # Permitir componentes y esquemas canónicos compartidos no directamente referenciados en paths
   no-unused-components: off
 
-  # Permitir endpoints públicos de autenticación o healthcheck sin forzar auth obligatoria
-  security-defined: off
 
   # Validación estricta de esquemas
   no-invalid-schema-examples: error
