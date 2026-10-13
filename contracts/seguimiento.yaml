@@ -4,8 +4,8 @@ info:
   description: >
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
-    y gestión del ciclo de vida de lesiones deportivas (Activa -> En recuperación -> Alta).
-  version: 1.1.0
+    y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
+  version: 1.2.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -16,29 +16,29 @@ security:
   - BearerAuth: []
 
 tags:
-  - name: Check-in y Semáforo
+  - name: Check-in and Traffic Light
     description: Reporte diario de bienestar subjetivo y semáforo tricolor para el preparador físico
-  - name: Cargas y Asistencia
+  - name: Loads and Attendance
     description: Registro de minutos de actividad diaria y asistencia automática sin tomar lista
-  - name: Evolución y Grupo
+  - name: Evolution and Benchmark
     description: Comparativa anónima de métricas del atleta contra el promedio de su categoría
-  - name: Lesiones
+  - name: Injuries
     description: Registro clínico de lesiones y transiciones controladas de estado
-  - name: Salud
+  - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
 paths:
-  /api/v1/atletas/{atletaId}/check-in:
+  /api/v1/athletes/{athleteId}/check-in:
     post:
       tags:
-        - Check-in y Semáforo
+        - Check-in and Traffic Light
       summary: Enviar o actualizar check-in diario del atleta
       description: >
         Registra el reporte de bienestar en menos de 30 segundos. Evalúa las respuestas mediante
-        umbrales y clasifica de inmediato al atleta en el semáforo tricolor (Verde, Amarillo o Rojo).
-      operationId: registrarCheckIn
+        umbrales y clasifica de inmediato al atleta en el semáforo tricolor (Green, Yellow o Red).
+      operationId: submitCheckIn
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
@@ -64,21 +64,21 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas/{atletaId}/check-ins:
+  /api/v1/athletes/{athleteId}/check-ins:
     get:
       tags:
-        - Check-in y Semáforo
+        - Check-in and Traffic Light
       summary: Historial de check-ins de un atleta
       description: Devuelve los registros de bienestar diarios del atleta (por defecto los últimos 14 registros).
-      operationId: listarCheckInsAtleta
+      operationId: listAthleteCheckIns
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
             type: string
             format: uuid
-        - name: limite
+        - name: limit
           in: query
           required: false
           schema:
@@ -98,17 +98,17 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas/{atletaId}/carga-diaria:
+  /api/v1/athletes/{athleteId}/daily-load:
     post:
       tags:
-        - Cargas y Asistencia
+        - Loads and Attendance
       summary: Registrar minutos de actividad física del día
       description: >
         El atleta reporta los minutos dedicados a gimnasio, práctica de su deporte, partido o
         trabajo individual. De aquí se deducen el volumen diario y la asistencia automática sin tomar lista.
-      operationId: registrarCargaDiaria
+      operationId: registerDailyLoad
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
@@ -119,7 +119,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CargaDiariaRequest'
+              $ref: '#/components/schemas/DailyLoadRequest'
       responses:
         "200":
           description: Carga y asistencia registradas con éxito.
@@ -128,10 +128,10 @@ paths:
               schema:
                 type: object
                 properties:
-                  mensaje:
+                  message:
                     type: string
                     example: "Carga del día registrada. Asistencia confirmada automáticamente."
-                  minutosTotales:
+                  totalMinutes:
                     type: integer
                     example: 105
         "400":
@@ -139,15 +139,15 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/categorias/{categoriaId}/asistencia-hoy:
+  /api/v1/categories/{categoryId}/attendance-today:
     get:
       tags:
-        - Cargas y Asistencia
+        - Loads and Attendance
       summary: Consultar asistencia automática del día por categoría
       description: Consolida quiénes entrenaron hoy a partir de las cargas de entrenamiento cargadas por los propios atletas.
-      operationId: obtenerAsistenciaCategoriaHoy
+      operationId: getCategoryAttendanceToday
       parameters:
-        - name: categoriaId
+        - name: categoryId
           in: path
           required: true
           schema:
@@ -159,21 +159,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResumenAsistenciaCategoria'
+                $ref: '#/components/schemas/CategoryAttendanceSummary'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas/{atletaId}/comparativa-categoria:
+  /api/v1/athletes/{athleteId}/group-benchmark:
     get:
       tags:
-        - Evolución y Grupo
+        - Evolution and Benchmark
       summary: Consultar perfil del atleta frente al promedio de su grupo
       description: >
         Retorna la evolución del atleta comparada exclusivamente contra el promedio
         anónimo de su categoría (garantía de seguridad: ningún atleta ve los datos individuales de sus compañeros).
-      operationId: obtenerComparativaCategoria
+      operationId: getGroupBenchmark
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
@@ -185,30 +185,30 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ComparativaCategoriaResponse'
+                $ref: '#/components/schemas/GroupBenchmarkResponse'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas/{atletaId}/lesiones:
+  /api/v1/athletes/{athleteId}/injuries:
     get:
       tags:
-        - Lesiones
+        - Injuries
       summary: Listar lesiones de un atleta
       description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual.
-      operationId: listarLesionesAtleta
+      operationId: listAthleteInjuries
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
             type: string
             format: uuid
-        - name: estado
+        - name: status
           in: query
           required: false
           schema:
             type: string
-            enum: [Activa, EnRecuperacion, Alta]
+            enum: [Active, InRecovery, Cleared]
       responses:
         "200":
           description: Lista de lesiones obtenida con éxito.
@@ -217,7 +217,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Lesion'
+                  $ref: '#/components/schemas/Injury'
         "401":
           $ref: '#/components/responses/Unauthorized'
         "404":
@@ -225,12 +225,12 @@ paths:
 
     post:
       tags:
-        - Lesiones
+        - Injuries
       summary: Registrar una nueva lesión
-      description: Da de alta una lesión para el atleta en estado inicial 'Activa'.
-      operationId: crearLesion
+      description: Da de alta una lesión para el atleta en estado inicial 'Active'.
+      operationId: createInjury
       parameters:
-        - name: atletaId
+        - name: athleteId
           in: path
           required: true
           schema:
@@ -241,30 +241,30 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CrearLesionRequest'
+              $ref: '#/components/schemas/CreateInjuryRequest'
       responses:
         "201":
           description: Lesión registrada con éxito.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Lesion'
+                $ref: '#/components/schemas/Injury'
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/lesiones/{lesionId}/estado:
+  /api/v1/injuries/{injuryId}/status:
     patch:
       tags:
-        - Lesiones
+        - Injuries
       summary: Actualizar estado de una lesión (Máquina de estados)
       description: >
         Realiza la transición de estado de una lesión. Regla de negocio estricta:
-        Una lesión 'Activa' no puede pasar directamente a 'Alta' sin haber transitado por 'EnRecuperacion'.
-      operationId: actualizarEstadoLesion
+        Una lesión 'Active' no puede pasar directamente a 'Cleared' sin haber transitado por 'InRecovery'.
+      operationId: updateInjuryStatus
       parameters:
-        - name: lesionId
+        - name: injuryId
           in: path
           required: true
           schema:
@@ -275,16 +275,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TransicionEstadoLesionRequest'
+              $ref: '#/components/schemas/UpdateInjuryStatusRequest'
       responses:
         "200":
           description: Transición de estado aplicada correctamente.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Lesion'
+                $ref: '#/components/schemas/Injury'
         "400":
-          description: Transición inválida (ej. intentar pasar de Activa a Alta directamente).
+          description: Transición inválida (ej. intentar pasar de Active a Cleared directamente).
           content:
             application/json:
               schema:
@@ -295,7 +295,7 @@ paths:
   /api/health:
     get:
       tags:
-        - Salud
+        - Health
       summary: Chequeo de salud del servicio
       security: []
       operationId: healthCheck
@@ -342,57 +342,57 @@ components:
     CheckInRequest:
       type: object
       required:
-        - horasSueno
-        - calidadSueno
-        - dolorMuscular
-        - nivelFatiga
-        - estadoAnimo
-        - nivelEstres
+        - sleepHours
+        - sleepQuality
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
       properties:
-        horasSueno:
+        sleepHours:
           type: number
           format: double
           minimum: 0
           maximum: 24
           example: 7.5
-        calidadSueno:
+        sleepQuality:
           type: integer
           minimum: 1
           maximum: 5
           description: Calidad de descanso de 1 (pésima) a 5 (óptima).
           example: 4
-        dolorMuscular:
+        muscleSoreness:
           type: integer
           minimum: 1
           maximum: 5
           description: Nivel de dolor muscular/articular (1 = ninguno, 5 = dolor severo).
           example: 1
-        nivelFatiga:
+        fatigueLevel:
           type: integer
           minimum: 1
           maximum: 5
           example: 2
-        estadoAnimo:
+        moodRate:
           type: integer
           minimum: 1
           maximum: 5
           example: 4
-        nivelEstres:
+        stressLevel:
           type: integer
           minimum: 1
           maximum: 5
           example: 2
-        nivelEsfuerzoRpeAnterior:
+        effortRate:
           type: integer
           minimum: 1
           maximum: 10
           nullable: true
           example: 7
-        estaEnfermo:
+        isSick:
           type: boolean
           default: false
           example: false
-        zonasDolor:
+        painZones:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
@@ -400,18 +400,18 @@ components:
     CheckInResponse:
       type: object
       required:
-        - mensaje
-        - colorSemaforo
+        - message
+        - trafficLight
         - checkIn
       properties:
-        mensaje:
+        message:
           type: string
           example: "Check-in completado exitosamente."
-        colorSemaforo:
+        trafficLight:
           type: string
-          enum: [Verde, Amarillo, Rojo]
-          example: "Verde"
-        motivoSemaforo:
+          enum: [Green, Yellow, Red]
+          example: "Green"
+        trafficLightReason:
           type: string
           nullable: true
           example: "Sin alertas de sobrecarga"
@@ -423,212 +423,212 @@ components:
       description: Objeto compartido de Check-In.
       required:
         - id
-        - atletaId
-        - fecha
-        - colorSemaforo
-        - horasSueno
-        - dolorMuscular
-        - nivelFatiga
-        - estadoAnimo
-        - nivelEstres
-        - estaEnfermo
+        - athleteId
+        - date
+        - trafficLight
+        - sleepHours
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
+        - isSick
       properties:
         id:
           type: string
           format: uuid
           example: "6c24fcf8-0fb5-48b2-b01f-0e4c67eb2581"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        fecha:
+        date:
           type: string
           format: date
           example: "2026-10-10"
-        colorSemaforo:
+        trafficLight:
           type: string
-          enum: [Verde, Amarillo, Rojo]
-          example: "Verde"
-        motivoSemaforo:
+          enum: [Green, Yellow, Red]
+          example: "Green"
+        trafficLightReason:
           type: string
           nullable: true
           example: "Sin alertas de sobrecarga"
-        horasSueno:
+        sleepHours:
           type: number
           format: double
           example: 7.5
-        calidadSueno:
+        sleepQuality:
           type: integer
           example: 4
-        dolorMuscular:
+        muscleSoreness:
           type: integer
           example: 1
-        nivelFatiga:
+        fatigueLevel:
           type: integer
           example: 2
-        estadoAnimo:
+        moodRate:
           type: integer
           example: 4
-        nivelEstres:
+        stressLevel:
           type: integer
           example: 2
-        nivelEsfuerzo:
+        effortRate:
           type: integer
           example: 7
-        estaEnfermo:
+        isSick:
           type: boolean
           example: false
-        zonasDolor:
+        painZones:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
 
-    CargaDiariaRequest:
+    DailyLoadRequest:
       type: object
       required:
-        - minutosGimnasio
+        - gymMinutes
       properties:
-        minutosGimnasio:
+        gymMinutes:
           type: integer
           minimum: 0
           example: 60
-        minutosEntrenamientoDeporte:
+        sportTrainingMinutes:
           type: integer
           minimum: 0
           example: 45
-        minutosPartido:
+        matchMinutes:
           type: integer
           minimum: 0
           example: 0
-        minutosTrabajoIndividual:
+        individualWorkMinutes:
           type: integer
           minimum: 0
           example: 0
 
-    ResumenAsistenciaCategoria:
+    CategoryAttendanceSummary:
       type: object
       required:
-        - categoriaId
-        - fecha
-        - totalPlantel
-        - presentesCount
+        - categoryId
+        - date
+        - totalRoster
+        - presentCount
       properties:
-        categoriaId:
+        categoryId:
           type: string
           format: uuid
           example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        fecha:
+        date:
           type: string
           format: date
           example: "2026-10-10"
-        totalPlantel:
+        totalRoster:
           type: integer
           example: 32
-        presentesCount:
+        presentCount:
           type: integer
           example: 29
-        porcentajeAsistencia:
+        attendancePercentage:
           type: number
           format: double
           example: 90.6
 
-    ComparativaCategoriaResponse:
+    GroupBenchmarkResponse:
       type: object
       required:
-        - atletaId
-        - categoriaId
-        - metricas
+        - athleteId
+        - categoryId
+        - metrics
       properties:
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        categoriaId:
+        categoryId:
           type: string
           format: uuid
           example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        metricas:
+        metrics:
           type: array
           items:
             type: object
             required:
               - dimension
-              - valorAtleta
-              - promedioGrupo
+              - athleteValue
+              - groupAverage
             properties:
               dimension:
                 type: string
                 example: "1RM Sentadilla (kg)"
-              valorAtleta:
+              athleteValue:
                 type: number
                 example: 140.0
-              promedioGrupo:
+              groupAverage:
                 type: number
                 example: 125.5
-              tendencia:
+              trend:
                 type: string
                 example: "Superior al promedio (+11.5%)"
 
-    CrearLesionRequest:
+    CreateInjuryRequest:
       type: object
       required:
-        - zonaCuerpo
-        - notas
+        - bodyZone
+        - notes
       properties:
-        zonaCuerpo:
+        bodyZone:
           type: string
           example: "Hombro derecho"
-        notas:
+        notes:
           type: string
           example: "Molestia punzante al bloquear banco plano con 90 kg."
 
-    TransicionEstadoLesionRequest:
+    UpdateInjuryStatusRequest:
       type: object
       required:
-        - nuevoEstado
-        - notaTransicion
+        - newStatus
+        - transitionNotes
       properties:
-        nuevoEstado:
+        newStatus:
           type: string
-          enum: [Activa, EnRecuperacion, Alta]
-          example: "EnRecuperacion"
-        notaTransicion:
+          enum: [Active, InRecovery, Cleared]
+          example: "InRecovery"
+        transitionNotes:
           type: string
           example: "Evolución favorable tras 5 días de kinesiología y movilidad."
 
-    Lesion:
+    Injury:
       type: object
       required:
         - id
-        - atletaId
-        - zonaCuerpo
-        - notas
-        - estado
-        - fechaCreacion
+        - athleteId
+        - bodyZone
+        - notes
+        - status
+        - createdAt
       properties:
         id:
           type: string
           format: uuid
           example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        zonaCuerpo:
+        bodyZone:
           type: string
           example: "Hombro derecho"
-        notas:
+        notes:
           type: string
-          example: "Molestia punzante al bloquear banco plano. | [2026-10-10] Estado a EnRecuperacion: Kinesiología favorable."
-        estado:
+          example: "Molestia punzante al bloquear banco plano. | [2026-10-10] Estado a InRecovery: Kinesiología favorable."
+        status:
           type: string
-          enum: [Activa, EnRecuperacion, Alta]
-          example: "EnRecuperacion"
-        fechaCreacion:
+          enum: [Active, InRecovery, Cleared]
+          example: "InRecovery"
+        createdAt:
           type: string
           format: date-time
           example: "2026-10-05T10:15:00Z"
-        fechaActualizacion:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-10-10T09:30:00Z"
@@ -651,10 +651,10 @@ components:
           example: 400
         detail:
           type: string
-          example: "Una lesión activa no puede pasar directamente a Alta. Debe pasar primero por estado 'En recuperación'."
+          example: "Una lesión activa no puede pasar directamente a Alta. Debe pasar primero por estado 'InRecovery'."
         instance:
           type: string
-          example: "/api/v1/lesiones/2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab/estado"
+          example: "/api/v1/injuries/2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab/status"
         errors:
           type: object
           additionalProperties:

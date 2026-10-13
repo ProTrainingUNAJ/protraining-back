@@ -3,372 +3,387 @@ info:
   title: ProTraining - Modelos Compartidos (Shared Schemas)
   description: >
     Definición canónica de los objetos de negocio compartidos entre los 5 microservicios
-    de ProTraining. Incorpora el alcance ampliado oficial: trazabilidad de récords,
-    consentimiento de tutores para atletas menores, semáforo tricolor de seguimiento,
-    calendario de partidos y control de hábitos y cargas.
-  version: 1.1.0
+    de ProTraining. Sigue la norma de idioma del proyecto: esquemas, propiedades y enums en inglés;
+    descripciones en español; excepciones en español para roles (PreparadorFisico, Atleta, Tutor) y pfId.
+  version: 1.2.0
 
 paths: {}
 
 components:
   schemas:
     # -------------------------------------------------------------------------
-    # 1. ATLETA
+    # 1. ATHLETE & GUARDIAN CONSENT
     # -------------------------------------------------------------------------
-    ConsentimientoTutor:
+    GuardianConsent:
       type: object
       description: Registro de consentimiento parental obligatorio para atletas menores de 18 años.
       required:
-        - tutorNombre
-        - tutorEmail
-        - tutorTelefono
-        - habilitaPreparacionFisica
-        - fechaConsentimiento
+        - isSigned
+        - consentDate
+        - isMinor
+        - allowsPhysicalTraining
+        - allowsHabitsRecommendations
       properties:
-        tutorNombre:
+        isSigned:
+          type: boolean
+          description: Indica si el consentimiento fue firmado electrónicamente.
+          example: true
+        consentDate:
           type: string
+          format: date-time
+          description: Fecha y hora en la que se registró el consentimiento.
+          example: "2026-03-01T14:00:00Z"
+        isMinor:
+          type: boolean
+          description: Indica si el deportista es menor de edad.
+          example: true
+        guardianName:
+          type: string
+          nullable: true
           description: Nombre completo del padre, madre o tutor legal.
           example: "Roberto Fernández"
-        tutorEmail:
+        guardianEmail:
           type: string
           format: email
+          nullable: true
+          description: Correo electrónico de contacto del tutor legal.
           example: "roberto.fernandez@email.com"
-        tutorTelefono:
+        guardianPhone:
           type: string
+          nullable: true
+          description: Teléfono de contacto del tutor legal.
           example: "+54 11 4444-1234"
-        habilitaPreparacionFisica:
+        allowsPhysicalTraining:
           type: boolean
           description: Autorización para realizar las rutinas y entrenamientos físicos del club.
           example: true
-        habilitaRecomendacionesHabitos:
+        allowsHabitsRecommendations:
           type: boolean
-          description: Autorización opcional para recibir consejos generales de hábitos, descanso y alimentación.
+          description: Autorización para recibir consejos generales de hábitos, descanso y alimentación.
           example: false
-        fechaConsentimiento:
-          type: string
-          format: date-time
-          example: "2026-03-01T14:00:00Z"
 
-    Atleta:
+    Athlete:
       type: object
       description: Entidad central del atleta, gestionada principalmente por Estructura y consumida por los demás microservicios.
       required:
         - id
-        - nombre
-        - apellido
+        - firstName
+        - lastName
+        - fullName
         - email
-        - telefono
-        - esMenorDeEdad
-        - categorias
-        - activo
+        - phone
+        - isMinor
+        - active
+        - allowsHabitsRecommendations
       properties:
         id:
           type: string
           format: uuid
           description: Identificador único universal del atleta.
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        cuentaId:
+        accountId:
           type: string
           format: uuid
           nullable: true
-          description: Identificador de la cuenta de usuario en Identidad (si tiene acceso a la PWA).
+          description: Identificador de la cuenta de usuario en Identidad si tiene acceso a la PWA.
           example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-        nombre:
+        firstName:
           type: string
+          description: Nombre del atleta.
           example: "Lucas"
-        apellido:
+        lastName:
           type: string
+          description: Apellido del atleta.
           example: "Fernández"
-        nombreCompleto:
+        fullName:
           type: string
+          description: Nombre y apellido concatenados para visualización rápida.
           example: "Lucas Fernández"
         email:
           type: string
           format: email
+          description: Correo de contacto del atleta.
           example: "lucas.fernandez@club.com"
-        telefono:
+        phone:
           type: string
+          description: Teléfono de contacto del deportista.
           example: "+54 11 5555-1234"
-        esMenorDeEdad:
+        isMinor:
           type: boolean
-          description: Indica si el atleta tiene menos de 18 años, requiriendo consentimiento de tutor.
+          description: Indica si el atleta es menor de 18 años.
           example: false
-        consentimientoTutor:
-          $ref: '#/components/schemas/ConsentimientoTutor'
-        condicionesMedicas:
+        emergencyContact:
           type: string
           nullable: true
-          description: Ficha médica, alergias o patologías preexistentes.
-          example: "Sin antecedentes patológicos relevantes"
-        contactoEmergencia:
-          type: string
-          nullable: true
-          description: Nombre y teléfono ante urgencias médicas.
+          description: Nombre y teléfono del contacto ante emergencias médicas.
           example: "María Fernández (Madre) - +54 11 4444-9876"
-        categorias:
-          type: array
-          description: Categorías o planteles a los que pertenece el deportista.
-          items:
-            type: string
-          example: ["Primera División", "Juveniles M19"]
-        lesionesActivasCount:
-          type: integer
-          description: Cantidad de lesiones en curso (Activa o En Recuperación).
-          example: 0
-        activo:
+        medicalConditions:
+          type: string
+          nullable: true
+          description: Ficha médica, alergias o condiciones patológicas preexistentes.
+          example: "Sin antecedentes patológicos relevantes"
+        active:
           type: boolean
           description: Estado administrativo del deportista en el club.
           example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          description: Permiso habilitado para recibir recomendaciones de hábitos.
+          example: true
+        guardianConsent:
+          $ref: '#/components/schemas/GuardianConsent'
 
     # -------------------------------------------------------------------------
-    # 2. CATEGORÍA
+    # 2. CATEGORY
     # -------------------------------------------------------------------------
-    Categoria:
+    Category:
       type: object
       description: Categoría o división deportiva dentro de la estructura de un club.
       required:
         - id
-        - organizacionId
-        - nombre
-        - atletasCount
+        - organizationId
+        - name
+        - athletesCount
       properties:
         id:
           type: string
           format: uuid
+          description: Identificador único de la categoría.
           example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        organizacionId:
+        organizationId:
           type: string
           format: uuid
+          description: Identificador de la organización/club al que pertenece la categoría.
           example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-        nombre:
+        name:
           type: string
+          description: Nombre de la división deportiva.
           example: "Primera División"
-        descripcion:
+        description:
           type: string
           nullable: true
+          description: Descripción u observaciones del plantel.
           example: "Plantel superior de rugby"
-        atletasCount:
+        athletesCount:
           type: integer
+          description: Cantidad de deportistas activos en la categoría.
           example: 32
-        proximoPartido:
-          $ref: '#/components/schemas/PartidoTemporada'
-
-    PartidoTemporada:
-      type: object
-      description: Evento de competencia del calendario de temporada para una categoría.
-      required:
-        - id
-        - categoriaId
-        - rival
-        - fecha
-        - condicion
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c"
-        categoriaId:
-          type: string
-          format: uuid
-          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        rival:
-          type: string
-          example: "Club San Martín"
-        fecha:
-          type: string
-          format: date-time
-          example: "2026-10-17T15:30:00Z"
-        condicion:
-          type: string
-          enum: [Local, Visitante, Neutral]
-          example: "Local"
-        observaciones:
-          type: string
-          nullable: true
-          example: "Fecha 8 del torneo oficial"
 
     # -------------------------------------------------------------------------
-    # 3. RÉCORD (1RM)
+    # 3. RECORD (1RM)
     # -------------------------------------------------------------------------
     Record:
       type: object
       description: Registro de peso máximo levantado (1RM) con trazabilidad de origen.
       required:
         - id
-        - atletaId
-        - ejercicioId
-        - ejercicioNombre
-        - peso1RmKg
-        - origen
-        - fechaAlcanzado
-        - esVigente
+        - athleteId
+        - exerciseId
+        - exerciseName
+        - weightOneRepMaxKg
+        - origin
+        - achievedAt
+        - isCurrent
       properties:
         id:
           type: string
           format: uuid
+          description: Identificador del registro de récord.
           example: "e6f491c7-7489-4b68-b765-a81e9f1a21e4"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
+          description: Identificador del atleta dueño del récord.
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        ejercicioId:
+        exerciseId:
           type: string
           format: uuid
+          description: Identificador del ejercicio del catálogo.
           example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
-        ejercicioNombre:
+        exerciseName:
           type: string
+          description: Nombre del ejercicio evaluado.
           example: "Sentadilla Trasera"
-        peso1RmKg:
+        weightOneRepMaxKg:
           type: number
           format: double
-          description: Peso de 1RM en kg.
+          description: Carga de 1RM alcanzada en kilogramos.
           example: 140.0
-        origen:
+        origin:
           type: string
-          enum: [TesteadoEnSesion, Reportado, EstimadoEpley]
-          description: Trazabilidad de la procedencia del récord (requisito del negocio).
-          example: "TesteadoEnSesion"
-        fechaAlcanzado:
+          enum: [TestedInSession, Reported, EstimatedEpley]
+          description: Trazabilidad de la procedencia del récord.
+          example: "TestedInSession"
+        achievedAt:
           type: string
           format: date-time
+          description: Fecha y hora en la que se registró el récord.
           example: "2026-10-01T15:30:00Z"
-        esVigente:
+        isCurrent:
           type: boolean
-          description: True si es la marca activa utilizada para dosificar las cargas.
+          description: True si es la marca activa utilizada para calcular los porcentajes de entrenamiento.
           example: true
 
     # -------------------------------------------------------------------------
-    # 4. SESIÓN
+    # 4. USER & SESSION (AUTH)
     # -------------------------------------------------------------------------
-    Sesion:
+    User:
       type: object
-      description: Contexto de sesión retornado tras autenticación (Login / Registro).
+      description: Información del usuario autenticado devuelto por el servicio de Identidad.
       required:
-        - token
-        - tipoToken
-        - cuentaId
-        - nombreCompleto
+        - id
         - email
-        - rol
+        - fullName
+        - role
       properties:
-        token:
-          type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-        tipoToken:
-          type: string
-          example: "Bearer"
-        expiraEn:
-          type: integer
-          example: 86400
-        cuentaId:
+        id:
           type: string
           format: uuid
+          description: Identificador único de la cuenta de usuario.
           example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-        nombreCompleto:
-          type: string
-          example: "Prof. Julián Antúnez"
         email:
           type: string
           format: email
+          description: Correo electrónico de inicio de sesión.
           example: "julian@protraining.com"
-        rol:
+        fullName:
           type: string
-          enum: [PF, Atleta]
-          example: "PF"
-        atletaId:
+          description: Nombre completo del usuario.
+          example: "Prof. Julián Antúnez"
+        role:
+          type: string
+          enum: [PreparadorFisico, Atleta, Tutor]
+          description: Rol asignado en el sistema (excepción de dominio en español).
+          example: "PreparadorFisico"
+        pfId:
           type: string
           format: uuid
           nullable: true
-          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          description: Identificador del preparador físico asignado (excepción de dominio en español).
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+
+    UserSession:
+      type: object
+      description: Respuesta real devuelta tras un inicio de sesión exitoso.
+      required:
+        - accessToken
+        - refreshToken
+        - tokenType
+        - expiresIn
+        - user
+      properties:
+        accessToken:
+          type: string
+          description: Token de acceso JWT firmado.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: Token de actualización para rotar el acceso sin pedir credenciales nuevamente.
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        tokenType:
+          type: string
+          description: Tipo de esquema del token de autenticación.
+          example: "Bearer"
+        expiresIn:
+          type: integer
+          description: Segundos de vigencia del token de acceso.
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
 
     # -------------------------------------------------------------------------
-    # 5. CHECK-IN (BIENESTAR DIARIO Y SEMÁFORO)
+    # 5. CHECK-IN (WELLNESS)
     # -------------------------------------------------------------------------
     CheckIn:
       type: object
       description: Reporte diario completado en <30s que alimenta el semáforo tricolor del preparador físico.
       required:
         - id
-        - atletaId
-        - fecha
-        - colorSemaforo
-        - nivelEsfuerzo
-        - horasSueno
-        - dolorMuscular
-        - nivelFatiga
-        - estadoAnimo
-        - nivelEstres
-        - estaEnfermo
+        - athleteId
+        - date
+        - trafficLight
+        - sleepHours
+        - sleepQuality
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
+        - isSick
       properties:
         id:
           type: string
           format: uuid
+          description: Identificador del check-in diario.
           example: "6c24fcf8-0fb5-48b2-b01f-0e4c67eb2581"
-        atletaId:
+        athleteId:
           type: string
           format: uuid
+          description: Identificador del atleta que realizó el reporte.
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        fecha:
+        date:
           type: string
           format: date
+          description: Fecha correspondiente al reporte de bienestar (YYYY-MM-DD).
           example: "2026-10-10"
-        colorSemaforo:
+        trafficLight:
           type: string
-          enum: [Verde, Amarillo, Rojo]
-          description: Clasificación de bienestar del atleta (Verde = normal, Amarillo = alerta/molestia, Rojo = intervención obligatoria).
-          example: "Verde"
-        motivoSemaforo:
+          enum: [Green, Yellow, Red]
+          description: Clasificación de bienestar del atleta (Green = normal, Yellow = alerta/molestia, Red = intervención obligatoria).
+          example: "Green"
+        trafficLightReason:
           type: string
           nullable: true
-          description: Justificación resumida si el semáforo está en Amarillo o Rojo.
+          description: Justificación resumida si el semáforo está en Yellow o Red.
           example: "Sin alertas de sobrecarga"
-        nivelEsfuerzo:
-          type: integer
-          minimum: 1
-          maximum: 10
-          description: RPE de la sesión anterior (1 a 10).
-          example: 7
-        horasSueno:
+        sleepHours:
           type: number
           format: double
           minimum: 0
           maximum: 24
+          description: Horas estimadas de descanso nocturno.
           example: 7.5
-        calidadSueno:
+        sleepQuality:
           type: integer
           minimum: 1
           maximum: 5
-          description: Escala de descanso subjetivo de 1 a 5.
+          description: Calidad subjetiva de sueño de 1 (pésima) a 5 (óptima).
           example: 4
-        dolorMuscular:
+        muscleSoreness:
           type: integer
           minimum: 1
           maximum: 5
           description: Nivel de molestia muscular/articular localizada (1 = sin dolor, 5 = dolor agudo).
           example: 1
-        nivelFatiga:
+        fatigueLevel:
           type: integer
           minimum: 1
           maximum: 5
           description: Fatiga general acumulada de 1 a 5.
           example: 2
-        estadoAnimo:
+        moodRate:
           type: integer
           minimum: 1
           maximum: 5
           description: Predisposición anímica y motivación de 1 a 5.
           example: 4
-        nivelEstres:
+        stressLevel:
           type: integer
           minimum: 1
           maximum: 5
           description: Nivel de estrés extradeportivo percibido de 1 a 5.
           example: 2
-        estaEnfermo:
+        effortRate:
+          type: integer
+          minimum: 1
+          maximum: 10
+          nullable: true
+          description: RPE percibido de la sesión previa de 1 a 10.
+          example: 7
+        isSick:
           type: boolean
-          description: Indica si el atleta cursa algún cuadro viral, gripal o gastrointestinal.
+          description: Indica si el atleta cursa algún cuadro viral o clínico.
           example: false
-        zonasDolor:
+        painZones:
           type: string
           nullable: true
           description: Zonas anatómicas seleccionadas en el mapa corporal si hay dolor.
@@ -387,24 +402,30 @@ components:
       properties:
         type:
           type: string
+          description: URI de referencia del tipo de error.
           example: "https://tools.ietf.org/html/rfc9110#section-15.5.5"
         title:
           type: string
+          description: Resumen corto y legible del tipo de error en español.
           example: "No encontrado"
         status:
           type: integer
+          description: Código de estado HTTP retornado por el servidor.
           example: 404
         detail:
           type: string
+          description: Explicación detallada y específica del error para ayudar al cliente.
           example: "El atleta especificado no existe o no pertenece a su club."
         instance:
           type: string
-          example: "/api/v1/atletas/3fa85f64-5717-4562-b3fc-2c963f66afa6/rutina-hoy"
+          description: Ruta del endpoint que generó el error.
+          example: "/api/v1/athletes/3fa85f64-5717-4562-b3fc-2c963f66afa6"
         errors:
           type: object
           additionalProperties:
             type: array
             items:
               type: string
+          description: Lista de errores de validación indexados por propiedad.
           example:
-            peso1RmKg: ["El récord 1RM debe estar entre 0 y 500 kg."]
+            email: ["El email no tiene un formato válido."]
