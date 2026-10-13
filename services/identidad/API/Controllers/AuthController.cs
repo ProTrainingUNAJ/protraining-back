@@ -1,13 +1,13 @@
 ﻿using Application.DTOs.Auth;
 using Application.UseCases.Auth.Login;
-using Application.UseCases.Auth.RefreshToken;   
+using Application.UseCases.Auth.RefreshToken;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
 namespace API.Controllers;
-
 /// <summary>
 /// controlador para autenticacion y emision de tokens
 /// </summary>
+[AllowAnonymous]
 [ApiController]
 [Route("api/v1/auth")]
 public class AuthController(LoginUseCase loginUseCase, RefreshTokenUseCase refreshTokenUseCase) : ControllerBase

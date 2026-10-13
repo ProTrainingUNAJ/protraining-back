@@ -7,6 +7,7 @@ namespace API.Controllers;
 [ApiController]
 [Route("api/health")]
 public sealed class HealthController(GetHealthQueryHandler healthHandler) : ControllerBase
+
 {
     [HttpGet]
     public async Task<ActionResult<HealthDto>> Get(CancellationToken cancellationToken)
