@@ -6,6 +6,7 @@ using Infrastructure.Services.Ai;
 using Infrastructure.Services.Ai.Gemini;
 using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -269,6 +270,126 @@ public sealed class ResilientAiFallbackTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal("Reglas", result.ProviderUsed);
         Assert.NotEmpty(result.Exercises);
+    }
+
+    /// <summary>
+    /// Escenario KAN-339: Validación de que la exclusión de AddStandardResilienceHandler en Program.cs
+    /// previene los reintentos automáticos en errores 429 de Gemini.
+    /// DADO el contenedor de dependencias configurado con ConfigureHttpClientDefaults idéntico a Program.cs
+    /// CUANDO Gemini responde HTTP 429 (cuota agotada)
+    /// ENTONCES Gemini recibe exactamente 1 petición (sin reintentos de Polly) y conmuta inmediatamente a reglas.
+    /// </summary>
+    [Fact]
+    public async Task Given_DiContainer_Configured_As_In_Program_When_Gemini_Returns_429_Then_No_Retries_Occur_And_Falls_Back_To_Rules_Immediately()
+    {
+        // Arrange
+        // 1. Simular Ollama caído para avanzar a Gemini
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/api/generate"))
+            .RespondWith(Response.Create().WithStatusCode(500).WithBody("Ollama caído"));
+
+        // 2. Simular Gemini con cuota agotada (HTTP 429)
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/v1beta/models/*"))
+            .RespondWith(Response.Create().WithStatusCode(429).WithBody("Resource exhausted"));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(_auditServiceMock.Object);
+
+        services.Configure<OllamaOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.TimeoutSeconds = 2;
+        });
+        services.Configure<GeminiOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.ApiKey = "test-key";
+            opts.TimeoutSeconds = 5;
+        });
+
+        // Configuración idéntica a Program.cs (sin AddStandardResilienceHandler en clientes de IA)
+        services.AddHttpClient<OllamaClient>();
+        services.AddHttpClient<GeminiClient>();
+        services.AddScoped<RuleBasedAiClient>();
+        services.AddScoped<IAiService, ResilientAiService>();
+
+        var provider = services.BuildServiceProvider();
+        var orchestrator = provider.GetRequiredService<IAiService>();
+
+        // Act
+        var stopwatch = Stopwatch.StartNew();
+        var result = await orchestrator.SuggestRoutineAsync(_defaultRequest);
+        stopwatch.Stop();
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Reglas", result.ProviderUsed);
+
+        // Validación clave de la revisión de Enzo: exactamente 1 llamada enviada a Gemini (sin 3 reintentos de Polly)
+        var geminiCalls = _wireMockServer.FindLogEntries(Request.Create().UsingPost().WithPath("/v1beta/models/*"));
+        Assert.Single(geminiCalls);
+
+        // Sin los reintentos de Polly, la conmutación se resuelve en menos de 2 segundos (no demora los 8s previos)
+        Assert.True(stopwatch.ElapsedMilliseconds < 3000, $"Esperado < 3s, demoró {stopwatch.ElapsedMilliseconds} ms");
+    }
+
+    /// <summary>
+    /// Escenario KAN-339: Validación de que la exclusión de AddStandardResilienceHandler en Program.cs
+    /// permite que Ollama ejecute peticiones locales de más de 10 segundos sin ser cortado por el AttemptTimeout de Polly.
+    /// DADO el contenedor de dependencias configurado como en Program.cs y Ollama con TimeoutSeconds = 15
+    /// CUANDO Ollama responde a los 12 segundos (superando los 10s por defecto de Polly)
+    /// ENTONCES no es abortado a los 10s y responde exitosamente con el modelo local.
+    /// </summary>
+    [Fact]
+    public async Task Given_DiContainer_Configured_As_In_Program_When_Ollama_Takes_12Seconds_Then_Not_Cut_At_10Seconds_And_Succeeds()
+    {
+        // Arrange
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/api/generate"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(CreateOllamaSampleResponse())
+                    .WithDelay(TimeSpan.FromSeconds(12)));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(_auditServiceMock.Object);
+
+        services.Configure<OllamaOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.TimeoutSeconds = 15;
+        });
+        services.Configure<GeminiOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.ApiKey = "test-key";
+            opts.TimeoutSeconds = 5;
+        });
+
+        // Configuración idéntica a Program.cs (sin AddStandardResilienceHandler en clientes de IA)
+        services.AddHttpClient<OllamaClient>();
+        services.AddHttpClient<GeminiClient>();
+        services.AddScoped<RuleBasedAiClient>();
+        services.AddScoped<IAiService, ResilientAiService>();
+
+        var provider = services.BuildServiceProvider();
+        var orchestrator = provider.GetRequiredService<IAiService>();
+
+        // Act
+        var result = await orchestrator.SuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Ollama", result.ProviderUsed);
+
+        // Verificamos que se haya enviado exactamente 1 petición sin abortos ni reintentos
+        var ollamaCalls = _wireMockServer.FindLogEntries(Request.Create().UsingPost().WithPath("/api/generate"));
+        Assert.Single(ollamaCalls);
     }
 
     private static string CreateGeminiSampleResponse()
