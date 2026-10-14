@@ -69,7 +69,13 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExerciseId");
+
                     b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "ExerciseId")
+                        .IsUnique()
+                        .HasFilter("is_active = true AND deleted_at IS NULL");
 
                     b.ToTable("athlete_records", (string)null);
                 });
@@ -145,6 +151,17 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("PfId");
 
                     b.ToTable("exercises", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.AthleteRecord", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
                 });
 #pragma warning restore 612, 618
         }
