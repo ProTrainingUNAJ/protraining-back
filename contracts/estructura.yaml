@@ -22,6 +22,8 @@ tags:
     description: Gestión de clubes u organizaciones deportivas del preparador físico
   - name: Categories
     description: Divisiones deportivas y calendario de partidos de la temporada
+  - name: Me
+    description: Datos del atleta logueado, resueltos a partir del token
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
@@ -314,6 +316,30 @@ paths:
                     type: string
                     format: date-time
                     example: "2026-10-19T23:59:59Z"
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/categories:
+    get:
+      tags:
+        - Me
+      summary: Listar las categorías del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Busca al atleta vinculado a la cuenta del token (claim `sub`)
+        y devuelve las categorías a las que pertenece. Si el atleta está dado de baja, la lista viene vacía.
+        Lo usa Entrenamiento para resolver la rutina de hoy.
+      operationId: listMyCategories
+      responses:
+        "200":
+          description: Categorías del atleta logueado.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
         "404":
           $ref: '#/components/responses/NotFound'
 
