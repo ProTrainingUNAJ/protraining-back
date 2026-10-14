@@ -1,4 +1,6 @@
-﻿using Application.DTOs.Auth;
+﻿using System.Security.Cryptography;
+using Application.DTOs.Auth;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -11,14 +13,15 @@ namespace Application.UseCases.Auth.Login;
 /// </summary>
 public class LoginUseCase(
     UserManager<User> userManager,
-    IJwtTokenGenerator jwtTokenGenerator)
+    IJwtTokenGenerator jwtTokenGenerator,
+    IRefreshTokenRepository refreshTokenRepository)
 {
     /// <summary>
     /// ejecuta la logica de autenticacion de un usuario
     /// </summary>
     /// <param name="request">Credenciales enviadas (Email y Password).</param>
     /// <returns>LoginResponse con el JWT si es válido, o null si las credenciales son incorrectas.</returns>
-    public async Task<LoginResponseDto> ExecuteAsync(LoginRequestDto request)
+    public async Task<LoginResponseDto> ExecuteAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
 
     {
         // 1. buscar al usuario por email
@@ -55,9 +58,22 @@ public class LoginUseCase(
         // 6. generar el JWT con claims unificados (sub, email, role, pf_id)
         var token = jwtTokenGenerator.GenerateToken(user, primaryRole);
 
-        // 7. retornar la respuesta con 1 hora de expiracion (3600 segundos)
+        // 7. generar y persistir el refresh token criptografico de 30 dias para este dispositivo
+        var refreshTokenValue = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var refreshToken = new Domain.Entities.RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenValue,
+            DeviceId = request.DeviceId,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow
+        };
+        await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
+        await refreshTokenRepository.SaveChangesAsync(cancellationToken);
+        // 8. retornar la respuesta con ambos tokens
         return new LoginResponseDto(
             AccessToken: token,
+            RefreshToken: refreshTokenValue,
             TokenType: "Bearer",
             ExpiresIn: 3600,
             User: new UserDto(

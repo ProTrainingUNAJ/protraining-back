@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
+using Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +14,7 @@ namespace Infrastructure.Services.Ai.Gemini;
 public sealed class GeminiClient(
     HttpClient httpClient,
     IOptions<GeminiOptions> options,
+    IAiAuditService aiAuditService,
     ILogger<GeminiClient> logger) : IAiClient
 {
     private readonly GeminiOptions _options = options.Value;
@@ -23,15 +26,26 @@ public sealed class GeminiClient(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var prompt = BuildAnonymousPrompt(request);
+
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
+            stopwatch.Stop();
             logger.LogWarning("API Key de Gemini no configurada. Omitiendo llamada a Gemini y pasando al respaldo.");
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "SinApiKey",
+                athleteId: request.AthleteId,
+                errorMessage: "API Key de Gemini no configurada."));
             return null;
         }
 
         try
         {
-            var prompt = BuildAnonymousPrompt(request);
             var payload = new
             {
                 contents = new[]
@@ -51,38 +65,82 @@ public sealed class GeminiClient(
                 }
             };
 
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.Model}:generateContent?key={_options.ApiKey}";
-            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://generativelanguage.googleapis.com" : _options.BaseUrl.TrimEnd('/');
+            var url = $"{baseUrl}/v1beta/models/{_options.Model}:generateContent";
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, url);
+            requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            {
+                requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", _options.ApiKey);
+            }
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
-            var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            var response = await httpClient.SendAsync(requestMessage, timeoutCts.Token);
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
+                stopwatch.Stop();
                 logger.LogWarning("Se agotó la cuota de solicitudes de la capa gratuita de Gemini (HTTP 429). Pasando al siguiente respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "CuotaAgotada",
+                    athleteId: request.AthleteId,
+                    errorMessage: "Cuota excedida de la capa gratuita de Gemini (HTTP 429)."));
                 return null;
             }
 
             if (!response.IsSuccessStatusCode)
             {
+                stopwatch.Stop();
                 var errorBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
                 logger.LogWarning("Gemini respondió con error {StatusCode}: {ErrorBody}. Activando respaldo.", response.StatusCode, errorBody);
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "ErrorHttp",
+                    athleteId: request.AthleteId,
+                    errorMessage: $"Gemini HTTP {(int)response.StatusCode} ({response.StatusCode}): {errorBody}"));
                 return null;
             }
 
             var responseString = await response.Content.ReadAsStringAsync(timeoutCts.Token);
-            return ParseGeminiResponse(request.AthleteId, responseString);
+            stopwatch.Stop();
+            return await ParseAndLogGeminiResponseAsync(request.AthleteId, prompt, responseString, stopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            stopwatch.Stop();
             logger.LogWarning("La llamada a Gemini superó el tiempo límite de {Seconds} segundos. Activando respaldo.", _options.TimeoutSeconds);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "Timeout",
+                athleteId: request.AthleteId,
+                errorMessage: $"Superó el tiempo límite de {_options.TimeoutSeconds} segundos."));
             return null;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             logger.LogWarning(ex, "Error al comunicarse con la API de Gemini: {Message}. Activando respaldo.", ex.Message);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "ErrorGeneral",
+                athleteId: request.AthleteId,
+                errorMessage: ex.Message));
             return null;
         }
     }
@@ -116,14 +174,41 @@ public sealed class GeminiClient(
             """;
     }
 
-    private RoutineSuggestionResponseDto? ParseGeminiResponse(Guid athleteId, string jsonResponse)
+    private async Task<RoutineSuggestionResponseDto?> ParseAndLogGeminiResponseAsync(
+        Guid athleteId,
+        string prompt,
+        string jsonResponse,
+        long latencyMs)
     {
         using var document = JsonDocument.Parse(jsonResponse);
         var root = document.RootElement;
 
+        int? promptTokens = null;
+        int? completionTokens = null;
+        int? totalTokens = null;
+
+        if (root.TryGetProperty("usageMetadata", out var usage))
+        {
+            if (usage.TryGetProperty("promptTokenCount", out var pt)) promptTokens = pt.GetInt32();
+            if (usage.TryGetProperty("candidatesTokenCount", out var ct)) completionTokens = ct.GetInt32();
+            if (usage.TryGetProperty("totalTokenCount", out var tt)) totalTokens = tt.GetInt32();
+        }
+
         if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
         {
             logger.LogWarning("La respuesta de Gemini no contuvo candidatos válidos.");
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                latencyMs,
+                isValid: false,
+                validationResult: "SinCandidatos",
+                response: jsonResponse,
+                athleteId: athleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens,
+                errorMessage: "La respuesta no contuvo candidatos válidos."));
             return null;
         }
 
@@ -136,6 +221,17 @@ public sealed class GeminiClient(
         if (string.IsNullOrWhiteSpace(text))
         {
             logger.LogWarning("El contenido generado por Gemini vino vacío.");
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                latencyMs,
+                isValid: false,
+                validationResult: "ContenidoVacio",
+                athleteId: athleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens,
+                errorMessage: "El contenido generado vino vacío."));
             return null;
         }
 
@@ -143,6 +239,18 @@ public sealed class GeminiClient(
         if (parsed == null || parsed.Exercises == null || parsed.Exercises.Count == 0)
         {
             logger.LogWarning("No se pudo deserializar la rutina generada por Gemini.");
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                latencyMs,
+                isValid: false,
+                validationResult: "JsonInvalido",
+                response: text,
+                athleteId: athleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens,
+                errorMessage: "No se pudo deserializar la rutina generada por Gemini."));
             return null;
         }
 
@@ -152,6 +260,18 @@ public sealed class GeminiClient(
             Reps: e.Reps > 0 ? e.Reps : 10,
             SuggestedPercentage: e.SuggestedPercentage > 0 ? e.SuggestedPercentage : 65m
         )).ToList();
+
+        await aiAuditService.LogAsync(AiLog.Create(
+            ProviderName,
+            prompt,
+            latencyMs,
+            isValid: true,
+            validationResult: "Valido",
+            response: text,
+            athleteId: athleteId,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            totalTokens: totalTokens));
 
         return new RoutineSuggestionResponseDto(
             AthleteId: athleteId,

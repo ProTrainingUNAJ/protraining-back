@@ -107,6 +107,7 @@ services:
       <<: *api-env
       Database__Host: db-entrenamiento
       Database__Name: entrenamiento
+      Services__Estructura__BaseUrl: http://estructura:8080
     ports: ["8083:8080"]
     depends_on:
       db-entrenamiento: { condition: service_healthy }
@@ -131,6 +132,7 @@ services:
       Database__Name: asistente
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
+      Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
     ports: ["8085:8080"]
     depends_on:

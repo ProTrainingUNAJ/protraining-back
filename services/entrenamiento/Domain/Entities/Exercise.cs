@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +15,9 @@ namespace Domain.Entities
         public string? AnimationUrl { get; private set; }
         public string? VideoUrl { get; private set; }
         public string? Equipment { get; private set; }
+        public List<string> Images { get; private set; } = [];
+        public List<string> PrimaryMuscles { get; private set; } = [];
+        public List<string> SecondaryMuscles { get; private set; } = [];
 
         private Exercise() { }
         public static Exercise Create(
@@ -23,7 +26,10 @@ namespace Domain.Entities
             string? description = null,
             string? animationUrl = null,
             string? videoUrl = null,
-            string? equipment = null)
+            string? equipment = null,
+            List<string>? images = null,
+            List<string>? primaryMuscles = null,
+            List<string>? secondaryMuscles = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("El nombre del ejercicio no puede estar vacío.");
@@ -35,9 +41,12 @@ namespace Domain.Entities
                 Name = name.Trim(),
                 MuscleGroup = muscleGroup.Trim(),
                 Description = description?.Trim(),
-                AnimationUrl = animationUrl?.Trim(),
+                AnimationUrl = animationUrl?.Trim() ?? images.FirstOrDefault(),
                 VideoUrl = videoUrl?.Trim(),
-                Equipment = equipment?.Trim()
+                Equipment = equipment?.Trim(),
+                Images = images ?? [],
+                PrimaryMuscles = primaryMuscles ?? [],
+                SecondaryMuscles = secondaryMuscles ?? []
             };
         }
     }

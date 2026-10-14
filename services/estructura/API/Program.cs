@@ -4,16 +4,33 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.ListAthletes;
+using Application.UseCases.Athletes.ListCategoriesByAthlete;
+using Application.UseCases.Athletes.ListMyCategories;
+using Application.UseCases.Athletes.RemoveAthleteCategory;
+using Application.UseCases.Athletes.UpdateAthlete;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
+using Application.UseCases.Categories.CreateCategory;
+using Application.UseCases.Categories.DeleteCategory;
+using Application.UseCases.Categories.GetCategory;
+using Application.UseCases.Categories.ListAthletesByCategory;
+using Application.UseCases.Categories.ListCategories;
+using Application.UseCases.Categories.UpdateCategory;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Organizations.CreateOrganization;
+using Application.UseCases.Organizations.DeleteOrganization;
+using Application.UseCases.Organizations.GetOrganization;
+using Application.UseCases.Organizations.ListOrganizations;
+using Application.UseCases.Organizations.UpdateOrganization;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.Export.ExportStructureCsv;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -52,18 +69,33 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<ListAthletesQueryHandler>();
 builder.Services.AddScoped<GetAthleteQueryHandler>();
 builder.Services.AddScoped<CreateAthleteCommandHandler>();
+builder.Services.AddScoped<UpdateAthleteCommandHandler>();
 builder.Services.AddScoped<UpdateHabitsPermissionCommandHandler>();
 builder.Services.AddScoped<DeleteAthleteCommandHandler>();
+builder.Services.AddScoped<AssignAthleteCategoryCommandHandler>();
+builder.Services.AddScoped<RemoveAthleteCategoryCommandHandler>();
+builder.Services.AddScoped<ListCategoriesByAthleteQueryHandler>();
+builder.Services.AddScoped<ListMyCategoriesQueryHandler>();
+builder.Services.AddScoped<ListOrganizationsQueryHandler>();
+builder.Services.AddScoped<GetOrganizationQueryHandler>();
+builder.Services.AddScoped<CreateOrganizationCommandHandler>();
+builder.Services.AddScoped<UpdateOrganizationCommandHandler>();
+builder.Services.AddScoped<DeleteOrganizationCommandHandler>();
+builder.Services.AddScoped<ListCategoriesQueryHandler>();
+builder.Services.AddScoped<GetCategoryQueryHandler>();
+builder.Services.AddScoped<ListAthletesByCategoryQueryHandler>();
+builder.Services.AddScoped<CreateCategoryCommandHandler>();
+builder.Services.AddScoped<UpdateCategoryCommandHandler>();
+builder.Services.AddScoped<DeleteCategoryCommandHandler>();
 builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {serviceName}", Version = "v1" }));
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
@@ -84,5 +116,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
+

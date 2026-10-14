@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Application.Interfaces.Services;
 using Domain.Common;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
@@ -9,6 +10,8 @@ namespace Infrastructure.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser currentUser)
     : DbContext(options)
 {
+    public DbSet<AiLog> AiLogs => Set<AiLog>();
+
     // EF reads it again on every query, so it is always the PF of the current request.
     // Without a token it is Guid.Empty and the filters return nothing.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;

@@ -24,6 +24,9 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             {
                 DomainException domain => (400, domain.Message, (string?)null),
                 AthleteNotFoundException => (404, "Atleta no encontrado.", null),
+                OrganizationNotFoundException => (404, "Organización no encontrada.", null),
+                CategoryNotFoundException => (404, "Categoría no encontrada.", null),
+                ConflictException conflict => (409, conflict.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
                 PersistenceUnavailableException => (503, "Base de datos no disponible.",

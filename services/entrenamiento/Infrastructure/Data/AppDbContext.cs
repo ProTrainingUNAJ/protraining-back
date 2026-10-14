@@ -16,8 +16,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<Exercise> Exercises { get; set; }
 
+    public DbSet<AthleteRecord> AthleteRecords { get; set; }
+
+    public DbSet<TrainingPlan> TrainingPlans => Set<TrainingPlan>();
+    public DbSet<TrainingWeek> TrainingWeeks => Set<TrainingWeek>();
+    public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
+    public DbSet<PrescribedExercise> PrescribedExercises => Set<PrescribedExercise>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("pg_trgm");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         ConfigureBaseEntities(modelBuilder);
     }

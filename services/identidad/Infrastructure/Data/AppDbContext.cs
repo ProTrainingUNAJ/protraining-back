@@ -16,30 +16,61 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     // Without a token it is Guid.Empty and the filters return nothing.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-             // 1. obligatorio para identity: carga sus claves primarias
+        // 1. obligatorio para Identity: carga sus claves primarias
         base.OnModelCreating(modelBuilder);
-        
-             // 2. esquema "db_identity"
+
+        // 2. esquema "db_identity"
         modelBuilder.HasDefaultSchema("db_identity");
-        
-             // 3. nombres de tablas de identity en minusculas
+
+        // 3. nombres de tablas y columnas de Identity en ingles y snake_case
         modelBuilder.Entity<User>(b =>
-             {
-            b.ToTable("usuarios");
-            b.Property(u => u.FullName).HasMaxLength(200);
-                 });
+        {
+            b.ToTable("users");
+            b.Property(u => u.FullName).HasColumnName("full_name").HasMaxLength(200);
+            b.Property(u => u.IsActive).HasColumnName("is_active");
+            b.Property(u => u.CreatedAt).HasColumnName("created_at");
+            b.Property(u => u.UpdatedAt).HasColumnName("updated_at");
+        });
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
-        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("usuarios_roles");
-        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("usuarios_claims");
-        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("usuarios_logins");
-        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("roles_claims");
-        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("usuarios_tokens");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("user_roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("user_claims");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("user_logins");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("role_claims");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("user_tokens");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         ConfigureBaseEntities(modelBuilder);
+
+        // 4. configuracion de la tabla de tokens de refresco
+        modelBuilder.Entity<RefreshToken>(b =>
+        {
+            b.ToTable("refresh_tokens");
+            b.HasKey(rt => rt.Id);
+            b.Property(rt => rt.Id).HasColumnName("id");
+            b.Property(rt => rt.UserId).HasColumnName("user_id").IsRequired();
+            b.Property(rt => rt.Token).HasColumnName("token").HasMaxLength(200).IsRequired();
+            b.Property(rt => rt.DeviceId).HasColumnName("device_id").HasMaxLength(100).IsRequired();
+            b.Property(rt => rt.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            b.Property(rt => rt.CreatedAt).HasColumnName("created_at").IsRequired();
+            b.Property(rt => rt.IsRevoked).HasColumnName("is_revoked").IsRequired();
+            b.Property(rt => rt.RevokedAt).HasColumnName("revoked_at");
+            b.Property(rt => rt.ReplacedByToken).HasColumnName("replaced_by_token").HasMaxLength(200);
+
+            b.HasIndex(rt => rt.Token).IsUnique();
+            b.HasIndex(rt => new { rt.UserId, rt.DeviceId });
+
+            b.HasOne(rt => rt.User)
+                .WithMany()
+                .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
+
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

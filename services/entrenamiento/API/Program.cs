@@ -1,14 +1,19 @@
-using System.Text.Json;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Memberships.ResolveActiveMemberships;
 using Infrastructure;
+using Infrastructure.Repositories;
+using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -47,13 +52,22 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
+builder.Services.AddScoped<ListExercisesQueryHandler>();
+
+// Estructura por HTTP, con el token del usuario (#062).
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddScoped<ResolveActiveMembershipsQueryHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {serviceName}", Version = "v1" }));
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
@@ -72,7 +86,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseStaticFiles();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();

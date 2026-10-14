@@ -3,9 +3,9 @@ info:
   title: ProTraining - Microservicio de Estructura
   description: >
     API v1 para la administración de organizaciones deportivas (clubes),
-    categorías, calendario de temporada (partidos por división) y el padrón de
-    atletas con ficha médica, contacto y estado de tutoría para menores.
-  version: 1.1.0
+    categorías, fixture de temporada y padrón de atletas con ficha médica,
+    contacto de emergencia y consentimiento de tutor para menores de edad.
+  version: 1.2.0
 servers:
   - url: http://localhost:8082
     description: Entorno local / Docker Compose
@@ -16,94 +16,410 @@ security:
   - BearerAuth: []
 
 tags:
-  - name: Organizaciones
+  - name: Athletes
+    description: Padrón de deportistas, ficha médica, consentimiento de tutor y vinculación a categorías
+  - name: Organizations
     description: Gestión de clubes u organizaciones deportivas del preparador físico
-  - name: Categorías y Temporada
+  - name: Categories
     description: Divisiones deportivas y calendario de partidos de la temporada
-  - name: Atletas
-    description: Padrón de deportistas, ficha médica, vinculación y enlaces de invitación
-  - name: Salud
+  - name: Me
+    description: Datos del atleta logueado, resueltos a partir del token
+  - name: Export
+    description: Exportación de datos de estructura en formatos tabulares (CSV)
+  - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
 paths:
-  /api/v1/organizaciones:
+  /api/v1/athletes:
     get:
       tags:
-        - Organizaciones
-      summary: Listar organizaciones del preparador físico
-      description: Devuelve los clubes u organizaciones administradas por el usuario autenticado.
-      operationId: listarOrganizaciones
+        - Athletes
+      summary: Listar atletas
+      description: Retorna el plantel de atletas pertenecientes a las organizaciones del preparador físico.
+      operationId: listAthletes
       responses:
         "200":
-          description: Lista de organizaciones recuperada con éxito.
+          description: Lista de atletas obtenida exitosamente.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Organizacion'
+                  $ref: '#/components/schemas/Athlete'
         "401":
           $ref: '#/components/responses/Unauthorized'
 
     post:
       tags:
-        - Organizaciones
-      summary: Crear una nueva organización / club
-      description: Da de alta un club asignado a la cuenta del preparador físico autenticado.
-      operationId: crearOrganizacion
+        - Athletes
+      summary: Registrar nuevo atleta
+      description: Da de alta un deportista registrando sus datos personales, información médica y consentimiento parental si es menor.
+      operationId: createAthlete
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CrearOrganizacionRequest'
+              $ref: '#/components/schemas/CreateAthleteRequest'
+      responses:
+        "201":
+          description: Atleta registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/athletes/{id}:
+    get:
+      tags:
+        - Athletes
+      summary: Obtener detalle de un atleta
+      description: Retorna la ficha completa del deportista, incluyendo datos de contacto y consentimiento de tutor si aplica.
+      operationId: getAthlete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Atleta encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Athletes
+      summary: Actualizar ficha del atleta
+      description: Actualiza los datos de contacto, contacto de emergencia o condiciones médicas del atleta.
+      operationId: updateAthlete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAthleteRequest'
+      responses:
+        "200":
+          description: Ficha actualizada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Athletes
+      summary: Dar de baja lógica a un atleta
+      description: Marca al deportista como eliminado (borrado lógico) preservando la integridad de datos históricos.
+      operationId: deleteAthlete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Atleta eliminado correctamente.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/habits-permission:
+    patch:
+      tags:
+        - Athletes
+      summary: Actualizar permiso de recomendaciones de hábitos
+      description: Habilita o deshabilita la recepción de recomendaciones de hábitos y alimentación para el deportista.
+      operationId: updateHabitsPermission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHabitsPermissionRequest'
+      responses:
+        "200":
+          description: Permiso actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/guardian-consent:
+    get:
+      tags:
+        - Athletes
+      summary: Consultar consentimiento del tutor de un atleta
+      description: Retorna el estado y los datos del consentimiento parental registrado para el deportista menor de edad.
+      operationId: getAthleteGuardianConsent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Consentimiento obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardianConsent'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/categories:
+    get:
+      tags:
+        - Athletes
+      summary: Listar categorías de un atleta
+      description: Retorna las divisiones deportivas a las que está asignado el atleta.
+      operationId: listCategoriesByAthlete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de categorías obtenida.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/categories/{categoryId}:
+    post:
+      tags:
+        - Athletes
+      summary: Asignar atleta a una categoría
+      description: Asocia al deportista al plantel de la categoría especificada.
+      operationId: assignCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Asignación completada con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Athletes
+      summary: Desvincular atleta de una categoría
+      description: Quita la asignación del deportista en la categoría deportiva.
+      operationId: removeCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Desvinculación exitosa.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/invitation:
+    get:
+      tags:
+        - Athletes
+      summary: Generar enlace de invitación para el atleta
+      description: Emite un enlace único para que el deportista configure su acceso a la PWA móvil.
+      operationId: generateAthleteInvitation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Enlace de invitación generado con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - invitationUrl
+                  - expiresAt
+                properties:
+                  invitationUrl:
+                    type: string
+                    example: "https://protraining.app/invite/a9f8c12e-3d4b-5c6a"
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    example: "2026-10-19T23:59:59Z"
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/categories:
+    get:
+      tags:
+        - Me
+      summary: Listar las categorías del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Busca al atleta vinculado a la cuenta del token (claim `sub`)
+        y devuelve las categorías a las que pertenece. Si el atleta está dado de baja, la lista viene vacía.
+        Lo usa Entrenamiento para resolver la rutina de hoy.
+      operationId: listMyCategories
+      responses:
+        "200":
+          description: Categorías del atleta logueado.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations:
+    get:
+      tags:
+        - Organizations
+      summary: Listar organizaciones
+      description: Obtiene los clubes u organizaciones deportivas gestionadas por el preparador físico autenticado.
+      operationId: listOrganizations
+      responses:
+        "200":
+          description: Lista de organizaciones recuperada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Organizations
+      summary: Crear organización
+      description: Registra una nueva entidad o club deportivo para el preparador físico.
+      operationId: createOrganization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
       responses:
         "201":
           description: Organización creada exitosamente.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Organizacion'
+                $ref: '#/components/schemas/Organization'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/organizaciones/{organizacionId}/categorias:
+  /api/v1/organizations/{id}:
     get:
       tags:
-        - Categorías y Temporada
-      summary: Listar categorías de una organización
-      description: Obtiene las divisiones deportivas registradas bajo una organización determinada.
-      operationId: listarCategorias
+        - Organizations
+      summary: Obtener detalle de una organización
+      description: Retorna la información de la organización deportiva.
+      operationId: getOrganization
       parameters:
-        - name: organizacionId
+        - name: id
           in: path
           required: true
           schema:
             type: string
             format: uuid
-          description: Identificador de la organización.
       responses:
         "200":
-          description: Lista de categorías encontradas.
+          description: Organización encontrada.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Categoria'
+                $ref: '#/components/schemas/Organization'
         "404":
           $ref: '#/components/responses/NotFound'
 
-    post:
+    put:
       tags:
-        - Categorías y Temporada
-      summary: Crear una nueva categoría dentro de una organización
-      description: Agrega una categoría deportiva al club especificado.
-      operationId: crearCategoria
+        - Organizations
+      summary: Actualizar organización
+      description: Modifica el nombre o descripción de la organización.
+      operationId: updateOrganization
       parameters:
-        - name: organizacionId
+        - name: id
           in: path
           required: true
           schema:
@@ -114,28 +430,200 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CrearCategoriaRequest'
+              $ref: '#/components/schemas/UpdateOrganizationRequest'
+      responses:
+        "200":
+          description: Organización actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Organizations
+      summary: Eliminar organización
+      description: Realiza el borrado lógico de la organización y sus dependencias.
+      operationId: deleteOrganization
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Organización eliminada.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories:
+    get:
+      tags:
+        - Categories
+      summary: Listar categorías
+      description: Obtiene las divisiones deportivas registradas bajo una organización específica.
+      operationId: listCategories
+      parameters:
+        - name: organizationId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la organización para filtrar.
+      responses:
+        "200":
+          description: Lista de categorías obtenida.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Categories
+      summary: Crear categoría
+      description: Agrega una nueva división o plantel a la organización deportiva.
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
       responses:
         "201":
           description: Categoría creada con éxito.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Categoria'
+                $ref: '#/components/schemas/Category'
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/categorias/{categoriaId}/partidos:
+  /api/v1/categories/{id}:
     get:
       tags:
-        - Categorías y Temporada
-      summary: Listar partidos de la temporada para una categoría
-      description: Recupera el fixture de competencias de la categoría. Es utilizado por el Asistente IA para anticipar alertas si hay un partido próximo.
-      operationId: listarPartidosCategoria
+        - Categories
+      summary: Obtener detalle de una categoría
+      description: Retorna la información de una división deportiva específica.
+      operationId: getCategory
       parameters:
-        - name: categoriaId
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Categoría encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Categories
+      summary: Actualizar categoría
+      description: Modifica el nombre o descripción de la categoría.
+      operationId: updateCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        "200":
+          description: Categoría actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Categories
+      summary: Eliminar categoría
+      description: Da de baja lógica una división deportiva.
+      operationId: deleteCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Categoría eliminada con éxito.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{id}/athletes:
+    get:
+      tags:
+        - Categories
+      summary: Listar atletas de una categoría
+      description: Retorna la lista de atletas asignados a la división deportiva especificada.
+      operationId: listAthletesByCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de atletas de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Athlete'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{id}/matches:
+    get:
+      tags:
+        - Categories
+      summary: Listar partidos de la temporada para una categoría
+      description: Recupera el fixture de competencias de la división. Permite al Asistente anticipar alertas de sobrecarga.
+      operationId: listCategoryMatches
+      parameters:
+        - name: id
           in: path
           required: true
           schema:
@@ -149,18 +637,18 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PartidoTemporada'
+                  $ref: '#/components/schemas/Match'
         "404":
           $ref: '#/components/responses/NotFound'
 
     post:
       tags:
-        - Categorías y Temporada
-      summary: Programar un partido en el calendario
-      description: Registra una nueva fecha competitiva (rival, fecha, localía).
-      operationId: agregarPartidoCategoria
+        - Categories
+      summary: Programar partido en el fixture
+      description: Registra una nueva fecha competitiva para la división.
+      operationId: createCategoryMatch
       parameters:
-        - name: categoriaId
+        - name: id
           in: path
           required: true
           schema:
@@ -171,227 +659,55 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CrearPartidoRequest'
+              $ref: '#/components/schemas/CreateMatchRequest'
       responses:
         "201":
-          description: Partido programado correctamente.
+          description: Partido programado con éxito.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PartidoTemporada'
+                $ref: '#/components/schemas/Match'
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/atletas:
+  /api/v1/export/csv:
     get:
       tags:
-        - Atletas
-      summary: Listar atletas
-      description: Retorna el plantel de atletas, permitiendo filtrar por categoría y estado de actividad.
-      operationId: listarAtletas
-      parameters:
-        - name: categoriaId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-          description: Filtrar por identificador de categoría.
-        - name: soloActivos
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: true
-          description: Filtrar solo atletas habilitados administrativamente.
+        - Export
+      summary: Exportar datos completos de estructura a CSV
+      description: >
+        Genera y descarga un archivo CSV con todas las organizaciones, categorías y atletas
+        registrados por el preparador físico autenticado. Requiere rol PreparadorFisico.
+      operationId: exportStructureCsv
       responses:
         "200":
-          description: Lista de atletas obtenida exitosamente.
-          content:
-            application/json:
+          description: Archivo CSV generado exitosamente.
+          headers:
+            Content-Disposition:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Atleta'
+                type: string
+              description: Encabezado estándar para descarga de archivo adjunto.
+              example: 'attachment; filename="estructura_export_20261014_120000.csv"'
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
         "401":
           $ref: '#/components/responses/Unauthorized'
-
-    post:
-      tags:
-        - Atletas
-      summary: Dar de alta a un atleta
-      description: Registra a un nuevo atleta con sus datos personales, información médica y categorías asignadas.
-      operationId: crearAtleta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CrearAtletaRequest'
-      responses:
-        "201":
-          description: Atleta registrado exitosamente.
+        "403":
+          description: Acceso denegado (requiere rol PreparadorFisico).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Atleta'
-        "400":
-          $ref: '#/components/responses/BadRequest'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/atletas/{atletaId}:
-    get:
-      tags:
-        - Atletas
-      summary: Obtener detalle completo de un atleta
-      description: Retorna los datos del atleta, categorías a las que pertenece, ficha médica y estado de consentimiento si es menor.
-      operationId: obtenerAtleta
-      parameters:
-        - name: atletaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Atleta encontrado.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Atleta'
-        "404":
-          $ref: '#/components/responses/NotFound'
-
-    put:
-      tags:
-        - Atletas
-      summary: Actualizar ficha del atleta
-      description: Modifica información médica, de contacto o datos personales del atleta.
-      operationId: actualizarAtleta
-      parameters:
-        - name: atletaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ActualizarAtletaRequest'
-      responses:
-        "200":
-          description: Ficha del atleta actualizada correctamente.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Atleta'
-        "400":
-          $ref: '#/components/responses/BadRequest'
-        "404":
-          $ref: '#/components/responses/NotFound'
-
-  /api/v1/atletas/{atletaId}/invitacion:
-    get:
-      tags:
-        - Atletas
-      summary: Generar link de invitación para el atleta
-      description: Genera un enlace único / código QR para que el deportista instale la PWA móvil e inicie sesión directamente.
-      operationId: generarInvitacionAtleta
-      parameters:
-        - name: atletaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Enlace de invitación generado.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  enlaceInvitacion:
-                    type: string
-                    example: "https://protraining.app/invitar/a9f8c12e-3d4b-5c6a"
-                  expiraEn:
-                    type: string
-                    format: date-time
-                    example: "2026-10-17T23:59:59Z"
-        "404":
-          $ref: '#/components/responses/NotFound'
-
-  /api/v1/atletas/{atletaId}/categorias/{categoriaId}:
-    post:
-      tags:
-        - Atletas
-      summary: Asignar atleta a una categoría
-      description: Incorpora al atleta en el plantel de una categoría (un atleta puede pertenecer a múltiples categorías simultáneas).
-      operationId: asignarAtletaCategoria
-      parameters:
-        - name: atletaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: categoriaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Asignación completada (idempotente si ya pertenecía).
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  mensaje:
-                    type: string
-                    example: "Atleta asignado exitosamente a la categoría."
-        "404":
-          $ref: '#/components/responses/NotFound'
-
-    delete:
-      tags:
-        - Atletas
-      summary: Remover atleta de una categoría
-      description: Quita la vinculación del atleta con la categoría deportiva especificada.
-      operationId: desasignarAtletaCategoria
-      parameters:
-        - name: atletaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: categoriaId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Atleta desvinculado de la categoría con éxito.
-        "404":
-          $ref: '#/components/responses/NotFound'
+                $ref: '#/components/schemas/ProblemDetails'
 
   /api/health:
     get:
       tags:
-        - Salud
+        - Health
       summary: Chequeo de salud del servicio
       security: []
       operationId: healthCheck
@@ -435,255 +751,355 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
-    Organizacion:
+    GuardianConsent:
       type: object
+      description: Registro de consentimiento parental obligatorio para atletas menores.
       required:
-        - id
-        - nombre
-        - categoriasCount
+        - isSigned
+        - consentDate
+        - isMinor
+        - allowsPhysicalTraining
+        - allowsHabitsRecommendations
       properties:
-        id:
-          type: string
-          format: uuid
-          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-        nombre:
-          type: string
-          example: "Club Atlético ProTraining"
-        descripcion:
-          type: string
-          nullable: true
-          example: "Sede central de entrenamiento deportivo"
-        categoriasCount:
-          type: integer
-          example: 3
-
-    CrearOrganizacionRequest:
-      type: object
-      required:
-        - nombre
-      properties:
-        nombre:
-          type: string
-          example: "Club Atlético ProTraining"
-        descripcion:
-          type: string
-          example: "Sede central"
-
-    Categoria:
-      type: object
-      description: Objeto compartido de Categoría.
-      required:
-        - id
-        - organizacionId
-        - nombre
-        - atletasCount
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        organizacionId:
-          type: string
-          format: uuid
-          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-        nombre:
-          type: string
-          example: "Primera División"
-        descripcion:
-          type: string
-          nullable: true
-          example: "Plantel superior competitivo"
-        atletasCount:
-          type: integer
-          example: 28
-
-    CrearCategoriaRequest:
-      type: object
-      required:
-        - nombre
-      properties:
-        nombre:
-          type: string
-          example: "Juveniles M19"
-        descripcion:
-          type: string
-          example: "Categoría de formación competitiva"
-
-    PartidoTemporada:
-      type: object
-      required:
-        - id
-        - categoriaId
-        - rival
-        - fecha
-        - condicion
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c"
-        categoriaId:
-          type: string
-          format: uuid
-          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-        rival:
-          type: string
-          example: "Club San Martín"
-        fecha:
+        isSigned:
+          type: boolean
+          example: true
+        consentDate:
           type: string
           format: date-time
-          example: "2026-10-17T15:30:00Z"
-        condicion:
-          type: string
-          enum: [Local, Visitante, Neutral]
-          example: "Local"
-        observaciones:
+          example: "2026-03-01T14:00:00Z"
+        isMinor:
+          type: boolean
+          example: true
+        guardianName:
           type: string
           nullable: true
-          example: "Fecha 8 del torneo oficial"
+          example: "Roberto Fernández"
+        guardianEmail:
+          type: string
+          format: email
+          nullable: true
+          example: "roberto.fernandez@email.com"
+        guardianPhone:
+          type: string
+          nullable: true
+          example: "+54 11 4444-1234"
+        allowsPhysicalTraining:
+          type: boolean
+          example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          example: false
 
-    CrearPartidoRequest:
+    Athlete:
       type: object
-      required:
-        - rival
-        - fecha
-        - condicion
-      properties:
-        rival:
-          type: string
-          example: "Club San Martín"
-        fecha:
-          type: string
-          format: date-time
-          example: "2026-10-17T15:30:00Z"
-        condicion:
-          type: string
-          enum: [Local, Visitante, Neutral]
-          example: "Local"
-        observaciones:
-          type: string
-          example: "Fecha 8"
-
-    Atleta:
-      type: object
-      description: Objeto compartido de Atleta.
+      description: Objeto de atleta en concordancia con el DTO implementado en el backend.
       required:
         - id
-        - nombre
-        - apellido
+        - firstName
+        - lastName
+        - fullName
         - email
-        - telefono
-        - esMenorDeEdad
-        - categorias
-        - activo
+        - phone
+        - isMinor
+        - active
+        - allowsHabitsRecommendations
       properties:
         id:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        cuentaId:
+        accountId:
           type: string
           format: uuid
           nullable: true
           example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-        nombre:
+        firstName:
           type: string
           example: "Lucas"
-        apellido:
+        lastName:
           type: string
           example: "Fernández"
-        nombreCompleto:
+        fullName:
           type: string
           example: "Lucas Fernández"
         email:
           type: string
           format: email
           example: "lucas.fernandez@club.com"
-        telefono:
+        phone:
           type: string
           example: "+54 11 5555-1234"
-        esMenorDeEdad:
+        isMinor:
           type: boolean
           example: false
-        condicionesMedicas:
-          type: string
-          nullable: true
-          example: "Sin antecedentes patológicos relevantes"
-        contactoEmergencia:
+        emergencyContact:
           type: string
           nullable: true
           example: "María Fernández - +54 11 4444-9876"
-        categorias:
-          type: array
-          items:
-            type: string
-          example: ["Primera División", "Juveniles M19"]
-        lesionesActivasCount:
-          type: integer
-          example: 0
-        activo:
+        medicalConditions:
+          type: string
+          nullable: true
+          example: "Sin antecedentes patológicos relevantes"
+        active:
           type: boolean
           example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          example: true
+        categories:
+          type: array
+          description: Categorías o divisiones deportivas asignadas al deportista.
+          items:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                type: string
+                format: uuid
+                example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+              name:
+                type: string
+                example: "Primera División"
+        guardianConsent:
+          $ref: '#/components/schemas/GuardianConsent'
 
-    CrearAtletaRequest:
+    CreateAthleteRequest:
       type: object
       required:
-        - nombre
-        - apellido
+        - firstName
+        - lastName
         - email
-        - telefono
+        - phone
+        - isMinor
+        - allowsPhysicalTraining
+        - allowsHabitsRecommendations
       properties:
-        nombre:
+        firstName:
           type: string
           example: "Lucas"
-        apellido:
+        lastName:
           type: string
           example: "Fernández"
         email:
           type: string
           format: email
           example: "lucas.fernandez@club.com"
-        telefono:
+        phone:
           type: string
           example: "+54 11 5555-1234"
-        esMenorDeEdad:
+        isMinor:
           type: boolean
-          default: false
           example: false
-        categoriaIds:
-          type: array
-          items:
-            type: string
-            format: uuid
-          example: ["d3b07384-d113-4ec4-9844-3c8b4df56844"]
-        condicionesMedicas:
+        guardianName:
           type: string
-          example: "Apto médico presentado marzo 2026."
-        contactoEmergencia:
+          nullable: true
+          example: "Roberto Fernández"
+        guardianEmail:
           type: string
-          example: "Madre: +54 11 4444-9876"
-
-    ActualizarAtletaRequest:
-      type: object
-      properties:
-        nombre:
+          format: email
+          nullable: true
+          example: "roberto.fernandez@email.com"
+        guardianPhone:
           type: string
-          example: "Lucas"
-        apellido:
-          type: string
-          example: "Fernández"
-        telefono:
-          type: string
-          example: "+54 11 5555-9999"
-        condicionesMedicas:
-          type: string
-          example: "Actualización de ficha médica: asmático leve."
-        contactoEmergencia:
-          type: string
-          example: "Padre: +54 11 2222-3333"
-        activo:
+          nullable: true
+          example: "+54 11 4444-1234"
+        allowsPhysicalTraining:
           type: boolean
           example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          example: false
+        emergencyContact:
+          type: string
+          nullable: true
+          example: "Madre: +54 11 4444-9876"
+        medicalConditions:
+          type: string
+          nullable: true
+          example: "Apto médico presentado marzo 2026."
+
+    UpdateAthleteRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          example: "+54 11 5555-9999"
+        emergencyContact:
+          type: string
+          example: "Padre: +54 11 2222-3333"
+        medicalConditions:
+          type: string
+          example: "Actualización médica: asmático leve."
+
+    UpdateHabitsPermissionRequest:
+      type: object
+      required:
+        - allowsHabitsRecommendations
+      properties:
+        allowsHabitsRecommendations:
+          type: boolean
+          example: true
+
+    Organization:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        name:
+          type: string
+          example: "Club Atlético ProTraining"
+        description:
+          type: string
+          nullable: true
+          example: "Sede central de entrenamiento deportivo"
+
+    CreateOrganizationRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Club Atlético ProTraining"
+        description:
+          type: string
+          nullable: true
+          example: "Sede central"
+
+    UpdateOrganizationRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Club Atlético ProTraining Actualizado"
+        description:
+          type: string
+          nullable: true
+          example: "Sede central ampliada"
+
+    Category:
+      type: object
+      required:
+        - id
+        - organizationId
+        - name
+        - athletesCount
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        organizationId:
+          type: string
+          format: uuid
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        name:
+          type: string
+          example: "Primera División"
+        description:
+          type: string
+          nullable: true
+          example: "Plantel superior competitivo"
+        athletesCount:
+          type: integer
+          example: 28
+
+    CreateCategoryRequest:
+      type: object
+      required:
+        - organizationId
+        - name
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        name:
+          type: string
+          example: "Juveniles M19"
+        description:
+          type: string
+          nullable: true
+          example: "Categoría de formación competitiva"
+
+    UpdateCategoryRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Juveniles M19 A"
+        description:
+          type: string
+          nullable: true
+          example: "División A"
+
+    Match:
+      type: object
+      required:
+        - id
+        - categoryId
+        - opponent
+        - matchDate
+        - homeOrAway
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        opponent:
+          type: string
+          example: "Club San Martín"
+        matchDate:
+          type: string
+          format: date-time
+          example: "2026-10-17T15:30:00Z"
+        homeOrAway:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        notes:
+          type: string
+          nullable: true
+          example: "Fecha 8 del torneo oficial"
+
+    CreateMatchRequest:
+      type: object
+      required:
+        - opponent
+        - matchDate
+        - homeOrAway
+      properties:
+        opponent:
+          type: string
+          example: "Club San Martín"
+        matchDate:
+          type: string
+          format: date-time
+          example: "2026-10-17T15:30:00Z"
+        homeOrAway:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        notes:
+          type: string
+          nullable: true
+          example: "Fecha 8"
 
     ProblemDetails:
       type: object
@@ -706,7 +1122,7 @@ components:
           example: "El atleta no existe o no pertenece a tu organización."
         instance:
           type: string
-          example: "/api/v1/atletas/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          example: "/api/v1/athletes/3fa85f64-5717-4562-b3fc-2c963f66afa6"
         errors:
           type: object
           additionalProperties:

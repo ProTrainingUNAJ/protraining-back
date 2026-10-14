@@ -6,6 +6,8 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
+using Infrastructure.Services.Ai.Gemini;
+using Infrastructure.Services.Ai.Ollama;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -42,8 +44,11 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Retries, timeouts and circuit breaker for every registered HttpClient.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+// NOTA (Resiliencia): No se aplica ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler())
+// en este microservicio porque sus únicos clientes HTTP son los proveedores de IA (OllamaClient y GeminiClient).
+// Dichos clientes cuentan con su propio manejo de tiempos límites configurables y su propia cadena de
+// respaldo determinístico en ResilientAiService. Aplicar el manejador estándar de la plantilla provocaría
+// 3 reintentos automáticos ante errores HTTP 429 (gastando cuota y demorando 8s) y cortaría a Ollama a los 10s.
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddHttpContextAccessor();
@@ -52,9 +57,7 @@ builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {serviceName}", Version = "v1" }));
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
@@ -75,5 +78,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
