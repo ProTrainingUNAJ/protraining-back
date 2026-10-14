@@ -15,19 +15,22 @@ namespace Infrastructure.Data.Migrations
                 name: "images",
                 table: "exercises",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'::text[]");
 
             migrationBuilder.AddColumn<List<string>>(
                 name: "primary_muscles",
                 table: "exercises",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'::text[]");
 
             migrationBuilder.AddColumn<List<string>>(
                 name: "secondary_muscles",
                 table: "exercises",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'::text[]");
         }
 
         /// <inheritdoc />

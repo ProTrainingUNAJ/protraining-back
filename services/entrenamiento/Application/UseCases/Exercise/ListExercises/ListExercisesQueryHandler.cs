@@ -1,10 +1,5 @@
 ﻿using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Application.UseCases.Exercise.ListExercises
 {
@@ -19,7 +14,7 @@ namespace Application.UseCases.Exercise.ListExercises
 
         public async Task<List<ExerciseDto>> Handle(ListExercisesQuery request, CancellationToken cancellationToken = default)
         {
-            var exercises = await exerciseRepository.ListAsync( request.Search, request.Equipment, request.MuscleGroup, cancellationToken);
+            var exercises = await exerciseRepository.ListAsync( request.Search, request.Equipment, request.MuscleGroup, request.Page, request.PageSize, cancellationToken);
 
             var exercisesDto = exercises.Select(e => new ExerciseDto
             {

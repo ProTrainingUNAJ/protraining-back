@@ -2,11 +2,6 @@
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Infrastructure.Repositories
 {
@@ -19,7 +14,7 @@ namespace Infrastructure.Repositories
             this.context = context;
         }
 
-        public async Task<List<Exercise>> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, CancellationToken cancellationToken = default)
+        public async Task<List<Exercise>> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default)
         {
             var exercises = context.Exercises.AsNoTracking();
             
@@ -35,10 +30,17 @@ namespace Infrastructure.Repositories
            
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.Where(e =>
-                    EF.Functions.TrigramsAreSimilar(e.Name, searchTerm) ||
-                    EF.Functions.ILike(e.Name, $"%{searchTerm}%"));
+                exercises = exercises.Where(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name) > 0.3).OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name));
             }
+            else
+            {
+                exercises = exercises.OrderBy(e => e.Name);
+            }
+
+            var pag = page < 1 ? 1 : page;
+            var pagSize = pageSize < 1 ? 20 : pageSize;
+
+            exercises = exercises.Skip((pag - 1) * pagSize).Take(pagSize);
 
             return await exercises.ToListAsync(cancellationToken);
         }
