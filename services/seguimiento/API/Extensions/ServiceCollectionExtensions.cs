@@ -2,6 +2,7 @@ using System.Text;
 using API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Authorization;
 
 
@@ -68,6 +69,31 @@ public static class ServiceCollectionExtensions
                 .RequireAuthenticatedUser()
                 .Build();
         });
+        return services;
+    }
+
+    // Swagger con el botón "Authorize": se pega el accessToken del login y Swagger lo manda en cada pedido.
+    public static IServiceCollection AddSwaggerWithBearer(this IServiceCollection services, string serviceName)
+    {
+        services.AddEndpointsApiExplorer();
+        services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v1", new OpenApiInfo { Title = $"ProTraining · {serviceName}", Version = "v1" });
+
+            var bearer = new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                Description = "Pegá el accessToken que devuelve el login (sin la palabra Bearer).",
+                In = ParameterLocation.Header,
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            };
+            options.AddSecurityDefinition("Bearer", bearer);
+            options.AddSecurityRequirement(new OpenApiSecurityRequirement { [bearer] = new List<string>() });
+        });
+
         return services;
     }
 }

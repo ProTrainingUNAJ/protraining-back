@@ -56,9 +56,7 @@ builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-        options.SwaggerDoc("v1", new() { Title = $"ProTraining · {serviceName}", Version = "v1" }));
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
