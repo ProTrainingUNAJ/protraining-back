@@ -6,8 +6,10 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Memberships.ResolveActiveMemberships;
 using Infrastructure;
 using Infrastructure.Repositories;
+using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -52,6 +54,15 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
+
+// Estructura por HTTP, con el token del usuario (#062).
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddScoped<ResolveActiveMembershipsQueryHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
