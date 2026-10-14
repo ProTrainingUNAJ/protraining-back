@@ -1,6 +1,7 @@
 ﻿using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace Infrastructure.Data.Configurations;
 
 public sealed class AthleteRecordConfiguration : IEntityTypeConfiguration<AthleteRecord>
@@ -8,24 +9,40 @@ public sealed class AthleteRecordConfiguration : IEntityTypeConfiguration<Athlet
     public void Configure(EntityTypeBuilder<AthleteRecord> builder)
     {
         builder.ToTable("athlete_records");
+
         builder.Property(r => r.AthleteId)
             .HasColumnName("athlete_id")
             .IsRequired();
+
         builder.Property(r => r.ExerciseId)
             .HasColumnName("exercise_id")
             .IsRequired();
+
         builder.Property(r => r.Weight)
             .HasColumnName("weight")
-            .HasPrecision(6, 2)
+            .HasPrecision(6, 2) 
             .IsRequired();
+
         builder.Property(r => r.Date)
             .HasColumnName("date")
             .IsRequired();
+
         builder.Property(r => r.IsActive)
             .HasColumnName("is_active")
             .IsRequired();
+
         builder.Property(r => r.Source)
             .HasColumnName("source")
             .IsRequired();
+
+        
+        builder.HasOne(r => r.Exercise)
+            .WithMany()
+            .HasForeignKey(r => r.ExerciseId)
+            .OnDelete(DeleteBehavior.Restrict);
+        
+        builder.HasIndex(r => new { r.AthleteId, r.ExerciseId })
+            .IsUnique()
+            .HasFilter("is_active = true AND deleted_at IS NULL");
     }
 }

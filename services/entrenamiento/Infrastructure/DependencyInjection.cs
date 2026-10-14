@@ -2,6 +2,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
+using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -44,6 +45,7 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+        services.AddScoped<IAthleteRecordRepository, AthleteRecordRepository>();
 
         return services;
     }
