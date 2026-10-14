@@ -5,11 +5,12 @@ namespace Domain.Services;
 public class LoadCalculatorEngine : ILoadCalculatorEngine
 {
     private const decimal EstimatedConservativeFactor = 0.95m;
+    private const decimal PlateStep = 2.5m;
 
     public LoadResult CalculateLoad(decimal? current1Rm, RecordSource? source, decimal targetPercentage)
     {
         // sin record: marcar la serie como de referencia
-        if (!current1Rm.HasValue || !source.HasValue)
+        if (!current1Rm.HasValue || !source.HasValue || source.Value == RecordSource.NoData)
         {
             return new LoadResult(null, true);
         }
@@ -18,13 +19,21 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
         decimal baseLoad = current1Rm.Value * (targetPercentage / 100m);
 
         //evaluar el origen del record
-        return source.Value switch
+        decimal rawLoad = source.Value switch
         {
-            RecordSource.Tested => new LoadResult(baseLoad, false),
-            RecordSource.Reported => new LoadResult(baseLoad, false),
-
-            RecordSource.Estimated => new LoadResult(baseLoad * EstimatedConservativeFactor, false), 
-            _=> new LoadResult(null, true)
+            RecordSource.Tested => baseLoad,
+            RecordSource.Reported => baseLoad,
+            RecordSource.Estimated => baseLoad * EstimatedConservativeFactor,
+            _ => baseLoad
         };
+
+        // Redondeo
+        decimal finalWeight = RoundToNearestPlate(rawLoad);
+
+        return new LoadResult(finalWeight, false);
+    }
+    public decimal RoundToNearestPlate(decimal weight)
+    {
+        return Math.Round(weight / PlateStep, MidpointRounding.AwayFromZero) * PlateStep;
     }
 }

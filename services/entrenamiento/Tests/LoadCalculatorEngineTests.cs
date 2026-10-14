@@ -33,7 +33,7 @@ public class LoadCalculatorEngineTests
 
         Assert.False(resultEstimado.IsReference);
         Assert.True(resultEstimado.WeightKg < resultTesteado.WeightKg, "El peso estimado debe ser menor al testeado");
-        Assert.Equal(76m, resultEstimado.WeightKg); // (100 * 0.80) * 0.95 = 76
+        Assert.Equal(75m, resultEstimado.WeightKg); // (100 * 0.80) * 0.95 = 76 -> redondeado a discos = 75
     }
 
     [Fact]
@@ -43,5 +43,15 @@ public class LoadCalculatorEngineTests
 
         Assert.True(result.IsReference);
         Assert.Null(result.WeightKg);
+    }
+
+    [Theory]
+    [InlineData(73.4, 72.5)]
+    [InlineData(86.8, 87.5)]
+    public void RoundToNearestPlate_DeberiaRedondearASaltosDeDiscosDeDosPuntoCincoKg(decimal theoreticalWeight, decimal expectedWeight)
+    {
+        var result = _engine.RoundToNearestPlate(theoreticalWeight);
+
+        Assert.Equal(expectedWeight, result);
     }
 }
