@@ -1,10 +1,12 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
+using Infrastructure.Data.Seeders;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Infrastructure;
@@ -46,12 +48,15 @@ public static class DependencyInjection
         return services;
     }
 
-    // Applies pending migrations on startup. Does nothing if the service has no migrations yet.
+    // Aplica las migraciones pendientes al arrancar. No hace nada si el servicio aún no tiene migraciones.
     public static async Task ApplyMigrationsAsync(this IServiceProvider serviceProvider)
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         if (context.Database.GetMigrations().Any())
             await context.Database.MigrateAsync();
+
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
+        await CatalogTestSeeder.SeedAsync(context, logger);
     }
 }
