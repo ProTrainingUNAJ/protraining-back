@@ -9,9 +9,9 @@ namespace Domain.Entities;
 /// </summary>
 public sealed class CatalogTest : BaseEntity
 {
-    public string Name { get; private set; }
+    public string Name { get; private set; } = string.Empty;
     public MotorCapacity MotorCapacity { get; private set; }
-    public string MeasurementUnit { get; private set; }
+    public string MeasurementUnit { get; private set; } = string.Empty;
     public int DifficultyLevel { get; private set; }
     public bool Active { get; private set; }
 
