@@ -153,6 +153,177 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("exercises", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.PrescribedExercise", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("Reps")
+                        .HasColumnType("integer")
+                        .HasColumnName("reps");
+
+                    b.Property<int>("Sets")
+                        .HasColumnType("integer")
+                        .HasColumnName("sets");
+
+                    b.Property<decimal?>("TargetPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("target_percentage");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingSessionId");
+
+                    b.ToTable("prescribed_exercises", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Objective")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("objective");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.ToTable("training_plans", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("TrainingWeekId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_week_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingWeekId");
+
+                    b.ToTable("training_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingWeek", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("TrainingPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_plan_id");
+
+                    b.Property<int>("WeekNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("week_number");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingPlanId");
+
+                    b.ToTable("training_weeks", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.AthleteRecord", b =>
                 {
                     b.HasOne("Domain.Entities.Exercise", "Exercise")
@@ -162,6 +333,62 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PrescribedExercise", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.TrainingSession", "TrainingSession")
+                        .WithMany("PrescribedExercises")
+                        .HasForeignKey("TrainingSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+
+                    b.Navigation("TrainingSession");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
+                {
+                    b.HasOne("Domain.Entities.TrainingWeek", "TrainingWeek")
+                        .WithMany("Sessions")
+                        .HasForeignKey("TrainingWeekId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainingWeek");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingWeek", b =>
+                {
+                    b.HasOne("Domain.Entities.TrainingPlan", "TrainingPlan")
+                        .WithMany("Weeks")
+                        .HasForeignKey("TrainingPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainingPlan");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
+                {
+                    b.Navigation("Weeks");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
+                {
+                    b.Navigation("PrescribedExercises");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingWeek", b =>
+                {
+                    b.Navigation("Sessions");
                 });
 #pragma warning restore 612, 618
         }
