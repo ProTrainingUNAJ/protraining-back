@@ -24,6 +24,8 @@ tags:
     description: Divisiones deportivas y calendario de partidos de la temporada
   - name: Me
     description: Datos del atleta logueado, resueltos a partir del token
+  - name: Export
+    description: Exportación de datos de estructura en formatos tabulares (CSV)
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
@@ -585,6 +587,34 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{id}/athletes:
+    get:
+      tags:
+        - Categories
+      summary: Listar atletas de una categoría
+      description: Retorna la lista de atletas asignados a la división deportiva especificada.
+      operationId: listAthletesByCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de atletas de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Athlete'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/categories/{id}/matches:
     get:
       tags:
@@ -641,6 +671,38 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/export/csv:
+    get:
+      tags:
+        - Export
+      summary: Exportar datos completos de estructura a CSV
+      description: >
+        Genera y descarga un archivo CSV con todas las organizaciones, categorías y atletas
+        registrados por el preparador físico autenticado. Requiere rol PreparadorFisico.
+      operationId: exportStructureCsv
+      responses:
+        "200":
+          description: Archivo CSV generado exitosamente.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Encabezado estándar para descarga de archivo adjunto.
+              example: 'attachment; filename="estructura_export_20261014_120000.csv"'
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (requiere rol PreparadorFisico).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /api/health:
     get:

@@ -101,21 +101,9 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
 
 components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
   responses:
     BadRequest:
       description: Solicitud con datos inválidos o formato erróneo.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-    Unauthorized:
-      description: No autenticado o credenciales inválidas.
       content:
         application/json:
           schema:

@@ -76,11 +76,13 @@ paths:
           description: Cantidad de ejercicios por página.
       responses:
         "200":
-          description: Catálogo de ejercicios paginado obtenido exitosamente.
+          description: Lista de ejercicios obtenida exitosamente según los filtros y paginación.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedExerciseResponse'
+                type: array
+                items:
+                  $ref: '#/components/schemas/Exercise'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -406,12 +408,18 @@ components:
         muscleGroup:
           type: string
           example: "Piernas"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Grupos musculares principales involucrados en la ejecución.
+          example: ["Piernas", "Glúteos"]
         secondaryMuscles:
           type: array
           items:
             type: string
-          description: Músculos secundarios involucrados en el movimiento.
-          example: ["Glúteos", "Zona Lumbar"]
+          description: Músculos secundarios o estabilizadores involucrados.
+          example: ["Isquiotibiales", "Zona Lumbar"]
         description:
           type: string
           nullable: true
@@ -431,48 +439,14 @@ components:
           nullable: true
           description: URL del GIF/animación técnica del movimiento.
           example: "https://cdn.protraining.app/exercises/squat.gif"
-        photoUrl1:
-          type: string
-          nullable: true
-          description: Fotografía de la postura inicial del ejercicio.
-          example: "https://cdn.protraining.app/exercises/squat-start.jpg"
-        photoUrl2:
-          type: string
-          nullable: true
-          description: Fotografía de la postura final o máxima flexión del ejercicio.
-          example: "https://cdn.protraining.app/exercises/squat-end.jpg"
-
-    PaginatedExerciseResponse:
-      type: object
-      description: Respuesta paginada del catálogo de ejercicios.
-      required:
-        - items
-        - page
-        - pageSize
-        - totalCount
-        - totalPages
-      properties:
-        items:
+        images:
           type: array
-          description: Lista de ejercicios devueltos en la página solicitada.
           items:
-            $ref: '#/components/schemas/Exercise'
-        page:
-          type: integer
-          description: Número de página actual.
-          example: 1
-        pageSize:
-          type: integer
-          description: Cantidad de ejercicios por página.
-          example: 20
-        totalCount:
-          type: integer
-          description: Total de ejercicios coincidentes con los filtros aplicados.
-          example: 120
-        totalPages:
-          type: integer
-          description: Total de páginas disponibles según el tamaño de página.
-          example: 6
+            type: string
+          description: URLs de las 2 fotografías técnicas del ejercicio (postura inicial y postura final).
+          example:
+            - "https://cdn.protraining.app/exercises/squat-0.jpg"
+            - "https://cdn.protraining.app/exercises/squat-1.jpg"
 
     Record:
       type: object
