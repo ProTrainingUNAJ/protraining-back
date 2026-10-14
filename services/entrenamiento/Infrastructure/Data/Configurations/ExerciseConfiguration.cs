@@ -27,6 +27,8 @@ namespace Infrastructure.Data.Configurations
 
 
             builder.HasIndex(e => e.MuscleGroup);
+            builder.HasIndex(e => e.Name).HasMethod("gin").HasOperators("gin_trgm_ops");
+
         }
     }
 }

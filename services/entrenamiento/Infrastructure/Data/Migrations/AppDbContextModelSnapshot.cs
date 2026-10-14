@@ -137,6 +137,11 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasIndex("MuscleGroup");
 
+                    b.HasIndex("Name");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("PfId");
 
                     b.ToTable("exercises", (string)null);
