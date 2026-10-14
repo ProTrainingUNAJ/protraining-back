@@ -48,13 +48,17 @@ public static class DependencyInjection
         return services;
     }
 
-    // Aplica las migraciones pendientes al arrancar. No hace nada si el servicio aún no tiene migraciones.
+    // Aplica las migraciones pendientes y siembra el catálogo al arrancar.
+    // Sin migraciones registradas en el ensamblado no hace nada: protege el arranque
+    // si el pipeline de migraciones se reordena o el servicio aún no tiene migraciones.
     public static async Task ApplyMigrationsAsync(this IServiceProvider serviceProvider)
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (context.Database.GetMigrations().Any())
-            await context.Database.MigrateAsync();
+        if (!context.Database.GetMigrations().Any())
+            return;
+
+        await context.Database.MigrateAsync();
 
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
         await CatalogTestSeeder.SeedAsync(context, logger);

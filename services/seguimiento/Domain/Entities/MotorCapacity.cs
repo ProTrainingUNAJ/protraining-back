@@ -2,7 +2,7 @@ namespace Domain.Entities;
 
 /// <summary>
 /// Representa las 7 capacidades motoras estándar del catálogo de pruebas físicas.
-/// Se definen con valores explícitos para garantizar un contrato estable y limpio con el front-end 
+/// Se definen con valores explícitos para garantizar un contrato estable y limpio con el front-end
 /// y evitar depender de cadenas de texto libres en los filtros por query string.
 /// </summary>
 public enum MotorCapacity

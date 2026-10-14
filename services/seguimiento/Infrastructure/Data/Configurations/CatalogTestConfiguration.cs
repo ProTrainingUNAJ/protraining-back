@@ -15,6 +15,8 @@ public sealed class CatalogTestConfiguration : IEntityTypeConfiguration<CatalogT
             .HasMaxLength(150)
             .IsRequired();
 
+        // HasConversion<string>() persiste el nombre del enum (p. ej. "Strength") como contrato
+        // de datos con el front-end y la BD: los nombres de MotorCapacity no deben renombrarse a futuro.
         builder.Property(e => e.MotorCapacity)
             .HasColumnName("motor_capacity")
             .HasConversion<string>()

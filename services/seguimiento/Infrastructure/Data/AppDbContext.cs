@@ -10,8 +10,8 @@ namespace Infrastructure.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser currentUser)
     : DbContext(options)
 {
-    // EF reads it again on every query, so it is always the PF of the current request.
-    // Without a token it is Guid.Empty and the filters return nothing.
+    // EF lo vuelve a leer en cada consulta, por lo que siempre refleja el PF de la petición actual.
+    // Sin token es Guid.Empty y los filtros no devuelven nada.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
     public DbSet<CatalogTest> CatalogTests { get; set; }
@@ -34,8 +34,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    // For every entity that inherits from BaseEntity: common columns, index by PF
-    // and the global filter (only the token's PF data, never the deleted rows).
+    // Para cada entidad que hereda de BaseEntity: columnas comunes, índice por PF
+    // y el filtro global (solo los datos del PF del token, nunca los registros eliminados).
     private void ConfigureBaseEntities(ModelBuilder modelBuilder)
     {
         var types = modelBuilder.Model.GetEntityTypes()
@@ -64,8 +64,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         ? entity => (entity.PfId == CurrentPfId || entity.PfId == Guid.Empty) && entity.DeletedAt == null
         : entity => entity.PfId == CurrentPfId && entity.DeletedAt == null;
 
-    // On create: PfId from the token and CreatedAt. On delete: soft delete (DeletedAt).
-    // PfId and CreatedAt cannot be changed afterwards.
+    // Al crear: PfId desde el token y CreatedAt. Al eliminar: borrado lógico (DeletedAt).
+    // PfId y CreatedAt no pueden modificarse después.
     private void SetBaseFields()
     {
         var now = DateTime.UtcNow;
