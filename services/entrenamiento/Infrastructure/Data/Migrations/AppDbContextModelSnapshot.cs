@@ -153,6 +153,53 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("exercises", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<Guid>("TrainingPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_plan_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AthleteId");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingPlanId");
+
+                    b.ToTable("plan_assignments", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.PrescribedExercise", b =>
                 {
                     b.Property<Guid>("Id")
@@ -213,10 +260,6 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("AthleteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("athlete_id");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -232,7 +275,6 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnName("name");
 
                     b.Property<string>("Objective")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("objective");
@@ -254,9 +296,18 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CoachNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("coach_notes");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer")
+                        .HasColumnName("day_of_week");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
@@ -284,7 +335,8 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasIndex("PfId");
 
-                    b.HasIndex("TrainingWeekId");
+                    b.HasIndex("TrainingWeekId", "Order")
+                        .IsUnique();
 
                     b.ToTable("training_sessions", (string)null);
                 });
@@ -319,7 +371,8 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasIndex("PfId");
 
-                    b.HasIndex("TrainingPlanId");
+                    b.HasIndex("TrainingPlanId", "WeekNumber")
+                        .IsUnique();
 
                     b.ToTable("training_weeks", (string)null);
                 });
@@ -333,6 +386,17 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
+                {
+                    b.HasOne("Domain.Entities.TrainingPlan", "Plan")
+                        .WithMany("Assignments")
+                        .HasForeignKey("TrainingPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Plan");
                 });
 
             modelBuilder.Entity("Domain.Entities.PrescribedExercise", b =>
@@ -356,13 +420,13 @@ namespace Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
                 {
-                    b.HasOne("Domain.Entities.TrainingWeek", "TrainingWeek")
+                    b.HasOne("Domain.Entities.TrainingWeek", "Week")
                         .WithMany("Sessions")
                         .HasForeignKey("TrainingWeekId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("TrainingWeek");
+                    b.Navigation("Week");
                 });
 
             modelBuilder.Entity("Domain.Entities.TrainingWeek", b =>
@@ -378,6 +442,8 @@ namespace Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
                 {
+                    b.Navigation("Assignments");
+
                     b.Navigation("Weeks");
                 });
 

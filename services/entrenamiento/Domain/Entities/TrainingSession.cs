@@ -3,28 +3,41 @@ using Domain.Exceptions;
 
 namespace Domain.Entities;
 
-public sealed class TrainingSession : BaseEntity
+public class TrainingSession : BaseEntity
 {
+    public Guid TrainingWeekId { get; private set; }
+    public TrainingWeek Week { get; private set; } = null!;
+
     public string Name { get; private set; }
     public int Order { get; private set; }
-    public Guid TrainingWeekId { get; private set; }
-    public TrainingWeek TrainingWeek { get; private set; } = null!;
+    public DayOfWeek DayOfWeek { get; private set; }
+    public string? CoachNotes { get; private set; }
 
-    private readonly List<PrescribedExercise> _prescribedExercises = [];
     public IReadOnlyCollection<PrescribedExercise> PrescribedExercises => _prescribedExercises.AsReadOnly();
+    private readonly List<PrescribedExercise> _prescribedExercises = new();
 
-    private TrainingSession(string name, int order, Guid trainingWeekId)
+    private TrainingSession(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes)
     {
+        TrainingWeekId = trainingWeekId;
         Name = name;
         Order = order;
-        TrainingWeekId = trainingWeekId;
+        DayOfWeek = dayOfWeek;
+        CoachNotes = coachNotes;
     }
 
-    public static TrainingSession Create(string name, int order, Guid trainingWeekId)
+    public static TrainingSession Create(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre de la sesión no puede estar vacío.");
 
-        return new TrainingSession(name, order, trainingWeekId);
+        if (order <= 0)
+            throw new DomainException("El orden debe ser mayor a cero.");
+
+        return new TrainingSession(trainingWeekId, name, order, dayOfWeek, coachNotes);
+    }
+
+    public void UpdateCoachNotes(string? notes)
+    {
+        CoachNotes = notes;
     }
 }
