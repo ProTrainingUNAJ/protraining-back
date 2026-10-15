@@ -350,4 +350,96 @@ public sealed class OllamaClientTests : IDisposable
             !log.IsValid &&
             log.ValidationResult == "RespuestaVacia"), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Given_Ollama_Returns_Json_With_Series_As_String_When_SuggestRoutine_Then_Returns_Null_And_Logs_SchemaInvalido()
+    {
+        // Arrange
+        const string invalidSchemaJson = "{\"tituloPropuesto\":\"Rutina Invalida\",\"resumenJustificacion\":\"Series como texto\",\"ejercicios\":[{\"ejercicioNombre\":\"Sentadilla\",\"series\":\"tres\",\"repeticiones\":10,\"porcentajeSugerido\":70.0}]}";
+        var ollamaResponse = new
+        {
+            model = "llama3.2:1b",
+            response = invalidSchemaJson,
+            done = true
+        };
+
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/api/generate"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(JsonSerializer.Serialize(ollamaResponse)));
+
+        var options = new OllamaOptions
+        {
+            BaseUrl = _wireMockServer.Url!,
+            Model = "llama3.2:1b",
+            TimeoutSeconds = 15
+        };
+
+        var client = new OllamaClient(
+            new HttpClient(),
+            Options.Create(options),
+            _auditServiceMock.Object,
+            NullLogger<OllamaClient>.Instance);
+
+        // Act
+        var result = await client.TrySuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.Null(result);
+
+        _auditServiceMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Ollama" &&
+            !log.IsValid &&
+            log.ValidationResult == "SchemaInvalido" &&
+            log.ErrorMessage!.Contains("series")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_Ollama_Returns_Json_With_Percentage_150_When_SuggestRoutine_Then_Returns_Null_And_Logs_SchemaInvalido()
+    {
+        // Arrange
+        const string outOfRangeJson = "{\"tituloPropuesto\":\"Rutina Rango Invalido\",\"resumenJustificacion\":\"Porcentaje fuera de rango\",\"ejercicios\":[{\"ejercicioNombre\":\"Press Banca\",\"series\":3,\"repeticiones\":10,\"porcentajeSugerido\":150.0}]}";
+        var ollamaResponse = new
+        {
+            model = "llama3.2:1b",
+            response = outOfRangeJson,
+            done = true
+        };
+
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/api/generate"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(JsonSerializer.Serialize(ollamaResponse)));
+
+        var options = new OllamaOptions
+        {
+            BaseUrl = _wireMockServer.Url!,
+            Model = "llama3.2:1b",
+            TimeoutSeconds = 15
+        };
+
+        var client = new OllamaClient(
+            new HttpClient(),
+            Options.Create(options),
+            _auditServiceMock.Object,
+            NullLogger<OllamaClient>.Instance);
+
+        // Act
+        var result = await client.TrySuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.Null(result);
+
+        _auditServiceMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Ollama" &&
+            !log.IsValid &&
+            log.ValidationResult == "SchemaInvalido" &&
+            log.ErrorMessage!.Contains("porcentajeSugerido")), It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

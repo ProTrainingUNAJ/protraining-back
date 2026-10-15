@@ -6,8 +6,6 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
-using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;

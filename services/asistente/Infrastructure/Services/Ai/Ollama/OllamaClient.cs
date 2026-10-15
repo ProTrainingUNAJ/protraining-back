@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Domain.Entities;
@@ -17,7 +17,6 @@ public sealed class OllamaClient(
     ILogger<OllamaClient> logger) : IAiClient
 {
     private readonly OllamaOptions _options = options.Value;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public string ProviderName => "Ollama";
 
@@ -101,56 +100,27 @@ public sealed class OllamaClient(
                 return null;
             }
 
-            var cleanedJson = CleanJson(rawText);
-            RawRoutineProposal? parsed;
-            try
-            {
-                parsed = JsonSerializer.Deserialize<RawRoutineProposal>(cleanedJson, JsonOptions);
-            }
-            catch (JsonException ex)
+            var validationResult = AiRoutineParser.ParseAndValidate(rawText);
+            if (!validationResult.IsValid)
             {
                 stopwatch.Stop();
-                logger.LogWarning(ex, "El texto generado por Ollama no posee formato JSON válido. Activando respaldo.");
+                var validationTag = validationResult.IsSyntaxError ? "JsonInvalido" : "SchemaInvalido";
+                logger.LogWarning("La respuesta de Ollama no cumple con el esquema JSON o rangos válidos ({ValidationTag}): {Errors}. Activando respaldo.", validationTag, validationResult.ErrorMessage);
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,
                     prompt,
                     stopwatch.ElapsedMilliseconds,
                     isValid: false,
-                    validationResult: "JsonInvalido",
+                    validationResult: validationTag,
                     response: rawText,
                     athleteId: request.AthleteId,
                     promptTokens: promptTokens,
                     completionTokens: completionTokens,
-                    errorMessage: ex.Message));
-                return null;
-            }
-
-            if (parsed == null || parsed.Exercises == null || parsed.Exercises.Count == 0)
-            {
-                stopwatch.Stop();
-                logger.LogWarning("No se pudo deserializar la rutina generada por Ollama. Activando respaldo.");
-                await aiAuditService.LogAsync(AiLog.Create(
-                    ProviderName,
-                    prompt,
-                    stopwatch.ElapsedMilliseconds,
-                    isValid: false,
-                    validationResult: "JsonInvalido",
-                    response: rawText,
-                    athleteId: request.AthleteId,
-                    promptTokens: promptTokens,
-                    completionTokens: completionTokens,
-                    errorMessage: "El JSON generado no coincide con la estructura de ejercicios."));
+                    errorMessage: validationResult.ErrorMessage));
                 return null;
             }
 
             stopwatch.Stop();
-            var exercises = parsed.Exercises.Select(e => new SuggestedExerciseDto(
-                ExerciseName: e.ExerciseName ?? "Ejercicio general",
-                Sets: e.Sets > 0 ? e.Sets : 3,
-                Reps: e.Reps > 0 ? e.Reps : 10,
-                SuggestedPercentage: e.SuggestedPercentage > 0 ? e.SuggestedPercentage : 65m
-            )).ToList();
-
             await aiAuditService.LogAsync(AiLog.Create(
                 ProviderName,
                 prompt,
@@ -164,9 +134,9 @@ public sealed class OllamaClient(
 
             return new RoutineSuggestionResponseDto(
                 AthleteId: request.AthleteId,
-                ProposedTitle: parsed.ProposedTitle ?? "Rutina Generada por Ollama",
-                JustificationSummary: parsed.JustificationSummary ?? "Propuesta generada localmente por Llama.",
-                Exercises: exercises,
+                ProposedTitle: validationResult.ProposedTitle ?? "Rutina Generada por Ollama",
+                JustificationSummary: validationResult.JustificationSummary ?? "Propuesta generada localmente por Llama.",
+                Exercises: validationResult.Exercises.ToList(),
                 ProviderUsed: ProviderName
             );
         }
@@ -226,52 +196,5 @@ public sealed class OllamaClient(
               ]
             }
             """;
-    }
-
-    private static string CleanJson(string text)
-    {
-        var trimmed = text.Trim();
-        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = trimmed[7..];
-        }
-        else if (trimmed.StartsWith("```", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = trimmed[3..];
-        }
-
-        if (trimmed.EndsWith("```", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = trimmed[..^3];
-        }
-
-        return trimmed.Trim();
-    }
-
-    private sealed class RawRoutineProposal
-    {
-        [JsonPropertyName("tituloPropuesto")]
-        public string? ProposedTitle { get; set; }
-
-        [JsonPropertyName("resumenJustificacion")]
-        public string? JustificationSummary { get; set; }
-
-        [JsonPropertyName("ejercicios")]
-        public List<RawExercise>? Exercises { get; set; }
-    }
-
-    private sealed class RawExercise
-    {
-        [JsonPropertyName("ejercicioNombre")]
-        public string? ExerciseName { get; set; }
-
-        [JsonPropertyName("series")]
-        public int Sets { get; set; }
-
-        [JsonPropertyName("repeticiones")]
-        public int Reps { get; set; }
-
-        [JsonPropertyName("porcentajeSugerido")]
-        public decimal SuggestedPercentage { get; set; }
     }
 }

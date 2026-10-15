@@ -392,6 +392,89 @@ public sealed class ResilientAiFallbackTests : IDisposable
         Assert.Single(ollamaCalls);
     }
 
+    /// <summary>
+    /// Criterio de aceptación KAN-517 / KAN-343:
+    /// DADO que Ollama devuelve un porcentaje fuera de rango (ej. 150%)
+    /// CUANDO el orquestador procesa la respuesta
+    /// ENTONCES la descarta, queda auditada como SchemaInvalido y conmuta exitosamente al siguiente proveedor (Gemini).
+    /// </summary>
+    [Fact]
+    public async Task Given_Ollama_Returns_OutOfRange_Percentage_When_Request_Executed_Then_Falls_Back_To_Gemini_And_Succeeds()
+    {
+        // Arrange
+        var invalidOllamaJson = JsonSerializer.Serialize(new
+        {
+            tituloPropuesto = "Ollama Rango Invalido",
+            resumenJustificacion = "Porcentaje 150 % no permitido",
+            ejercicios = new[]
+            {
+                new { ejercicioNombre = "Sentadilla", series = 4, repeticiones = 8, porcentajeSugerido = 150.0 }
+            }
+        });
+
+        // Ollama responde 200 pero con 150% en el payload
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/api/generate"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(JsonSerializer.Serialize(new
+                    {
+                        response = invalidOllamaJson,
+                        prompt_eval_count = 50,
+                        eval_count = 100
+                    })));
+
+        // Gemini responde una rutina válida
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/v1beta/models/*"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(CreateGeminiSampleResponse()));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(_auditServiceMock.Object);
+
+        services.Configure<OllamaOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.TimeoutSeconds = 5;
+        });
+        services.Configure<GeminiOptions>(opts =>
+        {
+            opts.BaseUrl = _wireMockServer.Url!;
+            opts.ApiKey = "test-key";
+            opts.TimeoutSeconds = 5;
+        });
+
+        services.AddHttpClient<OllamaClient>();
+        services.AddHttpClient<GeminiClient>();
+        services.AddScoped<RuleBasedAiClient>();
+        services.AddScoped<IAiService, ResilientAiService>();
+
+        var provider = services.BuildServiceProvider();
+        var orchestrator = provider.GetRequiredService<IAiService>();
+
+        // Act
+        var result = await orchestrator.SuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Gemini", result.ProviderUsed);
+        Assert.Equal("Fuerza Máxima - WireMock Gemini", result.ProposedTitle);
+
+        // Verifica que Ollama fue auditado como SchemaInvalido
+        _auditServiceMock.Verify(a => a.LogAsync(It.Is<Domain.Entities.AiLog>(log =>
+            log.Provider == "Ollama" &&
+            !log.IsValid &&
+            log.ValidationResult == "SchemaInvalido" &&
+            log.ErrorMessage!.Contains("porcentajeSugerido")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static string CreateGeminiSampleResponse()
     {
         var innerJson = JsonSerializer.Serialize(new
