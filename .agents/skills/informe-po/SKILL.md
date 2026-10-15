@@ -106,41 +106,43 @@ Traducciones típicas:
 
 ## Paso 5: el resumen
 
-Usá esta estructura. Las secciones vacías se sacan, salvo "Lo que viene".
+Cada página de servicio en Notion ya viene con una plantilla de seis títulos. Usá **esos títulos, en ese orden y con ese texto**, y escribí debajo de cada uno. No agregues ni saques títulos: si uno queda sin contenido, poné una línea corta (por ejemplo "Nada pendiente con el PO por ahora").
 
 ```markdown
-# <Servicio> · Sprint <n>
-
 > <Qué es para el PO, de la tabla del Paso 4> · Del <desde> al <hasta> · Actualizado el <fecha de hoy>
 
-## En pocas palabras
-Dos o tres líneas con lo más importante del servicio en el sprint: qué cambió para el PF y el atleta, y cuál es el próximo paso. Es lo único que va a leer el PO si está apurado: poné acá lo más vendedor que sea cierto.
+**En pocas palabras:** dos o tres líneas con lo más importante del servicio en el sprint: qué cambió para el PF y el atleta, y cuál es el próximo paso. Es lo único que va a leer el PO si está apurado: poné acá lo más vendedor que sea cierto.
 
-## Lo que ya se puede mostrar
-Los avances "listos para mostrar". Si todavía no hay ninguno, decilo en positivo: "Este sprint fue de construir el motor; las pantallas llegan en <cuándo, según Jira>".
+## Para qué le sirve al PF y al atleta
+Dos o tres líneas sobre qué resuelve este servicio en el día a día del PF y del atleta, en función de lo que ya existe o está planificado. No es una lista de avances.
 
-## Lo que ya funciona por dentro
-Los avances "listos por dentro", diciendo qué falta para verlos.
+## Qué quedó funcionando en este sprint
+**Listo para mostrar:** los avances "listos para mostrar". Si todavía no hay ninguno, decilo en positivo: "Este sprint fue de construir el motor; las pantallas llegan en <cuándo, según Jira>".
+**Listo por dentro:** los avances "listos por dentro", diciendo qué falta para verlos.
 
-## En qué estamos trabajando
-Los avances "en camino", una línea cada uno.
-
-## Lo que viene
+## Qué falta
+**En camino:** los avances "en camino", una línea cada uno.
 **Para cerrar este sprint (hasta el <hasta>):** las tareas del sprint actual que todavía no empezaron, agrupadas en logros. Si es el último día del sprint o ya terminó, sacá esta parte.
 **Sprint <n+1>:** lo planificado, agrupado en logros.
 
-## Para hablar con el PO
-Solo si hay algo real: una decisión que necesitamos de él, un riesgo para la demo, algo que se movió de sprint. Si no hay, sacá la sección.
+## Cómo se ve (capturas)
+Las capturas las pone el equipo a mano. Listá qué pantallas "listas para mostrar" conviene capturar. Si no hay ninguna: "Las capturas llegan con las pantallas, en <cuándo, según Jira>".
+
+## Reglas que importan para la demo
+Las reglas de negocio que el PO va a ver funcionar o le van a preguntar, solo si ya están en develop: "Un atleta carga un solo check-in por día", "Con una lesión activa, el atleta queda en rojo". Sacalas del código, en palabras del PF, con los números reales (umbrales, escalas). Si una regla todavía no se ve en ninguna pantalla, aclaralo.
+
+## Preguntas abiertas
+Solo si hay algo real: una decisión que necesitamos del PO, un riesgo para la demo, algo que se movió de sprint. Si no hay: "Nada pendiente con el PO por ahora".
 ```
 
 ## Paso 6: publicarlo en Notion
 
-En el Notion de ProTraining, **Documentación PO** tiene un apartado por sprint, y adentro una página por servicio.
+En el Notion de ProTraining (página **ProTraining**), **Documentación PO** tiene un apartado por sprint ("Sprint 1", "Sprint 2", "Sprint 3"), y adentro una página por servicio con el nombre del servicio solo: "Identidad", "Estructura", "Entrenamiento", "Seguimiento", "Asistente". En cada sprint hay además dos páginas que **no** son de esta skill y no se tocan: "Demo del sprint" (el guion de la demo) y "Gateway e infraestructura" (ahí van los avances de base que descartaste en el Paso 2).
 
 1. Si tenés las herramientas de Notion, buscá la página "Documentación PO", entrá al apartado del sprint (por ejemplo "Sprint 1") y abrí la página del servicio.
-2. **Si la página está vacía**, escribí el resumen ahí.
-3. **Si ya tiene contenido**, mostrale a quien te usa la sección "En pocas palabras" y preguntale si la reemplazás entera. El resumen cubre todo el sprint del servicio, así que la versión nueva incluye lo anterior. Si alguien agregó notas a mano que no salen de git ni de Jira, avisá antes de pisarlas.
-4. **Si no existe la página del servicio** o el apartado del sprint, creala con el mismo formato de nombre que las demás (por ejemplo "Seguimiento").
+2. **Si la página solo tiene la plantilla** (los seis títulos sin nada debajo), cuenta como vacía: escribí el resumen ahí, debajo de cada título.
+3. **Si ya tiene contenido**, mostrale a quien te usa el "En pocas palabras" que hay y preguntale si lo reemplazás entero. El resumen cubre todo el sprint del servicio, así que la versión nueva incluye lo anterior. **Nunca pises las capturas** de "Cómo se ve" ni notas que alguien agregó a mano y no salen de git ni de Jira: dejalas como están y avisá.
+4. **Si no existe la página del servicio** o el apartado del sprint, creala con el mismo formato de nombre que las demás (por ejemplo "Seguimiento" adentro de "Sprint 2") y con los seis títulos de la plantilla.
 5. **Si no tenés Notion conectado**, guardá el resumen en `notas/informe-po-<servicio>-sprint-<n>.md` (la carpeta `notas/` no se sube a GitHub) y decile a quien te usa que lo pegue en la página del servicio: Notion convierte el formato solo. Recordale que puede conectar el MCP de Notion en Antigravity para que la próxima vez se publique solo.
 
 ## Paso 7: cerrar en el chat
@@ -148,7 +150,7 @@ En el Notion de ProTraining, **Documentación PO** tiene un apartado por sprint,
 Al terminar, en el chat (no en Notion):
 
 - El link a la página de Notion, o dónde quedó el archivo.
-- La sección "En pocas palabras".
+- El "En pocas palabras".
 - Las diferencias entre Jira y git que encontraste (Paso 3).
 - Si el `git fetch` falló, o si no tenías el front o Jira.
 
