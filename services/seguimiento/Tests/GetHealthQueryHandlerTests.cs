@@ -11,7 +11,7 @@ namespace Seguimiento.Tests;
 public class GetHealthQueryHandlerTests
 {
     [Fact]
-    public async Task HandleAsync_CuandoLaBaseResponde_DeberiaDevolverHealthy()
+    public async Task HandleAsync_WhenDatabaseResponds_ReturnsHealthy()
     {
         var databaseHealth = new Mock<IDatabaseHealthService>();
         databaseHealth
@@ -26,7 +26,7 @@ public class GetHealthQueryHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_CuandoLaBaseNoResponde_DeberiaDevolverDegradedSinLanzarExcepcion()
+    public async Task HandleAsync_WhenDatabaseDoesNotRespond_ReturnsDegradedWithoutThrowing()
     {
         var databaseHealth = new Mock<IDatabaseHealthService>();
         databaseHealth
@@ -41,7 +41,7 @@ public class GetHealthQueryHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_CuandoLaBaseFallaConExcepcion_NoDeberiaQuedarSinRespuesta()
+    public async Task HandleAsync_WhenDatabaseThrows_PropagatesExceptionForMiddleware()
     {
         // El servicio de salud no debe dejar colgada la petición: la excepción sube al ExceptionMiddleware,
         // que responde con ProblemDetails en lugar de un cuelgue de red.

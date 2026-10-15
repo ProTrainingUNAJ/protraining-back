@@ -13,7 +13,7 @@ public class TrafficLightEngineTests
     // ---------- Rojo: prioridad máxima ----------
 
     [Fact]
-    public void Evaluate_ConLesionActiva_DeberiaDevolverRojoConMotivoLiteral()
+    public void Evaluate_WithActiveInjury_ReturnsRedWithLiteralReason()
     {
         var result = _engine.Evaluate("""{"hasInjury": true, "sleepHours": 7}""", "{}");
 
@@ -23,7 +23,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConClaveHasActiveInjuryEnJson_DeberiaDevolverRojo()
+    public void Evaluate_WithHasActiveInjuryJsonKey_ReturnsRed()
     {
         // Clave canónica del check-in real (columna has_active_injury).
         var result = _engine.Evaluate("""{"hasActiveInjury": true, "sleepHours": 8}""", "{}");
@@ -33,7 +33,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConLesionActivaEnDatosTipados_DeberiaDevolverRojo()
+    public void Evaluate_WithActiveInjuryInTypedData_ReturnsRed()
     {
         // Camino del check-in real: el caso de uso entrega CheckInData ya tipado, sin pasar por JSON.
         var result = _engine.Evaluate(
@@ -46,7 +46,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConHeridaActiva_DeberiaDevolverRojoConMotivo()
+    public void Evaluate_WithActiveWound_ReturnsRedWithReason()
     {
         var result = _engine.Evaluate("""{"hasWound": true}""", "{}");
 
@@ -55,7 +55,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConLesionYPocoSueno_DeberiaPriorizarRojoSobreAmarillo()
+    public void Evaluate_WithInjuryAndLittleSleep_PrioritizesRedOverYellow()
     {
         // Una lesión activa anula cualquier otra señal: el orden de prioridad es Rojo → Amarillo → Verde.
         var result = _engine.Evaluate("""{"hasActiveInjury": true, "sleepHours": 3, "effortRate": 9}""", "{}");
@@ -65,7 +65,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_SinLesionEnDatosTipados_DeberiaDevolverVerde()
+    public void Evaluate_WithoutInjuryInTypedData_ReturnsGreen()
     {
         var result = _engine.Evaluate(
             new CheckInData { HasActiveInjury = false, SleepHours = 8, EffortRate = 4, IsSick = false },
@@ -78,7 +78,7 @@ public class TrafficLightEngineTests
     // ---------- Amarillo: señales de alerta ----------
 
     [Fact]
-    public void Evaluate_ConPocoSuenoYEsfuerzoAlto_DeberiaDevolverAmarilloConTodasLasSenales()
+    public void Evaluate_WithLittleSleepAndHighEffort_ReturnsYellowWithAllSignals()
     {
         var result = _engine.Evaluate("""{"sleepHours": 3, "effortRate": 9}""", "{}");
 
@@ -88,7 +88,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_SinCheckIn_DeberiaDevolverAmarilloPorAusenciaDeDatos()
+    public void Evaluate_WithoutCheckIn_ReturnsYellowForMissingData()
     {
         var result = _engine.Evaluate("", "{}");
 
@@ -97,7 +97,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConDolorNuevo_DeberiaDevolverAmarillo()
+    public void Evaluate_WithNewPain_ReturnsYellow()
     {
         var result = _engine.Evaluate("""{"sleepHours": 8, "painZones": "Isquiotibial derecho"}""", "{}");
 
@@ -106,7 +106,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_ConEnfermedadEnElContexto_DeberiaDevolverAmarillo()
+    public void Evaluate_WithSicknessInContext_ReturnsYellow()
     {
         // El contexto también es local: no se consulta a ningún servicio para saber si el atleta está enfermo.
         var result = _engine.Evaluate("""{"sleepHours": 8}""", """{"isSick": true}""");
@@ -118,7 +118,7 @@ public class TrafficLightEngineTests
     // ---------- Verde: estado óptimo ----------
 
     [Fact]
-    public void Evaluate_EnEstadoOptimo_DeberiaDevolverVerde()
+    public void Evaluate_InOptimalState_ReturnsGreen()
     {
         var result = _engine.Evaluate("""{"sleepHours": 8, "effortRate": 4, "isSick": false}""", "{}");
 
@@ -132,7 +132,7 @@ public class TrafficLightEngineTests
     [Theory]
     [InlineData(5.0, 7)] // en el umbral exacto: no es "poco sueño" ni "esfuerzo alto" (los umbrales son estrictos)
     [InlineData(8.0, 4)]
-    public void Evaluate_ConValoresEnElUmbral_DeberiaDevolverVerde(double sleepHours, int effortRate)
+    public void Evaluate_AtThresholdValues_ReturnsGreen(double sleepHours, int effortRate)
     {
         var result = _engine.Evaluate($$"""{"sleepHours": {{sleepHours}}, "effortRate": {{effortRate}}}""", "{}");
 
@@ -142,7 +142,7 @@ public class TrafficLightEngineTests
     [Theory]
     [InlineData("esto no es json {{{")]
     [InlineData("\"es un string, no un objeto\"")]
-    public void Evaluate_ConJsonInvalido_NoDeberiaLanzarExcepcionYDebeCairEnAmarillo(string jsonInvalido)
+    public void Evaluate_WithInvalidJson_DoesNotThrowAndFallsBackToYellow(string jsonInvalido)
     {
         // Un dato corrupto no puede tumbar el semáforo: se trata como ausencia de check-in.
         var result = _engine.Evaluate(jsonInvalido, "{}");
@@ -152,7 +152,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_SinDatos_DeberiaDevolverAmarilloSinExcepcion()
+    public void Evaluate_WithoutData_ReturnsYellowWithoutException()
     {
         // Sin check-in y sin contexto: el motor degrada a Amarillo, nunca lanza excepción.
         var result = _engine.Evaluate(evaluationDataJson: null!, contextDataJson: null!);
@@ -161,7 +161,7 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
-    public void Evaluate_DeberiaDevolverSiempreUnMotivoEnEspanol()
+    public void Evaluate_Always_ReturnsReasonInSpanish()
     {
         var luces = new[]
         {

@@ -44,7 +44,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ConLesionActiva_DeberiaDevolverRojoConMotivoLesionActiva()
+    public async Task HandleAsync_WithActiveInjury_ReturnsRedWithActiveInjuryReason()
     {
         ConfigurarSinCheckInPrevio();
         CheckIn? guardado = null;
@@ -69,7 +69,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_SinLesionYPorTrasDeVerde_DeberiaActualizarElCheckInDelDia()
+    public async Task HandleAsync_WithoutInjuryOnGreenPath_UpdatesTodaysCheckIn()
     {
         var existente = new CheckIn
         {
@@ -98,7 +98,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ConPocoSueno_DeberiaDevolverAmarilloConElMotivoLocal()
+    public async Task HandleAsync_WithLittleSleep_ReturnsYellowWithLocalReason()
     {
         ConfigurarSinCheckInPrevio();
         _checkIns
@@ -113,7 +113,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ConHorasDeSuenoFueraDeRango_DeberiaLanzarDomainExceptionSinGuardar()
+    public async Task HandleAsync_WithSleepHoursOutOfRange_ThrowsDomainExceptionWithoutSaving()
     {
         ConfigurarSinCheckInPrevio();
 
@@ -125,7 +125,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ConAtletaInvalido_DeberiaLanzarDomainException()
+    public async Task HandleAsync_WithInvalidAthlete_ThrowsDomainException()
     {
         ConfigurarSinCheckInPrevio();
 

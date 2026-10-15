@@ -22,7 +22,7 @@ public class TrafficLightIsolationTests
     private static readonly Assembly[] AssembliesDelSemaforo = [DomainAssembly, ApplicationAssembly];
 
     [Fact]
-    public void Domain_NoDeberiaReferenciarHttpClientNiPaquetesDeResiliencia()
+    public void Domain_AssemblyReferences_DoNotIncludeHttpClientOrResiliencePackages()
     {
         var referencias = DomainAssembly.GetReferencedAssemblies().Select(assembla => assembla.Name).ToList();
 
@@ -32,7 +32,7 @@ public class TrafficLightIsolationTests
     }
 
     [Fact]
-    public void Application_NoDeberiaReferenciarHttpClientNiPaquetesDeResiliencia()
+    public void Application_AssemblyReferences_DoNotIncludeHttpClientOrResiliencePackages()
     {
         var referencias = ApplicationAssembly.GetReferencedAssemblies().Select(assembla => assembla.Name).ToList();
 
@@ -42,7 +42,7 @@ public class TrafficLightIsolationTests
     }
 
     [Fact]
-    public void CasosDeUsoYEntidades_NoDeberianInyectarHttpClientNiIHttpClientFactory()
+    public void UseCasesAndEntities_ConstructorDependencies_DoNotIncludeHttpClient()
     {
         var infracciones = new List<string>();
 
@@ -71,7 +71,7 @@ public class TrafficLightIsolationTests
     }
 
     [Fact]
-    public void TrafficLightEngine_NoDeberiaTenerDependenciasInyectadasNiBaseDeDatos()
+    public void TrafficLightEngine_Constructor_HasNoInjectedDependenciesNorDatabase()
     {
         // Motor puro: sin constructor parametrizado no puede recibir DbContext, HttpClient ni ningún servicio.
         var constructores = typeof(TrafficLightEngine).GetConstructors(BindingFlags.Public | BindingFlags.Instance);
@@ -91,7 +91,7 @@ public class TrafficLightIsolationTests
     }
 
     [Fact]
-    public void TrafficLightEngine_DeberiaCalcularElSemaforoSinNingunaFuenteExterna()
+    public void TrafficLightEngine_WithoutAnyExternalSource_CalculatesTrafficLight()
     {
         // Prueba de fuego de la autonomía: una instancia recién creada, sin nada inyectado,
         // debe poder clasificar al atleta. Así funciona el semáforo con el Asistente caído.
