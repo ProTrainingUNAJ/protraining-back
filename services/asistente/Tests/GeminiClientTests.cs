@@ -251,6 +251,120 @@ public sealed class GeminiClientTests : IDisposable
             log.ErrorMessage!.Contains("500")), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Given_Gemini_Returns_Json_With_Series_As_String_When_SuggestRoutine_Then_Returns_Null_And_Audits_SchemaInvalido()
+    {
+        // Arrange
+        var innerJson = "{\"tituloPropuesto\":\"Hipertrofia - Gemini\",\"resumenJustificacion\":\"Texto\",\"ejercicios\":[{\"ejercicioNombre\":\"Press Banca\",\"series\":\"cuatro\",\"repeticiones\":8,\"porcentajeSugerido\":75.0}]}";
+        var geminiResponse = JsonSerializer.Serialize(new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = innerJson }
+                        }
+                    }
+                }
+            }
+        });
+
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/v1beta/models/*"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(geminiResponse));
+
+        var options = new GeminiOptions
+        {
+            BaseUrl = _wireMockServer.Url!,
+            ApiKey = "test-key",
+            Model = "gemini-flash-lite-latest",
+            TimeoutSeconds = 5
+        };
+
+        var client = new GeminiClient(
+            new HttpClient(),
+            Options.Create(options),
+            _auditServiceMock.Object,
+            NullLogger<GeminiClient>.Instance);
+
+        // Act
+        var result = await client.TrySuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.Null(result);
+
+        _auditServiceMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Gemini" &&
+            !log.IsValid &&
+            log.ValidationResult == "SchemaInvalido" &&
+            log.ErrorMessage!.Contains("series")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_Gemini_Returns_Json_With_Percentage_150_When_SuggestRoutine_Then_Returns_Null_And_Audits_SchemaInvalido()
+    {
+        // Arrange
+        var innerJson = "{\"tituloPropuesto\":\"Hipertrofia - Gemini\",\"resumenJustificacion\":\"Texto\",\"ejercicios\":[{\"ejercicioNombre\":\"Press Banca\",\"series\":4,\"repeticiones\":8,\"porcentajeSugerido\":150.0}]}";
+        var geminiResponse = JsonSerializer.Serialize(new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = innerJson }
+                        }
+                    }
+                }
+            }
+        });
+
+        _wireMockServer
+            .Given(Request.Create().UsingPost().WithPath("/v1beta/models/*"))
+            .RespondWith(
+                Response.Create()
+                    .WithStatusCode(200)
+                    .WithHeader("Content-Type", "application/json")
+                    .WithBody(geminiResponse));
+
+        var options = new GeminiOptions
+        {
+            BaseUrl = _wireMockServer.Url!,
+            ApiKey = "test-key",
+            Model = "gemini-flash-lite-latest",
+            TimeoutSeconds = 5
+        };
+
+        var client = new GeminiClient(
+            new HttpClient(),
+            Options.Create(options),
+            _auditServiceMock.Object,
+            NullLogger<GeminiClient>.Instance);
+
+        // Act
+        var result = await client.TrySuggestRoutineAsync(_defaultRequest);
+
+        // Assert
+        Assert.Null(result);
+
+        _auditServiceMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Gemini" &&
+            !log.IsValid &&
+            log.ValidationResult == "SchemaInvalido" &&
+            log.ErrorMessage!.Contains("porcentajeSugerido")), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static string CreateGeminiSampleResponse()
     {
         var innerJson = JsonSerializer.Serialize(new
