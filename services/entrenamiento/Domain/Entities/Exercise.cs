@@ -41,7 +41,7 @@ namespace Domain.Entities
                 Name = name.Trim(),
                 MuscleGroup = muscleGroup.Trim(),
                 Description = description?.Trim(),
-                AnimationUrl = animationUrl?.Trim() ?? images.FirstOrDefault(),
+                AnimationUrl = animationUrl?.Trim() ?? images?.FirstOrDefault(),
                 VideoUrl = videoUrl?.Trim(),
                 Equipment = equipment?.Trim(),
                 Images = images ?? [],

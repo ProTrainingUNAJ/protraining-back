@@ -100,27 +100,48 @@ namespace Infrastructure.Data.Seeders
         {
             // Pecho (84)
             ["chest"] = "Pecho",
+            ["pecho"] = "Pecho",
+
             // Espalda (114)
             ["lats"] = "Espalda",
             ["middle back"] = "Espalda",
+            ["espalda media"] = "Espalda",
             ["lower back"] = "Espalda",
+            ["espalda baja"] = "Espalda",
             ["traps"] = "Espalda",
+            ["trapecios"] = "Espalda",
+
             // Piernas (298)
             ["quadriceps"] = "Piernas",
+            ["cuadríceps"] = "Piernas",
             ["hamstrings"] = "Piernas",
+            ["isquiotibiales"] = "Piernas",
             ["calves"] = "Piernas",
+            ["gemelos"] = "Piernas",
             ["glutes"] = "Piernas",
+            ["glúteos"] = "Piernas",
             ["adductors"] = "Piernas",
+            ["aductores"] = "Piernas",
             ["abductors"] = "Piernas",
+            ["abductores"] = "Piernas",
+
             // Hombros (137)
             ["shoulders"] = "Hombros",
+            ["hombros"] = "Hombros",
             ["neck"] = "Hombros",
+            ["cuello"] = "Hombros",
+
             // Brazos (151)
             ["biceps"] = "Brazos",
+            ["bíceps"] = "Brazos",
             ["triceps"] = "Brazos",
+            ["tríceps"] = "Brazos",
             ["forearms"] = "Brazos",
+            ["antebrazos"] = "Brazos",
+
             // Core (93)
-            ["abdominals"] = "Core"
+            ["abdominals"] = "Core",
+            ["abdominales"] = "Core"
         };
 
         private static string NormalizeMuscleGroup(string muscle) =>
