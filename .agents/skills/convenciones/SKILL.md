@@ -57,6 +57,7 @@ Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos nombres en esp
 - Interfaces que implementa Infrastructure → `Application/Interfaces/Persistence/` o `Application/Interfaces/Services/`.
 - Configuración de EF de cada entidad → `Infrastructure/Data/Configurations/<Entidad>Configuration.cs`.
 - Controllers → `API/Controllers/`.
+- Tests → **un solo proyecto por servicio**: `services/<servicio>/Tests/<Servicio>.Tests.csproj`, agregado al `<Servicio>.slnx` como `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). Si la rama crea un segundo proyecto de tests en el mismo servicio (por ejemplo `Entrenamiento.Tests/` al lado de `Tests/`), es ❌: los tests nuevos van al proyecto que ya existe. Si el proyecto no está en el `.slnx` o está dentro de un `<Folder>`, es ⚠️ (el CI lo corre igual porque busca cualquier `*Tests.csproj`).
 - `Domain` no puede depender de `Application`, `Infrastructure` ni `API`. `Application` no puede depender de `Infrastructure` ni `API`. Revisá los `using` y los `.csproj`.
 
 ### 3. Entidades y datos
