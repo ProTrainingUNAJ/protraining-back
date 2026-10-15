@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    // Configures JWT Bearer; endpoints opt in with [Authorize].
+    // Configura autenticacion JWT Bearer con FallbackPolicy: todo endpoint exige token salvo [AllowAnonymous].
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         string Required(string key) =>
