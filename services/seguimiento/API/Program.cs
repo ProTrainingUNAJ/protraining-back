@@ -42,7 +42,11 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Retries, timeouts and circuit breaker for every registered HttpClient.
+// Resiliencia por defecto (reintentos, timeouts y circuit breaker) para todo HttpClient registrado (KAN-364).
+// Regla: el semáforo se calcula solo con datos locales (check-ins y lesiones de esta base) y jamás llama
+// a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
+// opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
+// reintento y caída siempre al motivo local del RuleEngine (plan B), nunca propagando el error al cliente.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
