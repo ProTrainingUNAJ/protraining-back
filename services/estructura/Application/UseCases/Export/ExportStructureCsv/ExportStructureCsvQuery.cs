@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Application.Interfaces.Persistence;
 using Domain.Entities;
 
-
 namespace Application.UseCases.Export.ExportStructureCsv;
 
 public sealed record ExportStructureCsvQuery;
@@ -19,7 +18,8 @@ public sealed record ExportStructureCsvResult(
 public sealed class ExportStructureCsvQueryHandler(
     IOrganizationRepository organizationRepository,
     ICategoryRepository categoryRepository,
-    IAthleteRepository athleteRepository)
+    IAthleteRepository athleteRepository,
+    IAthleteCategoryRepository athleteCategoryRepository)
 {
     public async Task<ExportStructureCsvResult> HandleAsync(
         ExportStructureCsvQuery query,
@@ -79,6 +79,20 @@ public sealed class ExportStructureCsvQueryHandler(
             sb.Append(a.Active ? "true" : "false").Append(',');
             sb.Append(a.AllowsHabitsRecommendations ? "true" : "false").AppendLine();
         }
+        sb.AppendLine();
+
+        // seccion atletas por categoria (#017)
+        sb.AppendLine("# ATLETAS_CATEGORIAS");
+        sb.AppendLine("AtletaId,CategoriaId");
+        foreach (var a in athletes)
+        {
+            var athleteCategories = await athleteCategoryRepository.ListByAthleteAsync(a.Id, cancellationToken);
+            foreach (var ac in athleteCategories)
+            {
+                sb.Append(ac.AthleteId).Append(',');
+                sb.Append(ac.CategoryId).AppendLine();
+            }
+        }
 
         // 4. genera los bytes utf-8 con bom para que excel abra sin problemas de caracteres
         var preamble = Encoding.UTF8.GetPreamble();
@@ -96,6 +110,12 @@ public sealed class ExportStructureCsvQueryHandler(
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
+
+        // neutraliza formulas de excel (csv injection) si empieza con =, +, - o @
+        if (value.StartsWith('=') || value.StartsWith('+') || value.StartsWith('-') || value.StartsWith('@'))
+        {
+            value = "'" + value;
+        }
 
         // si contiene comas, comillas dobles o saltos de linea, se encierra entre comillas
         if (value.Contains(',') || value.Contains('\"') || value.Contains('\n') || value.Contains('\r'))
