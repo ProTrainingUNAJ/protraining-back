@@ -234,15 +234,18 @@ Application/
     Athletes/CreateAthlete/
 ```
 
+Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
+
 ## Comandos de IA para el equipo
 
-En `.agents/` hay dos comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
+En `.agents/` hay tres comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
 
 - **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
 - **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
+- **`/informe-po`**: arma el informe de avance del sprint para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene en el próximo sprint. Lee lo mergeado en `develop` del back y del front (`../protraining-front`), así que se corre una sola vez desde este repo. Lo guarda en `notas/informe-po-sprint-<n>-<fecha>.md`.
 
 Cómo se usan:
-- **Antigravity**: escribí `/convenciones` o `/documentar` en el chat del agente (son *workflows*, en `.agents/workflows/`).
+- **Antigravity**: escribí `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
 - **Otro asistente**: pedile "seguí las instrucciones de `.agents/skills/convenciones/SKILL.md`".
 
 Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. Si cambian las convenciones, se actualizan este README y ese archivo.
