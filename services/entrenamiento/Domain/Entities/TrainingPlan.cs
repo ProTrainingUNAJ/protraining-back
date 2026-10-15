@@ -3,27 +3,28 @@ using Domain.Exceptions;
 
 namespace Domain.Entities;
 
-public sealed class TrainingPlan : BaseEntity
+public class TrainingPlan : BaseEntity
 {
     public string Name { get; private set; }
-    public string Objective { get; private set; }
-    public Guid AthleteId { get; private set; }
+    public string? Objective { get; private set; }
 
-    private readonly List<TrainingWeek> _weeks = [];
     public IReadOnlyCollection<TrainingWeek> Weeks => _weeks.AsReadOnly();
+    private readonly List<TrainingWeek> _weeks = new();
 
-    private TrainingPlan(string name, string objective, Guid athleteId)
+    public IReadOnlyCollection<PlanAssignment> Assignments => _assignments.AsReadOnly();
+    private readonly List<PlanAssignment> _assignments = new();
+
+    private TrainingPlan(string name, string? objective)
     {
         Name = name;
         Objective = objective;
-        AthleteId = athleteId;
     }
 
-    public static TrainingPlan Create(string name, string objective, Guid athleteId)
+    public static TrainingPlan Create(string name, string? objective = null)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new DomainException("El nombre de la planificación no puede estar vacío.");
+            throw new DomainException("El nombre del plan no puede estar vacío.");
 
-        return new TrainingPlan(name, objective, athleteId);
+        return new TrainingPlan(name, objective);
     }
 }

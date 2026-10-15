@@ -10,17 +10,20 @@ public class TrainingWeekConfiguration : IEntityTypeConfiguration<TrainingWeek>
     {
         builder.ToTable("training_weeks");
 
-        builder.Property(x => x.WeekNumber)
-            .HasColumnName("week_number")
-            .IsRequired();
-
-        builder.Property(x => x.TrainingPlanId)
+        builder.Property(tw => tw.TrainingPlanId)
             .HasColumnName("training_plan_id")
             .IsRequired();
 
-        builder.HasMany(x => x.Sessions)
-            .WithOne(x => x.TrainingWeek)
-            .HasForeignKey(x => x.TrainingWeekId)
+        builder.Property(tw => tw.WeekNumber)
+            .HasColumnName("week_number")
+            .IsRequired();
+
+        
+        builder.HasIndex(tw => new { tw.TrainingPlanId, tw.WeekNumber }).IsUnique();
+
+        builder.HasMany(tw => tw.Sessions)
+            .WithOne(ts => ts.Week)
+            .HasForeignKey(ts => ts.TrainingWeekId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
