@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Application.Interfaces.Services;
 using Domain.Common;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
@@ -9,9 +10,11 @@ namespace Infrastructure.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser currentUser)
     : DbContext(options)
 {
-    // EF reads it again on every query, so it is always the PF of the current request.
-    // Without a token it is Guid.Empty and the filters return nothing.
+    // EF lo vuelve a leer en cada consulta, por lo que siempre refleja el PF de la petición actual.
+    // Sin token es Guid.Empty y los filtros no devuelven nada.
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
+
+    public DbSet<CatalogTest> CatalogTests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,8 +34,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    // For every entity that inherits from BaseEntity: common columns, index by PF
-    // and the global filter (only the token's PF data, never the deleted rows).
+    // Para cada entidad que hereda de BaseEntity: columnas comunes, índice por PF
+    // y el filtro global (solo los datos del PF del token, nunca los registros eliminados).
     private void ConfigureBaseEntities(ModelBuilder modelBuilder)
     {
         var types = modelBuilder.Model.GetEntityTypes()
@@ -55,11 +58,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         }
     }
 
+    // CatalogTest con PfId = Guid.Empty es un catálogo global: se ve desde cualquier PF.
     private Expression<Func<T, bool>> FilterByPf<T>() where T : BaseEntity =>
-        entity => entity.PfId == CurrentPfId && entity.DeletedAt == null;
+        typeof(T) == typeof(CatalogTest)
+        ? entity => (entity.PfId == CurrentPfId || entity.PfId == Guid.Empty) && entity.DeletedAt == null
+        : entity => entity.PfId == CurrentPfId && entity.DeletedAt == null;
 
-    // On create: PfId from the token and CreatedAt. On delete: soft delete (DeletedAt).
-    // PfId and CreatedAt cannot be changed afterwards.
+    // Al crear: PfId desde el token y CreatedAt. Al eliminar: borrado lógico (DeletedAt).
+    // PfId y CreatedAt no pueden modificarse después.
     private void SetBaseFields()
     {
         var now = DateTime.UtcNow;
@@ -69,8 +75,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
             switch (entry.State)
             {
                 case EntityState.Added:
+                    // CatalogTest se reserva el PfId = Guid.Empty para el catálogo global (seeder sin token).
                     entry.Property(entity => entity.PfId).CurrentValue = currentUser.PfId
-                        ?? throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token.");
+                        ?? (entry.Entity is CatalogTest ? Guid.Empty : throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token."));
                     entry.Property(entity => entity.CreatedAt).CurrentValue = now;
                     break;
 
