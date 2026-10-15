@@ -2,6 +2,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
+using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -43,6 +44,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<ICheckInRepository, CheckInRepository>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
         return services;

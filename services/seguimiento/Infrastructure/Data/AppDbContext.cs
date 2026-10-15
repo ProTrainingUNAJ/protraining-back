@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
     public DbSet<CatalogTest> CatalogTests { get; set; }
+    public DbSet<CheckIn> CheckIns { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
