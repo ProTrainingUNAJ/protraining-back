@@ -2,7 +2,7 @@ using System.Net.Http;
 using System.Reflection;
 using Application.UseCases.Health.GetHealth;
 using Domain.Entities;
-using Infrastructure;
+using Domain.Services;
 using Xunit;
 
 namespace Seguimiento.Tests;
@@ -71,31 +71,31 @@ public class TrafficLightIsolationTests
     }
 
     [Fact]
-    public void RuleEngine_NoDeberiaTenerDependenciasInyectadasNiBaseDeDatos()
+    public void TrafficLightEngine_NoDeberiaTenerDependenciasInyectadasNiBaseDeDatos()
     {
         // Motor puro: sin constructor parametrizado no puede recibir DbContext, HttpClient ni ningún servicio.
-        var constructores = typeof(RuleEngine).GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+        var constructores = typeof(TrafficLightEngine).GetConstructors(BindingFlags.Public | BindingFlags.Instance);
         Assert.Single(constructores);
         Assert.Empty(constructores[0].GetParameters());
 
-        var camposDeInstancia = typeof(RuleEngine)
+        var camposDeInstancia = typeof(TrafficLightEngine)
             .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
         foreach (var campo in camposDeInstancia)
         {
             Assert.False(typeof(HttpClient).IsAssignableFrom(campo.FieldType),
-                $"RuleEngine no debe guardar un {campo.FieldType.Name}.");
+                $"TrafficLightEngine no debe guardar un {campo.FieldType.Name}.");
             Assert.False(campo.FieldType.FullName?.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) == true,
-                $"RuleEngine no debe depender de EF Core: recibe los datos ya cargados de la tabla local de check-ins.");
+                "TrafficLightEngine no debe depender de EF Core: recibe los datos ya cargados de la tabla local de check-ins.");
         }
     }
 
     [Fact]
-    public void RuleEngine_DeberiaCalcularElSemaforoSinNingunaFuenteExterna()
+    public void TrafficLightEngine_DeberiaCalcularElSemaforoSinNingunaFuenteExterna()
     {
         // Prueba de fuego de la autonomía: una instancia recién creada, sin nada inyectado,
         // debe poder clasificar al atleta. Así funciona el semáforo con el Asistente caído.
-        var motor = new RuleEngine();
+        var motor = new TrafficLightEngine();
 
         var result = motor.Evaluate("""{"hasInjury": true, "sleepHours": 8}""", "{}");
 

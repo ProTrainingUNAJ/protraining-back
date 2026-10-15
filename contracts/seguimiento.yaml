@@ -427,6 +427,11 @@ components:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          default: false
+          description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
+          example: false
 
     CheckInResponse:
       type: object
@@ -513,6 +518,9 @@ components:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          example: false
 
     DailyLoadRequest:
       type: object

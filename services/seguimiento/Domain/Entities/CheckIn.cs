@@ -17,6 +17,9 @@ public class CheckIn : BaseEntity
     public bool IsSick { get; set; }
     public int? EffortRate { get; set; }
     public string? PainZones { get; set; }
+
+    // Lesión activa marcada por el atleta en su check-in diario → el semáforo queda en Rojo.
+    public bool HasActiveInjury { get; set; }
 }
 
 public enum TrafficLight { Green, Yellow, Red }
