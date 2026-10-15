@@ -242,7 +242,7 @@ En `.agents/` hay tres comandos que funcionan con el asistente de IA que uses (A
 
 - **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
 - **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
-- **`/informe-po`**: arma el informe de avance del sprint para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene en el próximo sprint. Lee lo mergeado en `develop` del back y del front (`../protraining-front`), así que se corre una sola vez desde este repo. Lo guarda en `notas/informe-po-sprint-<n>-<fecha>.md`.
+- **`/informe-po <servicio>`** (por ejemplo `/informe-po seguimiento`): arma el resumen del sprint de ese servicio para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene. Cuenta lo mergeado en `develop` del servicio y sus pantallas del front (`../protraining-front`), y lo publica en Notion, en **Documentación PO** > sprint > página del servicio. Necesita el MCP de Notion conectado; si no está, lo deja en `notas/` para pegarlo a mano.
 
 Cómo se usan:
 - **Antigravity**: escribí `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).

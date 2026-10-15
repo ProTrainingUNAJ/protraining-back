@@ -1,5 +1,5 @@
 ---
-description: Arma el informe de avance del sprint para el PO, en palabras de negocio y sin detalles técnicos (back y front juntos).
+description: Arma el resumen del sprint de un servicio para el PO, en palabras de negocio, y lo publica en Notion (Documentación PO). Uso: /informe-po <servicio>.
 ---
 
 1. Leé completo el archivo `.agents/skills/informe-po/SKILL.md` de este repositorio.
