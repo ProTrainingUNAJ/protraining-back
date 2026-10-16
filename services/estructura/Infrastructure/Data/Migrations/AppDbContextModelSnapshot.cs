@@ -313,6 +313,55 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("medical_records", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.MedicalRecordAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccessedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accessed_by_user_id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("justification");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AthleteId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "CreatedAt");
+
+                    b.ToTable("medical_record_audit_logs", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Organization", b =>
                 {
                     b.Property<Guid>("Id")
