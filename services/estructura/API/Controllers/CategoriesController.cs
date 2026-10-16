@@ -13,6 +13,9 @@ namespace API.Controllers;
 
 [ApiController]
 [Route("api/v1/categories")]
+[Route("api/categories")]
+[Route("api/v1/categorias")]
+[Route("api/categorias")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class CategoriesController(
     ListCategoriesQueryHandler listHandler,
