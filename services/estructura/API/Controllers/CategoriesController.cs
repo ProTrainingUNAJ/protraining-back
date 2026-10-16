@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Route("api/categories")]
+[Route("api/v1/categories")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class CategoriesController(
     ListCategoriesQueryHandler listHandler,
@@ -42,7 +42,7 @@ public sealed class CategoriesController(
             new CreateCategoryCommand(organizationId, request.Name, request.Description),
             cancellationToken);
 
-        return Created($"/api/categories/{category.Id}", category);
+        return Created($"/api/v1/categories/{category.Id}", category);
     }
 
     [HttpPut("{id:guid}")]

@@ -163,12 +163,12 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
     public async Task Given_AthleteAssociatedToCategories_When_SoftDeleted_Then_IntermediateRelationsArePreservedAndCategoryExcludesAthlete()
     {
         // 1. Arrange: Setup Org, Category, and Athlete with PF-A
-        var orgResponse = await _clientPfA.PostAsJsonAsync("/api/organizations",
+        var orgResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations",
             new CreateOrganizationRequest("Club Atletico Olimpia", "Club deportivo"));
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
         Assert.NotNull(org);
 
-        var catResponse = await _clientPfA.PostAsJsonAsync($"/api/categories?organizationId={org.Id}",
+        var catResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}",
             new CreateCategoryRequest("Categoria Primera", "Primera division"));
         var cat = await catResponse.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(cat);
@@ -183,7 +183,7 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.OK, assignResponse.StatusCode);
 
         // Verify active list in Category contains athlete
-        var beforeList = await _clientPfA.GetAsync($"/api/categories/{cat.Id}/athletes");
+        var beforeList = await _clientPfA.GetAsync($"/api/v1/categories/{cat.Id}/athletes");
         var athletesInCatBefore = await beforeList.Content.ReadFromJsonAsync<List<AthleteDto>>();
         Assert.NotNull(athletesInCatBefore);
         Assert.Contains(athletesInCatBefore, a => a.Id == athlete.Id);
@@ -193,7 +193,7 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
 
         // 3. Assert: Active Category Athletes query excludes the soft-deleted athlete (CA-05)
-        var afterList = await _clientPfA.GetAsync($"/api/categories/{cat.Id}/athletes");
+        var afterList = await _clientPfA.GetAsync($"/api/v1/categories/{cat.Id}/athletes");
         var athletesInCatAfter = await afterList.Content.ReadFromJsonAsync<List<AthleteDto>>();
         Assert.NotNull(athletesInCatAfter);
         Assert.DoesNotContain(athletesInCatAfter, a => a.Id == athlete.Id);
