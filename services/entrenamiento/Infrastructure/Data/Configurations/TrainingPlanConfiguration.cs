@@ -10,22 +10,23 @@ public class TrainingPlanConfiguration : IEntityTypeConfiguration<TrainingPlan>
     {
         builder.ToTable("training_plans");
 
-        builder.Property(x => x.Name)
+        builder.Property(tp => tp.Name)
             .HasColumnName("name")
-            .IsRequired()
-            .HasMaxLength(200);
+            .HasMaxLength(200)
+            .IsRequired();
 
-        builder.Property(x => x.Objective)
+        builder.Property(tp => tp.Objective)
             .HasColumnName("objective")
             .HasMaxLength(500);
 
-        builder.Property(x => x.AthleteId)
-            .HasColumnName("athlete_id")
-            .IsRequired();
+        builder.HasMany(tp => tp.Weeks)
+            .WithOne(tw => tw.TrainingPlan)
+            .HasForeignKey(tw => tw.TrainingPlanId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(x => x.Weeks)
-            .WithOne(x => x.TrainingPlan)
-            .HasForeignKey(x => x.TrainingPlanId)
+        builder.HasMany(tp => tp.Assignments)
+            .WithOne(pa => pa.Plan)
+            .HasForeignKey(pa => pa.TrainingPlanId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

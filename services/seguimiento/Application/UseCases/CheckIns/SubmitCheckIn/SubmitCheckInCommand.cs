@@ -1,6 +1,15 @@
-using Application.DTOs.CheckIns;
-
 namespace Application.UseCases.CheckIns.SubmitCheckIn;
 
-// Envío (o actualización) del check-in diario del atleta.
-public sealed record SubmitCheckInCommand(Guid AthleteId, CheckInRequestDto Request);
+public sealed record SubmitCheckInCommand(
+    Guid AthleteId,
+    double SleepHours,
+    int SleepQuality,
+    int MuscleSoreness,
+    int FatigueLevel,
+    int MoodRate,
+    int StressLevel,
+    bool IsSick,
+    int? EffortRate,
+    string? PainZones,
+    bool HasActiveInjury);
+    

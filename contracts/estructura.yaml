@@ -321,6 +321,35 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/me:
+    get:
+      tags:
+        - Me
+      summary: Obtener el atleta logueado
+      description: >-
+        Solo para el rol Atleta. Busca al atleta vinculado a la cuenta del token (claim `sub`)
+        y devuelve su id de atleta, su nombre y sus categorías. Si está dado de baja, las categorías vienen vacías.
+        Lo usan Seguimiento (check-in) y Entrenamiento (rutina de hoy) para saber qué atleta es el usuario,
+        llamándolo con el mismo token.
+      operationId: getMe
+      responses:
+        "200":
+          description: Atleta logueado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/me/categories:
     get:
       tags:
@@ -339,7 +368,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Category'
+                  $ref: '#/components/schemas/MeCategory'
         "401":
           $ref: '#/components/responses/Unauthorized'
         "404":
@@ -986,6 +1015,60 @@ components:
           type: string
           nullable: true
           example: "Sede central ampliada"
+
+    Me:
+      type: object
+      description: El atleta logueado, resuelto a partir del token.
+      required:
+        - athleteId
+        - firstName
+        - lastName
+        - fullName
+        - active
+        - categories
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          description: Id del atleta en Estructura (no es el id de la cuenta).
+          example: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+        firstName:
+          type: string
+          example: "Lucas"
+        lastName:
+          type: string
+          example: "Gomez"
+        fullName:
+          type: string
+          example: "Lucas Gomez"
+        active:
+          type: boolean
+          example: true
+        categories:
+          type: array
+          description: Categorías a las que pertenece. Vacía si el atleta está dado de baja.
+          items:
+            $ref: '#/components/schemas/MeCategory'
+
+    MeCategory:
+      type: object
+      required:
+        - id
+        - organizationId
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Primera"
+        description:
+          type: string
+          nullable: true
 
     Category:
       type: object

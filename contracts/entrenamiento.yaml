@@ -344,6 +344,209 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar planificaciones del preparador fisico
+      description: Devuelve el listado resumido de planificaciones de entrenamiento del preparador fisico autenticado.
+      operationId: listTrainingPlans
+      responses:
+        "200":
+          description: Lista de planes obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingPlanSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Routines and Templates
+      summary: Crear planificacion con arbol completo
+      description: Crea una planificacion completa con sus semanas, sesiones y ejercicios prescritos. Requiere rol PreparadorFisico.
+      operationId: createTrainingPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTrainingPlanRequest'
+      responses:
+        "201":
+          description: Plan creado exitosamente con sus identificadores generados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/{id}:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Obtener detalle completo de planificacion
+      description: Devuelve la estructura jerarquica completa del plan (semanas, sesiones y ejercicios prescritos).
+      operationId: getTrainingPlan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la planificacion.
+      responses:
+        "200":
+          description: Planificacion encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Routines and Templates
+      summary: Actualizar planificacion reemplazando su arbol
+      description: Reemplaza completamente el arbol de semanas, sesiones y ejercicios prescritos de la planificacion. Requiere rol PreparadorFisico.
+      operationId: updateTrainingPlan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la planificacion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTrainingPlanRequest'
+      responses:
+        "200":
+          description: Planificacion actualizada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/assignments:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Asignar planificacion a categoria o atleta
+      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico.
+      operationId: assignTrainingPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignPlanRequest'
+      responses:
+        "201":
+          description: Plan asignado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignPlanResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-sessions/{id}:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Obtener sesion de entrenamiento
+      description: Obtiene los detalles de una sesion de entrenamiento por su identificador.
+      operationId: getTrainingSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesion de entrenamiento.
+      responses:
+        "200":
+          description: Sesion de entrenamiento encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingSession'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-sessions/{id}/notes:
+    put:
+      tags:
+        - Routines and Templates
+      summary: Actualizar nota del preparador fisico en sesion
+      description: Modifica la nota u observacion del preparador fisico para una sesion de entrenamiento. Requiere rol PreparadorFisico.
+      operationId: updateTrainingSessionNotes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesion de entrenamiento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCoachNotesRequest'
+      responses:
+        "204":
+          description: Nota actualizada exitosamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/health:
     get:
       tags:
@@ -385,6 +588,13 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     NotFound:
       description: Recurso o atleta no encontrado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    Forbidden:
+      description: Acceso denegado (requiere rol PreparadorFisico).
       content:
         application/json:
           schema:
@@ -782,3 +992,288 @@ components:
             type: array
             items:
               type: string
+
+    AssignPlanRequest:
+      type: object
+      required:
+        - trainingPlanId
+        - startDate
+      properties:
+        trainingPlanId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        startDate:
+          type: string
+          format: date
+          example: "2026-10-20"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f"
+
+    AssignPlanResponse:
+      type: object
+      required:
+        - assignmentId
+        - message
+      properties:
+        assignmentId:
+          type: string
+          format: uuid
+          example: "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a"
+        message:
+          type: string
+          example: "Plan asignado exitosamente."
+
+    TrainingSession:
+      type: object
+      required:
+        - id
+        - trainingWeekId
+        - name
+        - order
+        - dayOfWeek
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        trainingWeekId:
+          type: string
+          format: uuid
+          example: "f6a7b8c9-d0e1-2f3a-4b5c-6d7e8f9a0b1c"
+        name:
+          type: string
+          example: "Fuerza Tren Superior"
+        order:
+          type: integer
+          example: 1
+        dayOfWeek:
+          type: integer
+          description: Dia de la semana (0 = Domingo, 1 = Lunes, ..., 6 = Sabado).
+          example: 3
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Controlar tecnica en descenso"
+
+    UpdateCoachNotesRequest:
+      type: object
+      properties:
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Controlar tecnica en descenso"
+
+    PrescribedExerciseRequest:
+      type: object
+      required:
+        - exerciseId
+        - order
+        - sets
+        - reps
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        order:
+          type: integer
+          example: 1
+        sets:
+          type: integer
+          example: 4
+        reps:
+          type: integer
+          example: 5
+        targetPercentage:
+          type: number
+          format: decimal
+          nullable: true
+          example: 80.0
+
+    TrainingSessionRequest:
+      type: object
+      required:
+        - name
+        - order
+        - dayOfWeek
+      properties:
+        name:
+          type: string
+          example: "Miércoles"
+        order:
+          type: integer
+          example: 1
+        dayOfWeek:
+          type: integer
+          description: Dia de la semana (0 = Domingo, 1 = Lunes, ..., 6 = Sabado).
+          example: 3
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Controlar técnica en descenso"
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseRequest'
+
+    TrainingWeekRequest:
+      type: object
+      required:
+        - weekNumber
+      properties:
+        weekNumber:
+          type: integer
+          example: 1
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingSessionRequest'
+
+    SaveTrainingPlanRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Fuerza base"
+        objective:
+          type: string
+          nullable: true
+          example: "Pretemporada"
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingWeekRequest'
+
+    PrescribedExerciseDetail:
+      type: object
+      required:
+        - id
+        - exerciseId
+        - order
+        - sets
+        - reps
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a"
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        order:
+          type: integer
+          example: 1
+        sets:
+          type: integer
+          example: 4
+        reps:
+          type: integer
+          example: 5
+        targetPercentage:
+          type: number
+          format: decimal
+          nullable: true
+          example: 80.0
+
+    TrainingSessionDetail:
+      type: object
+      required:
+        - id
+        - name
+        - order
+        - dayOfWeek
+        - exercises
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e2f3a4b5-c6d7-8e9f-0a1b-2c3d4e5f6a7b"
+        name:
+          type: string
+          example: "Miércoles"
+        order:
+          type: integer
+          example: 1
+        dayOfWeek:
+          type: integer
+          example: 3
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Controlar técnica en descenso"
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseDetail'
+
+    TrainingWeekDetail:
+      type: object
+      required:
+        - id
+        - weekNumber
+        - sessions
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f3a4b5c6-d7e8-9f0a-1b2c-3d4e5f6a7b8c"
+        weekNumber:
+          type: integer
+          example: 1
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingSessionDetail'
+
+    TrainingPlanDetail:
+      type: object
+      required:
+        - id
+        - name
+        - weeks
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        name:
+          type: string
+          example: "Fuerza base"
+        objective:
+          type: string
+          nullable: true
+          example: "Pretemporada"
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingWeekDetail'
+
+    TrainingPlanSummary:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        name:
+          type: string
+          example: "Fuerza base"
+        objective:
+          type: string
+          nullable: true
+          example: "Pretemporada"

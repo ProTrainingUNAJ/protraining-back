@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Domain.Entities;
@@ -18,7 +18,6 @@ public sealed class GeminiClient(
     ILogger<GeminiClient> logger) : IAiClient
 {
     private readonly GeminiOptions _options = options.Value;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public string ProviderName => "Gemini";
 
@@ -235,31 +234,26 @@ public sealed class GeminiClient(
             return null;
         }
 
-        var parsed = JsonSerializer.Deserialize<RawRoutineProposal>(text, JsonOptions);
-        if (parsed == null || parsed.Exercises == null || parsed.Exercises.Count == 0)
+        var validationResult = AiRoutineParser.ParseAndValidate(text);
+        if (!validationResult.IsValid)
         {
-            logger.LogWarning("No se pudo deserializar la rutina generada por Gemini.");
+            var validationTag = validationResult.IsSyntaxError ? "JsonInvalido" : "SchemaInvalido";
+            logger.LogWarning("La propuesta de rutina generada por Gemini no cumple con el esquema estricto o rangos válidos ({ValidationTag}): {Error}. Activando respaldo.",
+                validationTag, validationResult.ErrorMessage);
             await aiAuditService.LogAsync(AiLog.Create(
                 ProviderName,
                 prompt,
                 latencyMs,
                 isValid: false,
-                validationResult: "JsonInvalido",
+                validationResult: validationTag,
                 response: text,
                 athleteId: athleteId,
                 promptTokens: promptTokens,
                 completionTokens: completionTokens,
                 totalTokens: totalTokens,
-                errorMessage: "No se pudo deserializar la rutina generada por Gemini."));
+                errorMessage: validationResult.ErrorMessage));
             return null;
         }
-
-        var exercises = parsed.Exercises.Select(e => new SuggestedExerciseDto(
-            ExerciseName: e.ExerciseName ?? "Ejercicio general",
-            Sets: e.Sets > 0 ? e.Sets : 3,
-            Reps: e.Reps > 0 ? e.Reps : 10,
-            SuggestedPercentage: e.SuggestedPercentage > 0 ? e.SuggestedPercentage : 65m
-        )).ToList();
 
         await aiAuditService.LogAsync(AiLog.Create(
             ProviderName,
@@ -275,37 +269,10 @@ public sealed class GeminiClient(
 
         return new RoutineSuggestionResponseDto(
             AthleteId: athleteId,
-            ProposedTitle: parsed.ProposedTitle ?? "Rutina Asistida por IA",
-            JustificationSummary: parsed.JustificationSummary ?? "Propuesta generada mediante Google Gemini.",
-            Exercises: exercises,
+            ProposedTitle: validationResult.ProposedTitle ?? "Rutina Asistida por IA",
+            JustificationSummary: validationResult.JustificationSummary ?? "Propuesta generada mediante Google Gemini.",
+            Exercises: validationResult.Exercises.ToList(),
             ProviderUsed: ProviderName
         );
-    }
-
-    private sealed class RawRoutineProposal
-    {
-        [JsonPropertyName("tituloPropuesto")]
-        public string? ProposedTitle { get; set; }
-
-        [JsonPropertyName("resumenJustificacion")]
-        public string? JustificationSummary { get; set; }
-
-        [JsonPropertyName("ejercicios")]
-        public List<RawExercise>? Exercises { get; set; }
-    }
-
-    private sealed class RawExercise
-    {
-        [JsonPropertyName("ejercicioNombre")]
-        public string? ExerciseName { get; set; }
-
-        [JsonPropertyName("series")]
-        public int Sets { get; set; }
-
-        [JsonPropertyName("repeticiones")]
-        public int Reps { get; set; }
-
-        [JsonPropertyName("porcentajeSugerido")]
-        public decimal SuggestedPercentage { get; set; }
     }
 }

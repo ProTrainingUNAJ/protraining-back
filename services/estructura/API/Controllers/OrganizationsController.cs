@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [ApiController]
-[Route("api/organizations")]
+[Route("api/v1/organizations")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class OrganizationsController(
     ListOrganizationsQueryHandler listHandler,
@@ -36,7 +36,7 @@ public sealed class OrganizationsController(
             new CreateOrganizationCommand(request.Name, request.Description),
             cancellationToken);
 
-        return Created($"/api/organizations/{organization.Id}", organization);
+        return Created($"/api/v1/organizations/{organization.Id}", organization);
     }
 
     [HttpPut("{id:guid}")]

@@ -1,10 +1,9 @@
 namespace Application.DTOs.CheckIns;
 
-// Check-in persistido, con el semáforo ya calculado por el motor local.
 public sealed record CheckInDto(
     Guid Id,
     Guid AthleteId,
-    DateOnly Date,
+    DateTime Date,
     string TrafficLight,
     string? TrafficLightReason,
     double SleepHours,
@@ -13,7 +12,7 @@ public sealed record CheckInDto(
     int FatigueLevel,
     int MoodRate,
     int StressLevel,
-    bool IsSick,
     int? EffortRate,
+    bool IsSick,
     string? PainZones,
     bool HasActiveInjury);

@@ -2,13 +2,20 @@ using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
-using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
+using Application.UseCases.TrainingPlans.AssignPlan;
+using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.UpdatePlan;
+using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.UpdateCoachNotes;
+using Application.UseCases.Routines.GetTodayRoutine;
+using Domain.Services;
 using Infrastructure;
-using Infrastructure.Repositories;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -52,8 +59,18 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
-builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
+builder.Services.AddScoped<AssignPlanCommandHandler>();
+builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();
+builder.Services.AddScoped<UpdateTrainingPlanCommandHandler>();
+builder.Services.AddScoped<GetTrainingPlanQueryHandler>();
+builder.Services.AddScoped<ListTrainingPlansQueryHandler>();
+builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
+builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
+builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
+
+
 
 // Estructura por HTTP, con el token del usuario (#062).
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
