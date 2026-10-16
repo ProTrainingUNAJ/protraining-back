@@ -336,7 +336,8 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("PfId");
 
                     b.HasIndex("TrainingWeekId", "Order")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("training_sessions", (string)null);
                 });
@@ -372,7 +373,8 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("PfId");
 
                     b.HasIndex("TrainingPlanId", "WeekNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("training_weeks", (string)null);
                 });
