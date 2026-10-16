@@ -219,6 +219,15 @@ Reglas:
 
 Todo lo nuevo sigue esta regla. Lo que ya existe y no la cumple se va corrigiendo en las tareas de cada uno.
 
+**El catálogo de ejercicios va en español** (`services/entrenamiento/API/Data/exercises.json`): nombres, equipamiento, músculos e instrucciones, porque lo leen el PF y el atleta. Las instrucciones, en español rioplatense y de vos ("Acostate…", "Flexioná…"), sin mezclar usted ni tú.
+
+### Fechas: solo Argentina (UTC-3)
+
+La app es, por ahora, **solo para Argentina**.
+- En la base, los instantes se guardan en **UTC** (`created_at`, `deleted_at`…).
+- **"Hoy"** (la rutina del día, el check-in, el semáforo) se calcula en la hora de Argentina, con la zona `America/Argentina/Buenos_Aires`. Nunca `DateTime.UtcNow.Date` ni `DateTime.UtcNow.DayOfWeek`: después de las 21 h da el día siguiente.
+- Un día sin hora (fecha de inicio de un plan, fecha del check-in) va como `DateOnly`.
+
 ### Carpetas
 
 DTOs y requests van por módulo dentro de `Application/DTOs/`:
@@ -235,6 +244,21 @@ Application/
 ```
 
 Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
+
+### Casos de uso (CQRS liviano)
+
+Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handler:
+
+- **Escribe** (crear, modificar, borrar) → `XxxCommand` + `XxxCommandHandler`, que termina con `unitOfWork.SaveChangesAsync(...)`.
+- **Lee** → `XxxQuery` + `XxxQueryHandler`, con `AsNoTracking()`, y **nunca** guarda ni modifica nada.
+- Nada de `XxxUseCase`: si escribe es Command, si lee es Query. Sin MediatR: los handlers se registran en `Program.cs`.
+
+### API: REST nivel 2
+
+- URLs con **sustantivos**, en plural e inglés (`/api/v1/training-plans/{id}`), nunca acciones (`/sugerir-rutina`). Excepción: `/auth/login` y `/auth/refresh`.
+- **Verbos:** `GET` lee, `POST` crea, `PUT` reemplaza, `PATCH` cambia una parte, `DELETE` borra.
+- **Códigos:** `200` lectura, `201` creación **con la ubicación** (`Created($"/api/v1/<recurso>/{id}", dto)`), `204` sin cuerpo, `400` datos inválidos, `401` sin token, `403` sin permiso, `404` no existe, `409` conflicto. Un `500` es solo para errores inesperados: "no existe" va con una excepción propia mapeada a `404` en el `ExceptionMiddleware`.
+- Lo que solo puede hacer el PF lleva `[Authorize(Roles = "PreparadorFisico")]`, no un `[Authorize]` suelto.
 
 ## Comandos de IA para el equipo
 
