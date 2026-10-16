@@ -198,9 +198,43 @@ public static class AiRoutineParser
                         percentage = parsedPct;
                     }
 
+                    // ejercicioId (opcional en el JSON de entrada)
+                    Guid? exerciseId = null;
+                    if (TryGetPropertyCaseInsensitive(exerciseElement, "ejercicioId", out var idProp))
+                    {
+                        if (idProp.ValueKind == JsonValueKind.String)
+                        {
+                            var idString = idProp.GetString();
+                            if (Guid.TryParse(idString, out var parsedGuid))
+                            {
+                                exerciseId = parsedGuid;
+                            }
+                        }
+                    }
+
+                    // esReferencia (opcional)
+                    bool isReference = false;
+                    if (TryGetPropertyCaseInsensitive(exerciseElement, "esReferencia", out var refProp))
+                    {
+                        if (refProp.ValueKind == JsonValueKind.True)
+                        {
+                            isReference = true;
+                        }
+                        else if (refProp.ValueKind == JsonValueKind.False)
+                        {
+                            isReference = false;
+                        }
+                    }
+
                     if (exerciseName != null && sets.HasValue && reps.HasValue && percentage.HasValue)
                     {
-                        exercises.Add(new SuggestedExerciseDto(exerciseName, sets.Value, reps.Value, percentage.Value));
+                        exercises.Add(new SuggestedExerciseDto(
+                            exerciseName,
+                            sets.Value,
+                            reps.Value,
+                            percentage.Value,
+                            exerciseId,
+                            isReference));
                     }
                 }
             }
