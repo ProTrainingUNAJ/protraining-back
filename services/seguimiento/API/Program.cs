@@ -5,6 +5,7 @@ using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.SubmitCheckIn;
+using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.Health.GetHealth;
 using Domain.Services;
 using Infrastructure;
@@ -56,6 +57,8 @@ builder.Services.AddScoped<GetHealthQueryHandler>();
 // todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
 builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
+// Catálogo de tests físicos por capacidad motora (KAN-333).
+builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
