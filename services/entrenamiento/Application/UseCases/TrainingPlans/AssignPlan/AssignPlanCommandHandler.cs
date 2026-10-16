@@ -1,4 +1,5 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Exceptions;
+using Application.Interfaces.Persistence;
 using Domain.Entities;
 using Domain.Exceptions;
 
@@ -19,7 +20,7 @@ public class AssignPlanCommandHandler
     {
         var exists = await _planRepository.ExistsAsync(command.TrainingPlanId, cancellationToken);
         if (!exists)
-            throw new KeyNotFoundException($"No se encontró la planificación con ID '{command.TrainingPlanId}'.");
+            throw new NotFoundException($"No se encontró la planificación con ID '{command.TrainingPlanId}'.");
 
         var assignment = PlanAssignment.Create(
             command.TrainingPlanId,

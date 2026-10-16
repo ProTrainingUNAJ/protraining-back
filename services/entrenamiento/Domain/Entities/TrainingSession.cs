@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using Domain.Exceptions;
 
 namespace Domain.Entities;
@@ -39,5 +39,13 @@ public class TrainingSession : BaseEntity
     public void UpdateCoachNotes(string? notes)
     {
         CoachNotes = notes;
+    }
+
+    public void AddPrescribedExercise(PrescribedExercise exercise)
+    {
+        if (_prescribedExercises.Any(e => e.Order == exercise.Order))
+            throw new DomainException($"La sesión '{Name}' ya contiene un ejercicio con orden {exercise.Order}.");
+
+        _prescribedExercises.Add(exercise);
     }
 }

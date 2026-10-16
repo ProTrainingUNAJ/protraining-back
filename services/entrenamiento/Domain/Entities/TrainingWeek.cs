@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using Domain.Exceptions;
 
 namespace Domain.Entities;
@@ -24,5 +24,13 @@ public sealed class TrainingWeek : BaseEntity
             throw new DomainException("El número de la semana debe ser mayor a cero.");
 
         return new TrainingWeek(weekNumber, trainingPlanId);
+    }
+
+    public void AddSession(TrainingSession session)
+    {
+        if (_sessions.Any(s => s.Order == session.Order))
+            throw new DomainException($"La semana {WeekNumber} ya contiene una sesión con orden {session.Order}.");
+
+        _sessions.Add(session);
     }
 }

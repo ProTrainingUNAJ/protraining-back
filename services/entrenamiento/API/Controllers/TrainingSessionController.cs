@@ -1,4 +1,4 @@
-﻿using Application.DTOs.TrainingSessions;
+using Application.DTOs.TrainingSessions;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
 using Application.UseCases.TrainingSessions.UpdateCoachNotes;
 using Microsoft.AspNetCore.Authorization;
@@ -33,6 +33,7 @@ public class TrainingSessionController : ControllerBase
     }
 
     [HttpPut("{id:guid}/notes")]
+    [Authorize(Roles = "PreparadorFisico")]
     public async Task<IActionResult> UpdateNotes(Guid id, [FromBody] UpdateCoachNotesRequest request, CancellationToken cancellationToken = default)
     {
         var command = new UpdateCoachNotesCommand(id, request.CoachNotes);
