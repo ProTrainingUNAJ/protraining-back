@@ -1,10 +1,10 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 
 namespace Domain.Services;
 
 public class LoadCalculatorEngine : ILoadCalculatorEngine
 {
-    private const decimal EstimatedConservativeFactor = 0.95m;
+    private const decimal EstimatedConservativeFactor = 0.90m;
     private const decimal PlateStep = 2.5m;
 
     public LoadResult CalculateLoad(decimal? current1Rm, RecordSource? source, decimal targetPercentage)

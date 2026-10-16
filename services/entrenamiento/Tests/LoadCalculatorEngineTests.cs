@@ -33,7 +33,7 @@ public class LoadCalculatorEngineTests
 
         Assert.False(resultEstimado.IsReference);
         Assert.True(resultEstimado.WeightKg < resultTesteado.WeightKg, "El peso estimado debe ser menor al testeado");
-        Assert.Equal(75m, resultEstimado.WeightKg); // (100 * 0.80) * 0.95 = 76 -> redondeado a discos = 75
+        Assert.Equal(72.5m, resultEstimado.WeightKg); // (100 * 0.80) * 0.90 = 72.0 -> redondeado a discos de 2.5 kg = 72.5
     }
 
     [Fact]
