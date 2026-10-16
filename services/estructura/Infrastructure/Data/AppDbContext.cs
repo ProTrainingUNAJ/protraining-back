@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<AthleteCategory> AthleteCategories => Set<AthleteCategory>();
+    public DbSet<PendingPurge> PendingPurges => Set<PendingPurge>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
