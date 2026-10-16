@@ -16,10 +16,11 @@ public sealed class Athlete : BaseEntity
     public Guid? AccountId { get; private set; }
 
     public DigitalConsent? DigitalConsent { get; private set; }
+    public MedicalRecord? MedicalRecord { get; private set; }
 
     public string FullName => $"{FirstName} {LastName}".Trim();
-    public bool HasSignedConsent => DigitalConsent?.IsSigned == true;
-    public bool AllowsHabitsRecommendations => DigitalConsent?.IsSigned == true && DigitalConsent.AllowsHabitsRecommendations;
+    public bool HasSignedConsent => DigitalConsent?.IsValidForAthlete(IsMinor) == true;
+    public bool AllowsHabitsRecommendations => HasSignedConsent && DigitalConsent!.AllowsHabitsRecommendations;
 
     private Athlete() { }
 
@@ -49,6 +50,20 @@ public sealed class Athlete : BaseEntity
             allowsPhysicalTraining,
             allowsHabitsRecommendations);
 
+        return athlete;
+    }
+
+    // Permite dar de alta un atleta menor cuyo tutor legal aún no ha firmado el consentimiento digital.
+    public static Athlete CreateMinorPendingConsent(
+        string? firstName,
+        string? lastName,
+        string? email,
+        string? phone,
+        string? emergencyContact = null)
+    {
+        var athlete = new Athlete();
+        athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
+        athlete.IsMinor = true;
         return athlete;
     }
 
@@ -84,6 +99,9 @@ public sealed class Athlete : BaseEntity
         if (!IsMinor)
             throw new DomainException("Solo los atletas menores de edad requieren consentimiento de un tutor.");
 
+        if (DigitalConsent != null && DigitalConsent.IsSigned)
+            throw new DomainException("El consentimiento digital ya fue firmado y su registro es inmutable.");
+
         DigitalConsent = DigitalConsent.RegisterForMinor(
             Id,
             guardianName,
@@ -100,6 +118,9 @@ public sealed class Athlete : BaseEntity
         if (IsMinor)
             throw new DomainException("Los atletas menores de edad deben ser autorizados por un tutor legal.");
 
+        if (DigitalConsent != null && DigitalConsent.IsSigned)
+            throw new DomainException("El consentimiento digital ya fue firmado y su registro es inmutable.");
+
         DigitalConsent = DigitalConsent.RegisterForAdult(
             Id,
             allowsPhysicalTraining,
@@ -112,6 +133,52 @@ public sealed class Athlete : BaseEntity
             throw new DomainException("No existe un consentimiento firmado para modificar los permisos.");
 
         DigitalConsent.UpdateHabitsPermission(allowsHabitsRecommendations);
+    }
+
+    // Lee la ficha médica del atleta exigiendo que el consentimiento digital esté firmado (o el del tutor si es menor).
+    public MedicalRecord? ReadMedicalRecord()
+    {
+        EnsureConsentSignedForMedicalRecord();
+        return MedicalRecord;
+    }
+
+    // Completa o actualiza la ficha médica del atleta exigiendo consentimiento digital firmado (del atleta o del tutor si es menor).
+    public MedicalRecord CompleteOrUpdateMedicalRecord(
+        string? medicalHistory,
+        string? surgeries,
+        string? pathologies,
+        bool hasPhysicalFitnessCertificate,
+        DateOnly? physicalFitnessIssuedAt = null,
+        DateOnly? physicalFitnessExpiresAt = null,
+        string? physicalFitnessNotes = null)
+    {
+        EnsureConsentSignedForMedicalRecord();
+
+        if (MedicalRecord is null)
+        {
+            MedicalRecord = MedicalRecord.Create(
+                Id,
+                medicalHistory,
+                surgeries,
+                pathologies,
+                hasPhysicalFitnessCertificate,
+                physicalFitnessIssuedAt,
+                physicalFitnessExpiresAt,
+                physicalFitnessNotes);
+        }
+        else
+        {
+            MedicalRecord.Update(
+                medicalHistory,
+                surgeries,
+                pathologies,
+                hasPhysicalFitnessCertificate,
+                physicalFitnessIssuedAt,
+                physicalFitnessExpiresAt,
+                physicalFitnessNotes);
+        }
+
+        return MedicalRecord;
     }
 
     public void LinkAccount(Guid accountId)
@@ -133,6 +200,16 @@ public sealed class Athlete : BaseEntity
     }
 
     public void SetActive(bool active) => Active = active;
+
+    private void EnsureConsentSignedForMedicalRecord()
+    {
+        if (!HasSignedConsent)
+        {
+            throw new DomainException(IsMinor
+                ? "La ficha médica no puede ser leída ni completada porque el tutor legal aún no ha firmado el consentimiento digital."
+                : "La ficha médica no puede ser leída ni completada porque el atleta aún no ha firmado el consentimiento digital.");
+        }
+    }
 
     private void ValidateAndAssignPersonalData(
         string? firstName,

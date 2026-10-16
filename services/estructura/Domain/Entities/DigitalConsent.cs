@@ -81,7 +81,24 @@ public sealed class DigitalConsent : BaseEntity
 
     public void UpdateHabitsPermission(bool allowsHabitsRecommendations)
     {
+        // La fecha original de firma (ConsentDate) y los datos del firmante son inmutables.
         AllowsHabitsRecommendations = allowsHabitsRecommendations;
-        ConsentDate = DateTime.UtcNow;
+    }
+
+    // Verifica que el consentimiento esté firmado y cumpla con el ajuste N3 si el atleta es menor.
+    public bool IsValidForAthlete(bool athleteIsMinor)
+    {
+        if (!IsSigned || !AllowsPhysicalTraining)
+            return false;
+
+        if (athleteIsMinor)
+        {
+            return IsMinor
+                && !string.IsNullOrWhiteSpace(GuardianName)
+                && !string.IsNullOrWhiteSpace(GuardianEmail)
+                && !string.IsNullOrWhiteSpace(GuardianPhone);
+        }
+
+        return true;
     }
 }
