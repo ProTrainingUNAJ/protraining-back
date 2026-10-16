@@ -16,8 +16,6 @@ namespace API.Controllers;
 
 [ApiController]
 [Route("api/v1/athletes")]
-[Route("api/athletes")]
-[Route("api/v1/atletas")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class AthletesController(
     ListAthletesQueryHandler listHandler,

@@ -11,8 +11,6 @@ namespace API.Controllers;
 
 [ApiController]
 [Route("api/v1/organizations")]
-[Route("api/organizations")]
-[Route("api/v1/organizaciones")]
 [Authorize(Roles = "PreparadorFisico")]
 public sealed class OrganizationsController(
     ListOrganizationsQueryHandler listHandler,
