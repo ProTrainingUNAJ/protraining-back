@@ -76,13 +76,11 @@ paths:
           description: Cantidad de ejercicios por página.
       responses:
         "200":
-          description: Lista de ejercicios obtenida exitosamente según los filtros y paginación.
+          description: Catálogo de ejercicios paginado obtenido exitosamente.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Exercise'
+                $ref: '#/components/schemas/PaginatedExerciseResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -657,6 +655,38 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+
+    PaginatedExerciseResponse:
+      type: object
+      description: Respuesta paginada del catálogo de ejercicios.
+      required:
+        - items
+        - page
+        - pageSize
+        - totalCount
+        - totalPages
+      properties:
+        items:
+          type: array
+          description: Lista de ejercicios devueltos en la página solicitada.
+          items:
+            $ref: '#/components/schemas/Exercise'
+        page:
+          type: integer
+          description: Número de página actual.
+          example: 1
+        pageSize:
+          type: integer
+          description: Cantidad de ejercicios por página.
+          example: 20
+        totalCount:
+          type: integer
+          description: Total de ejercicios coincidentes con los filtros aplicados.
+          example: 120
+        totalPages:
+          type: integer
+          description: Total de páginas disponibles según el tamaño de página.
+          example: 6
 
     Record:
       type: object
