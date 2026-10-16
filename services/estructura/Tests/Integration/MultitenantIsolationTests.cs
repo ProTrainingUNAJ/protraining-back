@@ -32,8 +32,8 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_NoAuthenticationOrInvalidToken_When_AccessingProtectedEndpoints_Then_Returns401Unauthorized()
     {
         // 1. Unauthenticated requests
-        var unauthOrgs = await _unauthenticatedClient.GetAsync("/api/organizations");
-        var unauthCats = await _unauthenticatedClient.GetAsync("/api/categories?organizationId=" + Guid.NewGuid());
+        var unauthOrgs = await _unauthenticatedClient.GetAsync("/api/v1/organizations");
+        var unauthCats = await _unauthenticatedClient.GetAsync("/api/v1/categories?organizationId=" + Guid.NewGuid());
         var unauthAthletes = await _unauthenticatedClient.GetAsync("/api/v1/athletes");
 
         Assert.Equal(HttpStatusCode.Unauthorized, unauthOrgs.StatusCode);
@@ -44,14 +44,14 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         var expiredClient = _factory.CreateClient();
         expiredClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestJwtGenerator.GenerateExpiredToken(_pfAId));
-        var expiredResponse = await expiredClient.GetAsync("/api/organizations");
+        var expiredResponse = await expiredClient.GetAsync("/api/v1/organizations");
         Assert.Equal(HttpStatusCode.Unauthorized, expiredResponse.StatusCode);
 
         // 3. Invalid signature key token
         var invalidKeyClient = _factory.CreateClient();
         invalidKeyClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestJwtGenerator.GenerateTokenWithInvalidKey(_pfAId));
-        var invalidKeyResponse = await invalidKeyClient.GetAsync("/api/organizations");
+        var invalidKeyResponse = await invalidKeyClient.GetAsync("/api/v1/organizations");
         Assert.Equal(HttpStatusCode.Unauthorized, invalidKeyResponse.StatusCode);
     }
 
@@ -59,20 +59,20 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_OrganizationOwnedByPfB_When_PfAConsultsOrLists_Then_PfADoesNotSeePfBOrganizationAndGets404OnDirectAccess()
     {
         // 1. PF-B creates an organization
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Organizacion Secreta PF-B", "Privada"));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Organizacion Secreta PF-B", "Privada"));
         Assert.Equal(HttpStatusCode.Created, orgBResponse.StatusCode);
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
         Assert.NotNull(orgB);
 
         // 2. PF-A lists organizations -> must not contain Org-B
-        var listResponse = await _clientPfA.GetAsync("/api/organizations");
+        var listResponse = await _clientPfA.GetAsync("/api/v1/organizations");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
         var orgsPfA = await listResponse.Content.ReadFromJsonAsync<List<OrganizationDto>>();
         Assert.NotNull(orgsPfA);
         Assert.DoesNotContain(orgsPfA, o => o.Id == orgB.Id);
 
         // 3. PF-A queries Org-B by Id directly -> returns 404 Not Found (without revealing existence)
-        var directGetResponse = await _clientPfA.GetAsync($"/api/organizations/{orgB.Id}");
+        var directGetResponse = await _clientPfA.GetAsync($"/api/v1/organizations/{orgB.Id}");
         Assert.Equal(HttpStatusCode.NotFound, directGetResponse.StatusCode);
     }
 
@@ -80,18 +80,18 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_OrganizationOwnedByPfB_When_PfAAttemptsUpdateOrDelete_Then_Returns404AndDataRemainsUnchangedInDb()
     {
         // 1. PF-B creates Org-B
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Org Original B", "Descripcion B"));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Org Original B", "Descripcion B"));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
         Assert.NotNull(orgB);
 
         // 2. PF-A attempts to update Org-B -> must return 404
         var updateResponse = await _clientPfA.PutAsJsonAsync(
-            $"/api/organizations/{orgB.Id}",
+            $"/api/v1/organizations/{orgB.Id}",
             new UpdateOrganizationRequest("Nombre Modificado Ilegalmente", "Hack"));
         Assert.Equal(HttpStatusCode.NotFound, updateResponse.StatusCode);
 
         // 3. PF-A attempts to delete Org-B -> must return 404
-        var deleteResponse = await _clientPfA.DeleteAsync($"/api/organizations/{orgB.Id}");
+        var deleteResponse = await _clientPfA.DeleteAsync($"/api/v1/organizations/{orgB.Id}");
         Assert.Equal(HttpStatusCode.NotFound, deleteResponse.StatusCode);
 
         // 4. Verify in DB and from PF-B that Org-B is completely intact
@@ -105,7 +105,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         Assert.Equal("Descripcion B", orgInDb.Description);
         Assert.Null(orgInDb.DeletedAt);
 
-        var verifyFromPfB = await _clientPfB.GetAsync($"/api/organizations/{orgB.Id}");
+        var verifyFromPfB = await _clientPfB.GetAsync($"/api/v1/organizations/{orgB.Id}");
         Assert.Equal(HttpStatusCode.OK, verifyFromPfB.StatusCode);
     }
 
@@ -113,12 +113,12 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_OrganizationOwnedByPfB_When_PfAAttemptsToCreateCategoryInsideIt_Then_Returns404AndCategoryIsNotCreated()
     {
         // 1. PF-B creates Org-B
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club PF-B", null));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club PF-B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
 
         // 2. PF-A attempts to create category in Org-B -> must return 404 (organization not found in PF-A scope)
         var createCatResponse = await _clientPfA.PostAsJsonAsync(
-            $"/api/categories?organizationId={orgB!.Id}",
+            $"/api/v1/categories?organizationId={orgB!.Id}",
             new CreateCategoryRequest("Categoria Ilegal", "Intruso"));
         Assert.Equal(HttpStatusCode.NotFound, createCatResponse.StatusCode);
 
@@ -134,29 +134,29 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_CategoryOwnedByPfB_When_PfAAccessesModifiesOrDeletesIt_Then_Returns404AndCategoryRemainsIntact()
     {
         // 1. PF-B creates Org-B and Cat-B
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club B", null));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Sub 21 PF-B", "Legitima"));
+        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Sub 21 PF-B", "Legitima"));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(catB);
 
         // 2. PF-A lists categories in Org-B -> empty list
-        var listResponse = await _clientPfA.GetAsync($"/api/categories?organizationId={orgB.Id}");
+        var listResponse = await _clientPfA.GetAsync($"/api/v1/categories?organizationId={orgB.Id}");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
         var cats = await listResponse.Content.ReadFromJsonAsync<List<CategoryDto>>();
         Assert.NotNull(cats);
         Assert.Empty(cats);
 
         // 3. PF-A queries Cat-B by Id -> 404
-        var getResponse = await _clientPfA.GetAsync($"/api/categories/{catB.Id}");
+        var getResponse = await _clientPfA.GetAsync($"/api/v1/categories/{catB.Id}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
 
         // 4. PF-A updates Cat-B -> 404
-        var putResponse = await _clientPfA.PutAsJsonAsync($"/api/categories/{catB.Id}", new UpdateCategoryRequest("Hacked Cat", null));
+        var putResponse = await _clientPfA.PutAsJsonAsync($"/api/v1/categories/{catB.Id}", new UpdateCategoryRequest("Hacked Cat", null));
         Assert.Equal(HttpStatusCode.NotFound, putResponse.StatusCode);
 
         // 5. PF-A deletes Cat-B -> 404
-        var delResponse = await _clientPfA.DeleteAsync($"/api/categories/{catB.Id}");
+        var delResponse = await _clientPfA.DeleteAsync($"/api/v1/categories/{catB.Id}");
         Assert.Equal(HttpStatusCode.NotFound, delResponse.StatusCode);
 
         // 6. Verify Cat-B persists untouched
@@ -206,17 +206,17 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_CrossTenantAssociationAttempts_When_PfAAttemptsToLinkOrUnlinkPfBAthletesOrCategories_Then_OperationRejectedWith404()
     {
         // 1. Setup PF-A assets
-        var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club A", null));
+        var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club A", null));
         var orgA = await orgAResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
+        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
         var catA = await catAResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Atleta", "A", "a@test.com", "111", false));
         var athleteA = await athleteAResponse.Content.ReadFromJsonAsync<AthleteDto>();
 
         // 2. Setup PF-B assets
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club B", null));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
+        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Atleta", "B", "b@test.com", "222", false));
         var athleteB = await athleteBResponse.Content.ReadFromJsonAsync<AthleteDto>();
@@ -265,7 +265,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         """;
 
         var content = new StringContent(jsonWithForeignPfId, Encoding.UTF8, "application/json");
-        var response = await _clientPfA.PostAsync("/api/organizations", content);
+        var response = await _clientPfA.PostAsync("/api/v1/organizations", content);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var createdOrg = await response.Content.ReadFromJsonAsync<OrganizationDto>();
@@ -285,25 +285,25 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
     public async Task Given_CrossTenantDataInDatabase_When_QueryingWithJoinsAndIncludes_Then_NoDataLeakedAcrossTenants()
     {
         // 1. Setup PF-A assets
-        var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club A", null));
+        var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club A", null));
         var orgA = await orgAResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
+        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
         var catA = await catAResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var aAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("AtletaA", "Test", "a@test.com", "111", false));
         var aA = await aAResponse.Content.ReadFromJsonAsync<AthleteDto>();
         await _clientPfA.PostAsync($"/api/v1/athletes/{aA!.Id}/categories/{catA!.Id}", null);
 
         // 2. Setup PF-B assets in same shared database
-        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest("Club B", null));
+        var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
+        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var aBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("AtletaB", "Test", "b@test.com", "222", false));
         var aB = await aBResponse.Content.ReadFromJsonAsync<AthleteDto>();
         await _clientPfB.PostAsync($"/api/v1/athletes/{aB!.Id}/categories/{catB!.Id}", null);
 
         // 3. Query athletes by category with joins (PF-A)
-        var athletesInCatA = await _clientPfA.GetFromJsonAsync<List<AthleteDto>>($"/api/categories/{catA.Id}/athletes");
+        var athletesInCatA = await _clientPfA.GetFromJsonAsync<List<AthleteDto>>($"/api/v1/categories/{catA.Id}/athletes");
         Assert.NotNull(athletesInCatA);
         Assert.Single(athletesInCatA);
         Assert.Equal(aA.Id, athletesInCatA[0].Id);
