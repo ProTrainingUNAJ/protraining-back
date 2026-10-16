@@ -20,7 +20,6 @@ public class TrainingPlanUseCasesTests
     [Fact]
     public async Task CreatePlan_DadoPlanConSemanaYSesiones_CuandoSeCrea_EntoncesRetornaArbolCompleto()
     {
-        // ARRANGE: Criterio para cerrarla: DADO un PF CUANDO hace POST /api/v1/training-plans con 1 semana, 2 sesiones y sus ejercicios ENTONCES responde 201, y el GET del plan devuelve el mismo árbol con sus ids.
         var exerciseId = Guid.NewGuid();
         _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -127,36 +126,82 @@ public class TrainingPlanUseCasesTests
     }
 
     [Fact]
-    public async Task UpdatePlan_DadoPlanExistente_DeberiaActualizarArbolCompleto()
+    public async Task UpdatePlan_DadoPlanExistente_DeberiaReemplazarArbolCompletoYGetDevolverArbolNuevo()
     {
+        // ARRANGE: Crear plan inicial con 1 semana, 2 sesiones y ejercicios
         var planId = Guid.NewGuid();
-        var existingPlan = TrainingPlan.Create("Plan Viejo", "Objetivo Viejo");
+        var existingPlan = TrainingPlan.Create("Fuerza base", "Pretemporada");
+        var initialWeek = TrainingWeek.Create(1, planId);
+        var initialSession1 = TrainingSession.Create(initialWeek.Id, "Miércoles", 1, DayOfWeek.Wednesday, "Nota inicial");
+        initialSession1.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 80m, initialSession1.Id, Guid.NewGuid()));
+        var initialSession2 = TrainingSession.Create(initialWeek.Id, "Viernes", 2, DayOfWeek.Friday);
+        initialSession2.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 8, 70m, initialSession2.Id, Guid.NewGuid()));
+        initialWeek.AddSession(initialSession1);
+        initialWeek.AddSession(initialSession2);
+        existingPlan.AddWeek(initialWeek);
+
         _planRepoMock.Setup(r => r.GetWithDetailsByIdAsync(planId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingPlan);
         _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var request = new SaveTrainingPlanRequest(
-            "Plan Nuevo",
-            "Objetivo Nuevo",
+        // Nuevo árbol para reemplazar el anterior (usando las mismas semanas y órdenes de sesión para verificar el reemplazo sin colisión)
+        var newExerciseId = Guid.NewGuid();
+        var updateRequest = new SaveTrainingPlanRequest(
+            "Fuerza Hipertrofia",
+            "Fase 2",
             new List<TrainingWeekRequest>
             {
-                new(1, new List<TrainingSessionRequest>
-                {
-                    new("Lunes", 1, DayOfWeek.Monday, "Nota", null)
-                })
+                new(
+                    1,
+                    new List<TrainingSessionRequest>
+                    {
+                        new(
+                            "Lunes",
+                            1,
+                            DayOfWeek.Monday,
+                            "Controlar tempo",
+                            new List<PrescribedExerciseRequest>
+                            {
+                                new(newExerciseId, 1, 4, 10, 75m)
+                            }
+                        )
+                    }
+                )
             }
         );
 
-        var handler = new UpdateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
+        var updateHandler = new UpdateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
+        var getHandler = new GetTrainingPlanQueryHandler(_planRepoMock.Object);
 
-        var result = await handler.Handle(new UpdateTrainingPlanCommand(planId, request));
+        // ACT: Ejecutar PUT (Update) y luego GET
+        var updatedResult = await updateHandler.Handle(new UpdateTrainingPlanCommand(planId, updateRequest));
+        var getResult = await getHandler.Handle(new GetTrainingPlanQuery(planId));
 
-        Assert.Equal("Plan Nuevo", result.Name);
-        Assert.Equal("Objetivo Nuevo", result.Objective);
-        Assert.Single(result.Weeks);
-        Assert.Equal("Lunes", result.Weeks[0].Sessions[0].Name);
+        // ASSERT: Verificar que se guardó y que el GET refleja exactamente el árbol nuevo
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        Assert.Equal("Fuerza Hipertrofia", updatedResult.Name);
+        Assert.Equal("Fase 2", updatedResult.Objective);
+        Assert.Single(updatedResult.Weeks);
+        Assert.Equal(1, updatedResult.Weeks[0].WeekNumber);
+        Assert.Single(updatedResult.Weeks[0].Sessions);
+        Assert.Equal("Lunes", updatedResult.Weeks[0].Sessions[0].Name);
+        Assert.Equal(1, updatedResult.Weeks[0].Sessions[0].Order);
+        Assert.Equal(DayOfWeek.Monday, updatedResult.Weeks[0].Sessions[0].DayOfWeek);
+        Assert.Equal("Controlar tempo", updatedResult.Weeks[0].Sessions[0].CoachNotes);
+        Assert.Single(updatedResult.Weeks[0].Sessions[0].Exercises);
+        Assert.Equal(10, updatedResult.Weeks[0].Sessions[0].Exercises[0].Reps);
+
+        Assert.Equal("Fuerza Hipertrofia", getResult.Name);
+        Assert.Equal("Fase 2", getResult.Objective);
+        Assert.Single(getResult.Weeks);
+        Assert.Equal(1, getResult.Weeks[0].WeekNumber);
+        Assert.Single(getResult.Weeks[0].Sessions);
+        Assert.Equal("Lunes", getResult.Weeks[0].Sessions[0].Name);
+        Assert.Equal(1, getResult.Weeks[0].Sessions[0].Order);
+        Assert.Equal(DayOfWeek.Monday, getResult.Weeks[0].Sessions[0].DayOfWeek);
+        Assert.Equal("Controlar tempo", getResult.Weeks[0].Sessions[0].CoachNotes);
     }
 
     [Fact]
