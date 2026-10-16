@@ -10,7 +10,10 @@ namespace API.Controllers.CheckIns;
 public sealed class CheckInsController(SubmitCheckInCommandHandler handler) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<CheckInDto>> Submit(
+    [ProducesResponseType(typeof(CheckInResponseDto), 200)]
+    [ProducesResponseType(typeof(CheckInResponseDto), 201)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
+    public async Task<ActionResult<CheckInResponseDto>> Submit(
         Guid athleteId,
         SubmitCheckInRequest request,
         CancellationToken cancellationToken)
@@ -26,11 +29,12 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler) : Co
                 request.StressLevel,
                 request.IsSick,
                 request.EffortRate,
-                request.PainZones),
+                request.PainZones,
+                request.HasActiveInjury),
             cancellationToken);
 
         return result.Created
-            ? Created($"/api/v1/athletes/{athleteId}/check-in", result.CheckIn)
-            : Ok(result.CheckIn);
+            ? Created($"/api/v1/athletes/{athleteId}/check-in", result.Response)
+            : Ok(result.Response);
     }
 }

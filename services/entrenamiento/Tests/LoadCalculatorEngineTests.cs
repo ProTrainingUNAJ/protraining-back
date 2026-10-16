@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Domain.Services;
 using Xunit;
 
@@ -48,6 +48,15 @@ public class LoadCalculatorEngineTests
     [Theory]
     [InlineData(73.4, 72.5)]
     [InlineData(86.8, 87.5)]
+    [InlineData(80.0, 80.0)]
+    [InlineData(81.24, 80.0)]
+    [InlineData(81.25, 82.5)]
+    [InlineData(82.5, 82.5)]
+    [InlineData(83.74, 82.5)]
+    [InlineData(83.75, 85.0)]
+    [InlineData(0.0, 0.0)]
+    [InlineData(1.24, 0.0)]
+    [InlineData(1.25, 2.5)]
     public void RoundToNearestPlate_DeberiaRedondearASaltosDeDiscosDeDosPuntoCincoKg(decimal theoreticalWeight, decimal expectedWeight)
     {
         var result = _engine.RoundToNearestPlate(theoreticalWeight);

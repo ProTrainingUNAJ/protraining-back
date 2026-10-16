@@ -10,5 +10,6 @@ public sealed record SubmitCheckInCommand(
     int StressLevel,
     bool IsSick,
     int? EffortRate,
-    string? PainZones);
+    string? PainZones,
+    bool HasActiveInjury);
     

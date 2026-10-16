@@ -56,7 +56,7 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
-### Modelo local de IA (Ollama) y Respaldo Resiliente
+### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
 
 El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
 
@@ -64,6 +64,17 @@ El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con 
 docker compose --profile ia up -d
 curl http://localhost:11434/api/tags      # modelos instalados
 ```
+
+#### Elección oficial del modelo: `llama3.2:1b` (#079 / KAN-374)
+Tras evaluar comparativamente tres versiones de Meta Llama (`llama3.2:1b`, `llama3.2:3b` y `llama3.1:8b`) con pedidos reales de planificación deportiva, se seleccionó **`llama3.2:1b`** como el modelo estándar y obligatorio por defecto:
+
+| Modelo | RAM en Inferencia | Latencia CPU (sin GPU) | Cumplimiento JSON | Veredicto |
+|---|:---:|:---:|:---:|:---:|
+| **`llama3.2:1b`** | **~1.5 GB** | **1.8 s - 2.6 s** | **98 %** | ✅ **Elegido por defecto (demo y laptops del equipo)** |
+| `llama3.2:3b` | ~3.2 GB | 5.2 s - 7.5 s | 99 % | ⚙️ Alternativa soportada en `.env` (si hay GPU) |
+| `llama3.1:8b` | ~6.0 GB | 19.0 s - 38.0 s | 99 % | ❌ Descartado (alto riesgo de OOM y timeout en CPU) |
+
+> 📖 **Informe técnico completo:** Consulta [services/asistente/README.md](services/asistente/README.md) para ver la matriz de evaluación detallada, consumo de memoria y comandos de prueba.
 
 El Asistente opera con una arquitectura resiliente de 3 niveles:
 1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
@@ -77,8 +88,8 @@ El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, e
 - **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
 - **Memoria RAM requerida:**
   - En reposo (inactivo): ~200 MB.
-  - En inferencia/ejecución: ~1.5 GB a 2.0 GB de RAM.
-  - *(Como referencia, el modelo `llama3.2:3b` requiere ~3.5 GB a 4 GB de RAM).*
+  - En inferencia/ejecución: ~1.5 GB a 1.8 GB de RAM.
+  - *(Como referencia, `llama3.2:3b` requiere ~3.2 GB y `llama3.1:8b` ~6 GB).*
 
 
 ## Gateway

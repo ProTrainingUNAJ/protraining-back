@@ -109,6 +109,12 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("fatigue_level");
 
+                    b.Property<bool>("HasActiveInjury")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_active_injury");
+
                     b.Property<bool>("IsSick")
                         .HasColumnType("boolean")
                         .HasColumnName("is_sick");

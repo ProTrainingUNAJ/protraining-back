@@ -81,6 +81,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ICategoryRepository, CategoryRepository>();
                 services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+                services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 

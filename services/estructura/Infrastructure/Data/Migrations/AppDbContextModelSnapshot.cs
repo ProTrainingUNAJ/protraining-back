@@ -245,6 +245,123 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("digital_consents", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.MedicalRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("HasPhysicalFitnessCertificate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_physical_fitness_certificate");
+
+                    b.Property<string>("MedicalHistory")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("medical_history");
+
+                    b.Property<string>("Pathologies")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("pathologies");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<DateOnly?>("PhysicalFitnessExpiresAt")
+                        .HasColumnType("date")
+                        .HasColumnName("physical_fitness_expires_at");
+
+                    b.Property<DateOnly?>("PhysicalFitnessIssuedAt")
+                        .HasColumnType("date")
+                        .HasColumnName("physical_fitness_issued_at");
+
+                    b.Property<string>("PhysicalFitnessNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("physical_fitness_notes");
+
+                    b.Property<string>("Surgeries")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("surgeries");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AthleteId")
+                        .IsUnique();
+
+                    b.HasIndex("PfId");
+
+                    b.ToTable("medical_records", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.MedicalRecordAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccessedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accessed_by_user_id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("justification");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AthleteId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "CreatedAt");
+
+                    b.ToTable("medical_record_audit_logs", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Organization", b =>
                 {
                     b.Property<Guid>("Id")
@@ -367,9 +484,20 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.Entities.MedicalRecord", b =>
+                {
+                    b.HasOne("Domain.Entities.Athlete", null)
+                        .WithOne("MedicalRecord")
+                        .HasForeignKey("Domain.Entities.MedicalRecord", "AthleteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.Entities.Athlete", b =>
                 {
                     b.Navigation("DigitalConsent");
+
+                    b.Navigation("MedicalRecord");
                 });
 #pragma warning restore 612, 618
         }

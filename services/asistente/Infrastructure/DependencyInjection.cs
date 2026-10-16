@@ -48,13 +48,15 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IAiAuditService, AiAuditService>();
 
+        services.AddMemoryCache();
+        services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));
         services.Configure<OllamaOptions>(configuration.GetSection(OllamaOptions.SectionName));
         services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
 
+        services.AddSingleton<IAiResponseCache, Infrastructure.Services.Ai.Cache.AiResponseMemoryCache>();
         services.AddHttpClient<OllamaClient>();
         services.AddHttpClient<GeminiClient>();
         services.AddScoped<RuleBasedAiClient>();
-        services.AddSingleton<IExerciseCatalogService, Infrastructure.Services.Catalog.ExerciseCatalogService>();
         services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
         services.AddScoped<IAiService, ResilientAiService>();
 

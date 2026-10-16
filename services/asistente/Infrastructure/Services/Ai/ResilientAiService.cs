@@ -20,6 +20,7 @@ public sealed class ResilientAiService : IAiService
 {
     private readonly IReadOnlyList<IAiClient> _providers;
     private readonly IExerciseSemanticValidator? _semanticValidator;
+    private readonly IAiResponseCache? _responseCache;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -27,7 +28,7 @@ public sealed class ResilientAiService : IAiService
         GeminiClient geminiClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, logger)
     {
     }
 
@@ -37,9 +38,30 @@ public sealed class ResilientAiService : IAiService
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, logger)
     {
-        _providers = [ollamaClient, geminiClient, ruleBasedClient];
+    }
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ILogger<ResilientAiService> logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ILogger<ResilientAiService> logger)
+    {
+        _providers = providers;
         _semanticValidator = semanticValidator;
+        _responseCache = responseCache;
         _logger = logger;
     }
 
@@ -48,6 +70,28 @@ public sealed class ResilientAiService : IAiService
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = Stopwatch.StartNew();
+
+        // 1. Verificación de caché en memoria de IA por hash de las instrucciones (KAN-368)
+        string? promptHash = null;
+        if (_responseCache != null)
+        {
+            promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis);
+            if (_responseCache.TryGet(promptHash, out var cachedResponse) && cachedResponse != null)
+            {
+                totalStopwatch.Stop();
+                _logger.LogInformation(
+                    "Caché HIT: Respuesta de IA recuperada desde memoria para el objetivo '{Goal}' (Hash: {Hash}) en {ElapsedMs} ms. Evitando llamadas a proveedores externos.",
+                    request.Goal,
+                    promptHash,
+                    totalStopwatch.ElapsedMilliseconds);
+
+                return cachedResponse with
+                {
+                    AthleteId = request.AthleteId
+                };
+            }
+        }
+
         _logger.LogInformation("Iniciando cadena de proveedores de IA para el atleta '{AthleteId}'.", request.AthleteId);
 
         for (var i = 0; i < _providers.Count; i++)
@@ -102,6 +146,12 @@ public sealed class ResilientAiService : IAiService
                     }
 
                     response = validationResult.SanitizedRoutine;
+                }
+
+                // 2. Almacenar la propuesta validada en caché en memoria (KAN-368)
+                if (_responseCache != null && !string.IsNullOrEmpty(promptHash))
+                {
+                    _responseCache.Set(promptHash, response);
                 }
 
                 totalStopwatch.Stop();

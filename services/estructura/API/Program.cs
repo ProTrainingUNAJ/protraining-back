@@ -32,6 +32,9 @@ using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Application.UseCases.Export.ExportStructureCsv;
+using API.BackgroundServices;
+using Application.UseCases.Reminders.SendDailyWellnessReminders;
+
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -91,6 +94,10 @@ builder.Services.AddScoped<UpdateCategoryCommandHandler>();
 builder.Services.AddScoped<DeleteCategoryCommandHandler>();
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
+builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
+builder.Services.AddScoped<SendDailyWellnessRemindersCommandHandler>();
+builder.Services.AddHostedService<WellnessReminderWorker>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");

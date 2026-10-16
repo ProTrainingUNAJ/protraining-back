@@ -1,80 +1,136 @@
 namespace Infrastructure.Services.Catalog;
 
+using System.Collections.Concurrent;
 using System.Globalization;
-using System.Security.Cryptography;
+using System.Net;
+using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json;
+using System.Text.Json.Serialization;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Servicio de catálogo de ejercicios para el asistente.
-/// Mantiene en memoria el catálogo de ejercicios oficiales del club con identificadores determinísticos estables,
-/// permitiendo verificación instantánea por ID y resolución semántica por nombre y alias comunes.
+/// Cliente HTTP hacia el microservicio de Entrenamiento para consultar y verificar
+/// los ejercicios en la biblioteca oficial. Reenvía la autorización del preparador físico
+/// a través de ForwardAuthorizationHandler y no depende de lecturas locales de disco ni listas estáticas.
 /// </summary>
 public sealed class ExerciseCatalogService : IExerciseCatalogService
 {
-    private readonly Dictionary<Guid, CatalogExerciseDto> _byId = [];
-    private readonly Dictionary<string, CatalogExerciseDto> _byNormalizedName = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<CatalogExerciseDto> _allExercises = [];
+    public const string ExercisesPath = "api/v1/exercises";
+
+    private readonly HttpClient _httpClient;
     private readonly ILogger<ExerciseCatalogService> _logger;
+    private readonly ConcurrentDictionary<Guid, CatalogExerciseDto> _cacheById = new();
+    private readonly ConcurrentDictionary<string, CatalogExerciseDto> _cacheByName = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "de", "con", "en", "el", "la", "los", "las", "un", "una", "unos", "unas", "para", "por", "al", "del", "y", "o", "no"
     };
 
-    public ExerciseCatalogService(ILogger<ExerciseCatalogService> logger)
+    public ExerciseCatalogService(HttpClient httpClient, ILogger<ExerciseCatalogService> logger)
     {
+        _httpClient = httpClient;
         _logger = logger;
-        InitializeStandardCatalog();
-        TryLoadFromFileSystem();
     }
 
-    public Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
+    public async Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
     {
-        _byId.TryGetValue(exerciseId, out var item);
-        return Task.FromResult(item);
+        if (exerciseId == Guid.Empty)
+        {
+            return null;
+        }
+
+        // 1. Verificación en caché local de respuestas previas
+        if (_cacheById.TryGetValue(exerciseId, out var cached))
+        {
+            return cached;
+        }
+
+        // 2. Si la caché local está vacía, realizamos una carga inicial del catálogo
+        if (_cacheById.IsEmpty)
+        {
+            await GetAllAsync(cancellationToken);
+            if (_cacheById.TryGetValue(exerciseId, out cached))
+            {
+                return cached;
+            }
+        }
+
+        // 3. Consulta HTTP directa al microservicio de Entrenamiento
+        try
+        {
+            using var response = await _httpClient.GetAsync($"{ExercisesPath}/{exerciseId}", cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                var item = await response.Content.ReadFromJsonAsync<RemoteExerciseDto>(cancellationToken: cancellationToken);
+                if (item != null)
+                {
+                    var dto = new CatalogExerciseDto(item.Id, item.Name, item.MuscleGroup, item.Equipment ?? string.Empty);
+                    _cacheById[item.Id] = dto;
+                    _cacheByName[NormalizeText(item.Name)] = dto;
+                    return dto;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "No se pudo obtener el ejercicio {Id} desde el endpoint individual de Entrenamiento.", exerciseId);
+        }
+
+        return null;
     }
 
-    public Task<CatalogExerciseDto?> FindByNameAsync(string exerciseName, CancellationToken cancellationToken = default)
+    public async Task<CatalogExerciseDto?> FindByNameAsync(string exerciseName, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(exerciseName))
         {
-            return Task.FromResult<CatalogExerciseDto?>(null);
+            return null;
         }
 
         var normalized = NormalizeText(exerciseName);
 
-        // 1. Coincidencia exacta por nombre normalizado
-        if (_byNormalizedName.TryGetValue(normalized, out var exactMatch))
+        // 1. Coincidencia en caché local
+        if (_cacheByName.TryGetValue(normalized, out var cached))
         {
-            return Task.FromResult<CatalogExerciseDto?>(exactMatch);
+            return cached;
         }
 
-        // 2. Coincidencia eliminando contenido entre paréntesis (ej. "(Back Squat)", "(TRX)")
         var withoutParentheses = RemoveParentheses(normalized);
-        if (_byNormalizedName.TryGetValue(withoutParentheses, out var cleanMatch))
+        if (_cacheByName.TryGetValue(withoutParentheses, out var cleanCached))
         {
-            return Task.FromResult<CatalogExerciseDto?>(cleanMatch);
+            return cleanCached;
         }
 
-        // 3. Coincidencia por alias
-        foreach (var item in _allExercises)
+        // 2. Consulta HTTP de búsqueda hacia Entrenamiento
+        var candidates = await SearchAsync(withoutParentheses, cancellationToken);
+        if (candidates.Count == 0 && withoutParentheses != normalized)
         {
-            if (item.Aliases == null) continue;
-            foreach (var alias in item.Aliases)
-            {
-                var normAlias = NormalizeText(alias);
-                if (normAlias == normalized || normAlias == withoutParentheses)
-                {
-                    return Task.FromResult<CatalogExerciseDto?>(item);
-                }
-            }
+            candidates = await SearchAsync(exerciseName, cancellationToken);
         }
 
-        // 4. Coincidencia por conjunto de términos significativos (excluyendo conectores y palabras vacías)
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        // 3. Coincidencia exacta por nombre normalizado
+        var exactMatch = candidates.FirstOrDefault(c =>
+            NormalizeText(c.Name) == normalized ||
+            NormalizeText(c.Name) == withoutParentheses ||
+            RemoveParentheses(NormalizeText(c.Name)) == withoutParentheses);
+
+        if (exactMatch != null)
+        {
+            return exactMatch;
+        }
+
+        // 4. Coincidencia por similitud de términos clave (F1 score sobre tokens significativos)
         var searchMeaningful = withoutParentheses
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(t => !StopWords.Contains(t) && t.Length > 2)
@@ -82,15 +138,15 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
         if (searchMeaningful.Count == 0)
         {
-            return Task.FromResult<CatalogExerciseDto?>(null);
+            return candidates.FirstOrDefault();
         }
 
         CatalogExerciseDto? bestMatch = null;
         var highestScore = 0.0;
 
-        foreach (var item in _allExercises)
+        foreach (var item in candidates)
         {
-            var itemNorm = NormalizeText(item.Name);
+            var itemNorm = RemoveParentheses(NormalizeText(item.Name));
             var itemMeaningful = itemNorm
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Where(t => !StopWords.Contains(t) && t.Length > 2)
@@ -105,173 +161,75 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             var precision = (double)common / itemMeaningful.Count;
             var f1 = 2 * (precision * recall) / (precision + recall);
 
-            // Requerimos que al menos el 75% de los términos clave coincidan
-            if (recall >= 0.75 && precision >= 0.60 && f1 > highestScore)
+            if (recall >= 0.70 && f1 > highestScore)
             {
                 highestScore = f1;
                 bestMatch = item;
             }
         }
 
-        return Task.FromResult(bestMatch);
+        return bestMatch ?? candidates.FirstOrDefault();
     }
 
-    public Task<IReadOnlyList<CatalogExerciseDto>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(searchTerm))
-        {
-            return Task.FromResult<IReadOnlyList<CatalogExerciseDto>>(_allExercises);
-        }
-
-        var normalized = NormalizeText(searchTerm);
-        var results = _allExercises
-            .Where(e => NormalizeText(e.Name).Contains(normalized, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        return Task.FromResult<IReadOnlyList<CatalogExerciseDto>>(results);
-    }
-
-    public Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult<IReadOnlyList<CatalogExerciseDto>>(_allExercises);
-    }
-
-    private void AddExercise(string name, string muscleGroup, string equipment, params string[] aliases)
-    {
-        var id = GenerateDeterministicGuid(name);
-        var dto = new CatalogExerciseDto(id, name, muscleGroup, equipment, aliases);
-
-        _byId[id] = dto;
-        var normName = NormalizeText(name);
-        _byNormalizedName[normName] = dto;
-        _allExercises.Add(dto);
-    }
-
-    private void InitializeStandardCatalog()
-    {
-        // Piernas
-        AddExercise("Sentadilla trasera con barra", "Piernas", "Barra", "Sentadilla con barra", "Back Squat", "Sentadilla trasera", "Sentadilla completa con barra");
-        AddExercise("Sentadilla frontal con barra", "Piernas", "Barra", "Front Squat", "Sentadilla frontal");
-        AddExercise("Sentadilla búlgara con mancuernas", "Piernas", "Mancuernas", "Sentadilla búlgara", "Bulgarian Split Squat");
-        AddExercise("Sentadilla Goblet con mancuerna", "Piernas", "Mancuerna", "Goblet Squat", "Sentadilla Goblet");
-        AddExercise("Peso muerto rumano con barra", "Piernas", "Barra", "Peso muerto rumano", "Romanian Deadlift", "RDL");
-        AddExercise("Peso muerto convencional", "Piernas", "Barra", "Peso muerto", "Deadlift", "Peso muerto con barra");
-        AddExercise("Prensa de piernas 45°", "Piernas", "Máquina", "Prensa de piernas", "Prensa 45", "Leg Press");
-        AddExercise("Curl femoral acostado en máquina", "Piernas", "Máquina", "Curl femoral", "Hamstring Curl");
-        AddExercise("Extensiones de cuádriceps en máquina", "Piernas", "Máquina", "Sillón de cuadriceps", "Leg Extension");
-        AddExercise("Elevación de talones de pie", "Piernas", "Máquina", "Gemelos de pie", "Calf Raise");
-        AddExercise("Empuje de cadera (Hip Thrust) con barra", "Piernas", "Barra", "Hip Thrust", "Puente de glúteos con barra");
-        AddExercise("Zancadas caminando continuas", "Piernas", "Mancuernas", "Zancadas con mancuernas", "Walking Lunges", "Estocadas");
-        AddExercise("Subidas al cajón dinámicas (Step-ups)", "Piernas", "Cajón", "Step-ups", "Subidas al cajón");
-
-        // Pecho
-        AddExercise("Press de banca plano con barra", "Pecho", "Barra", "Press de banca", "Bench Press", "Press plano");
-        AddExercise("Press de banca inclinado con mancuernas", "Pecho", "Mancuernas", "Press inclinado", "Incline Dumbbell Press");
-        AddExercise("Press de banca plano con mancuernas", "Pecho", "Mancuernas", "Press con mancuernas");
-        AddExercise("Aperturas con mancuernas en banco plano", "Pecho", "Mancuernas", "Aperturas planas", "Chest Flyes");
-        AddExercise("Flexiones de brazos tradicionales", "Pecho", "Peso corporal", "Flexiones de brazos", "Push-ups", "Lagartijas");
-        AddExercise("Fondos en paralelas para pecho", "Pecho", "Paralelas", "Dips", "Fondos");
-
-        // Espalda
-        AddExercise("Remo con barra Pendlay", "Espalda", "Barra", "Remo Pendlay", "Pendlay Row");
-        AddExercise("Remo con barra inclinado", "Espalda", "Barra", "Remo con barra", "Barbell Row");
-        AddExercise("Remo unilateral con mancuerna", "Espalda", "Mancuerna", "Remo con mancuerna", "Dumbbell Row");
-        AddExercise("Remo en polea baja con agarre neutro", "Espalda", "Polea", "Remo en polea", "Seated Cable Row");
-        AddExercise("Dominadas con lastre o agarre prono", "Espalda", "Barra fija", "Dominadas", "Pull-ups");
-        AddExercise("Jalón al pecho en polea alta", "Espalda", "Polea", "Jalón al pecho", "Lat Pulldown");
-        AddExercise("Tracción facial con banda elástica (Face Pull)", "Espalda", "Banda elástica", "Face Pull");
-
-        // Hombros y Brazos
-        AddExercise("Press militar de pie con barra", "Hombros", "Barra", "Press militar", "Overhead Press", "OHP");
-        AddExercise("Elevaciones laterales con mancuernas", "Hombros", "Mancuernas", "Vuelos laterales", "Lateral Raises");
-        AddExercise("Pájaros con mancuernas", "Hombros", "Mancuernas", "Posterior con mancuernas");
-        AddExercise("Curl de bíceps con barra Z", "Brazos", "Barra", "Curl con barra", "Bicep Curl");
-        AddExercise("Extensiones de tríceps en polea alta", "Brazos", "Polea", "Tríceps en polea", "Tricep Pushdown");
-
-        // Core y Zona Media
-        AddExercise("Plancha frontal isométrica", "Core", "Peso corporal", "Plancha frontal", "Plank", "Plancha");
-        AddExercise("Plancha isométrica con sobrecarga", "Core", "Disco", "Plancha con disco");
-        AddExercise("Rueda abdominal (Ab rollouts)", "Core", "Rueda abdominal", "Ab Wheel", "Rueda abdominal");
-        AddExercise("Press Pallof con banda elástica", "Core", "Banda elástica", "Press Pallof", "Pallof Press");
-        AddExercise("Deadbug controlado con respiración diafragmática", "Core", "Peso corporal", "Deadbug", "Bicho muerto");
-
-        // Pliometría y Potencia
-        AddExercise("Saltos al cajón pliométricos (Box Jumps)", "Potencia", "Cajón", "Box Jumps", "Saltos al cajón");
-        AddExercise("Swings con pesa rusa (Kettlebell)", "Potencia", "Pesa rusa", "Kettlebell Swing", "Swings");
-        AddExercise("Cargada de potencia colgante (Hang Power Clean)", "Potencia", "Barra", "Hang Clean", "Power Clean");
-        AddExercise("Push Press con barra", "Potencia", "Barra", "Push Press");
-    }
-
-    private void TryLoadFromFileSystem()
+    public async Task<IReadOnlyList<CatalogExerciseDto>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
     {
         try
         {
-            // Intentamos localizar exercises.json en ubicaciones relativas conocidas
-            var candidates = new[]
+            var url = string.IsNullOrWhiteSpace(searchTerm)
+                ? $"{ExercisesPath}?pageSize=100"
+                : $"{ExercisesPath}?search={Uri.EscapeDataString(searchTerm)}&pageSize=50";
+
+            using var response = await _httpClient.GetAsync(url, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                Path.Combine(AppContext.BaseDirectory, "Data", "exercises.json"),
-                Path.Combine(Directory.GetCurrentDirectory(), "Data", "exercises.json"),
-                Path.Combine(Directory.GetCurrentDirectory(), "..", "entrenamiento", "API", "Data", "exercises.json"),
-                Path.Combine(Directory.GetCurrentDirectory(), "services", "entrenamiento", "API", "Data", "exercises.json")
-            };
-
-            foreach (var path in candidates)
-            {
-                if (File.Exists(path))
-                {
-                    var jsonContent = File.ReadAllText(path);
-                    using var doc = JsonDocument.Parse(jsonContent);
-
-                    var countAdded = 0;
-                    foreach (var elem in doc.RootElement.EnumerateArray())
-                    {
-                        if (elem.TryGetProperty("name", out var nameProp))
-                        {
-                            var name = nameProp.GetString();
-                            if (!string.IsNullOrWhiteSpace(name))
-                            {
-                                var norm = NormalizeText(name);
-                                if (!_byNormalizedName.ContainsKey(norm))
-                                {
-                                    var muscle = elem.TryGetProperty("primaryMuscles", out var pm) && pm.GetArrayLength() > 0
-                                        ? pm[0].GetString() ?? "General"
-                                        : "General";
-                                    var equipment = elem.TryGetProperty("equipment", out var eq)
-                                        ? eq.GetString() ?? "General"
-                                        : "General";
-
-                                    AddExercise(name, muscle, equipment);
-                                    countAdded++;
-                                }
-                            }
-                        }
-                    }
-
-                    _logger.LogInformation("Cargados {Count} ejercicios adicionales desde '{Path}'. Total en catálogo: {Total}.", countAdded, path, _allExercises.Count);
-                    break;
-                }
+                return [];
             }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Entrenamiento respondió {Status} al buscar ejercicios por término '{Search}'.", (int)response.StatusCode, searchTerm);
+                return [];
+            }
+
+            var items = await response.Content.ReadFromJsonAsync<List<RemoteExerciseDto>>(cancellationToken: cancellationToken);
+            if (items == null || items.Count == 0)
+            {
+                return [];
+            }
+
+            var result = new List<CatalogExerciseDto>(items.Count);
+            foreach (var item in items)
+            {
+                var dto = new CatalogExerciseDto(item.Id, item.Name, item.MuscleGroup, item.Equipment ?? string.Empty);
+                _cacheById[item.Id] = dto;
+                _cacheByName[NormalizeText(item.Name)] = dto;
+                result.Add(dto);
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "No se cargaron ejercicios externos adicionales desde el sistema de archivos.");
+            _logger.LogWarning(ex, "Error al consultar los ejercicios en el microservicio de Entrenamiento.");
+            return [];
         }
     }
 
-    public static Guid GenerateDeterministicGuid(string input)
+    public async Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeText(input);
-        var bytes = Encoding.UTF8.GetBytes(normalized);
-        var hash = MD5.HashData(bytes);
-        return new Guid(hash);
+        return await SearchAsync(string.Empty, cancellationToken);
     }
 
-    public static string NormalizeText(string text)
+    private static string NormalizeText(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
         var normalizedString = text.Normalize(NormalizationForm.FormD);
-        var stringBuilder = new StringBuilder();
+        var stringBuilder = new StringBuilder(normalizedString.Length);
 
         foreach (var c in normalizedString)
         {
@@ -282,7 +240,8 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             }
         }
 
-        return stringBuilder.ToString()
+        return stringBuilder
+            .ToString()
             .Normalize(NormalizationForm.FormC)
             .Trim()
             .ToLowerInvariant();
@@ -290,13 +249,32 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
     private static string RemoveParentheses(string text)
     {
-        var open = text.IndexOf('(');
-        var close = text.IndexOf(')');
-        if (open >= 0 && close > open)
+        var sb = new StringBuilder();
+        var inside = false;
+        foreach (var ch in text)
         {
-            var cleaned = text.Remove(open, close - open + 1);
-            return cleaned.Trim();
+            if (ch == '(') inside = true;
+            else if (ch == ')') inside = false;
+            else if (!inside) sb.Append(ch);
         }
-        return text.Trim();
+        return sb.ToString().Trim();
+    }
+
+    private sealed class RemoteExerciseDto
+    {
+        [JsonPropertyName("id")]
+        public Guid Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("muscleGroup")]
+        public string MuscleGroup { get; set; } = string.Empty;
+
+        [JsonPropertyName("equipment")]
+        public string? Equipment { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
     }
 }

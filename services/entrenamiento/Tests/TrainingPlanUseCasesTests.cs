@@ -60,10 +60,8 @@ public class TrainingPlanUseCasesTests
 
         var handler = new CreateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
 
-        // ACT
         var result = await handler.Handle(new CreateTrainingPlanCommand(request));
 
-        // ASSERT
         Assert.NotEqual(Guid.Empty, result.Id);
         Assert.Equal("Fuerza base", result.Name);
         Assert.Equal("Pretemporada", result.Objective);

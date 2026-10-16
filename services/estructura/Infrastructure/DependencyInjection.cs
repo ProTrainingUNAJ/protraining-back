@@ -46,8 +46,15 @@ public static class DependencyInjection
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
         services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+        services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+
+        // servicios para recordatorios de wellness (KAN-369)
+        services.AddScoped<IPushNotificationService, PushNotificationService>();
+        services.AddSingleton<IWellnessReminderTracker, InMemoryWellnessReminderTracker>();
+        services.AddScoped<ISessionScheduleService, SessionScheduleService>();
+        services.AddScoped<IWellnessCheckInService, WellnessCheckInService>();
 
         return services;
     }

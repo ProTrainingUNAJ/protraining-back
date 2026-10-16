@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.2.0
+  version: 1.3.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -24,6 +24,8 @@ tags:
     description: Comparativa anónima de métricas del atleta contra el promedio de su categoría
   - name: Injuries
     description: Registro clínico de lesiones y transiciones controladas de estado
+  - name: Fitness Tests
+    description: Catálogo de tests físicos estandarizados por capacidad motora para armar baterías de evaluación
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
 
@@ -323,6 +325,38 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/fitness-tests:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Catálogo de tests físicos por capacidad motora
+      description: >
+        Devuelve el catálogo de tests de evaluación física activos (los tests desactivados
+        no se exponen). Con el parámetro opcional motorCapacity filtra por tipo de capacidad
+        motora (ej. Power devuelve Salto Vertical CMJ y Salto Abalakov); sin parámetro
+        devuelve todos los tests activos.
+      operationId: listFitnessTests
+      parameters:
+        - name: motorCapacity
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MotorCapacity'
+          description: Capacidad motora por la cual filtrar el catálogo.
+      responses:
+        "200":
+          description: Catálogo de tests obtenido (lista vacía si el filtro no tiene resultados).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FitnessTest'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
   /api/health:
     get:
       tags:
@@ -427,6 +461,11 @@ components:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          default: false
+          description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
+          example: false
 
     CheckInResponse:
       type: object
@@ -513,6 +552,9 @@ components:
           type: string
           nullable: true
           example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          example: false
 
     DailyLoadRequest:
       type: object
@@ -696,6 +738,53 @@ components:
           type: string
           format: date-time
           example: "2026-10-10T09:30:00Z"
+
+    FitnessTest:
+      type: object
+      required:
+        - id
+        - name
+        - motorCapacity
+        - measurementUnit
+        - difficultyLevel
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        name:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          $ref: '#/components/schemas/MotorCapacity'
+        measurementUnit:
+          type: string
+          description: Unidad de medida del resultado del test.
+          example: "cm"
+        difficultyLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Nivel de dificultad del test (1 a 5).
+          example: 3
+        active:
+          type: boolean
+          description: Estado activo del test. El catálogo solo expone tests activos.
+          example: true
+
+    MotorCapacity:
+      type: string
+      description: Capacidades motoras estándar del catálogo de tests físicos.
+      enum:
+        - Strength
+        - Velocity
+        - Endurance
+        - Power
+        - Flexibility
+        - Agility
+        - Coordination
+      example: "Power"
 
     ProblemDetails:
       type: object
