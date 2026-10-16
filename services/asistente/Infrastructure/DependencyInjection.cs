@@ -54,7 +54,6 @@ public static class DependencyInjection
         services.AddHttpClient<OllamaClient>();
         services.AddHttpClient<GeminiClient>();
         services.AddScoped<RuleBasedAiClient>();
-        services.AddSingleton<IExerciseCatalogService, Infrastructure.Services.Catalog.ExerciseCatalogService>();
         services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
         services.AddScoped<IAiService, ResilientAiService>();
 

@@ -1,26 +1,54 @@
 namespace Asistente.Tests;
 
+using System.Net;
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using API.Services;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Catalog;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Xunit;
 
 /// <summary>
 /// Pruebas unitarias para el validador semántico de ejercicios (KAN-344):
-/// Verifica la existencia de ejercicios e identificadores contra el catálogo oficial,
-/// la corrección automática de identificadores inexistentes, la inclusión de ejercicios
-/// de referencia (Ajuste N2) y la conmutación a generación determinística segura.
+/// Verifica la existencia de ejercicios e identificadores contra la biblioteca oficial de Entrenamiento,
+/// la corrección automática de identificadores inexistentes, la preservación de variantes no catalogadas
+/// como referencia (Ajuste N2) y la conmutación a generación determinística segura.
 /// </summary>
 public sealed class ExerciseSemanticValidatorTests
 {
+    private static readonly Guid SentadillaId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid PressBancaId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid PesoMuertoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid PrensaPiernasId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid SentadillaBarraId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid RemoBarraId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid PlanchaId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+
+    private static readonly List<TestExercise> SeedExercises =
+    [
+        new(SentadillaId, "Sentadilla trasera con barra", "Piernas", "Barra"),
+        new(PressBancaId, "Press de banca plano con barra", "Pectorales", "Barra"),
+        new(PesoMuertoId, "Peso muerto convencional", "Espalda", "Barra"),
+        new(PrensaPiernasId, "Prensa de piernas 45°", "Piernas", "Máquina"),
+        new(SentadillaBarraId, "Sentadilla con barra", "Piernas", "Barra"),
+        new(RemoBarraId, "Remo con barra", "Espalda", "Barra"),
+        new(PlanchaId, "Plancha", "Core", "Ninguno")
+    ];
+
     private readonly ExerciseCatalogService _catalogService;
     private readonly ExerciseSemanticValidator _validator;
 
     public ExerciseSemanticValidatorTests()
     {
-        _catalogService = new ExerciseCatalogService(NullLogger<ExerciseCatalogService>.Instance);
+        var handler = new FakeTrainingHandler(SeedExercises);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
+        _catalogService = new ExerciseCatalogService(httpClient, NullLogger<ExerciseCatalogService>.Instance);
         _validator = new ExerciseSemanticValidator(_catalogService);
     }
 
@@ -65,9 +93,7 @@ public sealed class ExerciseSemanticValidatorTests
         var sanitizedExercise = Assert.Single(result.SanitizedRoutine.Exercises);
         Assert.NotNull(sanitizedExercise.ExerciseId);
         Assert.NotEqual(uncatalogedId, sanitizedExercise.ExerciseId);
-
-        var expectedRealCatalogId = ExerciseCatalogService.GenerateDeterministicGuid("Sentadilla trasera con barra");
-        Assert.Equal(expectedRealCatalogId, sanitizedExercise.ExerciseId);
+        Assert.Equal(SentadillaId, sanitizedExercise.ExerciseId);
         Assert.False(sanitizedExercise.IsReference);
     }
 
@@ -103,8 +129,7 @@ public sealed class ExerciseSemanticValidatorTests
         Assert.Equal(1, result.CorrectedCount);
 
         var sanitizedExercise = Assert.Single(result.SanitizedRoutine.Exercises);
-        var expectedRealCatalogId = ExerciseCatalogService.GenerateDeterministicGuid("Press de banca plano con barra");
-        Assert.Equal(expectedRealCatalogId, sanitizedExercise.ExerciseId);
+        Assert.Equal(PressBancaId, sanitizedExercise.ExerciseId);
         Assert.False(sanitizedExercise.IsReference);
     }
 
@@ -113,7 +138,7 @@ public sealed class ExerciseSemanticValidatorTests
     {
         // Arrange: El ejercicio ya cuenta con el identificador exacto registrado en el catálogo
         var athleteId = Guid.NewGuid();
-        var legitimateId = ExerciseCatalogService.GenerateDeterministicGuid("Peso muerto convencional");
+        var legitimateId = PesoMuertoId;
 
         var draft = new RoutineSuggestionResponseDto(
             AthleteId: athleteId,
@@ -338,31 +363,31 @@ public sealed class ExerciseSemanticValidatorTests
 
         var sentadilla = validation.SanitizedRoutine.Exercises[0];
         Assert.NotEqual(Guid.Parse("11111111-2222-3333-4444-555555555555"), sentadilla.ExerciseId);
-        Assert.NotNull(sentadilla.ExerciseId);
+        Assert.Equal(SentadillaId, sentadilla.ExerciseId);
         Assert.False(sentadilla.IsReference);
 
         var prensa = validation.SanitizedRoutine.Exercises[1];
-        Assert.NotNull(prensa.ExerciseId);
+        Assert.Equal(PrensaPiernasId, prensa.ExerciseId);
         Assert.False(prensa.IsReference);
     }
 
     [Fact]
-    public void Given_Deterministic_Rule_Engine_When_Generating_Proposal_Then_All_Exercises_Contain_Valid_Deterministic_Catalog_Ids()
+    public void Given_Deterministic_Rule_Engine_When_Generating_Proposal_Then_Exercises_Contain_Valid_Names_And_Null_Id_Ready_For_Catalog_Binding()
     {
         // Act: Generación mediante el motor de reglas determinísticas
         var (title, justification, exercises) = DeterministicRuleEngine.GenerateProposal(
             "Fuerza Máxima",
             ["Piernas"]);
 
-        // Assert: Todos los ejercicios generados cuentan con identificadores reproducibles del catálogo
+        // Assert: Los ejercicios generados contienen nombres estructurados y ExerciseId nulo para resolución contra el catálogo
         Assert.NotEmpty(title);
         Assert.NotEmpty(justification);
         Assert.NotEmpty(exercises);
 
         foreach (var exercise in exercises)
         {
-            Assert.NotNull(exercise.ExerciseId);
-            Assert.NotEqual(Guid.Empty, exercise.ExerciseId);
+            Assert.NotEmpty(exercise.ExerciseName);
+            Assert.Null(exercise.ExerciseId);
             Assert.False(exercise.IsReference);
         }
     }
@@ -384,7 +409,7 @@ public sealed class ExerciseSemanticValidatorTests
         var handler = new TestHttpMessageHandler(fakeAiResponseJson);
         var httpClient = new HttpClient(handler);
         var ollamaOptions = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Ollama.OllamaOptions { BaseUrl = "http://localhost:11434", Model = "llama3.2:3b", TimeoutSeconds = 10 });
-        var auditService = new Moq.Mock<Application.Interfaces.Services.IAiAuditService>().Object;
+        var auditService = new Mock<Application.Interfaces.Services.IAiAuditService>().Object;
 
         var ollamaClient = new Infrastructure.Services.Ai.Ollama.OllamaClient(httpClient, ollamaOptions, auditService, NullLogger<Infrastructure.Services.Ai.Ollama.OllamaClient>.Instance);
         var geminiOptions = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Gemini.GeminiOptions { ApiKey = "", Model = "gemini-1.5-flash" });
@@ -407,18 +432,116 @@ public sealed class ExerciseSemanticValidatorTests
         var exercise = Assert.Single(result.Exercises);
         Assert.NotNull(exercise.ExerciseId);
         Assert.NotEqual(nonCatalogedId, exercise.ExerciseId);
-        var realId = ExerciseCatalogService.GenerateDeterministicGuid("Sentadilla trasera con barra");
-        Assert.Equal(realId, exercise.ExerciseId);
+        Assert.Equal(SentadillaId, exercise.ExerciseId);
+    }
+
+    [Fact]
+    public async Task Given_RequestWithToken_When_ForwardAuthorizationHandlerSendsRequest_Then_CopiesBearerHeader()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers.Authorization = "Bearer token-preparador-fisico";
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(httpContext);
+
+        var fakeHandler = new FakeTrainingHandler(SeedExercises);
+        var forwardHandler = new ForwardAuthorizationHandler(accessor.Object) { InnerHandler = fakeHandler };
+        var invoker = new HttpMessageInvoker(forwardHandler);
+
+        // Act
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://entrenamiento:8080/api/v1/exercises");
+        await invoker.SendAsync(request, CancellationToken.None);
+
+        // Assert: Reenvía exactamente la cabecera Authorization hacia Entrenamiento
+        Assert.NotNull(fakeHandler.LastRequest);
+        Assert.Equal("Bearer token-preparador-fisico", fakeHandler.LastRequest!.Headers.Authorization?.ToString());
+    }
+
+    [Fact]
+    public async Task Given_EntrenamientoUnreachable_When_SearchAsync_Then_ReturnsEmptyListAndDoesNotThrow()
+    {
+        // Arrange
+        var throwingHandler = new ThrowingHttpMessageHandler();
+        var client = new HttpClient(throwingHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
+        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+
+        // Act
+        var result = await service.SearchAsync("Sentadilla");
+
+        // Assert: Resiliencia ante falla de red, retorna lista vacía sin romper el flujo
+        Assert.Empty(result);
+    }
+
+    private sealed class FakeTrainingHandler(List<TestExercise> exercises) : HttpMessageHandler
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+
+            // Handle GET api/v1/exercises/{id}
+            var singleMatch = Regex.Match(uri, @"api/v1/exercises/([0-9a-fA-F-]+)$");
+            if (singleMatch.Success && Guid.TryParse(singleMatch.Groups[1].Value, out var requestedId))
+            {
+                var item = exercises.FirstOrDefault(e => e.Id == requestedId);
+                if (item != null)
+                {
+                    var json = System.Text.Json.JsonSerializer.Serialize(item);
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(json, Encoding.UTF8, "application/json")
+                    });
+                }
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
+            // Handle GET api/v1/exercises?search=...
+            var query = request.RequestUri?.Query ?? string.Empty;
+            string searchTerm = string.Empty;
+            if (query.Contains("search="))
+            {
+                var part = query.Split("search=")[1].Split('&')[0];
+                searchTerm = Uri.UnescapeDataString(part);
+            }
+
+            var results = string.IsNullOrWhiteSpace(searchTerm)
+                ? exercises
+                : exercises.Where(e => e.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                       searchTerm.Contains(e.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var listJson = System.Text.Json.JsonSerializer.Serialize(results);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(listJson, Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    private sealed class ThrowingHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException("Simulated connection failure to Entrenamiento");
+        }
     }
 
     private sealed class TestHttpMessageHandler(string responseContent) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(responseContent, System.Text.Encoding.UTF8, "application/json")
+                Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
             });
         }
     }
+
+    private record TestExercise(
+        [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("muscleGroup")] string MuscleGroup,
+        [property: JsonPropertyName("equipment")] string? Equipment = null
+    );
 }

@@ -277,8 +277,7 @@ public static class DeterministicRuleEngine
 
     private static SuggestedExerciseDto CreateExercise(string name, int sets, int reps, decimal pct)
     {
-        var id = Infrastructure.Services.Catalog.ExerciseCatalogService.GenerateDeterministicGuid(name);
-        return new SuggestedExerciseDto(name, sets, reps, pct, id, IsReference: false);
+        return new SuggestedExerciseDto(name, sets, reps, pct, ExerciseId: null, IsReference: false);
     }
 
     private enum GoalCategory

@@ -226,6 +226,12 @@ public sealed class ExerciseSemanticValidator(
                 defaultExercises.Add(new SuggestedExerciseDto(item.Name, 3, 10, 70.0m, item.Id, IsReference: false));
             }
         }
+        else if (defaultExercises.Count == 0)
+        {
+            // Fallback resiliente si el servicio de catálogo no responde
+            defaultExercises.Add(new SuggestedExerciseDto("Sentadilla básica", 3, 10, 60.0m, null, IsReference: true));
+            defaultExercises.Add(new SuggestedExerciseDto("Flexiones de brazos", 3, 10, 0.0m, null, IsReference: true));
+        }
 
         return new RoutineSuggestionResponseDto(
             AthleteId: originalRequest.AthleteId,

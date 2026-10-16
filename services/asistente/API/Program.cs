@@ -47,6 +47,19 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // Dichos clientes cuentan con su propio manejo de tiempos límites configurables y su propia cadena de
 // respaldo determinístico en ResilientAiService. Aplicar el manejador estándar de la plantilla provocaría
 // 3 reintentos automáticos ante errores HTTP 429 (gastando cuota y demorando 8s) y cortaría a Ollama a los 10s.
+// Entrenamiento por HTTP, con el token del preparador físico (#049 / KAN-344).
+var trainingBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"];
+if (!Uri.TryCreate(trainingBaseUrl, UriKind.Absolute, out var trainingUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Entrenamiento__BaseUrl (URL absoluta).");
+
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IExerciseCatalogService, Infrastructure.Services.Catalog.ExerciseCatalogService>(client =>
+{
+    var uriString = trainingUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    client.Timeout = TimeSpan.FromSeconds(5);
+}).AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddHttpContextAccessor();

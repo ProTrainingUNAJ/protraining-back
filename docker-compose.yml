@@ -130,6 +130,7 @@ services:
       <<: *api-env
       Database__Host: db-asistente
       Database__Name: asistente
+      Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
       Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}
