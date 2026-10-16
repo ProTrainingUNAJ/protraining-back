@@ -20,7 +20,7 @@ public class TrainingPlanUseCasesTests
     [Fact]
     public async Task CreatePlan_DadoPlanConSemanaYSesiones_CuandoSeCrea_EntoncesRetornaArbolCompleto()
     {
-        // ARRANGE: Criterio para cerrarla: DADO un PF CUANDO hace POST /api/v1/training-plans con 1 semana, 2 sesiones y sus ejercicios ENTONCES responde 201, y el GET del plan devuelve el mismo árbol con sus ids.
+        
         var exerciseId = Guid.NewGuid();
         _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -61,10 +61,8 @@ public class TrainingPlanUseCasesTests
 
         var handler = new CreateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
 
-        // ACT
         var result = await handler.Handle(new CreateTrainingPlanCommand(request));
 
-        // ASSERT
         Assert.NotEqual(Guid.Empty, result.Id);
         Assert.Equal("Fuerza base", result.Name);
         Assert.Equal("Pretemporada", result.Objective);

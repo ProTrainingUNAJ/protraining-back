@@ -25,10 +25,6 @@ public class PlanCascadeDeleteTests
     [Fact]
     public async Task DadoPlanCon4SemanasY12Sesiones_CuandoSeEliminaElPlan_EntoncesConsultaDeSesionesRetorna0Filas()
     {
-        // ARRANGE: Criterio de aceptación:
-        // DADO un plan con 4 semanas y 12 sesiones
-        // CUANDO se ejecuta la eliminación del plan
-        // ENTONCES la consulta de sesiones asociadas en base de datos retorna 0 filas
         var pfId = Guid.NewGuid();
         var dbName = Guid.NewGuid().ToString();
 
@@ -69,7 +65,6 @@ public class PlanCascadeDeleteTests
             Assert.Equal(12, totalSessionsBefore);
         }
 
-        // ACT: CUANDO se ejecuta la eliminación del plan
         await using (var deleteContext = CreateInMemoryDbContext(pfId, dbName))
         {
             var planToDelete = await deleteContext.TrainingPlans
@@ -81,7 +76,6 @@ public class PlanCascadeDeleteTests
             await deleteContext.SaveChangesAsync();
         }
 
-        // ASSERT: ENTONCES la consulta de sesiones asociadas en base de datos retorna 0 filas
         await using (var assertContext = CreateInMemoryDbContext(pfId, dbName))
         {
             var associatedSessions = await assertContext.TrainingSessions
