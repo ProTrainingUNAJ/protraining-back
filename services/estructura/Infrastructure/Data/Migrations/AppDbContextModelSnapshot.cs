@@ -331,7 +331,7 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("purgas_pendientes", (string)null);
+                    b.ToTable("pending_purges", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.AthleteCategory", b =>

@@ -69,7 +69,7 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
         Assert.True(dbAthlete.DeletedAt <= DateTime.UtcNow);
         Assert.Equal(_pfAId, dbAthlete.PfId);
 
-        // CA-02: Pending purge registered in purgas_pendientes with minimal technical data
+        // CA-02: Pending purge registered in pending_purges with minimal technical data
         var pendingPurges = await dbContext.PendingPurges
             .IgnoreQueryFilters()
             .Where(p => p.AthleteId == athlete.Id)

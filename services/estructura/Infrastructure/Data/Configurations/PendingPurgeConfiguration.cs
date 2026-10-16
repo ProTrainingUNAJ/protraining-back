@@ -8,7 +8,7 @@ public sealed class PendingPurgeConfiguration : IEntityTypeConfiguration<Pending
 {
     public void Configure(EntityTypeBuilder<PendingPurge> builder)
     {
-        builder.ToTable("purgas_pendientes");
+        builder.ToTable("pending_purges");
 
         builder.Property(p => p.AthleteId)
             .HasColumnName("athlete_id")
