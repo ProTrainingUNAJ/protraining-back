@@ -13,7 +13,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            // The client closed the request; do not try to send another response.
+            
         }
         catch (Exception exception)
         {
@@ -23,6 +23,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             var (status, title, detail) = exception switch
             {
                 DomainException domain => (400, domain.Message, (string?)null),
+                NotFoundException notFound => (404, notFound.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
                 PersistenceUnavailableException => (503, "Base de datos no disponible.",

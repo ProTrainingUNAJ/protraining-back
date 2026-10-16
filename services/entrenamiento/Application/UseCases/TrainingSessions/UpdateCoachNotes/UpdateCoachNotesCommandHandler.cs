@@ -1,4 +1,5 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Exceptions;
+using Application.Interfaces.Persistence;
 
 namespace Application.UseCases.TrainingSessions.UpdateCoachNotes;
 
@@ -17,7 +18,7 @@ public class UpdateCoachNotesCommandHandler
     {
         var session = await _sessionRepository.GetByIdAsync(command.SessionId, cancellationToken);
         if (session == null)
-            throw new KeyNotFoundException($"No se encontró la sesión con ID '{command.SessionId}'.");
+            throw new NotFoundException($"No se encontró la sesión con ID '{command.SessionId}'.");
 
         session.UpdateCoachNotes(command.CoachNotes);
         await _sessionRepository.UpdateAsync(session, cancellationToken);

@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using Domain.Exceptions;
 
 namespace Domain.Entities;
@@ -28,6 +28,9 @@ public sealed class PrescribedExercise : BaseEntity
 
     public static PrescribedExercise Create(int order, int sets, int reps, decimal? targetPercentage, Guid trainingSessionId, Guid exerciseId)
     {
+        if (order <= 0)
+            throw new DomainException("El orden debe ser mayor a cero.");
+
         if (sets <= 0 || reps <= 0)
             throw new DomainException("Las series y repeticiones deben ser mayores a cero.");
 

@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using Domain.Exceptions;
 
 namespace Domain.Entities;
@@ -26,5 +26,27 @@ public class TrainingPlan : BaseEntity
             throw new DomainException("El nombre del plan no puede estar vacío.");
 
         return new TrainingPlan(name, objective);
+    }
+
+    public void Update(string name, string? objective)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("El nombre del plan no puede estar vacío.");
+
+        Name = name;
+        Objective = objective;
+    }
+
+    public void AddWeek(TrainingWeek week)
+    {
+        if (_weeks.Any(w => w.WeekNumber == week.WeekNumber))
+            throw new DomainException($"El plan ya contiene una semana con número {week.WeekNumber}.");
+
+        _weeks.Add(week);
+    }
+
+    public void ClearWeeks()
+    {
+        _weeks.Clear();
     }
 }
