@@ -16,6 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<Athlete> Athletes => Set<Athlete>();
     public DbSet<DigitalConsent> DigitalConsents => Set<DigitalConsent>();
+    public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<AthleteCategory> AthleteCategories => Set<AthleteCategory>();
@@ -85,6 +86,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
                 case EntityState.Modified:
                     entry.Property(entity => entity.PfId).IsModified = false;
                     entry.Property(entity => entity.CreatedAt).IsModified = false;
+
+                    if (entry.Entity is DigitalConsent)
+                    {
+                        // La evidencia de firma del consentimiento digital es inmutable una vez registrada.
+                        entry.Property(nameof(DigitalConsent.AthleteId)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.IsSigned)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.ConsentDate)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.IsMinor)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianName)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianEmail)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianPhone)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.AllowsPhysicalTraining)).IsModified = false;
+                    }
                     break;
 
                 case EntityState.Deleted:
