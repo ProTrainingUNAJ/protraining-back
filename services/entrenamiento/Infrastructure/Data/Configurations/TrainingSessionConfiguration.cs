@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -31,7 +31,9 @@ public class TrainingSessionConfiguration : IEntityTypeConfiguration<TrainingSes
             .HasColumnName("coach_notes")
             .HasMaxLength(1000);
 
-        builder.HasIndex(ts => new { ts.TrainingWeekId, ts.Order }).IsUnique();
+        builder.HasIndex(ts => new { ts.TrainingWeekId, ts.Order })
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
 
         builder.HasMany(ts => ts.PrescribedExercises)
             .WithOne(pe => pe.TrainingSession)
