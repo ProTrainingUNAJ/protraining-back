@@ -47,6 +47,8 @@ Las **únicas excepciones** (no son error):
 
 Los comentarios van en español para que todo el equipo entienda el código; un comentario en inglés **no** es error, no lo marques.
 
+**El catálogo de ejercicios va en español** (`services/entrenamiento/API/Data/exercises.json`: nombres, equipamiento, músculos e instrucciones), porque lo lee el PF y el atleta. Es contenido, no código: los campos del JSON y las columnas siguen en inglés. Las instrucciones van en **español rioplatense, de vos** ("Acostate…", "Flexioná…"). Mezclar usted ("Acuéstese") o tú ("Flexiona") es ⚠️.
+
 Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos nombres en español, agrupalos en un solo punto con la lista de archivos.
 
 ### 2. Carpetas (cada servicio tiene `Domain`, `Application`, `Infrastructure`, `API`)
@@ -57,6 +59,12 @@ Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos nombres en esp
 - Interfaces que implementa Infrastructure → `Application/Interfaces/Persistence/` o `Application/Interfaces/Services/`.
 - Configuración de EF de cada entidad → `Infrastructure/Data/Configurations/<Entidad>Configuration.cs`.
 - Controllers → `API/Controllers/`.
+- **CQRS liviano:** cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handler, en `Application/UseCases/<Módulo>/<CasoDeUso>/`.
+  - Escribe (crear, modificar, borrar) → `XxxCommand` + `XxxCommandHandler`, y el handler termina con `unitOfWork.SaveChangesAsync(...)`. Un handler que modifica y no guarda es ❌ (no persiste nada).
+  - Lee → `XxxQuery` + `XxxQueryHandler`. **Nunca** llama a `SaveChanges` ni modifica entidades (❌), y lee con `AsNoTracking()` (si falta, ⚠️).
+  - Un caso de uso con otro nombre (`XxxUseCase`, `XxxService` en `UseCases/`) es ⚠️: renombrarlo a Command o Query según si escribe o lee.
+  - El Command o la Query y su handler pueden ir en el mismo archivo o en dos, pero **igual que el resto del servicio** (⚠️ si la rama mezcla las dos formas en un mismo servicio).
+  - No se usa MediatR: los handlers se registran en `Program.cs` y se inyectan en el controller.
 - Tests → **un solo proyecto por servicio**: `services/<servicio>/Tests/<Servicio>.Tests.csproj`, agregado al `<Servicio>.slnx` como `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). Si la rama crea un segundo proyecto de tests en el mismo servicio (por ejemplo `Entrenamiento.Tests/` al lado de `Tests/`), es ❌: los tests nuevos van al proyecto que ya existe. Si el proyecto no está en el `.slnx` o está dentro de un `<Folder>`, es ⚠️ (el CI lo corre igual porque busca cualquier `*Tests.csproj`).
 - `Domain` no puede depender de `Application`, `Infrastructure` ni `API`. `Application` no puede depender de `Infrastructure` ni `API`. Revisá los `using` y los `.csproj`.
 
@@ -70,6 +78,11 @@ Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos nombres en esp
 - El PF del pedido se obtiene con **`ICurrentUser`** (claim `pf_id`), nunca leyendo el token a mano.
 - Los ids de otros servicios se guardan como `Guid`, **sin** relación de base (sin foreign key ni navegación a una entidad de otro servicio).
 - Un servicio **nunca** accede a la base de otro: se hablan por HTTP.
+- **Fechas: la app es, por ahora, solo para Argentina (UTC-3).**
+  - En la base se guardan los instantes en **UTC** (`timestamp with time zone`, como `created_at`).
+  - Pero **"hoy"** (la rutina del día, el check-in, el semáforo) se calcula en la hora de Argentina, zona `America/Argentina/Buenos_Aires`: `TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow, "America/Argentina/Buenos_Aires")`. Mejor en un solo lugar reutilizable.
+  - Usar `DateTime.UtcNow.Date`, `DateTime.UtcNow.DayOfWeek` o `DateOnly.FromDateTime(DateTime.UtcNow)` como "hoy" es ❌: después de las 21 h de Argentina da el día siguiente.
+  - Un día sin hora (fecha de inicio de un plan, fecha del check-in) va como `DateOnly`.
 
 ### 4. Migraciones
 
@@ -90,6 +103,26 @@ Marcá solo lo que **agregó o cambió esta rama**. Si hay muchos nombres en esp
   - Si el endpoint es **nuevo** y no aparece en el contrato, avisá como ⚠️: hay que sumarlo al contrato.
   - Si el endpoint ya está en el contrato pero la ruta o los campos no coinciden, avisá como ⚠️ (hoy hay diferencias conocidas entre contratos y código; el dev tiene que hablarlo con Javi, dueño de los contratos).
 - Endpoints que necesitan usuario logueado: `[Authorize]`. Los públicos (login, registro, health) llevan `[AllowAnonymous]`. Mientras el proyecto no exija el JWT en todos lados, que falte `[AllowAnonymous]` es ⚠️, no ❌.
+- Lo que solo puede hacer el PF (crear, modificar o borrar datos del PF) lleva `[Authorize(Roles = "PreparadorFisico")]`. Un `[Authorize]` sin rol en un endpoint que modifica es ❌: un atleta del mismo PF podría usarlo.
+
+**REST nivel 2 (modelo de Richardson).** Toda la API lo cumple:
+- **Recursos con sustantivos** en la URL, en plural e inglés: `/api/v1/athletes/{id}`, `/api/v1/training-plans`. Una acción en la URL (`/sugerir-rutina`, `/getAthlete`, `/createPlan`) es ❌. Excepción aceptada: `POST /api/v1/auth/login` y `/auth/refresh`.
+- **El verbo correcto:** `GET` lee (nunca modifica), `POST` crea, `PUT` reemplaza, `PATCH` cambia una parte, `DELETE` borra.
+- **El código correcto:**
+
+  | Caso | Código |
+  |---|---|
+  | Lectura bien | `200` con el dato |
+  | Creación bien | `201` con la ubicación de lo creado: `Created($"/api/v1/<recurso>/{id}", dto)`. `Created(string.Empty, …)` es ❌ |
+  | Modificación o borrado sin cuerpo | `204` |
+  | Datos inválidos | `400` |
+  | Sin token | `401` |
+  | Token válido pero sin permiso (rol) | `403` |
+  | No existe | `404`, con una excepción propia mapeada en el `ExceptionMiddleware` (por ejemplo, `NotFoundException`). `KeyNotFoundException` u otra excepción sin mapear sale como `500`: es ❌ |
+  | Conflicto (duplicado, concurrencia) | `409` |
+
+- Si un caso devuelve `500` y no es un error inesperado del servidor, es ❌.
+- La respuesta de éxito es el recurso (o su DTO), no un objeto armado a mano tipo `new { message = "…" }`.
 
 ### 6. Configuración y seguridad
 
