@@ -29,6 +29,9 @@ public static class BorradorPlanificacionJsonSchema
             "type": "object",
             "required": ["ejercicioNombre", "series", "repeticiones", "porcentajeSugerido"],
             "properties": {
+              "ejercicioId": {
+                "type": ["string", "null"]
+              },
               "ejercicioNombre": {
                 "type": "string",
                 "minLength": 2
@@ -47,6 +50,9 @@ public static class BorradorPlanificacionJsonSchema
                 "type": "number",
                 "minimum": 0.0,
                 "maximum": 100.0
+              },
+              "esReferencia": {
+                "type": "boolean"
               }
             }
           }

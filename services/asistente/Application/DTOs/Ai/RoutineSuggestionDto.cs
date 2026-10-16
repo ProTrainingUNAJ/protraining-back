@@ -12,7 +12,9 @@ public sealed record SuggestedExerciseDto(
     [property: JsonPropertyName("ejercicioNombre")] string ExerciseName,
     [property: JsonPropertyName("series")] int Sets,
     [property: JsonPropertyName("repeticiones")] int Reps,
-    [property: JsonPropertyName("porcentajeSugerido")] decimal SuggestedPercentage
+    [property: JsonPropertyName("porcentajeSugerido")] decimal SuggestedPercentage,
+    [property: JsonPropertyName("ejercicioId")] Guid? ExerciseId = null,
+    [property: JsonPropertyName("esReferencia")] bool IsReference = false
 );
 
 public sealed record RoutineSuggestionResponseDto(

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Infrastructure.Services.Ai.Gemini;
@@ -13,22 +14,41 @@ namespace Infrastructure.Services.Ai;
 /// 1. Ollama (modelo local en Docker)
 /// 2. Google Gemini (respaldo en la nube)
 /// 3. Motor de reglas determinísticas locales (respaldo final garantizado)
-/// Asegura alta disponibilidad, tiempos límites independientes por proveedor y registro del origen.
+/// Asegura alta disponibilidad, tiempos límites independientes por proveedor, validación semántica de ejercicios y registro del origen.
 /// </summary>
-public sealed class ResilientAiService(
-    OllamaClient ollamaClient,
-    GeminiClient geminiClient,
-    RuleBasedAiClient ruleBasedClient,
-    ILogger<ResilientAiService> logger) : IAiService
+public sealed class ResilientAiService : IAiService
 {
-    private readonly IReadOnlyList<IAiClient> _providers = [ollamaClient, geminiClient, ruleBasedClient];
+    private readonly IReadOnlyList<IAiClient> _providers;
+    private readonly IExerciseSemanticValidator? _semanticValidator;
+    private readonly ILogger<ResilientAiService> _logger;
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        ILogger<ResilientAiService> logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        ILogger<ResilientAiService> logger)
+    {
+        _providers = [ollamaClient, geminiClient, ruleBasedClient];
+        _semanticValidator = semanticValidator;
+        _logger = logger;
+    }
 
     public async Task<RoutineSuggestionResponseDto> SuggestRoutineAsync(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = Stopwatch.StartNew();
-        logger.LogInformation("Iniciando cadena de proveedores de IA para el atleta '{AthleteId}'.", request.AthleteId);
+        _logger.LogInformation("Iniciando cadena de proveedores de IA para el atleta '{AthleteId}'.", request.AthleteId);
 
         for (var i = 0; i < _providers.Count; i++)
         {
@@ -36,7 +56,7 @@ public sealed class ResilientAiService(
             var isLast = i == _providers.Count - 1;
             var tierNumber = i + 1;
 
-            logger.LogInformation(
+            _logger.LogInformation(
                 "Paso {Step} de {Total}: Intentando con proveedor '{Provider}'.",
                 tierNumber,
                 _providers.Count,
@@ -55,7 +75,7 @@ public sealed class ResilientAiService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(
+                _logger.LogWarning(
                     ex,
                     "Excepción no controlada durante la consulta a {Provider} tras {ElapsedMs} ms.",
                     provider.ProviderName,
@@ -68,8 +88,24 @@ public sealed class ResilientAiService(
 
             if (response != null)
             {
+                // Validación semántica de ejercicios en caso de contar con el validador
+                if (_semanticValidator != null && !isLast)
+                {
+                    var validationResult = await _semanticValidator.ValidateDraftAsync(response, cancellationToken: cancellationToken);
+                    if (validationResult.RequiresDeterministicFallback)
+                    {
+                        _logger.LogWarning(
+                            "La propuesta del proveedor '{Provider}' contiene ejercicios inválidos que no pudieron corregirse ({Messages}). Descartando propuesta y activando siguiente respaldo.",
+                            provider.ProviderName,
+                            string.Join("; ", validationResult.ValidationMessages));
+                        continue;
+                    }
+
+                    response = validationResult.SanitizedRoutine;
+                }
+
                 totalStopwatch.Stop();
-                logger.LogInformation(
+                _logger.LogInformation(
                     "Propuesta de rutina resuelta exitosamente por proveedor '{Provider}' en {ElapsedMs} ms (tiempo total: {TotalMs} ms).",
                     response.ProviderUsed,
                     tierStopwatch.ElapsedMilliseconds,
@@ -79,7 +115,7 @@ public sealed class ResilientAiService(
 
             if (!isLast)
             {
-                logger.LogWarning(
+                _logger.LogWarning(
                     "El proveedor '{Provider}' no estuvo disponible, agotó cuota o superó su tiempo límite tras {ElapsedMs} ms. Activando siguiente respaldo.",
                     provider.ProviderName,
                     tierStopwatch.ElapsedMilliseconds);
