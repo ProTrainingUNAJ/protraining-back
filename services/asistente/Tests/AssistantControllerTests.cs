@@ -124,4 +124,50 @@ public sealed class AssistantControllerTests
         Assert.Contains(httpPosts, p => p.Template == "suggest-routine");
         Assert.Contains(httpPosts, p => p.Template == "/api/v1/asistente/sugerir-rutina");
     }
+
+    [Fact]
+    public async Task Given_EndToEndController_When_SuggestRoutine_Called_Twice_Then_SecondCall_Returns_Cached_Result_Rebound_To_New_Athlete()
+    {
+        // Arrange: Componentes reales de DI (Controller -> UseCase -> ResilientAiService -> Cache + RuleEngine)
+        var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var cacheOptions = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Cache.AiCacheOptions { Enabled = true, TtlMinutes = 30 });
+        var cache = new Infrastructure.Services.Ai.Cache.AiResponseMemoryCache(memoryCache, cacheOptions, NullLogger<Infrastructure.Services.Ai.Cache.AiResponseMemoryCache>.Instance);
+
+        var auditMock = new Mock<IAiAuditService>();
+        var rulesClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var realAiService = new ResilientAiService(
+            providers: [rulesClient],
+            semanticValidator: null,
+            responseCache: cache,
+            logger: NullLogger<ResilientAiService>.Instance
+        );
+
+        var useCase = new SuggestRoutineUseCase(realAiService);
+        var controller = new AssistantController(useCase);
+
+        var athlete1 = Guid.NewGuid();
+        var athlete2 = Guid.NewGuid();
+        var request1 = new RoutineSuggestionRequestDto(athlete1, "Fuerza Máxima de Piernas", ["Piernas"]);
+        var request2 = new RoutineSuggestionRequestDto(athlete2, "Fuerza Máxima de Piernas", ["Piernas"]);
+
+        // Act 1: Primer llamado (Cache MISS -> resuelve con motor de reglas y guarda en caché)
+        var result1 = await controller.SuggestRoutine(request1, CancellationToken.None);
+
+        // Act 2: Segundo llamado con otro atleta e idéntico objetivo (Cache HIT -> responde desde memoria)
+        var result2 = await controller.SuggestRoutine(request2, CancellationToken.None);
+
+        // Assert: Respuestas HTTP 200 OK con reasociación segura del AthleteId
+        var ok1 = Assert.IsType<OkObjectResult>(result1.Result);
+        var ok2 = Assert.IsType<OkObjectResult>(result2.Result);
+
+        var response1 = Assert.IsType<RoutineSuggestionResponseDto>(ok1.Value);
+        var response2 = Assert.IsType<RoutineSuggestionResponseDto>(ok2.Value);
+
+        Assert.Equal(athlete1, response1.AthleteId);
+        Assert.Equal(athlete2, response2.AthleteId);
+        Assert.Equal(response1.ProposedTitle, response2.ProposedTitle);
+        Assert.Equal(response1.Exercises.Count, response2.Exercises.Count);
+        Assert.NotEmpty(response2.Exercises);
+    }
 }
