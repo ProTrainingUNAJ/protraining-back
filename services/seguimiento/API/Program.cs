@@ -6,6 +6,7 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Application.UseCases.Health.GetHealth;
+using Domain.Services;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -43,13 +44,21 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Retries, timeouts and circuit breaker for every registered HttpClient.
+// Resiliencia por defecto (reintentos, timeouts y circuit breaker) para todo HttpClient registrado (KAN-364).
+// Regla: el semáforo se calcula solo con datos locales (check-ins y lesiones de esta base) y jamás llama
+// a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
+// opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
+// reintento y caída siempre al motivo local del TrafficLightEngine (plan B), nunca propagando el error al cliente.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
+
+// Motor puro del semáforo (KAN-363) y caso de uso del check-in diario (KAN-364/Demo 1):
+// todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
+builder.Services.AddScoped<TrafficLightEngine>();
+builder.Services.AddScoped<SubmitCheckInCommandHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
-builder.Services.AddScoped<SubmitCheckInCommandHandler>();
 
 if (builder.Environment.IsDevelopment())
 {

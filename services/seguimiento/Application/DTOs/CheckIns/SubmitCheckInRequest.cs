@@ -4,7 +4,7 @@ namespace Application.DTOs.CheckIns;
 
 public sealed record SubmitCheckInRequest
 {
-    [Range(0, 12, ErrorMessage = "Las horas de sueño deben estar entre 0 y 12.")]
+    [Range(0, 24, ErrorMessage = "Las horas de sueño deben estar entre 0 y 24.")]
     public double SleepHours { get; init; }
 
     [Range(1, 5, ErrorMessage = "La calidad de sueño debe estar entre 1 y 5.")]
@@ -28,4 +28,7 @@ public sealed record SubmitCheckInRequest
     public bool IsSick { get; init; }
 
     public string? PainZones { get; init; }
+
+    // Lesión activa marcada por el atleta: el semáforo del día queda en Rojo (KAN-364).
+    public bool HasActiveInjury { get; init; }
 }

@@ -20,5 +20,6 @@ public static class CheckInMappings
             checkIn.StressLevel,
             checkIn.EffortRate,
             checkIn.IsSick,
-            checkIn.PainZones);
+            checkIn.PainZones,
+            checkIn.HasActiveInjury);
 }

@@ -14,4 +14,5 @@ public sealed record CheckInDto(
     int StressLevel,
     int? EffortRate,
     bool IsSick,
-    string? PainZones);
+    string? PainZones,
+    bool HasActiveInjury);

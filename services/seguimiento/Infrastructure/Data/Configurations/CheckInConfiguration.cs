@@ -22,6 +22,7 @@ public sealed class CheckInConfiguration : IEntityTypeConfiguration<CheckIn>
         builder.Property(c => c.IsSick).HasColumnName("is_sick").IsRequired();
         builder.Property(c => c.EffortRate).HasColumnName("effort_rate");
         builder.Property(c => c.PainZones).HasColumnName("pain_zones");
+        builder.Property(c => c.HasActiveInjury).HasColumnName("has_active_injury").IsRequired().HasDefaultValue(false);
 
         builder.HasIndex(c => new { c.AthleteId, c.Date })
             .IsUnique()
