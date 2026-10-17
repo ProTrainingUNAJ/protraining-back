@@ -57,7 +57,7 @@ public sealed class AiResponseMemoryCache(
         logger.LogInformation("Caché SET: Almacenada respuesta de IA para el hash '{Hash}' con vencimiento de {TtlMinutes} minutos.", promptHash, ttl.TotalMinutes);
     }
 
-    public string ComputePromptHash(string goal, IEnumerable<string>? muscleGroupEmphasis)
+    public string ComputePromptHash(string goal, IEnumerable<string>? muscleGroupEmphasis, Guid? pfId = null)
     {
         var normalizedGoal = (goal ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -74,7 +74,8 @@ public sealed class AiResponseMemoryCache(
             normalizedMuscles = "general";
         }
 
-        var canonicalInstructions = $"goal:{normalizedGoal}|muscles:{normalizedMuscles}";
+        var pfPrefix = pfId.HasValue && pfId.Value != Guid.Empty ? $"pf:{pfId.Value}|" : string.Empty;
+        var canonicalInstructions = $"{pfPrefix}goal:{normalizedGoal}|muscles:{normalizedMuscles}";
         return ComputeSha256(canonicalInstructions);
     }
 
