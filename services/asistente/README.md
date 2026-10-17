@@ -92,3 +92,29 @@ curl http://localhost:11434/api/tags
 Si tu equipo cuenta con GPU dedicada (NVIDIA RTX / Apple Silicon) y deseas utilizar `llama3.2:3b`:
 1. Modifica en tu `.env` local: `OLLAMA_MODEL=llama3.2:3b`.
 2. Reinicia el contenedor: `docker compose --profile ia up -d ollama-model`.
+
+---
+
+## 7. Cadena Resiliente de Proveedores y Respaldo Determinístico (`#080 / KAN-375`)
+
+Para garantizar alta disponibilidad continua ante fallos locales o interrupciones de red, el microservicio implementa una conmutación jerárquica en `ResilientAiService`:
+
+```mermaid
+graph TD
+    A["Petición de Rutina (POST /suggest-routine)"] --> B{"¿Hit en Caché SHA-256? (#073 / KAN-368)"}
+    B -- Sí --> C["Retornar respuesta desde memoria RAM (~1 ms)"]
+    B -- No --> D["Paso 1: Ollama (Modelo local Llama)"]
+    D -- Éxito --> E["Validar Semántica y Guardar en Caché"]
+    D -- "Falla (HTTP 500, Timeout, Red caída)" --> F["Paso 2: Google Gemini (Nube)"]
+    F -- Éxito --> E
+    F -- "Falla (HTTP 500, Cuota 429, Timeout)" --> G["Paso 3: Motor de Reglas Determinísticas"]
+    G --> H["Retornar propuesta de respaldo (ProviderUsed: 'Reglas')"]
+    E --> I["Retornar propuesta de IA al usuario"]
+```
+
+### Comportamiento ante Caídas
+1. **Ollama caído:** Si el contenedor de Ollama no responde, supera el tiempo límite configurado o devuelve error 500/JSON malformado, la solicitud conmuta automáticamente a **Google Gemini**.
+2. **Gemini caído / Cuota agotada:** Si la API de Google Gemini no está disponible o agota su cuota gratuita (HTTP 429), la solicitud degrada al **Motor Determinístico de Reglas**.
+3. **Ambos proveedores caídos:** El motor de reglas (`RuleBasedAiClient`) resuelve la solicitud en milisegundos con ejercicios anatómica y metodológicamente coherentes con el objetivo.
+4. **Propagación de cancelación:** Si el cliente cancela la petición HTTP (`CancellationToken`), la operación aborta inmediatamente con `OperationCanceledException` sin enmascararla como falla de proveedor.
+
