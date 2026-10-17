@@ -7,9 +7,11 @@ using System.Text.RegularExpressions;
 using API.Services;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
+using Application.Interfaces.Services;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Catalog;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -22,6 +24,18 @@ using Xunit;
 /// </summary>
 public sealed class ExerciseSemanticValidatorTests
 {
+    private static ExerciseCatalogService CreateCatalogService(
+        HttpClient httpClient,
+        IMemoryCache? memoryCache = null,
+        ICurrentUser? currentUser = null)
+    {
+        return new ExerciseCatalogService(
+            httpClient,
+            memoryCache ?? new MemoryCache(new MemoryCacheOptions()),
+            currentUser ?? Mock.Of<ICurrentUser>(),
+            NullLogger<ExerciseCatalogService>.Instance);
+    }
+
     private static readonly Guid SentadillaId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid PressBancaId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PesoMuertoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -48,7 +62,7 @@ public sealed class ExerciseSemanticValidatorTests
     {
         var handler = new FakeTrainingHandler(SeedExercises);
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
-        _catalogService = new ExerciseCatalogService(httpClient, NullLogger<ExerciseCatalogService>.Instance);
+        _catalogService = CreateCatalogService(httpClient);
         _validator = new ExerciseSemanticValidator(_catalogService);
     }
 
@@ -463,7 +477,7 @@ public sealed class ExerciseSemanticValidatorTests
         // Arrange
         var throwingHandler = new ThrowingHttpMessageHandler();
         var client = new HttpClient(throwingHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
-        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+        var service = CreateCatalogService(client);
 
         // Act
         var result = await service.SearchAsync("Sentadilla");
@@ -496,7 +510,7 @@ public sealed class ExerciseSemanticValidatorTests
 
         var testHandler = new TestHttpMessageHandler(paginatedJson);
         var client = new HttpClient(testHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
-        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+        var service = CreateCatalogService(client);
 
         // Act
         var results = await service.SearchAsync("Sentadilla");
@@ -535,7 +549,7 @@ public sealed class ExerciseSemanticValidatorTests
 
         var testHandler = new TestHttpMessageHandler(catalogJson);
         var client = new HttpClient(testHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
-        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+        var service = CreateCatalogService(client);
         var validator = new ExerciseSemanticValidator(service);
 
         var draft = new RoutineSuggestionResponseDto(

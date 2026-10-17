@@ -124,10 +124,19 @@ public sealed class ExerciseSemanticValidator(
                 );
             }
 
-            // Si el identificador no coincide con ningún registro, se busca resolución por nombre en el catálogo
             var byName = await catalogService.FindByNameAsync(exercise.ExerciseName, cancellationToken);
             if (byName != null)
             {
+                if (exercise.ExerciseId == byName.Id)
+                {
+                    // Si el identificador ya coincide exactamente con el del catálogo oficial, es válido (sin corrección requerida)
+                    return (
+                        exercise with { ExerciseId = byName.Id, IsReference = false },
+                        ExerciseValidationStatus.Valid,
+                        $"Ejercicio '{exercise.ExerciseName}' verificado con ejercicioId válido '{byName.Id}'."
+                    );
+                }
+
                 // Detección y corrección: se vincula el identificador oficial correspondiente al ejercicio identificado
                 return (
                     exercise with { ExerciseId = byName.Id, IsReference = false },

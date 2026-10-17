@@ -23,7 +23,8 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
 
     private readonly HttpClient _httpClient;
-    private readonly IMemoryCache? _memoryCache;
+    private readonly IMemoryCache _memoryCache;
+    private readonly ICurrentUser _currentUser;
     private readonly ILogger<ExerciseCatalogService> _logger;
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -38,56 +39,25 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
     public ExerciseCatalogService(
         HttpClient httpClient,
-        ILogger<ExerciseCatalogService> logger) : this(httpClient, null, logger)
-    {
-    }
-
-    public ExerciseCatalogService(
-        HttpClient httpClient,
-        IMemoryCache? memoryCache,
+        IMemoryCache memoryCache,
+        ICurrentUser currentUser,
         ILogger<ExerciseCatalogService> logger)
     {
-        _httpClient = httpClient;
-        _memoryCache = memoryCache;
-        _logger = logger;
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+        _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
+    public Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
     {
         if (exerciseId == Guid.Empty)
         {
-            return null;
+            return Task.FromResult<CatalogExerciseDto?>(null);
         }
 
-        // 1. Verificación en memoria de resultados previamente recuperados
-        var cached = GetCachedById(exerciseId);
-        if (cached != null)
-        {
-            return cached;
-        }
-
-        // 2. Consulta a Entrenamiento vía búsqueda por ids (?ids=...) según contrato oficial
-        try
-        {
-            var url = $"{ExercisesPath}?ids={exerciseId}";
-            using var response = await _httpClient.GetAsync(url, cancellationToken);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(cancellationToken);
-                var items = ParseExercisesFromJson(json);
-                return items.FirstOrDefault(e => e.Id == exerciseId);
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "No se pudo consultar el ejercicio {Id} vía ?ids en Entrenamiento.", exerciseId);
-        }
-
-        return null;
+        // Búsqueda en memoria local; se eliminó la llamada con ?ids= que no existe en el contrato oficial (KAN-530)
+        return Task.FromResult(GetCachedById(exerciseId));
     }
 
     public async Task<CatalogExerciseDto?> FindByNameAsync(string exerciseName, CancellationToken cancellationToken = default)
@@ -276,42 +246,36 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         return result;
     }
 
+    private string GetPfIdKey() => _currentUser.PfId?.ToString() ?? "global";
+    private string BuildIdKey(Guid id) => $"{CacheKeyPrefixId}{GetPfIdKey()}_{id}";
+    private string BuildNameKey(string normalizedName) => $"{CacheKeyPrefixName}{GetPfIdKey()}_{normalizedName}";
+
     private void CacheItem(CatalogExerciseDto dto)
     {
-        if (_memoryCache == null) return;
-
         var entryOptions = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl };
-        _memoryCache.Set(CacheKeyPrefixId + dto.Id, dto, entryOptions);
+        _memoryCache.Set(BuildIdKey(dto.Id), dto, entryOptions);
 
         var norm = NormalizeText(dto.Name);
         if (!string.IsNullOrEmpty(norm))
         {
-            _memoryCache.Set(CacheKeyPrefixName + norm, dto, entryOptions);
+            _memoryCache.Set(BuildNameKey(norm), dto, entryOptions);
         }
 
         var withoutParens = RemoveParentheses(norm);
         if (!string.IsNullOrEmpty(withoutParens) && withoutParens != norm)
         {
-            _memoryCache.Set(CacheKeyPrefixName + withoutParens, dto, entryOptions);
+            _memoryCache.Set(BuildNameKey(withoutParens), dto, entryOptions);
         }
     }
 
     private CatalogExerciseDto? GetCachedById(Guid id)
     {
-        if (_memoryCache != null && _memoryCache.TryGetValue(CacheKeyPrefixId + id, out CatalogExerciseDto? cached))
-        {
-            return cached;
-        }
-        return null;
+        return _memoryCache.TryGetValue(BuildIdKey(id), out CatalogExerciseDto? cached) ? cached : null;
     }
 
     private CatalogExerciseDto? GetCachedByName(string normalizedName)
     {
-        if (_memoryCache != null && _memoryCache.TryGetValue(CacheKeyPrefixName + normalizedName, out CatalogExerciseDto? cached))
-        {
-            return cached;
-        }
-        return null;
+        return _memoryCache.TryGetValue(BuildNameKey(normalizedName), out CatalogExerciseDto? cached) ? cached : null;
     }
 
     private static string NormalizeText(string text)
