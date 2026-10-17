@@ -54,6 +54,12 @@ paths:
               $ref: '#/components/schemas/CheckInRequest'
       responses:
         "200":
+          description: Check-in actualizado para el mismo día y semáforo recalculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        "201":
           description: Check-in registrado exitosamente y semáforo calculado.
           content:
             application/json:
@@ -63,8 +69,14 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
-          $ref: '#/components/responses/NotFound'
+          description: La cuenta no tiene un atleta vinculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /api/v1/athletes/{athleteId}/check-ins:
     get:
@@ -398,6 +410,12 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     NotFound:
       description: Atleta o lesión no encontrados.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: "Acceso denegado: el token no corresponde al atleta de la ruta."
       content:
         application/json:
           schema:

@@ -1,6 +1,7 @@
 using Application.DTOs.CheckIns;
 using Application.Interfaces.Persistence;
 using Application.Mappings;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Services;
@@ -22,8 +23,7 @@ public sealed class SubmitCheckInCommandHandler(
     {
         Validate(command);
 
-        var date = DateTime.UtcNow.Date;
-
+        var date = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
         var checkIn = await repository.GetByAthleteAndDateAsync(command.AthleteId, date, cancellationToken);
 
         var created = checkIn is null;
