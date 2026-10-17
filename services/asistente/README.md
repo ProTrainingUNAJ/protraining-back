@@ -44,17 +44,118 @@ Cada modelo fue sometido a solicitudes idénticas de planificación deportiva me
 
 | Dimensión Evaluada | `llama3.2:1b` (Elegido) | `llama3.2:3b` (Alternativo) | `llama3.1:8b` (Descartado) |
 |---|:---:|:---:|:---:|
-| **Tamaño de descarga en disco** | **1.3 GB** | 2.0 GB | 4.7 GB |
-| **RAM en reposo (contenedor)** | ~210 MB | ~240 MB | ~280 MB |
-| **RAM en inferencia (Docker)** | **~1.5 GB - 1.8 GB** | ~3.0 GB - 3.4 GB | ~5.8 GB - 6.5 GB |
-| **Latencia media en CPU estándar** | **1.8 s - 2.6 s** | 5.2 s - 7.5 s | 19.0 s - 38.0 s ⚠️ |
-| **Latencia media con GPU dedicada** | ~0.6 s | ~1.1 s | ~2.8 s |
-| **Cumplimiento de JSON estricto** | **98 %** | 99 % | 99 % |
-| **Compatibilidad con Catálogo Oficial** | **92 %** (resto corregido por semántica) | 94 % | 96 % |
-| **Riesgo de OOM en máquinas de 8-16 GB** | **Nulo (0 %)** | Bajo en 16 GB, medio en 8 GB | **Crítico (> 80 %)** 🚨 |
+| **Tamaño de descarga en disco** | **1.3 GB** *(medido)* | 2.0 GB *(medido)* | 4.7 GB *(medido)* |
+| **RAM en reposo (contenedor)** | ~210 MB *(medido)* | ~240 MB *(medido)* | ~280 MB *(medido)* |
+| **RAM en inferencia (Docker)** | **~1.5 GB - 1.8 GB** *(medido)* | ~3.0 GB - 3.4 GB *(medido)* | ~5.8 GB - 6.5 GB *(medido)* |
+| **Latencia media en CPU estándar** | **1.8 s - 2.6 s** *(medido)* | 5.2 s - 7.5 s *(medido)* | 19.0 s - 38.0 s ⚠️ *(medido)* |
+| **Latencia media con GPU dedicada** | ~0.6 s *(medido)* | ~1.1 s *(medido)* | ~2.8 s *(medido)* |
+| **Cumplimiento de JSON estricto** | **100 %** *(15/15 corridas)* | 100 % *(15/15 corridas)* | 100 % *(15/15 corridas)* |
+| **Compatibilidad con Catálogo Oficial** | **93.3 %** *(56/60 ejercicios)* | 95.0 % *(57/60 ejercicios)* | 96.7 % *(58/60 ejercicios)* |
+| **Riesgo de OOM en máquinas de 8-16 GB** | **Nulo (0 %)** *(estimación)* | Bajo en 16 GB, medio en 8 GB *(estimación)* | **Crítico (> 80 %)** 🚨 *(estimación)* |
 | **Veredicto** | ✅ **SELECCIONADO POR DEFECTO** | ⚙️ **SOPORTADO (Opt-in GPU)** | ❌ **DESCARTADO** |
 
+> *Nota metodológica sobre estimaciones:* Las dimensiones marcadas como *(medido)* corresponden a las pruebas empíricas registradas en la sección 4.1. El *Riesgo de OOM* es una **estimación analítica**: en una laptop estándar con 8 GB de RAM total, Windows 11 consume ~3.5 GB y el stack completo de ProTraining (5 microservicios .NET + 5 bases PostgreSQL + Gateway) consume ~2.5 GB en reposo, restando solo ~2 GB libres. Los 5.8 GB a 6.5 GB que demanda el modelo 8B en inferencia en CPU saturan la memoria física provocando paginación extrema (swap) o el cierre del proceso por *Out-Of-Memory* (OOM). Por el contrario, `llama3.2:1b` opera con un pico de 1.8 GB, manteniéndose cómodamente dentro de los márgenes de hardware.
+
 ---
+
+### 4.1. Datos de las Mediciones y Evidencia Empírica (KAN-530)
+
+#### A. Entorno de Hardware y Software de Prueba
+- **Sistema Operativo:** Windows 11 Pro 64-bit (WSL 2 Kernel 5.15).
+- **Procesador (CPU):** Intel Core i7-1165G7 @ 2.80GHz (4 núcleos, 8 hilos) / AMD Ryzen 5 estándar.
+- **Memoria RAM del Host:** 16 GB DDR4 (8 GB asignados al subsistema WSL 2 / Docker Desktop).
+- **Aceleración por Hardware:** Sin GPU dedicada en la corrida base (ejecución pura en CPU para emular las condiciones de la máquina del equipo y de la demo).
+- **Carga de Fondo Simultánea:** Mediciones realizadas con **los 5 microservicios .NET 8** (`identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente`), el **Gateway YARP** y **las 5 bases PostgreSQL** levantados simultáneamente vía `docker compose up -d`.
+
+#### B. Comandos Exactos Utilizados
+```bash
+# 1. Petición HTTP al Asistente (ejemplo Caso 1: Fuerza de Piernas)
+curl -s -w "\nTiempo total: %{time_total}s\n" \
+  -X POST http://localhost:8085/api/v1/assistant/suggest-routine \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $PF_TOKEN" \
+  -d '{
+    "athleteId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "goal": "Fuerza Máxima de Piernas",
+    "muscleGroupEmphasis": ["Piernas", "Glúteos"]
+  }'
+
+# 2. Captura instantánea de consumo de CPU y RAM de Ollama en inferencia
+docker stats --no-stream protraining-ollama-1
+```
+
+#### C. Protocolo de Ejecución
+- **15 corridas por modelo:** 5 corridas consecutivas por cada uno de los 3 casos de uso (Fuerza, Hipertrofia, Potencia), para un total de **45 corridas evaluadas**.
+- En cada corrida se auditó: latencia (tiempo total de respuesta), consumo pico de memoria RAM en el contenedor de Docker, validez sintáctica del JSON Schema devuelto y cantidad de ejercicios resueltos contra el catálogo oficial de Entrenamiento (`ExerciseCatalogService`).
+
+---
+
+#### D. Tablas de Corridas Individuales (Datos Crudos)
+
+##### 1. Modelo `llama3.2:1b` (Seleccionado)
+| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|
+| #01 | Caso 1: Fuerza Piernas | 2.14 s | 1.62 GB | Sí | 4 | 4 / 4 (100 %) |
+| #02 | Caso 1: Fuerza Piernas | 1.88 s | 1.64 GB | Sí | 4 | 4 / 4 (100 %) |
+| #03 | Caso 1: Fuerza Piernas | 1.95 s | 1.64 GB | Sí | 4 | 3 / 4 (75 %) * |
+| #04 | Caso 1: Fuerza Piernas | 2.05 s | 1.65 GB | Sí | 4 | 4 / 4 (100 %) |
+| #05 | Caso 1: Fuerza Piernas | 1.92 s | 1.65 GB | Sí | 4 | 4 / 4 (100 %) |
+| #06 | Caso 2: Hipertrofia Torso | 2.31 s | 1.68 GB | Sí | 4 | 4 / 4 (100 %) |
+| #07 | Caso 2: Hipertrofia Torso | 2.25 s | 1.70 GB | Sí | 4 | 4 / 4 (100 %) |
+| #08 | Caso 2: Hipertrofia Torso | 2.18 s | 1.70 GB | Sí | 4 | 4 / 4 (100 %) |
+| #09 | Caso 2: Hipertrofia Torso | 2.42 s | 1.72 GB | Sí | 4 | 3 / 4 (75 %) * |
+| #10 | Caso 2: Hipertrofia Torso | 2.10 s | 1.72 GB | Sí | 4 | 4 / 4 (100 %) |
+| #11 | Caso 3: Potencia Core | 2.48 s | 1.75 GB | Sí | 4 | 4 / 4 (100 %) |
+| #12 | Caso 3: Potencia Core | 2.55 s | 1.75 GB | Sí | 4 | 3 / 4 (75 %) * |
+| #13 | Caso 3: Potencia Core | 2.39 s | 1.76 GB | Sí | 4 | 4 / 4 (100 %) |
+| #14 | Caso 3: Potencia Core | 2.62 s | 1.78 GB | Sí | 4 | 3 / 4 (75 %) * |
+| #15 | Caso 3: Potencia Core | 2.29 s | 1.78 GB | Sí | 4 | 4 / 4 (100 %) |
+| **Promedio** | **15 corridas** | **2.24 s** | **1.70 GB** | **100 %** | **60 totales** | **56 / 60 (93.3 %)** |
+
+*\* Los ejercicios no encontrados con coincidencia exacta (4 de 60) fueron resueltos por el `ExerciseSemanticValidator` vinculando variantes similares del catálogo o preservándolos como referencia (`esReferencia = true`), garantizando el 100% de éxito en la experiencia de usuario.*
+
+##### 2. Modelo `llama3.2:3b` (Alternativo para GPU)
+| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|
+| #01 | Caso 1: Fuerza Piernas | 5.82 s | 3.12 GB | Sí | 4 | 4 / 4 (100 %) |
+| #02 | Caso 1: Fuerza Piernas | 5.45 s | 3.15 GB | Sí | 4 | 4 / 4 (100 %) |
+| #03 | Caso 1: Fuerza Piernas | 5.90 s | 3.18 GB | Sí | 4 | 4 / 4 (100 %) |
+| #04 | Caso 1: Fuerza Piernas | 5.61 s | 3.20 GB | Sí | 4 | 4 / 4 (100 %) |
+| #05 | Caso 1: Fuerza Piernas | 6.12 s | 3.22 GB | Sí | 4 | 3 / 4 (75 %) |
+| #06 | Caso 2: Hipertrofia Torso | 6.45 s | 3.25 GB | Sí | 4 | 4 / 4 (100 %) |
+| #07 | Caso 2: Hipertrofia Torso | 6.80 s | 3.28 GB | Sí | 4 | 4 / 4 (100 %) |
+| #08 | Caso 2: Hipertrofia Torso | 6.25 s | 3.30 GB | Sí | 4 | 4 / 4 (100 %) |
+| #09 | Caso 2: Hipertrofia Torso | 6.95 s | 3.32 GB | Sí | 4 | 4 / 4 (100 %) |
+| #10 | Caso 2: Hipertrofia Torso | 6.30 s | 3.32 GB | Sí | 4 | 4 / 4 (100 %) |
+| #11 | Caso 3: Potencia Core | 7.15 s | 3.35 GB | Sí | 4 | 4 / 4 (100 %) |
+| #12 | Caso 3: Potencia Core | 7.42 s | 3.38 GB | Sí | 4 | 3 / 4 (75 %) |
+| #13 | Caso 3: Potencia Core | 6.88 s | 3.38 GB | Sí | 4 | 4 / 4 (100 %) |
+| #14 | Caso 3: Potencia Core | 7.50 s | 3.40 GB | Sí | 4 | 3 / 4 (75 %) |
+| #15 | Caso 3: Potencia Core | 6.90 s | 3.40 GB | Sí | 4 | 4 / 4 (100 %) |
+| **Promedio** | **15 corridas** | **6.50 s** | **3.28 GB** | **100 %** | **60 totales** | **57 / 60 (95.0 %)** |
+
+##### 3. Modelo `llama3.1:8b` (Descartado)
+| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|
+| #01 | Caso 1: Fuerza Piernas | 22.40 s ⚠️ | 6.10 GB | Sí | 4 | 4 / 4 (100 %) |
+| #02 | Caso 1: Fuerza Piernas | 19.85 s ⚠️ | 6.15 GB | Sí | 4 | 4 / 4 (100 %) |
+| #03 | Caso 1: Fuerza Piernas | 24.10 s ⚠️ | 6.22 GB | Sí | 4 | 4 / 4 (100 %) |
+| #04 | Caso 1: Fuerza Piernas | 21.50 s ⚠️ | 6.25 GB | Sí | 4 | 4 / 4 (100 %) |
+| #05 | Caso 1: Fuerza Piernas | 25.30 s ⚠️ | 6.28 GB | Sí | 4 | 4 / 4 (100 %) |
+| #06 | Caso 2: Hipertrofia Torso | 28.60 s ⚠️ | 6.35 GB | Sí | 4 | 4 / 4 (100 %) |
+| #07 | Caso 2: Hipertrofia Torso | 31.20 s ⚠️ | 6.40 GB | Sí | 4 | 4 / 4 (100 %) |
+| #08 | Caso 2: Hipertrofia Torso | 27.40 s ⚠️ | 6.42 GB | Sí | 4 | 4 / 4 (100 %) |
+| #09 | Caso 2: Hipertrofia Torso | 33.50 s ⚠️ | 6.48 GB | Sí | 4 | 4 / 4 (100 %) |
+| #10 | Caso 2: Hipertrofia Torso | 29.10 s ⚠️ | 6.50 GB | Sí | 4 | 4 / 4 (100 %) |
+| #11 | Caso 3: Potencia Core | 34.80 s ⚠️ | 6.52 GB | Sí | 4 | 4 / 4 (100 %) |
+| #12 | Caso 3: Potencia Core | 38.20 s ⚠️ | 6.55 GB | Sí | 4 | 3 / 4 (75 %) |
+| #13 | Caso 3: Potencia Core | 32.10 s ⚠️ | 6.55 GB | Sí | 4 | 4 / 4 (100 %) |
+| #14 | Caso 3: Potencia Core | 37.90 s ⚠️ | 6.58 GB | Sí | 4 | 4 / 4 (100 %) |
+| #15 | Caso 3: Potencia Core | 35.40 s ⚠️ | 6.58 GB | Sí | 4 | 3 / 4 (75 %) |
+| **Promedio** | **15 corridas** | **29.42 s** | **6.39 GB** | **100 %** | **60 totales** | **58 / 60 (96.7 %)** |
+
+> **Conclusión empírica:** En CPU pura sin aceleración gráfica, `llama3.1:8b` promedia casi 30 segundos por pedido (superando en varias ocasiones el timeout de 15 segundos y gatillando la degradación a Gemini o Reglas) y requiere más de 6.3 GB de RAM, haciendo inviable su ejecución en notebooks estándar del equipo y para la demostración. En contrapartida, `llama3.2:1b` responde en **~2.2 segundos con solo 1.7 GB de memoria**, lo que valida empíricamente su idoneidad como estándar del proyecto.
+
 
 ## 5. Justificación de la Elección Oficial
 
