@@ -22,6 +22,10 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
 
             var (status, title, detail) = exception switch
             {
+                ForbiddenException forbidden => (403, forbidden.Message, (string?)null),
+                NoAthleteLinkedException noAthlete => (404, noAthlete.Message, (string?)null),
+                StructureUnavailableException => (503, "Estructura no disponible.",
+                    "No se pudo validar el atleta. Inténtalo de nuevo en unos segundos."),
                 DomainException domain => (400, domain.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),

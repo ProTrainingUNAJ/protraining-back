@@ -1,5 +1,6 @@
 using Application.Interfaces.Persistence;
 using Application.UseCases.CheckIns.SubmitCheckIn;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Services;
@@ -64,7 +65,7 @@ public class SubmitCheckInCommandHandlerTests
         var existente = new CheckIn
         {
             AthleteId = AthleteId,
-            Date = DateTime.UtcNow.Date,
+            Date = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue),
             TrafficLight = TrafficLight.Yellow
         };
         _checkIns
@@ -121,5 +122,25 @@ public class SubmitCheckInCommandHandlerTests
 
         await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
             new SubmitCheckInCommand(Guid.Empty, 8, 4, 1, 2, 4, 2, false, 4, null, false)));
+    }
+    [Fact]
+    public async Task HandleAsync_UsesArgentinaDate_InsteadOfUtcDate()
+    {
+        DateTime? fechaRecibida = null;
+        _checkIns
+            .Setup(repo => repo.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, DateTime, CancellationToken>((_, fecha, _) => fechaRecibida = fecha)
+            .ReturnsAsync((CheckIn?)null);
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _unitOfWork
+            .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        await CreateHandler().HandleAsync(CommandValido());
+
+        Assert.NotNull(fechaRecibida);
+        Assert.Equal(ArgentinaTime.Today, DateOnly.FromDateTime(fechaRecibida!.Value));
     }
 }

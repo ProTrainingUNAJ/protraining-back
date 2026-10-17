@@ -9,6 +9,7 @@ using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.Health.GetHealth;
 using Domain.Services;
 using Infrastructure;
+using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -61,6 +62,14 @@ builder.Services.AddScoped<SubmitCheckInCommandHandler>();
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+// Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
+// del token con el athleteId de la ruta antes de registrar el check-in.
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
