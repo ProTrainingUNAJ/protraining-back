@@ -96,6 +96,9 @@ services:
       <<: *api-env
       Database__Host: db-estructura
       Database__Name: estructura
+      Vapid__Subject: ${VAPID_SUBJECT:-mailto:soporte@protraining.app}
+      Vapid__PublicKey: ${VAPID_PUBLIC_KEY:-}
+      Vapid__PrivateKey: ${VAPID_PRIVATE_KEY:-}
     ports: ["8082:8080"]
     depends_on:
       db-estructura: { condition: service_healthy }

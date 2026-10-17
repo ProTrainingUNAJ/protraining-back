@@ -47,10 +47,19 @@ public static class DependencyInjection
         services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
         services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
         services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
+        services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
-        // servicios para recordatorios de wellness (KAN-369)
+        // servicios para recordatorios y notificaciones Web Push (VAPID)
+        services.Configure<Infrastructure.Options.VapidOptions>(options =>
+        {
+            var section = configuration.GetSection(Infrastructure.Options.VapidOptions.SectionName);
+            options.Subject = section["Subject"] ?? "mailto:soporte@protraining.app";
+            options.PublicKey = section["PublicKey"] ?? string.Empty;
+            options.PrivateKey = section["PrivateKey"] ?? string.Empty;
+        });
+        services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
         services.AddScoped<IPushNotificationService, PushNotificationService>();
         services.AddSingleton<IWellnessReminderTracker, InMemoryWellnessReminderTracker>();
         services.AddScoped<ISessionScheduleService, SessionScheduleService>();

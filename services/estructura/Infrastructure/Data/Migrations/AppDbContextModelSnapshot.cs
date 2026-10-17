@@ -451,6 +451,78 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("pending_purges", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.PushSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("auth");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("endpoint");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTime?>("LastDeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_delivered_at");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("p256dh");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("user_agent");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AthleteId");
+
+                    b.HasIndex("Endpoint");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("push_subscriptions", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.AthleteCategory", b =>
                 {
                     b.HasOne("Domain.Entities.Athlete", null)
