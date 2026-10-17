@@ -472,6 +472,137 @@ public sealed class ExerciseSemanticValidatorTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public async Task Given_TrainingService_Returns_PaginatedExerciseResponse_When_Searching_Then_Parses_Items_Correctly()
+    {
+        // Arrange: Respuesta oficial según contrato OpenAPI PaginatedExerciseResponse (KAN-519 / KAN-516)
+        var realId = Guid.NewGuid();
+        var paginatedJson = $$"""
+        {
+          "items": [
+            {
+              "id": "{{realId}}",
+              "name": "Sentadilla trasera con barra",
+              "muscleGroup": "Piernas",
+              "equipment": "Barra Olímpica"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "totalCount": 1,
+          "totalPages": 1
+        }
+        """;
+
+        var testHandler = new TestHttpMessageHandler(paginatedJson);
+        var client = new HttpClient(testHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
+        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+
+        // Act
+        var results = await service.SearchAsync("Sentadilla");
+
+        // Assert: Deserializa correctamente la lista desde la propiedad "items"
+        Assert.NotEmpty(results);
+        Assert.Equal(realId, results[0].Id);
+        Assert.Equal("Sentadilla trasera con barra", results[0].Name);
+    }
+
+    [Fact]
+    public async Task Given_BurpeesConSaltoAlCajon_When_CatalogOnlyHas_SaltoAlCajon_Then_DoesNotReplace_And_KeepsAsReference()
+    {
+        // Arrange: Caso real observado por Enzo:
+        // La IA propone "Burpees con salto al cajón", que no existe en el catálogo.
+        // Entrenamiento devuelve como candidato más parecido "Salto al cajón (respuesta múltiple)".
+        // Como el recall y precisión no alcanzan el umbral, NO debe reemplazar el burpee por salto al cajón,
+        // sino dejarlo con IsReference: true y ExerciseId: null (Ajuste N2).
+        var saltoAlCajonId = Guid.NewGuid();
+        var catalogJson = $$"""
+        {
+          "items": [
+            {
+              "id": "{{saltoAlCajonId}}",
+              "name": "Salto al cajón (respuesta múltiple)",
+              "muscleGroup": "Piernas",
+              "equipment": "Cajón"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "totalCount": 1,
+          "totalPages": 1
+        }
+        """;
+
+        var testHandler = new TestHttpMessageHandler(catalogJson);
+        var client = new HttpClient(testHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
+        var service = new ExerciseCatalogService(client, NullLogger<ExerciseCatalogService>.Instance);
+        var validator = new ExerciseSemanticValidator(service);
+
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: Guid.NewGuid(),
+            ProposedTitle: "Rutina Metabólica",
+            JustificationSummary: "Acondicionamiento",
+            Exercises:
+            [
+                new SuggestedExerciseDto(
+                    ExerciseName: "Burpees con salto al cajón",
+                    Sets: 3,
+                    Reps: 12,
+                    SuggestedPercentage: 0m,
+                    ExerciseId: null,
+                    IsReference: false
+                )
+            ],
+            ProviderUsed: "Ollama"
+        );
+
+        // Act
+        var validationResult = await validator.ValidateDraftAsync(draft);
+
+        // Assert: El ejercicio NO se sustituyó por "Salto al cajón", se preservó el nombre original como referencia
+        var exercise = Assert.Single(validationResult.SanitizedRoutine.Exercises);
+        Assert.Equal("Burpees con salto al cajón", exercise.ExerciseName);
+        Assert.Null(exercise.ExerciseId);
+        Assert.True(exercise.IsReference);
+    }
+
+    [Fact]
+    public async Task Given_ResilientAiService_With_Rules_Provider_When_Executed_Then_Rules_Exercises_Are_Semantically_Validated()
+    {
+        // Arrange: Reglas determinísticas como único proveedor
+        var auditMock = new Mock<Application.Interfaces.Services.IAiAuditService>();
+        var rulesClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var orchestrator = new Infrastructure.Services.Ai.ResilientAiService(
+            providers: [rulesClient],
+            semanticValidator: _validator,
+            responseCache: null,
+            logger: NullLogger<Infrastructure.Services.Ai.ResilientAiService>.Instance
+        );
+
+        var request = new RoutineSuggestionRequestDto(
+            AthleteId: Guid.NewGuid(),
+            Goal: "Fuerza Máxima de Piernas",
+            MuscleGroupEmphasis: ["Piernas"]
+        );
+
+        // Act
+        var result = await orchestrator.SuggestRoutineAsync(request);
+
+        // Assert: Todos los ejercicios generados por el motor de reglas fueron validados semánticamente:
+        // Los que existen en el catálogo poseen ExerciseId real de Entrenamiento, y los que no, quedan como referencia.
+        Assert.NotNull(result);
+        Assert.NotEmpty(result.Exercises);
+        Assert.All(result.Exercises, e =>
+        {
+            if (!e.IsReference)
+            {
+                Assert.NotNull(e.ExerciseId);
+                Assert.NotEqual(Guid.Empty, e.ExerciseId);
+            }
+        });
+    }
+
     private sealed class FakeTrainingHandler(List<TestExercise> exercises) : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }

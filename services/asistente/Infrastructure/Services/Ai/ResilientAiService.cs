@@ -133,10 +133,10 @@ public sealed class ResilientAiService : IAiService
             if (response != null)
             {
                 // Validación semántica de ejercicios en caso de contar con el validador
-                if (_semanticValidator != null && !isLast)
+                if (_semanticValidator != null)
                 {
                     var validationResult = await _semanticValidator.ValidateDraftAsync(response, cancellationToken: cancellationToken);
-                    if (validationResult.RequiresDeterministicFallback)
+                    if (validationResult.RequiresDeterministicFallback && !isLast)
                     {
                         _logger.LogWarning(
                             "La propuesta del proveedor '{Provider}' contiene ejercicios inválidos que no pudieron corregirse ({Messages}). Descartando propuesta y activando siguiente respaldo.",

@@ -1,37 +1,54 @@
 namespace Infrastructure.Services.Catalog;
 
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Cliente HTTP hacia el microservicio de Entrenamiento para consultar y verificar
 /// los ejercicios en la biblioteca oficial. Reenvía la autorización del preparador físico
-/// a través de ForwardAuthorizationHandler y no depende de lecturas locales de disco ni listas estáticas.
+/// a través de ForwardAuthorizationHandler y utiliza IMemoryCache para persistir el catálogo en memoria.
 /// </summary>
 public sealed class ExerciseCatalogService : IExerciseCatalogService
 {
     public const string ExercisesPath = "api/v1/exercises";
+    private const string CacheKeyPrefixId = "cat_ex_id_";
+    private const string CacheKeyPrefixName = "cat_ex_name_";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
 
     private readonly HttpClient _httpClient;
+    private readonly IMemoryCache? _memoryCache;
     private readonly ILogger<ExerciseCatalogService> _logger;
-    private readonly ConcurrentDictionary<Guid, CatalogExerciseDto> _cacheById = new();
-    private readonly ConcurrentDictionary<string, CatalogExerciseDto> _cacheByName = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "de", "con", "en", "el", "la", "los", "las", "un", "una", "unos", "unas", "para", "por", "al", "del", "y", "o", "no"
     };
 
-    public ExerciseCatalogService(HttpClient httpClient, ILogger<ExerciseCatalogService> logger)
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public ExerciseCatalogService(
+        HttpClient httpClient,
+        ILogger<ExerciseCatalogService> logger) : this(httpClient, null, logger)
+    {
+    }
+
+    public ExerciseCatalogService(
+        HttpClient httpClient,
+        IMemoryCache? memoryCache,
+        ILogger<ExerciseCatalogService> logger)
     {
         _httpClient = httpClient;
+        _memoryCache = memoryCache;
         _logger = logger;
     }
 
@@ -42,36 +59,23 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             return null;
         }
 
-        // 1. Verificación en caché local de respuestas previas
-        if (_cacheById.TryGetValue(exerciseId, out var cached))
+        // 1. Verificación en memoria de resultados previamente recuperados
+        var cached = GetCachedById(exerciseId);
+        if (cached != null)
         {
             return cached;
         }
 
-        // 2. Si la caché local está vacía, realizamos una carga inicial del catálogo
-        if (_cacheById.IsEmpty)
-        {
-            await GetAllAsync(cancellationToken);
-            if (_cacheById.TryGetValue(exerciseId, out cached))
-            {
-                return cached;
-            }
-        }
-
-        // 3. Consulta HTTP directa al microservicio de Entrenamiento
+        // 2. Consulta a Entrenamiento vía búsqueda por ids (?ids=...) según contrato oficial
         try
         {
-            using var response = await _httpClient.GetAsync($"{ExercisesPath}/{exerciseId}", cancellationToken);
+            var url = $"{ExercisesPath}?ids={exerciseId}";
+            using var response = await _httpClient.GetAsync(url, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
-                var item = await response.Content.ReadFromJsonAsync<RemoteExerciseDto>(cancellationToken: cancellationToken);
-                if (item != null)
-                {
-                    var dto = new CatalogExerciseDto(item.Id, item.Name, item.MuscleGroup, item.Equipment ?? string.Empty);
-                    _cacheById[item.Id] = dto;
-                    _cacheByName[NormalizeText(item.Name)] = dto;
-                    return dto;
-                }
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                var items = ParseExercisesFromJson(json);
+                return items.FirstOrDefault(e => e.Id == exerciseId);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -80,7 +84,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "No se pudo obtener el ejercicio {Id} desde el endpoint individual de Entrenamiento.", exerciseId);
+            _logger.LogDebug(ex, "No se pudo consultar el ejercicio {Id} vía ?ids en Entrenamiento.", exerciseId);
         }
 
         return null;
@@ -95,20 +99,26 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
         var normalized = NormalizeText(exerciseName);
 
-        // 1. Coincidencia en caché local
-        if (_cacheByName.TryGetValue(normalized, out var cached))
+        // 1. Coincidencia en caché en memoria
+        var cached = GetCachedByName(normalized);
+        if (cached != null)
         {
             return cached;
         }
 
         var withoutParentheses = RemoveParentheses(normalized);
-        if (_cacheByName.TryGetValue(withoutParentheses, out var cleanCached))
+        if (!string.IsNullOrEmpty(withoutParentheses))
         {
-            return cleanCached;
+            cached = GetCachedByName(withoutParentheses);
+            if (cached != null)
+            {
+                return cached;
+            }
         }
 
-        // 2. Consulta HTTP de búsqueda hacia Entrenamiento
-        var candidates = await SearchAsync(withoutParentheses, cancellationToken);
+        // 2. Consulta HTTP de búsqueda hacia Entrenamiento (búsqueda por trigramas)
+        var searchTerm = !string.IsNullOrEmpty(withoutParentheses) ? withoutParentheses : normalized;
+        var candidates = await SearchAsync(searchTerm, cancellationToken);
         if (candidates.Count == 0 && withoutParentheses != normalized)
         {
             candidates = await SearchAsync(exerciseName, cancellationToken);
@@ -130,7 +140,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             return exactMatch;
         }
 
-        // 4. Coincidencia por similitud de términos clave (F1 score sobre tokens significativos)
+        // 4. Coincidencia por similitud estricta de términos clave (F1 score sobre tokens significativos)
         var searchMeaningful = withoutParentheses
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(t => !StopWords.Contains(t) && t.Length > 2)
@@ -138,7 +148,8 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
         if (searchMeaningful.Count == 0)
         {
-            return candidates.FirstOrDefault();
+            // Sin coincidencia exacta ni tokens distintivos, no se asume coincidencia (Ajuste N2: va como referencia)
+            return null;
         }
 
         CatalogExerciseDto? bestMatch = null;
@@ -161,14 +172,16 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             var precision = (double)common / itemMeaningful.Count;
             var f1 = 2 * (precision * recall) / (precision + recall);
 
-            if (recall >= 0.70 && f1 > highestScore)
+            // Se exige tanto recall alto como precisión para no sustituir por ejercicios distintos (caso Enzo: Burpees vs Salto al cajón)
+            if (recall >= 0.70 && precision >= 0.60 && f1 >= 0.65 && f1 > highestScore)
             {
                 highestScore = f1;
                 bestMatch = item;
             }
         }
 
-        return bestMatch ?? candidates.FirstOrDefault();
+        // Si no hay una coincidencia con puntaje suficiente, devuelve null (no sustituye por el más parecido)
+        return bestMatch;
     }
 
     public async Task<IReadOnlyList<CatalogExerciseDto>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
@@ -176,7 +189,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         try
         {
             var url = string.IsNullOrWhiteSpace(searchTerm)
-                ? $"{ExercisesPath}?pageSize=100"
+                ? $"{ExercisesPath}?pageSize=50"
                 : $"{ExercisesPath}?search={Uri.EscapeDataString(searchTerm)}&pageSize=50";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
@@ -191,22 +204,8 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
                 return [];
             }
 
-            var items = await response.Content.ReadFromJsonAsync<List<RemoteExerciseDto>>(cancellationToken: cancellationToken);
-            if (items == null || items.Count == 0)
-            {
-                return [];
-            }
-
-            var result = new List<CatalogExerciseDto>(items.Count);
-            foreach (var item in items)
-            {
-                var dto = new CatalogExerciseDto(item.Id, item.Name, item.MuscleGroup, item.Equipment ?? string.Empty);
-                _cacheById[item.Id] = dto;
-                _cacheByName[NormalizeText(item.Name)] = dto;
-                result.Add(dto);
-            }
-
-            return result;
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            return ParseExercisesFromJson(json);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -222,6 +221,97 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     public async Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await SearchAsync(string.Empty, cancellationToken);
+    }
+
+    private IReadOnlyList<CatalogExerciseDto> ParseExercisesFromJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        List<RemoteExerciseDto>? items = null;
+
+        // Intento 1: Deserializar según contrato oficial PaginatedExerciseResponse (con propiedad "items")
+        try
+        {
+            var paginated = JsonSerializer.Deserialize<PaginatedExerciseResponseDto>(json, JsonOptions);
+            if (paginated?.Items != null)
+            {
+                items = paginated.Items;
+            }
+        }
+        catch (JsonException)
+        {
+            // Fallback transitorio si Entrenamiento devuelve una lista plana
+        }
+
+        // Intento 2: Lista plana directa de ejercicios
+        if (items == null)
+        {
+            try
+            {
+                items = JsonSerializer.Deserialize<List<RemoteExerciseDto>>(json, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "No se pudo deserializar la respuesta de ejercicios de Entrenamiento.");
+                return [];
+            }
+        }
+
+        if (items == null || items.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<CatalogExerciseDto>(items.Count);
+        foreach (var item in items)
+        {
+            var dto = new CatalogExerciseDto(item.Id, item.Name, item.MuscleGroup, item.Equipment ?? string.Empty);
+            CacheItem(dto);
+            result.Add(dto);
+        }
+
+        return result;
+    }
+
+    private void CacheItem(CatalogExerciseDto dto)
+    {
+        if (_memoryCache == null) return;
+
+        var entryOptions = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl };
+        _memoryCache.Set(CacheKeyPrefixId + dto.Id, dto, entryOptions);
+
+        var norm = NormalizeText(dto.Name);
+        if (!string.IsNullOrEmpty(norm))
+        {
+            _memoryCache.Set(CacheKeyPrefixName + norm, dto, entryOptions);
+        }
+
+        var withoutParens = RemoveParentheses(norm);
+        if (!string.IsNullOrEmpty(withoutParens) && withoutParens != norm)
+        {
+            _memoryCache.Set(CacheKeyPrefixName + withoutParens, dto, entryOptions);
+        }
+    }
+
+    private CatalogExerciseDto? GetCachedById(Guid id)
+    {
+        if (_memoryCache != null && _memoryCache.TryGetValue(CacheKeyPrefixId + id, out CatalogExerciseDto? cached))
+        {
+            return cached;
+        }
+        return null;
+    }
+
+    private CatalogExerciseDto? GetCachedByName(string normalizedName)
+    {
+        if (_memoryCache != null && _memoryCache.TryGetValue(CacheKeyPrefixName + normalizedName, out CatalogExerciseDto? cached))
+        {
+            return cached;
+        }
+        return null;
     }
 
     private static string NormalizeText(string text)
@@ -258,6 +348,24 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             else if (!inside) sb.Append(ch);
         }
         return sb.ToString().Trim();
+    }
+
+    private sealed class PaginatedExerciseResponseDto
+    {
+        [JsonPropertyName("items")]
+        public List<RemoteExerciseDto>? Items { get; set; }
+
+        [JsonPropertyName("page")]
+        public int Page { get; set; }
+
+        [JsonPropertyName("pageSize")]
+        public int PageSize { get; set; }
+
+        [JsonPropertyName("totalCount")]
+        public int TotalCount { get; set; }
+
+        [JsonPropertyName("totalPages")]
+        public int TotalPages { get; set; }
     }
 
     private sealed class RemoteExerciseDto

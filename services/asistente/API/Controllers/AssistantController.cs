@@ -11,7 +11,6 @@ namespace API.Controllers;
 public sealed class AssistantController(SuggestRoutineUseCase suggestRoutineUseCase) : ControllerBase
 {
     [HttpPost("suggest-routine")]
-    [HttpPost("/api/v1/asistente/sugerir-rutina")]
     public async Task<ActionResult<RoutineSuggestionResponseDto>> SuggestRoutine(
         [FromBody] RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken)

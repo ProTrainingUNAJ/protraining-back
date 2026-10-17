@@ -108,21 +108,20 @@ public sealed class AssistantControllerTests
     }
 
     [Fact]
-    public void Given_AssistantController_When_Inspecting_Routes_Then_Exposes_English_Route_And_Spanish_Alias()
+    public void Given_AssistantController_When_Inspecting_Routes_Then_Exposes_English_Route()
     {
         // Assert: Ruta base api/v1/assistant
         var routeAttribute = typeof(AssistantController).GetCustomAttribute<RouteAttribute>();
         Assert.NotNull(routeAttribute);
         Assert.Equal("api/v1/assistant", routeAttribute.Template);
 
-        // Assert: Método SuggestRoutine expone ambas rutas para retrocompatibilidad
+        // Assert: Método SuggestRoutine expone exclusivamente la ruta estándar en inglés
         var method = typeof(AssistantController).GetMethod(nameof(AssistantController.SuggestRoutine));
         Assert.NotNull(method);
 
-        var httpPosts = method.GetCustomAttributes<HttpPostAttribute>().ToList();
-        Assert.Equal(2, httpPosts.Count);
-        Assert.Contains(httpPosts, p => p.Template == "suggest-routine");
-        Assert.Contains(httpPosts, p => p.Template == "/api/v1/asistente/sugerir-rutina");
+        var httpPost = method.GetCustomAttribute<HttpPostAttribute>();
+        Assert.NotNull(httpPost);
+        Assert.Equal("suggest-routine", httpPost.Template);
     }
 
     [Fact]
