@@ -89,4 +89,79 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
             }
         }
     }
+
+    public async Task<IReadOnlyList<AthleteCategoryDto>> GetAthleteCategoriesAsync(Guid athleteId, CancellationToken cancellationToken = default)
+    {
+        var athleteCategoriesPath = $"api/v1/athletes/{athleteId}/categories";
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(athleteCategoriesPath, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return await response.Content.ReadFromJsonAsync<List<AthleteCategoryDto>>(cancellationToken) ?? [];
+
+                case HttpStatusCode.NotFound:
+                    logger.LogWarning("El atleta {AthleteId} no fue encontrado en Estructura al consultar sus categorías.", athleteId);
+                    return [];
+
+                case HttpStatusCode.Unauthorized:
+                case HttpStatusCode.Forbidden:
+                    throw new UnauthorizedAccessException();
+
+                default:
+                    logger.LogError("Estructura respondió {Status} al pedir las categorías del atleta {AthleteId}.", (int)response.StatusCode, athleteId);
+                    throw new StructureUnavailableException();
+            }
+        }
+    }
+
+    public async Task<StructureAthleteDto?> GetAthleteByIdAsync(Guid athleteId, CancellationToken cancellationToken = default)
+    {
+        var path = $"api/v1/athletes/{athleteId}";
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(path, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return await response.Content.ReadFromJsonAsync<StructureAthleteDto>(cancellationToken);
+                case HttpStatusCode.NotFound:
+                    logger.LogWarning("El atleta {AthleteId} no fue encontrado en Estructura.", athleteId);
+                    return null;
+                case HttpStatusCode.Unauthorized:
+                case HttpStatusCode.Forbidden:
+                    throw new UnauthorizedAccessException();
+                default:
+                    logger.LogError("Estructura respondió {Status} al consultar el detalle del atleta {AthleteId}.", (int)response.StatusCode, athleteId);
+                    throw new StructureUnavailableException();
+            }
+        }
+    }
 }

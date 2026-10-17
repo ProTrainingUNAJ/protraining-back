@@ -202,4 +202,45 @@ public class GetTodayRoutineQueryHandlerTests
 
         return session;
     }
+
+    [Fact]
+    public async Task Given_PreparadorFisicoPideRutinaDeAtletaConPlanAsignadoPorCategoria_When_ConsultaRutina_Then_DevuelveNombreDeAtletaYEjercicios()
+    {
+        var athleteId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m, coachNotes: "Controlar técnica en descenso");
+
+        _structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Primera", null)]);
+
+        _structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(
+                athleteId,
+                It.Is<IReadOnlyList<Guid>>(cats => cats.Contains(categoryId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var record = AthleteRecord.Create(athleteId, exercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, exercise.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(record);
+
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId });
+
+        Assert.Equal("Lucas Gómez", result.AthleteName);
+        Assert.Equal(athleteId, result.AthleteId);
+        Assert.Equal("Controlar técnica en descenso", result.CoachNotes);
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal("Sentadilla Trasera", item.Name);
+        Assert.Equal(80.0, item.WeightKg);
+    }
+
 }

@@ -31,6 +31,17 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             if (query.AthleteId.HasValue && query.AthleteId.Value != Guid.Empty)
             {
                 athleteId = query.AthleteId.Value;
+
+                var categories = await structureClient.GetAthleteCategoriesAsync(athleteId, cancellationToken);
+
+                categoryIds = categories?.Select(c => c.Id).ToList() ?? [];
+
+                var athlete = await structureClient.GetAthleteByIdAsync(athleteId, cancellationToken);
+
+                if (athlete != null)
+                {
+                    athleteName = athlete.FullName;
+                }
             }
             else
             {
