@@ -3,8 +3,10 @@ namespace Asistente.Tests;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Application.Interfaces.Services;
+using Domain.Entities;
 using Infrastructure.Services.Ai;
 using Infrastructure.Services.Ai.Cache;
+using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -213,5 +215,159 @@ public sealed class AiResponseCacheTests
 
         // Assert: Ambas peticiones ejecutaron la IA porque la caché está deshabilitada
         Assert.Equal(2, callCount);
+    }
+
+    [Fact]
+    public async Task Given_DeterministicRules_Response_When_Executed_Then_Not_Cached()
+    {
+        // Arrange: Motor de reglas determinísticas como proveedor de respaldo
+        var auditMock = new Mock<IAiAuditService>();
+        var rulesClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var orchestrator = new ResilientAiService(
+            providers: [rulesClient],
+            semanticValidator: null,
+            responseCache: _cacheService,
+            logger: NullLogger<ResilientAiService>.Instance
+        );
+
+        var request = new RoutineSuggestionRequestDto(Guid.NewGuid(), "Fuerza Máxima", ["Piernas"]);
+
+        // Act 1: Primer pedido resuelto por reglas determinísticas
+        var response1 = await orchestrator.SuggestRoutineAsync(request);
+
+        // Act 2: Segundo pedido idéntico
+        var response2 = await orchestrator.SuggestRoutineAsync(request);
+
+        // Assert: La respuesta de reglas NO debe quedar guardada en memoria
+        // para que ante una recuperación de Ollama/Gemini, no quede bloqueado por 30 minutos.
+        var promptHash = _cacheService.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis);
+        var isCached = _cacheService.TryGet(promptHash, out _);
+
+        Assert.False(isCached);
+        Assert.NotNull(response1);
+        Assert.NotNull(response2);
+        Assert.Equal("Reglas", response1.ProviderUsed);
+        Assert.Equal("Reglas", response2.ProviderUsed);
+    }
+
+    [Fact]
+    public async Task Given_Different_Pfs_With_Same_Goal_When_Executed_Then_Cache_Is_Isolated_By_Pf()
+    {
+        // Arrange: Dos PFs distintos consultando el mismo objetivo
+        var pfA = Guid.NewGuid();
+        var pfB = Guid.NewGuid();
+
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(pfA);
+
+        var callCount = 0;
+        var aiClientMock = new Mock<IAiClient>();
+        aiClientMock.Setup(c => c.ProviderName).Returns("Ollama");
+        aiClientMock.Setup(c => c.TrySuggestRoutineAsync(It.IsAny<RoutineSuggestionRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((RoutineSuggestionRequestDto req, CancellationToken _) =>
+            {
+                callCount++;
+                return new RoutineSuggestionResponseDto(
+                    AthleteId: req.AthleteId,
+                    ProposedTitle: "Rutina Isquios",
+                    JustificationSummary: "Rehabilitación específica",
+                    Exercises: [new SuggestedExerciseDto("Curl femoral", 3, 12, 60m, Guid.NewGuid())],
+                    ProviderUsed: "Ollama"
+                );
+            });
+
+        var orchestrator = new ResilientAiService(
+            providers: [aiClientMock.Object],
+            semanticValidator: null,
+            responseCache: _cacheService,
+            currentUser: currentUserMock.Object,
+            auditService: null,
+            logger: NullLogger<ResilientAiService>.Instance
+        );
+
+        var request = new RoutineSuggestionRequestDto(Guid.NewGuid(), "Rehabilitación isquios", ["Piernas"]);
+
+        // Act 1: PF A realiza la consulta (Cache Miss -> llama a la IA)
+        var responseA = await orchestrator.SuggestRoutineAsync(request);
+
+        // Act 2: PF B realiza EXACTAMENTE el mismo pedido (debe aislarse y llamar a la IA de nuevo)
+        currentUserMock.Setup(u => u.PfId).Returns(pfB);
+        var responseB = await orchestrator.SuggestRoutineAsync(request);
+
+        // Act 3: PF A repite su pedido (debe recuperar su propio caché)
+        currentUserMock.Setup(u => u.PfId).Returns(pfA);
+        var responseA2 = await orchestrator.SuggestRoutineAsync(request);
+
+        // Assert:
+        // Se llamó a la IA 2 veces (una para PF A y otra para PF B).
+        // La 3ra petición de PF A no llamó a la IA porque respondió desde su caché aislado.
+        Assert.Equal(2, callCount);
+        Assert.NotNull(responseA);
+        Assert.NotNull(responseB);
+        Assert.NotNull(responseA2);
+        Assert.Equal("Ollama", responseA.ProviderUsed);
+        Assert.Equal("Ollama", responseB.ProviderUsed);
+        Assert.Equal("Ollama (cache)", responseA2.ProviderUsed);
+    }
+
+    [Fact]
+    public void Given_Different_Pfs_When_Computing_Hash_Then_Produces_Different_Hash()
+    {
+        // Arrange
+        var pf1 = Guid.NewGuid();
+        var pf2 = Guid.NewGuid();
+
+        var hash1 = _cacheService.ComputePromptHash("Fuerza", ["Piernas"], pf1);
+        var hash2 = _cacheService.ComputePromptHash("Fuerza", ["Piernas"], pf2);
+        var hashGlobal = _cacheService.ComputePromptHash("Fuerza", ["Piernas"], null);
+
+        // Assert: Distinto PF genera claves distintas, garantizando aislamiento en IMemoryCache
+        Assert.NotEqual(hash1, hash2);
+        Assert.NotEqual(hash1, hashGlobal);
+    }
+
+    [Fact]
+    public async Task Given_Cached_Response_When_Returned_Then_ProviderUsed_Indicates_Cache_And_Audit_Is_Logged()
+    {
+        // Arrange
+        var auditMock = new Mock<IAiAuditService>();
+        var aiClientMock = new Mock<IAiClient>();
+        aiClientMock.Setup(c => c.ProviderName).Returns("Ollama");
+        aiClientMock.Setup(c => c.TrySuggestRoutineAsync(It.IsAny<RoutineSuggestionRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((RoutineSuggestionRequestDto req, CancellationToken _) =>
+                new RoutineSuggestionResponseDto(
+                    AthleteId: req.AthleteId,
+                    ProposedTitle: "Rutina Fuerza",
+                    JustificationSummary: "Progresión de cargas",
+                    Exercises: [],
+                    ProviderUsed: "Ollama"
+                ));
+
+        var orchestrator = new ResilientAiService(
+            providers: [aiClientMock.Object],
+            semanticValidator: null,
+            responseCache: _cacheService,
+            currentUser: null,
+            auditService: auditMock.Object,
+            logger: NullLogger<ResilientAiService>.Instance
+        );
+
+        var request = new RoutineSuggestionRequestDto(Guid.NewGuid(), "Fuerza tren superior", ["Brazos"]);
+
+        // Act 1: Primer pedido (Cache Miss -> Proveedor original)
+        var res1 = await orchestrator.SuggestRoutineAsync(request);
+
+        // Act 2: Segundo pedido (Cache Hit -> Debe indicar sufijo (cache) y loguear en auditoría)
+        var res2 = await orchestrator.SuggestRoutineAsync(request);
+
+        // Assert
+        Assert.Equal("Ollama", res1.ProviderUsed);
+        Assert.Equal("Ollama (cache)", res2.ProviderUsed);
+
+        // Verificamos que se haya invocado la auditoría de IA marcando CacheHit
+        auditMock.Verify(a => a.LogAsync(
+            It.Is<AiLog>(l => l.Provider == "Ollama (cache)" && l.ValidationResult == "CacheHit"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

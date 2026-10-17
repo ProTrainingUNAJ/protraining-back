@@ -20,9 +20,9 @@ public interface IAiResponseCache
     void Set(string promptHash, RoutineSuggestionResponseDto response, TimeSpan? customTtl = null);
 
     /// <summary>
-    /// Calcula un hash determinístico SHA-256 a partir del objetivo y los grupos musculares solicitados.
+    /// Calcula un hash determinístico SHA-256 a partir del objetivo, los grupos musculares solicitados y opcionalmente el identificador del preparador físico (KAN-368).
     /// </summary>
-    string ComputePromptHash(string goal, IEnumerable<string>? muscleGroupEmphasis);
+    string ComputePromptHash(string goal, IEnumerable<string>? muscleGroupEmphasis, Guid? pfId = null);
 
     /// <summary>
     /// Calcula un hash determinístico SHA-256 a partir de un texto de prompt crudo.
