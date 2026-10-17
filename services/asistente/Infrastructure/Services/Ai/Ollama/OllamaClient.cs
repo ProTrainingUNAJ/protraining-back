@@ -24,6 +24,7 @@ public sealed class OllamaClient(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var stopwatch = Stopwatch.StartNew();
         var prompt = BuildAnonymousPrompt(request);
 
@@ -139,6 +140,10 @@ public sealed class OllamaClient(
                 Exercises: validationResult.Exercises.ToList(),
                 ProviderUsed: ProviderName
             );
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

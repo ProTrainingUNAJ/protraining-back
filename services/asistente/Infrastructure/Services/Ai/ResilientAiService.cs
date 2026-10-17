@@ -98,6 +98,7 @@ public sealed class ResilientAiService : IAiService
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var totalStopwatch = Stopwatch.StartNew();
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
@@ -154,6 +155,7 @@ public sealed class ResilientAiService : IAiService
 
         for (var i = 0; i < _providers.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var provider = _providers[i];
             var isLast = i == _providers.Count - 1;
             var tierNumber = i + 1;
