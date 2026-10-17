@@ -8,6 +8,7 @@ namespace Application.DTOs.Routines
         public DateOnly Date { get; set; }
         public bool HasActiveInjuries { get; set; }
         public bool RoutineAdapted { get; set; }
+        public string? CoachNotes { get; set; }
         public List<TodayRoutineExerciseDto> Exercises { get; set; } = [];
     }
 }

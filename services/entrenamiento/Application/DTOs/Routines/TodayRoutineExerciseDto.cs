@@ -10,7 +10,8 @@ namespace Application.DTOs.Routines
         public int Sets { get; set; }
         public int Reps { get; set; }
         public double Percentage { get; set; }
-        public double WeightKg { get; set; }
-        public double Current1RmKg { get; set; }
+        public double? WeightKg { get; set; }
+        public double? Current1RmKg { get; set; }
+        public bool IsReference { get; set; }
     }
 }

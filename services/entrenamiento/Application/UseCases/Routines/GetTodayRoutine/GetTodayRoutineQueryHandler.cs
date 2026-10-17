@@ -1,5 +1,8 @@
 using Application.DTOs.Routines;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
+using Domain.Common;
 using Domain.Services;
 
 namespace Application.UseCases.Routines.GetTodayRoutine
@@ -9,24 +12,46 @@ namespace Application.UseCases.Routines.GetTodayRoutine
         private readonly IAthleteRecordRepository athleteRecordRepository;
         private readonly ITrainingSessionRepository trainingSessionRepository;
         private readonly ILoadCalculatorEngine calculator;
+        private readonly IStructureClient structureClient;
 
-        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator)
+        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator, IStructureClient structureClient)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
             this.calculator = calculator;
+            this.structureClient = structureClient;
         }
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
         {
-            var routine = await trainingSessionRepository.GetTodaySessionByAthleteIdAsync(query.AthleteId, cancellationToken);
+            Guid athleteId;
+            string athleteName = string.Empty;
+            IReadOnlyList<Guid> categoryIds = [];
+
+            if (query.AthleteId.HasValue && query.AthleteId.Value != Guid.Empty)
+            {
+                athleteId = query.AthleteId.Value;
+            }
+            else
+            {
+                var athlete = await structureClient.GetMeAsync(cancellationToken) ?? throw new NotFoundException("No se encontró un perfil de atleta vinculado a la cuenta actual.");
+
+                athleteId = athlete.AthleteId;
+
+                athleteName = athlete.FullName;
+
+                categoryIds = athlete.Categories.Select(c => c.Id).ToList();
+            }
+
+            var routine = await trainingSessionRepository.GetByAthleteIdAsync(athleteId, categoryIds, cancellationToken);
 
             if(routine == null)
             {
                 return new TodayRoutineResponseDto
                 {
-                    AthleteId = query.AthleteId,
-                    Date = DateOnly.FromDateTime(DateTime.UtcNow),
+                    AthleteId = athleteId,
+                    AthleteName = athleteName,
+                    Date = ArgentinaTime.Today,
                     HasActiveInjuries = false,
                     RoutineAdapted = false,
                     Exercises = []
@@ -38,7 +63,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             // Por cada ejercicio prescrito, resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)
             {
-                var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(query.AthleteId, prescribed.ExerciseId, cancellationToken);
+                var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(athleteId, prescribed.ExerciseId, cancellationToken);
 
                 decimal percentage = prescribed.TargetPercentage ?? 100m;
 
@@ -59,17 +84,20 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     Sets = prescribed.Sets,
                     Reps = prescribed.Reps,
                     Percentage = (double)percentage,
-                    WeightKg = (double)(loadResult.WeightKg ?? 0m),
-                    Current1RmKg = (double)(current1RmKg ?? 0m)
+                    WeightKg = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null,
+                    Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
+                    IsReference = loadResult.IsReference
                 });
             }
 
             var todayRoutineDto = new TodayRoutineResponseDto
             {
-                AthleteId = query.AthleteId,
-                Date = DateOnly.FromDateTime(DateTime.UtcNow),
+                AthleteId = athleteId,
+                AthleteName = athleteName,
+                Date = ArgentinaTime.Today,
                 HasActiveInjuries = false,
                 RoutineAdapted = false,
+                CoachNotes = routine.CoachNotes,
                 Exercises = exercisesDto
             };
 

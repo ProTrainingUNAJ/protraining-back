@@ -7,7 +7,7 @@ namespace API.Controllers
 {
     [Route("api/v1/athletes")]
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "PreparadorFisico")]
     public class AthleteController : ControllerBase
     {
         private readonly GetTodayRoutineQueryHandler queryHandler;

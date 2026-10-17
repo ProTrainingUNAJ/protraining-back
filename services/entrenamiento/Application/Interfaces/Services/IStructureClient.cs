@@ -7,4 +7,5 @@ public interface IStructureClient
 {
     // Categorías activas del atleta logueado. Lista vacía si su cuenta no está vinculada a un atleta.
     Task<IReadOnlyList<AthleteCategoryDto>> GetMyCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<AthleteMeDto?> GetMeAsync(CancellationToken cancellationToken = default);
 }
