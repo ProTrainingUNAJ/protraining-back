@@ -52,7 +52,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CheckInRequest'
-       responses:
+      responses:
         "200":
           description: Check-in actualizado para el mismo día y semáforo recalculado.
           content:
