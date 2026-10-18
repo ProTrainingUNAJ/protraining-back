@@ -34,12 +34,21 @@ public sealed class CategoriesController(
 
     [HttpPost]
     public async Task<ActionResult<CategoryDto>> Create(
-        [FromQuery] Guid organizationId,
         CreateCategoryRequest request,
         CancellationToken cancellationToken)
     {
+        if (request is null || request.OrganizationId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Datos inválidos",
+                Detail = "El identificador de la organización es obligatorio.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
         var category = await createHandler.HandleAsync(
-            new CreateCategoryCommand(organizationId, request.Name, request.Description),
+            new CreateCategoryCommand(request.OrganizationId, request.Name, request.Description),
             cancellationToken);
 
         return Created($"/api/v1/categories/{category.Id}", category);

@@ -168,8 +168,8 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
         Assert.NotNull(org);
 
-        var catResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}",
-            new CreateCategoryRequest("Categoria Primera", "Primera division"));
+        var catResponse = await _clientPfA.PostAsJsonAsync("/api/v1/categories",
+            new CreateCategoryRequest(org.Id, "Categoria Primera", "Primera division"));
         var cat = await catResponse.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(cat);
 
