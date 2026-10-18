@@ -61,9 +61,10 @@ public static class DependencyInjection
         });
         services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
         services.AddScoped<IPushNotificationService, PushNotificationService>();
-        services.AddSingleton<IWellnessReminderTracker, InMemoryWellnessReminderTracker>();
+        services.AddScoped<IWellnessReminderTracker, DbWellnessReminderTracker>();
         services.AddScoped<ISessionScheduleService, SessionScheduleService>();
         services.AddScoped<IWellnessCheckInService, WellnessCheckInService>();
+
 
         return services;
     }
