@@ -34,11 +34,11 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         Assert.Equal("Club Atletico Test", org.Name);
 
         // 2. Create Categories within Organization
-        var cat1Request = new CreateCategoryRequest("Plantel Superior", "Primera division");
-        var cat2Request = new CreateCategoryRequest("Juveniles M19", "Menores de 19");
+        var cat1Request = new CreateCategoryRequest(org.Id, "Plantel Superior", "Primera division");
+        var cat2Request = new CreateCategoryRequest(org.Id, "Juveniles M19", "Menores de 19");
 
-        var cat1Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}", cat1Request);
-        var cat2Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}", cat2Request);
+        var cat1Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", cat1Request);
+        var cat2Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", cat2Request);
 
         Assert.Equal(HttpStatusCode.Created, cat1Response.StatusCode);
         Assert.Equal(HttpStatusCode.Created, cat2Response.StatusCode);
@@ -75,8 +75,8 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
         Assert.NotNull(org);
 
-        var cat1Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}", new CreateCategoryRequest("Primera A", null));
-        var cat2Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}", new CreateCategoryRequest("Intermedia", null));
+        var cat1Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org.Id, "Primera A", null));
+        var cat2Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org.Id, "Intermedia", null));
         var cat1 = await cat1Response.Content.ReadFromJsonAsync<CategoryDto>();
         var cat2 = await cat2Response.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(cat1);
@@ -122,7 +122,7 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         // 1. Setup Organization and Category
         var orgResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Hockey", null));
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org!.Id}", new CreateCategoryRequest("Sub 16", null));
+        var catResponse = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Sub 16", null));
         var cat = await catResponse.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(cat);
 
@@ -152,7 +152,7 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         // 1. Setup
         var orgResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Idempotencia", null));
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org!.Id}", new CreateCategoryRequest("Cat Unica", null));
+        var catResponse = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Cat Unica", null));
         var cat = await catResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Tomas", "Diaz", "tomas@test.com", "111", false));
         var athlete = await athleteResponse.Content.ReadFromJsonAsync<AthleteDto>();
@@ -185,8 +185,8 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         // 1. Setup Org, 2 Categories, 1 Athlete
         var orgResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Desasociacion", null));
         var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var cat1Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org!.Id}", new CreateCategoryRequest("Cat Primaria", null));
-        var cat2Response = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={org.Id}", new CreateCategoryRequest("Cat Secundaria", null));
+        var cat1Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Cat Primaria", null));
+        var cat2Response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org.Id, "Cat Secundaria", null));
         var cat1 = await cat1Response.Content.ReadFromJsonAsync<CategoryDto>();
         var cat2 = await cat2Response.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Valentin", "Gimenez", "valentin@test.com", "222", false));
@@ -209,6 +209,17 @@ public sealed class OrganizationalHierarchyTests : IAsyncDisposable
         // 4. Verify Athlete still exists and is not deleted
         var getAthleteResponse = await _clientPfA.GetAsync($"/api/v1/athletes/{athlete.Id}");
         Assert.Equal(HttpStatusCode.OK, getAthleteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_EmptyOrganizationId_When_CreatingCategory_Then_Returns400BadRequest()
+    {
+        var response = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(Guid.Empty, "Sub 18", null));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal("El identificador de la organización es obligatorio.", problem.Detail);
     }
 
     public async ValueTask DisposeAsync()

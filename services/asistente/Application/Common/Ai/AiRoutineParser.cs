@@ -38,11 +38,12 @@ public static class AiRoutineParser
 
             var errors = new List<string>();
 
-            // 1. Validar tituloPropuesto
+            // 1. Validar tituloPropuesto / proposedTitle
             string? proposedTitle = null;
-            if (!TryGetPropertyCaseInsensitive(root, "tituloPropuesto", out var titleProp))
+            if (!TryGetPropertyCaseInsensitive(root, "tituloPropuesto", out var titleProp) &&
+                !TryGetPropertyCaseInsensitive(root, "proposedTitle", out titleProp))
             {
-                errors.Add("Falta el campo obligatorio 'tituloPropuesto'.");
+                errors.Add("Falta el campo obligatorio 'tituloPropuesto' ('proposedTitle').");
             }
             else if (titleProp.ValueKind != JsonValueKind.String)
             {
@@ -57,11 +58,12 @@ public static class AiRoutineParser
                 proposedTitle = titleProp.GetString()!.Trim();
             }
 
-            // 2. Validar resumenJustificacion
+            // 2. Validar resumenJustificacion / justificationSummary
             string? justificationSummary = null;
-            if (!TryGetPropertyCaseInsensitive(root, "resumenJustificacion", out var justProp))
+            if (!TryGetPropertyCaseInsensitive(root, "resumenJustificacion", out var justProp) &&
+                !TryGetPropertyCaseInsensitive(root, "justificationSummary", out justProp))
             {
-                errors.Add("Falta el campo obligatorio 'resumenJustificacion'.");
+                errors.Add("Falta el campo obligatorio 'resumenJustificacion' ('justificationSummary').");
             }
             else if (justProp.ValueKind != JsonValueKind.String)
             {
@@ -76,11 +78,12 @@ public static class AiRoutineParser
                 justificationSummary = justProp.GetString()!.Trim();
             }
 
-            // 3. Validar ejercicios
+            // 3. Validar ejercicios / exercises
             var exercises = new List<SuggestedExerciseDto>();
-            if (!TryGetPropertyCaseInsensitive(root, "ejercicios", out var exercisesProp))
+            if (!TryGetPropertyCaseInsensitive(root, "ejercicios", out var exercisesProp) &&
+                !TryGetPropertyCaseInsensitive(root, "exercises", out exercisesProp))
             {
-                errors.Add("Falta el campo obligatorio 'ejercicios'.");
+                errors.Add("Falta el campo obligatorio 'ejercicios' ('exercises').");
             }
             else if (exercisesProp.ValueKind != JsonValueKind.Array)
             {
@@ -102,11 +105,12 @@ public static class AiRoutineParser
                         continue;
                     }
 
-                    // ejercicioNombre
+                    // ejercicioNombre / exerciseName
                     string? exerciseName = null;
-                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "ejercicioNombre", out var nameProp))
+                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "ejercicioNombre", out var nameProp) &&
+                        !TryGetPropertyCaseInsensitive(exerciseElement, "exerciseName", out nameProp))
                     {
-                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'ejercicioNombre'.");
+                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'ejercicioNombre' ('exerciseName').");
                     }
                     else if (nameProp.ValueKind != JsonValueKind.String)
                     {
@@ -121,11 +125,12 @@ public static class AiRoutineParser
                         exerciseName = nameProp.GetString()!.Trim();
                     }
 
-                    // series
+                    // series / sets
                     int? sets = null;
-                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "series", out var setsProp))
+                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "series", out var setsProp) &&
+                        !TryGetPropertyCaseInsensitive(exerciseElement, "sets", out setsProp))
                     {
-                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'series'.");
+                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'series' ('sets').");
                     }
                     else if (setsProp.ValueKind != JsonValueKind.Number)
                     {
@@ -148,11 +153,12 @@ public static class AiRoutineParser
                         sets = parsedSets;
                     }
 
-                    // repeticiones
+                    // repeticiones / reps
                     int? reps = null;
-                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "repeticiones", out var repsProp))
+                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "repeticiones", out var repsProp) &&
+                        !TryGetPropertyCaseInsensitive(exerciseElement, "reps", out repsProp))
                     {
-                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'repeticiones'.");
+                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'repeticiones' ('reps').");
                     }
                     else if (repsProp.ValueKind != JsonValueKind.Number)
                     {
@@ -175,11 +181,12 @@ public static class AiRoutineParser
                         reps = parsedReps;
                     }
 
-                    // porcentajeSugerido
+                    // porcentajeSugerido / suggestedPercentage
                     decimal? percentage = null;
-                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "porcentajeSugerido", out var pctProp))
+                    if (!TryGetPropertyCaseInsensitive(exerciseElement, "porcentajeSugerido", out var pctProp) &&
+                        !TryGetPropertyCaseInsensitive(exerciseElement, "suggestedPercentage", out pctProp))
                     {
-                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'porcentajeSugerido'.");
+                        errors.Add($"El ejercicio #{index} no contiene el campo obligatorio 'porcentajeSugerido' ('suggestedPercentage').");
                     }
                     else if (pctProp.ValueKind != JsonValueKind.Number)
                     {
@@ -198,9 +205,10 @@ public static class AiRoutineParser
                         percentage = parsedPct;
                     }
 
-                    // ejercicioId (opcional en el JSON de entrada)
+                    // ejercicioId / exerciseId (opcional en el JSON de entrada)
                     Guid? exerciseId = null;
-                    if (TryGetPropertyCaseInsensitive(exerciseElement, "ejercicioId", out var idProp))
+                    if (TryGetPropertyCaseInsensitive(exerciseElement, "ejercicioId", out var idProp) ||
+                        TryGetPropertyCaseInsensitive(exerciseElement, "exerciseId", out idProp))
                     {
                         if (idProp.ValueKind == JsonValueKind.String)
                         {
@@ -212,9 +220,10 @@ public static class AiRoutineParser
                         }
                     }
 
-                    // esReferencia (opcional)
+                    // esReferencia / isReference (opcional)
                     bool isReference = false;
-                    if (TryGetPropertyCaseInsensitive(exerciseElement, "esReferencia", out var refProp))
+                    if (TryGetPropertyCaseInsensitive(exerciseElement, "esReferencia", out var refProp) ||
+                        TryGetPropertyCaseInsensitive(exerciseElement, "isReference", out refProp))
                     {
                         if (refProp.ValueKind == JsonValueKind.True)
                         {

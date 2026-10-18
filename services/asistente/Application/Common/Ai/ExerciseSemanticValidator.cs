@@ -124,10 +124,19 @@ public sealed class ExerciseSemanticValidator(
                 );
             }
 
-            // Si el identificador no coincide con ningún registro, se busca resolución por nombre en el catálogo
             var byName = await catalogService.FindByNameAsync(exercise.ExerciseName, cancellationToken);
             if (byName != null)
             {
+                if (exercise.ExerciseId == byName.Id)
+                {
+                    // Si el identificador ya coincide exactamente con el del catálogo oficial, es válido (sin corrección requerida)
+                    return (
+                        exercise with { ExerciseId = byName.Id, IsReference = false },
+                        ExerciseValidationStatus.Valid,
+                        $"Ejercicio '{exercise.ExerciseName}' verificado con ejercicioId válido '{byName.Id}'."
+                    );
+                }
+
                 // Detección y corrección: se vincula el identificador oficial correspondiente al ejercicio identificado
                 return (
                     exercise with { ExerciseId = byName.Id, IsReference = false },
@@ -225,6 +234,12 @@ public sealed class ExerciseSemanticValidator(
             {
                 defaultExercises.Add(new SuggestedExerciseDto(item.Name, 3, 10, 70.0m, item.Id, IsReference: false));
             }
+        }
+        else if (defaultExercises.Count == 0)
+        {
+            // Fallback resiliente si el servicio de catálogo no responde
+            defaultExercises.Add(new SuggestedExerciseDto("Sentadilla básica", 3, 10, 60.0m, null, IsReference: true));
+            defaultExercises.Add(new SuggestedExerciseDto("Flexiones de brazos", 3, 10, 0.0m, null, IsReference: true));
         }
 
         return new RoutineSuggestionResponseDto(

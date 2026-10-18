@@ -54,5 +54,10 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
             .WithOne()
             .HasForeignKey<DigitalConsent>(consent => consent.AthleteId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(athlete => athlete.MedicalRecord)
+            .WithOne()
+            .HasForeignKey<MedicalRecord>(record => record.AthleteId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

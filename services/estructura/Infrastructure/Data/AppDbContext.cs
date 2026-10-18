@@ -3,6 +3,7 @@ using System.Reflection;
 using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
@@ -16,11 +17,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<Athlete> Athletes => Set<Athlete>();
     public DbSet<DigitalConsent> DigitalConsents => Set<DigitalConsent>();
+    public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
+    public DbSet<MedicalRecordAuditLog> MedicalRecordAuditLogs => Set<MedicalRecordAuditLog>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<AthleteCategory> AthleteCategories => Set<AthleteCategory>();
     public DbSet<PendingPurge> PendingPurges => Set<PendingPurge>();
+
     public DbSet<WellnessReminderSent> WellnessRemindersSent => Set<WellnessReminderSent>();
+
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,11 +91,36 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
                     break;
 
                 case EntityState.Modified:
+                    if (entry.Entity is MedicalRecordAuditLog)
+                    {
+                        throw new DomainException(
+                            "Los registros de auditoría médica son inmutables y de solo inserción: no se permite modificarlos.");
+                    }
+
                     entry.Property(entity => entity.PfId).IsModified = false;
                     entry.Property(entity => entity.CreatedAt).IsModified = false;
+
+                    if (entry.Entity is DigitalConsent)
+                    {
+                        // La evidencia de firma del consentimiento digital es inmutable una vez registrada.
+                        entry.Property(nameof(DigitalConsent.AthleteId)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.IsSigned)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.ConsentDate)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.IsMinor)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianName)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianEmail)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.GuardianPhone)).IsModified = false;
+                        entry.Property(nameof(DigitalConsent.AllowsPhysicalTraining)).IsModified = false;
+                    }
                     break;
 
                 case EntityState.Deleted:
+                    if (entry.Entity is MedicalRecordAuditLog)
+                    {
+                        throw new DomainException(
+                            "Los registros de auditoría médica son inmutables y de solo inserción: no se permite eliminarlos.");
+                    }
+
                     entry.State = EntityState.Modified;
                     entry.Property(entity => entity.DeletedAt).CurrentValue = now;
                     break;

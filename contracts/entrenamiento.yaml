@@ -76,13 +76,11 @@ paths:
           description: Cantidad de ejercicios por página.
       responses:
         "200":
-          description: Lista de ejercicios obtenida exitosamente según los filtros y paginación.
+          description: Catálogo de ejercicios paginado obtenido exitosamente.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Exercise'
+                $ref: '#/components/schemas/PaginatedExerciseResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -275,6 +273,36 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/me/today-routine:
+    get:
+      tags:
+        - Execution and Loads
+      summary: Rutina de hoy del atleta autenticado con peso resuelto
+      description: >
+        Devuelve la planificación del día del atleta correspondiente a la cuenta autenticada,
+        resolviendo su perfil en el microservicio de Estructura. Calcula la carga exacta a levantar
+        en kg en base a su 1RM vigente y redondeada al múltiplo de 2.5 kg más cercano.
+        Si no cuenta con una marca previa, prescribe la serie como de referencia (isReference: true).
+        Si hoy es día de descanso o no tiene sesión programada, responde 200 con la lista de ejercicios vacía.
+      operationId: getMyTodayRoutine
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayRoutineResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          description: La cuenta no tiene un perfil de atleta vinculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/athletes/{athleteId}/today-routine:
     get:
       tags:
@@ -302,6 +330,8 @@ paths:
                 $ref: '#/components/schemas/TodayRoutineResponse'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           description: El atleta no existe o no es tuyo
           content:
@@ -658,6 +688,38 @@ components:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
 
+    PaginatedExerciseResponse:
+      type: object
+      description: Respuesta paginada del catálogo de ejercicios.
+      required:
+        - items
+        - page
+        - pageSize
+        - totalCount
+        - totalPages
+      properties:
+        items:
+          type: array
+          description: Lista de ejercicios devueltos en la página solicitada.
+          items:
+            $ref: '#/components/schemas/Exercise'
+        page:
+          type: integer
+          description: Número de página actual.
+          example: 1
+        pageSize:
+          type: integer
+          description: Cantidad de ejercicios por página.
+          example: 20
+        totalCount:
+          type: integer
+          description: Total de ejercicios coincidentes con los filtros aplicados.
+          example: 120
+        totalPages:
+          type: integer
+          description: Total de páginas disponibles según el tamaño de página.
+          example: 6
+
     Record:
       type: object
       description: Objeto compartido de Récord 1RM con trazabilidad.
@@ -845,7 +907,7 @@ components:
         - name
         - sets
         - reps
-        - weightKg
+        - isReference
       properties:
         exerciseId:
           type: string
@@ -874,12 +936,19 @@ components:
         weightKg:
           type: number
           format: double
-          description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg).
+          nullable: true
+          description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg). Es null en series de referencia sin récord previo.
           example: 112.5
         current1RmKg:
           type: number
           format: double
+          nullable: true
+          description: Marca 1RM vigente tomada como referencia para el cálculo. Es null si el atleta no tiene récord.
           example: 140.0
+        isReference:
+          type: boolean
+          description: True si el ejercicio no tiene récord previo y la serie se prescribe como de referencia para probar y registrar.
+          example: false
 
     TodayRoutineResponse:
       type: object
@@ -905,6 +974,11 @@ components:
           type: boolean
           description: Indica si el copiloto adaptó ejercicios hoy debido a molestias o dolores marcados en el check-in.
           example: false
+        coachNotes:
+          type: string
+          nullable: true
+          description: Indicaciones o notas del preparador físico asociadas a la sesión.
+          example: "Controlar técnica en descenso y mantener pausa de 1 segundo."
         exercises:
           type: array
           items:

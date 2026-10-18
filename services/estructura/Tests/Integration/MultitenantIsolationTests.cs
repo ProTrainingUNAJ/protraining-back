@@ -118,8 +118,8 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
 
         // 2. PF-A attempts to create category in Org-B -> must return 404 (organization not found in PF-A scope)
         var createCatResponse = await _clientPfA.PostAsJsonAsync(
-            $"/api/v1/categories?organizationId={orgB!.Id}",
-            new CreateCategoryRequest("Categoria Ilegal", "Intruso"));
+            "/api/v1/categories",
+            new CreateCategoryRequest(orgB!.Id, "Categoria Ilegal", "Intruso"));
         Assert.Equal(HttpStatusCode.NotFound, createCatResponse.StatusCode);
 
         // 3. Verify in DB that no category was created
@@ -136,7 +136,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         // 1. PF-B creates Org-B and Cat-B
         var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Sub 21 PF-B", "Legitima"));
+        var catBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(orgB!.Id, "Sub 21 PF-B", "Legitima"));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         Assert.NotNull(catB);
 
@@ -208,7 +208,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         // 1. Setup PF-A assets
         var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club A", null));
         var orgA = await orgAResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
+        var catAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(orgA!.Id, "Cat A", null));
         var catA = await catAResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Atleta", "A", "a@test.com", "111", false));
         var athleteA = await athleteAResponse.Content.ReadFromJsonAsync<AthleteDto>();
@@ -216,7 +216,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         // 2. Setup PF-B assets
         var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
+        var catBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(orgB!.Id, "Cat B", null));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var athleteBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("Atleta", "B", "b@test.com", "222", false));
         var athleteB = await athleteBResponse.Content.ReadFromJsonAsync<AthleteDto>();
@@ -287,7 +287,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         // 1. Setup PF-A assets
         var orgAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club A", null));
         var orgA = await orgAResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catAResponse = await _clientPfA.PostAsJsonAsync($"/api/v1/categories?organizationId={orgA!.Id}", new CreateCategoryRequest("Cat A", null));
+        var catAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(orgA!.Id, "Cat A", null));
         var catA = await catAResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var aAResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("AtletaA", "Test", "a@test.com", "111", false));
         var aA = await aAResponse.Content.ReadFromJsonAsync<AthleteDto>();
@@ -296,7 +296,7 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         // 2. Setup PF-B assets in same shared database
         var orgBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club B", null));
         var orgB = await orgBResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        var catBResponse = await _clientPfB.PostAsJsonAsync($"/api/v1/categories?organizationId={orgB!.Id}", new CreateCategoryRequest("Cat B", null));
+        var catBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(orgB!.Id, "Cat B", null));
         var catB = await catBResponse.Content.ReadFromJsonAsync<CategoryDto>();
         var aBResponse = await _clientPfB.PostAsJsonAsync("/api/v1/athletes", new CreateAthleteRequest("AtletaB", "Test", "b@test.com", "222", false));
         var aB = await aBResponse.Content.ReadFromJsonAsync<AthleteDto>();

@@ -25,6 +25,7 @@ public sealed class GeminiClient(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var stopwatch = Stopwatch.StartNew();
         var prompt = BuildAnonymousPrompt(request);
 
@@ -113,6 +114,10 @@ public sealed class GeminiClient(
             var responseString = await response.Content.ReadAsStringAsync(timeoutCts.Token);
             stopwatch.Stop();
             return await ParseAndLogGeminiResponseAsync(request.AthleteId, prompt, responseString, stopwatch.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

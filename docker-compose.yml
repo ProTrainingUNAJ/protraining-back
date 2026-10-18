@@ -96,6 +96,9 @@ services:
       <<: *api-env
       Database__Host: db-estructura
       Database__Name: estructura
+      Vapid__Subject: ${VAPID_SUBJECT:-mailto:soporte@protraining.app}
+      Vapid__PublicKey: ${VAPID_PUBLIC_KEY:-}
+      Vapid__PrivateKey: ${VAPID_PRIVATE_KEY:-}
     ports: ["8082:8080"]
     depends_on:
       db-estructura: { condition: service_healthy }
@@ -119,6 +122,7 @@ services:
       <<: *api-env
       Database__Host: db-seguimiento
       Database__Name: seguimiento
+      Services__Estructura__BaseUrl: http://estructura:8080
     ports: ["8084:8080"]
     depends_on:
       db-seguimiento: { condition: service_healthy }
@@ -130,6 +134,7 @@ services:
       <<: *api-env
       Database__Host: db-asistente
       Database__Name: asistente
+      Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
       Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}

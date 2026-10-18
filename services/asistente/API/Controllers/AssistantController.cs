@@ -7,10 +7,10 @@ namespace API.Controllers;
 
 [Authorize(Roles = "PreparadorFisico")]
 [ApiController]
-[Route("api/v1/asistente")]
-public sealed class AsistenteController(SuggestRoutineUseCase suggestRoutineUseCase) : ControllerBase
+[Route("api/v1/assistant")]
+public sealed class AssistantController(SuggestRoutineUseCase suggestRoutineUseCase) : ControllerBase
 {
-    [HttpPost("sugerir-rutina")]
+    [HttpPost("suggest-routine")]
     public async Task<ActionResult<RoutineSuggestionResponseDto>> SuggestRoutine(
         [FromBody] RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken)

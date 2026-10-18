@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,7 +19,9 @@ public class TrainingWeekConfiguration : IEntityTypeConfiguration<TrainingWeek>
             .IsRequired();
 
         
-        builder.HasIndex(tw => new { tw.TrainingPlanId, tw.WeekNumber }).IsUnique();
+        builder.HasIndex(tw => new { tw.TrainingPlanId, tw.WeekNumber })
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
 
         builder.HasMany(tw => tw.Sessions)
             .WithOne(ts => ts.Week)
