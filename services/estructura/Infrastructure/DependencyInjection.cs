@@ -51,9 +51,10 @@ public static class DependencyInjection
 
         // servicios para recordatorios de wellness (KAN-369)
         services.AddScoped<IPushNotificationService, PushNotificationService>();
-        services.AddSingleton<IWellnessReminderTracker, InMemoryWellnessReminderTracker>();
+        services.AddScoped<IWellnessReminderTracker, DbWellnessReminderTracker>();
         services.AddScoped<ISessionScheduleService, SessionScheduleService>();
         services.AddScoped<IWellnessCheckInService, WellnessCheckInService>();
+
 
         return services;
     }

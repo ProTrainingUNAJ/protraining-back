@@ -20,6 +20,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<AthleteCategory> AthleteCategories => Set<AthleteCategory>();
     public DbSet<PendingPurge> PendingPurges => Set<PendingPurge>();
+    public DbSet<WellnessReminderSent> WellnessRemindersSent => Set<WellnessReminderSent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

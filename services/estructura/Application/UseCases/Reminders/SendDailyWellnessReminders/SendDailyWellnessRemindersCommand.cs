@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Interfaces.Services;
+using Domain.Common;
+
 
 namespace Application.UseCases.Reminders.SendDailyWellnessReminders;
 
@@ -26,7 +28,7 @@ public sealed class SendDailyWellnessRemindersCommandHandler(
         SendDailyWellnessRemindersCommand command,
         CancellationToken cancellationToken = default)
     {
-        var today = command.TargetDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = command.TargetDate ?? ArgentinaTime.Today;
 
         // 1. busca atletas que tienen sesion en el calendario hoy
         var athleteIdsWithSession = await sessionScheduleService.GetAthletesWithScheduledSessionAsync(today, cancellationToken);

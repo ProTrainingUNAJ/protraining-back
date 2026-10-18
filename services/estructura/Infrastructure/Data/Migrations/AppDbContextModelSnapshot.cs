@@ -23,354 +23,381 @@ namespace Infrastructure.Data.Migrations
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Domain.Entities.Athlete", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<Guid?>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
+                b.Property<Guid?>("AccountId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("account_id");
 
-                    b.Property<bool>("Active")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("active");
+                b.Property<bool>("Active")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true)
+                    .HasColumnName("active");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("email");
+                b.Property<string>("Email")
+                    .IsRequired()
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("email");
 
-                    b.Property<string>("EmergencyContact")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("emergency_contact");
+                b.Property<string>("EmergencyContact")
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("emergency_contact");
 
-                    b.Property<string>("FirstName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("first_name");
+                b.Property<string>("FirstName")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("character varying(100)")
+                    .HasColumnName("first_name");
 
-                    b.Property<bool>("IsMinor")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_minor");
+                b.Property<bool>("IsMinor")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_minor");
 
-                    b.Property<string>("LastName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("last_name");
+                b.Property<string>("LastName")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("character varying(100)")
+                    .HasColumnName("last_name");
 
-                    b.Property<string>("MedicalConditions")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("medical_conditions");
+                b.Property<string>("MedicalConditions")
+                    .HasMaxLength(1000)
+                    .HasColumnType("character varying(1000)")
+                    .HasColumnName("medical_conditions");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("phone");
+                b.Property<string>("Phone")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("character varying(50)")
+                    .HasColumnName("phone");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.ToTable("athletes", (string)null);
-                });
+                b.ToTable("athletes", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.AthleteCategory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<Guid>("AthleteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("athlete_id");
+                b.Property<Guid>("AthleteId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("athlete_id");
 
-                    b.Property<Guid>("CategoryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("category_id");
+                b.Property<Guid>("CategoryId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("category_id");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("CategoryId");
+                b.HasIndex("CategoryId");
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.HasIndex("AthleteId", "CategoryId")
-                        .IsUnique()
-                        .HasFilter("deleted_at IS NULL");
+                b.HasIndex("AthleteId", "CategoryId")
+                    .IsUnique()
+                    .HasFilter("deleted_at IS NULL");
 
-                    b.ToTable("athlete_categories", (string)null);
-                });
+                b.ToTable("athlete_categories", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
+                b.Property<string>("Description")
+                    .HasMaxLength(500)
+                    .HasColumnType("character varying(500)")
+                    .HasColumnName("description");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("name");
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("name");
 
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("organization_id");
+                b.Property<Guid>("OrganizationId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization_id");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.HasIndex("OrganizationId", "Name")
-                        .IsUnique()
-                        .HasFilter("deleted_at IS NULL");
+                b.HasIndex("OrganizationId", "Name")
+                    .IsUnique()
+                    .HasFilter("deleted_at IS NULL");
 
-                    b.ToTable("categories", (string)null);
-                });
+                b.ToTable("categories", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.DigitalConsent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<bool>("AllowsHabitsRecommendations")
-                        .HasColumnType("boolean")
-                        .HasColumnName("allows_habits_recommendations");
+                b.Property<bool>("AllowsHabitsRecommendations")
+                    .HasColumnType("boolean")
+                    .HasColumnName("allows_habits_recommendations");
 
-                    b.Property<bool>("AllowsPhysicalTraining")
-                        .HasColumnType("boolean")
-                        .HasColumnName("allows_physical_training");
+                b.Property<bool>("AllowsPhysicalTraining")
+                    .HasColumnType("boolean")
+                    .HasColumnName("allows_physical_training");
 
-                    b.Property<Guid>("AthleteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("athlete_id");
+                b.Property<Guid>("AthleteId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("athlete_id");
 
-                    b.Property<DateTime>("ConsentDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("consent_date");
+                b.Property<DateTime>("ConsentDate")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("consent_date");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<string>("GuardianEmail")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("guardian_email");
+                b.Property<string>("GuardianEmail")
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("guardian_email");
 
-                    b.Property<string>("GuardianName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("guardian_name");
+                b.Property<string>("GuardianName")
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("guardian_name");
 
-                    b.Property<string>("GuardianPhone")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("guardian_phone");
+                b.Property<string>("GuardianPhone")
+                    .HasMaxLength(50)
+                    .HasColumnType("character varying(50)")
+                    .HasColumnName("guardian_phone");
 
-                    b.Property<bool>("IsMinor")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_minor");
+                b.Property<bool>("IsMinor")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_minor");
 
-                    b.Property<bool>("IsSigned")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_signed");
+                b.Property<bool>("IsSigned")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_signed");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("AthleteId")
-                        .IsUnique();
+                b.HasIndex("AthleteId")
+                    .IsUnique();
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.ToTable("digital_consents", (string)null);
-                });
+                b.ToTable("digital_consents", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.Organization", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
+                b.Property<string>("Description")
+                    .HasMaxLength(500)
+                    .HasColumnType("character varying(500)")
+                    .HasColumnName("description");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("name");
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)")
+                    .HasColumnName("name");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.HasIndex("PfId", "Name")
-                        .IsUnique()
-                        .HasFilter("deleted_at IS NULL");
+                b.HasIndex("PfId", "Name")
+                    .IsUnique()
+                    .HasFilter("deleted_at IS NULL");
 
-                    b.ToTable("organizations", (string)null);
-                });
+                b.ToTable("organizations", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.PendingPurge", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
 
-                    b.Property<Guid>("AthleteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("athlete_id");
+                b.Property<Guid>("AthleteId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("athlete_id");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTime>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
+                b.Property<DateTime?>("DeletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleted_at");
 
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("entity_type");
+                b.Property<string>("EntityType")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("character varying(50)")
+                    .HasColumnName("entity_type");
 
-                    b.Property<Guid>("PfId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pf_id");
+                b.Property<Guid>("PfId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pf_id");
 
-                    b.Property<DateTime?>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("processed_at");
+                b.Property<DateTime?>("ProcessedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("processed_at");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasMaxLength(30)
+                    .HasColumnType("character varying(30)")
+                    .HasColumnName("status");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("AthleteId");
+                b.HasIndex("AthleteId");
 
-                    b.HasIndex("PfId");
+                b.HasIndex("PfId");
 
-                    b.HasIndex("Status");
+                b.HasIndex("Status");
 
-                    b.ToTable("pending_purges", (string)null);
-                });
+                b.ToTable("pending_purges", (string)null);
+            });
+
+            modelBuilder.Entity("Domain.Entities.WellnessReminderSent", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<Guid>("AthleteId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("athlete_id");
+
+                b.Property<DateOnly>("Date")
+                    .HasColumnType("date")
+                    .HasColumnName("date");
+
+                b.Property<DateTime>("SentAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("sent_at");
+
+                b.HasKey("Id");
+
+                b.HasIndex("AthleteId", "Date")
+                    .IsUnique()
+                    .HasDatabaseName("ix_wellness_reminders_sent_athlete_id_date");
+
+                b.ToTable("wellness_reminders_sent", (string)null);
+            });
 
             modelBuilder.Entity("Domain.Entities.AthleteCategory", b =>
-                {
-                    b.HasOne("Domain.Entities.Athlete", null)
-                        .WithMany()
-                        .HasForeignKey("AthleteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+            {
+                b.HasOne("Domain.Entities.Athlete", null)
+                    .WithMany()
+                    .HasForeignKey("AthleteId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
 
-                    b.HasOne("Domain.Entities.Category", null)
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
+                b.HasOne("Domain.Entities.Category", null)
+                    .WithMany()
+                    .HasForeignKey("CategoryId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+            });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
-                {
-                    b.HasOne("Domain.Entities.Organization", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
+            {
+                b.HasOne("Domain.Entities.Organization", null)
+                    .WithMany()
+                    .HasForeignKey("OrganizationId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+            });
 
             modelBuilder.Entity("Domain.Entities.DigitalConsent", b =>
-                {
-                    b.HasOne("Domain.Entities.Athlete", null)
-                        .WithOne("DigitalConsent")
-                        .HasForeignKey("Domain.Entities.DigitalConsent", "AthleteId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
+            {
+                b.HasOne("Domain.Entities.Athlete", null)
+                    .WithOne("DigitalConsent")
+                    .HasForeignKey("Domain.Entities.DigitalConsent", "AthleteId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+            });
 
             modelBuilder.Entity("Domain.Entities.Athlete", b =>
-                {
-                    b.Navigation("DigitalConsent");
-                });
+            {
+                b.Navigation("DigitalConsent");
+            });
 #pragma warning restore 612, 618
         }
     }
