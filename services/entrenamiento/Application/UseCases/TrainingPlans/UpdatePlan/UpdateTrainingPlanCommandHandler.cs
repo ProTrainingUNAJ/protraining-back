@@ -40,159 +40,184 @@ public class UpdateTrainingPlanCommandHandler
                 throw new NotFoundException("Uno o más ejercicios especificados no existen.");
         }
 
-        plan.Update(request.Name, request.Objective);
-
-        // Actualización in-place del árbol (conserva IDs de semanas, sesiones y ejercicios)
-        var requestedWeeks = request.Weeks ?? [];
-
-        var weeksToRemove = plan.Weeks
-            .Where(w => !requestedWeeks.Any(rw => MatchesWeek(w, rw)))
-            .ToList();
-
-        foreach (var week in weeksToRemove)
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            plan.RemoveWeek(week);
-        }
+            plan.Update(request.Name, request.Objective);
 
-        foreach (var weekReq in requestedWeeks)
-        {
-            var existingWeek = plan.Weeks.FirstOrDefault(w => MatchesWeek(w, weekReq));
+            // Actualización in-place del árbol (conserva IDs de semanas, sesiones y ejercicios)
+            var requestedWeeks = request.Weeks ?? [];
 
-            if (existingWeek == null)
+            // Fase 1: Detectar semanas y sesiones existentes que cambian de número u orden,
+            // y asignarles valores temporales para evitar violaciones de índices únicos (Postgres/SQLite).
+            var hasTemporaryChanges = false;
+            var tempIndex = -1;
+
+            foreach (var weekReq in requestedWeeks)
             {
-                var newWeek = TrainingWeek.Create(weekReq.WeekNumber, plan.Id);
+                var existingWeek = plan.Weeks.FirstOrDefault(w => MatchesWeek(w, weekReq));
+                if (existingWeek == null) continue;
 
-                if (weekReq.Sessions != null)
+                if (existingWeek.WeekNumber != weekReq.WeekNumber)
                 {
-                    foreach (var sessionReq in weekReq.Sessions)
-                    {
-                        var newSession = TrainingSession.Create(
-                            newWeek.Id,
-                            sessionReq.Name,
-                            sessionReq.Order,
-                            sessionReq.DayOfWeek,
-                            sessionReq.CoachNotes
-                        );
-
-                        if (sessionReq.Exercises != null)
-                        {
-                            foreach (var exReq in sessionReq.Exercises)
-                            {
-                                var newExercise = PrescribedExercise.Create(
-                                    exReq.Order,
-                                    exReq.Sets,
-                                    exReq.Reps,
-                                    exReq.TargetPercentage,
-                                    newSession.Id,
-                                    exReq.ExerciseId
-                                );
-                                newSession.AddPrescribedExercise(newExercise);
-                            }
-                        }
-
-                        newWeek.AddSession(newSession);
-                    }
+                    existingWeek.SetTemporaryWeekNumber(tempIndex--);
+                    hasTemporaryChanges = true;
                 }
 
-                plan.AddWeek(newWeek);
-            }
-            else
-            {
-                var requestedSessions = weekReq.Sessions ?? [];
+                if (weekReq.Sessions == null) continue;
 
-                var sessionsToRemove = existingWeek.Sessions
-                    .Where(s => !requestedSessions.Any(rs => MatchesSession(s, rs)))
-                    .ToList();
-
-                foreach (var session in sessionsToRemove)
-                {
-                    existingWeek.RemoveSession(session);
-                }
-
-                foreach (var sessionReq in requestedSessions)
+                foreach (var sessionReq in weekReq.Sessions)
                 {
                     var existingSession = existingWeek.Sessions.FirstOrDefault(s => MatchesSession(s, sessionReq));
-
-                    if (existingSession == null)
+                    if (existingSession != null && existingSession.Order != sessionReq.Order)
                     {
-                        var newSession = TrainingSession.Create(
-                            existingWeek.Id,
-                            sessionReq.Name,
-                            sessionReq.Order,
-                            sessionReq.DayOfWeek,
-                            sessionReq.CoachNotes
-                        );
-
-                        if (sessionReq.Exercises != null)
-                        {
-                            foreach (var exReq in sessionReq.Exercises)
-                            {
-                                var newExercise = PrescribedExercise.Create(
-                                    exReq.Order,
-                                    exReq.Sets,
-                                    exReq.Reps,
-                                    exReq.TargetPercentage,
-                                    newSession.Id,
-                                    exReq.ExerciseId
-                                );
-                                newSession.AddPrescribedExercise(newExercise);
-                            }
-                        }
-
-                        existingWeek.AddSession(newSession);
+                        existingSession.SetTemporaryOrder(tempIndex--);
+                        hasTemporaryChanges = true;
                     }
-                    else
+                }
+            }
+
+            if (hasTemporaryChanges)
+            {
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            // Fase 2: Aplicar remociones, actualizaciones finales y agregados
+            var weeksToRemove = plan.Weeks
+                .Where(w => !requestedWeeks.Any(rw => MatchesWeek(w, rw)))
+                .ToList();
+
+            foreach (var week in weeksToRemove)
+            {
+                plan.RemoveWeek(week);
+            }
+
+            foreach (var weekReq in requestedWeeks)
+            {
+                var existingWeek = plan.Weeks.FirstOrDefault(w => MatchesWeek(w, weekReq));
+
+                if (existingWeek == null)
+                {
+                    var newWeek = TrainingWeek.Create(weekReq.WeekNumber, plan.Id);
+
+                    if (weekReq.Sessions != null)
                     {
-                        existingSession.Update(sessionReq.Name, sessionReq.Order, sessionReq.DayOfWeek, sessionReq.CoachNotes);
-
-                        var requestedExercises = sessionReq.Exercises ?? [];
-
-                        var exercisesToRemove = existingSession.PrescribedExercises
-                            .Where(e => !requestedExercises.Any(re => MatchesExercise(e, re)))
-                            .ToList();
-
-                        foreach (var exercise in exercisesToRemove)
+                        foreach (var sessionReq in weekReq.Sessions)
                         {
-                            existingSession.RemovePrescribedExercise(exercise);
+                            newWeek.AddSession(CreateSession(newWeek.Id, sessionReq));
                         }
+                    }
 
-                        foreach (var exReq in requestedExercises)
+                    plan.AddWeek(newWeek);
+                }
+                else
+                {
+                    existingWeek.Update(weekReq.WeekNumber);
+
+                    var requestedSessions = weekReq.Sessions ?? [];
+
+                    var sessionsToRemove = existingWeek.Sessions
+                        .Where(s => !requestedSessions.Any(rs => MatchesSession(s, rs)))
+                        .ToList();
+
+                    foreach (var session in sessionsToRemove)
+                    {
+                        existingWeek.RemoveSession(session);
+                    }
+
+                    foreach (var sessionReq in requestedSessions)
+                    {
+                        var existingSession = existingWeek.Sessions.FirstOrDefault(s => MatchesSession(s, sessionReq));
+
+                        if (existingSession == null)
                         {
-                            var existingExercise = existingSession.PrescribedExercises.FirstOrDefault(e => MatchesExercise(e, exReq));
-
-                            if (existingExercise == null)
-                            {
-                                var newExercise = PrescribedExercise.Create(
-                                    exReq.Order,
-                                    exReq.Sets,
-                                    exReq.Reps,
-                                    exReq.TargetPercentage,
-                                    existingSession.Id,
-                                    exReq.ExerciseId
-                                );
-                                existingSession.AddPrescribedExercise(newExercise);
-                            }
-                            else
-                            {
-                                existingExercise.Update(
-                                    exReq.Order,
-                                    exReq.Sets,
-                                    exReq.Reps,
-                                    exReq.TargetPercentage,
-                                    exReq.ExerciseId
-                                );
-                            }
+                            existingWeek.AddSession(CreateSession(existingWeek.Id, sessionReq));
+                        }
+                        else
+                        {
+                            existingSession.Update(sessionReq.Name, sessionReq.Order, sessionReq.DayOfWeek, sessionReq.CoachNotes);
+                            SyncExercises(existingSession, sessionReq.Exercises);
                         }
                     }
                 }
             }
-        }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }, cancellationToken);
 
         var exerciseNames = await _planRepository.GetExerciseNamesAsync(TrainingPlanMapper.GetExerciseIds(plan), cancellationToken);
 
         return TrainingPlanMapper.ToDetailDto(plan, exerciseNames);
+    }
+
+    private static TrainingSession CreateSession(Guid weekId, TrainingSessionRequest sessionReq)
+    {
+        var session = TrainingSession.Create(
+            weekId,
+            sessionReq.Name,
+            sessionReq.Order,
+            sessionReq.DayOfWeek,
+            sessionReq.CoachNotes
+        );
+
+        if (sessionReq.Exercises != null)
+        {
+            foreach (var exReq in sessionReq.Exercises)
+            {
+                var exercise = PrescribedExercise.Create(
+                    exReq.Order,
+                    exReq.Sets,
+                    exReq.Reps,
+                    exReq.TargetPercentage,
+                    session.Id,
+                    exReq.ExerciseId
+                );
+                session.AddPrescribedExercise(exercise);
+            }
+        }
+
+        return session;
+    }
+
+    private static void SyncExercises(TrainingSession session, List<PrescribedExerciseRequest>? requestedExercises)
+    {
+        var exercises = requestedExercises ?? [];
+
+        var exercisesToRemove = session.PrescribedExercises
+            .Where(e => !exercises.Any(re => MatchesExercise(e, re)))
+            .ToList();
+
+        foreach (var exercise in exercisesToRemove)
+        {
+            session.RemovePrescribedExercise(exercise);
+        }
+
+        foreach (var exReq in exercises)
+        {
+            var existingExercise = session.PrescribedExercises.FirstOrDefault(e => MatchesExercise(e, exReq));
+
+            if (existingExercise == null)
+            {
+                var newExercise = PrescribedExercise.Create(
+                    exReq.Order,
+                    exReq.Sets,
+                    exReq.Reps,
+                    exReq.TargetPercentage,
+                    session.Id,
+                    exReq.ExerciseId
+                );
+                session.AddPrescribedExercise(newExercise);
+            }
+            else
+            {
+                existingExercise.Update(
+                    exReq.Order,
+                    exReq.Sets,
+                    exReq.Reps,
+                    exReq.TargetPercentage,
+                    exReq.ExerciseId
+                );
+            }
+        }
     }
 
     private static bool MatchesWeek(TrainingWeek entity, TrainingWeekRequest request)

@@ -55,6 +55,11 @@ public class TrainingSession : BaseEntity
         CoachNotes = coachNotes;
     }
 
+    public void SetTemporaryOrder(int temporaryOrder)
+    {
+        Order = temporaryOrder;
+    }
+
     public void AddPrescribedExercise(PrescribedExercise exercise)
     {
         if (_prescribedExercises.Any(e => e.Order == exercise.Order))

@@ -22,6 +22,9 @@ public class TrainingPlanUseCasesTests
         // Por defecto el catálogo no devuelve nombres; los tests que los necesitan lo configuran.
         _planRepoMock.Setup(r => r.GetExerciseNamesAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string>());
+
+        _unitOfWorkMock.Setup(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<CancellationToken>()))
+            .Returns<Func<Task>, CancellationToken>((action, _) => action());
     }
 
     [Fact]

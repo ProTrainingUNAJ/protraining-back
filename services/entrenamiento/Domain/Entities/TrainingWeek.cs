@@ -26,6 +26,19 @@ public sealed class TrainingWeek : BaseEntity
         return new TrainingWeek(weekNumber, trainingPlanId);
     }
 
+    public void Update(int weekNumber)
+    {
+        if (weekNumber <= 0)
+            throw new DomainException("El número de la semana debe ser mayor a cero.");
+
+        WeekNumber = weekNumber;
+    }
+
+    public void SetTemporaryWeekNumber(int temporaryWeekNumber)
+    {
+        WeekNumber = temporaryWeekNumber;
+    }
+
     public void AddSession(TrainingSession session)
     {
         if (_sessions.Any(s => s.Order == session.Order))
