@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Exercise;
+using Application.DTOs.Exercise;
 using Application.UseCases.Exercise.ListExercises;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,7 +18,7 @@ namespace API.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<ExerciseDto>>> List([FromQuery] ListExercisesQuery query, CancellationToken cancellationToken = default)
+        public async Task<ActionResult<PaginatedExerciseResponse>> List([FromQuery] ListExercisesQuery query, CancellationToken cancellationToken = default)
         {
             var result = await queryHandler.Handle(query, cancellationToken);
             return Ok(result);

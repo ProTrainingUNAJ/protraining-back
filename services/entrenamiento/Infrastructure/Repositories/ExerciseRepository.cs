@@ -1,4 +1,4 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Interfaces.Persistence;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +14,7 @@ namespace Infrastructure.Repositories
             this.context = context;
         }
 
-        public async Task<List<Exercise>> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default)
         {
             var exercises = context.Exercises.AsNoTracking();
             
@@ -30,7 +30,14 @@ namespace Infrastructure.Repositories
            
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.Where(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name) > 0.3).OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name));
+                exercises = exercises.Where(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name) > 0.3);
+            }
+
+            var totalCount = await exercises.CountAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                exercises = exercises.OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name));
             }
             else
             {
@@ -38,11 +45,13 @@ namespace Infrastructure.Repositories
             }
 
             var pag = page < 1 ? 1 : page;
-            var pagSize = pageSize < 1 ? 20 : pageSize;
+            var pagSize = pageSize < 1 ? 20 : (pageSize > 100 ? 100 : pageSize);
 
             exercises = exercises.Skip((pag - 1) * pagSize).Take(pagSize);
 
-            return await exercises.ToListAsync(cancellationToken);
+            var items = await exercises.ToListAsync(cancellationToken);
+
+            return (items, totalCount);
         }
     }
 }

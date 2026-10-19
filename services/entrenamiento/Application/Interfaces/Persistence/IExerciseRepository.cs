@@ -1,9 +1,8 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 
-namespace Application.Interfaces.Persistence
+namespace Application.Interfaces.Persistence;
+
+public interface IExerciseRepository
 {
-    public interface IExerciseRepository
-    {
-        Task<List<Exercise>> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default);
-    }
+    Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default);
 }
