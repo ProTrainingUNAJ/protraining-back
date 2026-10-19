@@ -99,4 +99,65 @@ public class StructureClientTests
 
         Assert.Equal("Bearer token-del-atleta", structure.LastRequest!.Headers.Authorization!.ToString());
     }
+
+    // ---------- GetCategoryAthletesAsync (semáforo por categoría, KAN-364) ----------
+
+    [Fact]
+    public async Task Given_CategoryWithAthletes_When_GetCategoryAthletes_Then_Returns_IdAndFullName()
+    {
+        var athleteId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        // Estructura devuelve más campos (email, teléfono, etc.): el DTO nuevo solo usa Id y FullName.
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK,
+            $$"""[{"id":"{{athleteId}}","firstName":"Lucas","lastName":"Fernández","fullName":"Lucas Fernández","email":"lucas@example.com","phone":"1234","active":true,"allowsHabitsRecommendations":true}]"""));
+        var client = CreateClient(handler);
+
+        var athletes = await client.GetCategoryAthletesAsync(categoryId);
+
+        var athlete = Assert.Single(athletes);
+        Assert.Equal(athleteId, athlete.Id);
+        Assert.Equal("Lucas Fernández", athlete.FullName);
+        Assert.Equal($"http://estructura:8080/api/v1/categories/{categoryId}/athletes",
+            handler.LastRequest!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task Given_UnknownCategory_When_GetCategoryAthletes_Then_Throws_CategoryNotFound()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => Json(HttpStatusCode.NotFound, """{"title":"Categoría no encontrada."}""")));
+
+        await Assert.ThrowsAsync<CategoryNotFoundException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_TokenRejected_When_GetCategoryAthletes_Then_Throws_Unauthorized()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_AccountWithoutPfRole_When_GetCategoryAthletes_Then_Throws_Forbidden()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)));
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_StructureFailing_When_GetCategoryAthletes_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_StructureUnreachable_When_GetCategoryAthletes_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused")));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
 }

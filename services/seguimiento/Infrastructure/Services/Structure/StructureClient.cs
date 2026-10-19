@@ -53,4 +53,47 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
             }
         }
     }
+
+    public async Task<IReadOnlyList<CategoryAthleteDto>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync($"api/v1/categories/{categoryId}/athletes", cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return await response.Content.ReadFromJsonAsync<List<CategoryAthleteDto>>(cancellationToken) ?? [];
+
+                // La categoría no existe en Estructura: lo resuelve el controller con 404.
+                case HttpStatusCode.NotFound:
+                    logger.LogWarning("La categoría {CategoryId} no existe en Estructura.", categoryId);
+                    throw new CategoryNotFoundException();
+
+                case HttpStatusCode.Unauthorized:
+                    throw new UnauthorizedAccessException();
+
+                // Estructura exige el rol PreparadorFisico: sin él, 403.
+                case HttpStatusCode.Forbidden:
+                    throw new ForbiddenException("La cuenta del token no está autorizada como preparador físico.");
+
+                default:
+                    logger.LogError("Estructura respondió {Status} al consultar los atletas de la categoría {CategoryId}.",
+                        (int)response.StatusCode, categoryId);
+                    throw new StructureUnavailableException();
+            }
+        }
+    }
 }
