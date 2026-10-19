@@ -65,6 +65,19 @@ public class TrafficLightEngineTests
     }
 
     [Fact]
+    public void Evaluate_WithActiveInjuryAndAlerts_ReturnsRedWithLowestResultValue()
+    {
+        // KAN-364: con lesión activa Y otras señales, el ResultValue debe ser el de Rojo (20),
+        // no el de Amarillo (50): la prioridad del número sigue la misma que la del color.
+        var result = _engine.Evaluate(
+            new CheckInData { HasActiveInjury = true, SleepHours = 3, EffortRate = 9, IsSick = true },
+            context: null);
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal(20, result.ResultValue);
+    }
+
+    [Fact]
     public void Evaluate_WithoutInjuryInTypedData_ReturnsGreen()
     {
         var result = _engine.Evaluate(
@@ -103,6 +116,47 @@ public class TrafficLightEngineTests
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
         Assert.Contains("dolor nuevo", result.Reason, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("[]")]
+    [InlineData(" [] ")]
+    [InlineData("{}")]
+    public void Evaluate_WithEmptyPainZones_DoesNotTriggerNewPain(string? painZones)
+    {
+        // KAN-364: "[]" es una lista vacía serializada por el front, no dolor nuevo.
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false, PainZones = painZones },
+            context: null);
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
+    }
+
+    [Theory]
+    [InlineData("Isquiotibial derecho")]
+    [InlineData("[\"rodilla\"]")]
+    [InlineData("[\"rodilla\", \"tobillo\"]")]
+    public void Evaluate_WithNonEmptyPainZones_ReturnsYellowWithNewPain(string painZones)
+    {
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false, PainZones = painZones },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Contains("dolor nuevo", result.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_WithEmptyPainZonesJsonArray_DoesNotTriggerNewPain()
+    {
+        // Camino JSON (KAN-363): el mismo criterio aplica cuando el dato llega como string JSON.
+        var result = _engine.Evaluate("""{"sleepHours": 8, "effortRate": 4, "painZones": "[]"}""", "{}");
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
     }
 
     [Fact]
