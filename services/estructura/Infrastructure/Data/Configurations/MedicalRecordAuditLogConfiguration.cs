@@ -28,6 +28,11 @@ public sealed class MedicalRecordAuditLogConfiguration : IEntityTypeConfiguratio
             .HasMaxLength(MedicalRecordAuditLog.MaxJustificationLength)
             .IsRequired();
 
+        builder.HasOne<Athlete>()
+            .WithMany()
+            .HasForeignKey(audit => audit.AthleteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(audit => audit.AthleteId);
         builder.HasIndex(audit => new { audit.AthleteId, audit.CreatedAt });
     }

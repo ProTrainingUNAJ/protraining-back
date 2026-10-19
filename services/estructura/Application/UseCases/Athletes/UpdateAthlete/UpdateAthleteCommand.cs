@@ -8,8 +8,7 @@ namespace Application.UseCases.Athletes.UpdateAthlete;
 public sealed record UpdateAthleteCommand(
     Guid Id,
     string? Phone,
-    string? EmergencyContact,
-    string? MedicalConditions);
+    string? EmergencyContact);
 
 public sealed class UpdateAthleteCommandHandler(IAthleteRepository repository, IUnitOfWork unitOfWork)
 {
@@ -22,10 +21,6 @@ public sealed class UpdateAthleteCommandHandler(IAthleteRepository repository, I
             throw new AthleteNotFoundException();
 
         athlete.UpdateContactInfo(command.Phone, command.EmergencyContact);
-
-        // MedicalConditions no tiene método propio en la entidad actual;
-        // se expone solo Phone y EmergencyContact. MedicalConditions queda
-        // pendiente hasta que el dominio lo exponga explícitamente.
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return AthleteMappings.ToDto(athlete);

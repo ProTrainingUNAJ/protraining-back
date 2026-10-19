@@ -12,7 +12,6 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
             await context.Athletes
                 .AsNoTracking()
                 .Include(athlete => athlete.DigitalConsent)
-                .Include(athlete => athlete.MedicalRecord)
                 .OrderBy(athlete => athlete.LastName)
                 .ThenBy(athlete => athlete.FirstName)
                 .ToListAsync(cancellationToken));

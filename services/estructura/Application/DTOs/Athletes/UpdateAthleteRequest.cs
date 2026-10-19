@@ -7,5 +7,4 @@ namespace Application.DTOs.Athletes;
 /// </summary>
 public sealed record UpdateAthleteRequest(
     string? Phone,
-    string? EmergencyContact,
-    string? MedicalConditions);
+    string? EmergencyContact);

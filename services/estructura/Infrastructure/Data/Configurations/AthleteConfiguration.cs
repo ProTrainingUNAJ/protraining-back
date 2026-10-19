@@ -38,10 +38,6 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
             .HasColumnName("emergency_contact")
             .HasMaxLength(150);
 
-        builder.Property(athlete => athlete.MedicalConditions)
-            .HasColumnName("medical_conditions")
-            .HasMaxLength(1000);
-
         builder.Property(athlete => athlete.Active)
             .HasColumnName("active")
             .HasDefaultValue(true)

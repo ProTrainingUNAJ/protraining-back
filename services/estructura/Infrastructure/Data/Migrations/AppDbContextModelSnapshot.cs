@@ -73,11 +73,6 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("last_name");
 
-                    b.Property<string>("MedicalConditions")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("medical_conditions");
-
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
@@ -589,6 +584,15 @@ namespace Infrastructure.Data.Migrations
                         .WithOne("MedicalRecord")
                         .HasForeignKey("Domain.Entities.MedicalRecord", "AthleteId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Entities.MedicalRecordAuditLog", b =>
+                {
+                    b.HasOne("Domain.Entities.Athlete", null)
+                        .WithMany()
+                        .HasForeignKey("AthleteId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
