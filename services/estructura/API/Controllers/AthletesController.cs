@@ -6,9 +6,12 @@ using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.ListAthletes;
 using Application.UseCases.Athletes.ListCategoriesByAthlete;
+using Application.UseCases.Athletes.ListMedicalRecordAuditLogs;
+using Application.UseCases.Athletes.ReadMedicalRecord;
 using Application.UseCases.Athletes.RemoveAthleteCategory;
 using Application.UseCases.Athletes.UpdateAthlete;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
+using Application.UseCases.Athletes.UpdateMedicalRecord;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,7 +29,10 @@ public sealed class AthletesController(
     DeleteAthleteCommandHandler deleteHandler,
     AssignAthleteCategoryCommandHandler assignCategoryHandler,
     RemoveAthleteCategoryCommandHandler removeCategoryHandler,
-    ListCategoriesByAthleteQueryHandler listCategoriesHandler) : ControllerBase
+    ListCategoriesByAthleteQueryHandler listCategoriesHandler,
+    ReadMedicalRecordCommandHandler readMedicalRecordHandler,
+    UpdateMedicalRecordCommandHandler updateMedicalRecordHandler,
+    ListMedicalRecordAuditLogsQueryHandler listMedicalRecordAuditLogsHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -51,8 +57,7 @@ public sealed class AthletesController(
                 request.GuardianPhone,
                 request.AllowsPhysicalTraining,
                 request.AllowsHabitsRecommendations,
-                request.EmergencyContact,
-                request.MedicalConditions),
+                request.EmergencyContact),
             cancellationToken);
 
         return Created($"/api/v1/athletes/{athlete.Id}", athlete);
@@ -84,7 +89,42 @@ public sealed class AthletesController(
         UpdateAthleteRequest request,
         CancellationToken cancellationToken) =>
         Ok(await updateHandler.HandleAsync(
-            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact, request.MedicalConditions),
+            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
+            cancellationToken));
+
+    [HttpGet("{id:guid}/medical-record")]
+    public async Task<ActionResult<MedicalRecordDto>> GetMedicalRecord(
+        Guid id,
+        [FromQuery] string? justification,
+        CancellationToken cancellationToken) =>
+        Ok(await readMedicalRecordHandler.HandleAsync(
+            new ReadMedicalRecordCommand(id, justification),
+            cancellationToken));
+
+    [HttpPut("{id:guid}/medical-record")]
+    public async Task<ActionResult<MedicalRecordDto>> UpdateMedicalRecord(
+        Guid id,
+        UpdateMedicalRecordRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateMedicalRecordHandler.HandleAsync(
+            new UpdateMedicalRecordCommand(
+                id,
+                request.Justification,
+                request.MedicalHistory,
+                request.Surgeries,
+                request.Pathologies,
+                request.HasPhysicalFitnessCertificate,
+                request.PhysicalFitnessIssuedAt,
+                request.PhysicalFitnessExpiresAt,
+                request.PhysicalFitnessNotes),
+            cancellationToken));
+
+    [HttpGet("{id:guid}/medical-record/audit-logs")]
+    public async Task<ActionResult<IReadOnlyList<MedicalRecordAuditLogDto>>> ListMedicalRecordAuditLogs(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await listMedicalRecordAuditLogsHandler.HandleAsync(
+            new ListMedicalRecordAuditLogsQuery(id),
             cancellationToken));
 
     [HttpPost("{id:guid}/categories/{categoryId:guid}")]

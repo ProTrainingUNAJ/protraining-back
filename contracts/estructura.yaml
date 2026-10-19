@@ -205,6 +205,108 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/medical-record:
+    get:
+      tags:
+        - Athletes
+      summary: Consultar ficha médica de un atleta con justificación auditada
+      description: >
+        Retorna los antecedentes médicos, cirugías, patologías y estado del apto físico del atleta.
+        Exige declarar un motivo explícito en el parámetro `justification`, que el consentimiento digital
+        esté firmado (por el atleta o su tutor si es menor) y registra un evento inmutable de lectura en auditoría.
+      operationId: getAthleteMedicalRecord
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: justification
+          in: query
+          required: true
+          description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
+          schema:
+            type: string
+            maxLength: 500
+            example: "Revisión médica previa a planificación de fuerza"
+      responses:
+        "200":
+          description: Ficha médica obtenida y acceso registrado en auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicalRecord'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Athletes
+      summary: Completar o actualizar ficha médica de un atleta con justificación auditada
+      description: >
+        Crea o actualiza la ficha médica del deportista exigiendo justificación explícita y consentimiento
+        digital firmado, registrando un evento inmutable de alta o modificación en auditoría.
+      operationId: updateAthleteMedicalRecord
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMedicalRecordRequest'
+      responses:
+        "200":
+          description: Ficha médica guardada y evento registrado en auditoría.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicalRecord'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/medical-record/audit-logs:
+    get:
+      tags:
+        - Athletes
+      summary: Listar registros inmutables de auditoría médica de un atleta
+      description: Retorna el historial cronológico descendente de lecturas y modificaciones sobre la ficha médica del deportista.
+      operationId: listAthleteMedicalRecordAuditLogs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Historial de auditoría médica obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MedicalRecordAuditLog'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{id}/categories:
     get:
       tags:
@@ -866,10 +968,6 @@ components:
           type: string
           nullable: true
           example: "María Fernández - +54 11 4444-9876"
-        medicalConditions:
-          type: string
-          nullable: true
-          example: "Sin antecedentes patológicos relevantes"
         active:
           type: boolean
           example: true
@@ -945,10 +1043,6 @@ components:
           type: string
           nullable: true
           example: "Madre: +54 11 4444-9876"
-        medicalConditions:
-          type: string
-          nullable: true
-          example: "Apto médico presentado marzo 2026."
 
     UpdateAthleteRequest:
       type: object
@@ -959,9 +1053,137 @@ components:
         emergencyContact:
           type: string
           example: "Padre: +54 11 2222-3333"
-        medicalConditions:
+
+    MedicalRecord:
+      type: object
+      description: Ficha médica estructurada del atleta.
+      required:
+        - athleteId
+        - hasPhysicalFitnessCertificate
+      properties:
+        id:
           type: string
-          example: "Actualización médica: asmático leve."
+          format: uuid
+          nullable: true
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        medicalHistory:
+          type: string
+          nullable: true
+          example: "Antecedente de esguince de tobillo derecho (2024)"
+        surgeries:
+          type: string
+          nullable: true
+          example: "Reconstrucción de LCA rodilla izquierda (2022)"
+        pathologies:
+          type: string
+          nullable: true
+          example: "Sin patologías cardiovasculares"
+        hasPhysicalFitnessCertificate:
+          type: boolean
+          example: true
+        physicalFitnessIssuedAt:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-03-01"
+        physicalFitnessExpiresAt:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-03-01"
+        physicalFitnessNotes:
+          type: string
+          nullable: true
+          example: "Ergometría de 12 derivaciones normal"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-01T14:30:00Z"
+
+    UpdateMedicalRecordRequest:
+      type: object
+      description: Solicitud para cargar o actualizar la ficha médica exigiendo justificación explícita.
+      required:
+        - justification
+        - hasPhysicalFitnessCertificate
+      properties:
+        justification:
+          type: string
+          maxLength: 500
+          example: "Carga inicial de ficha médica y apto físico anual"
+        medicalHistory:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: "Sin antecedentes patológicos relevantes"
+        surgeries:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: "Ninguna"
+        pathologies:
+          type: string
+          nullable: true
+          maxLength: 2000
+          example: "Ninguna"
+        hasPhysicalFitnessCertificate:
+          type: boolean
+          example: true
+        physicalFitnessIssuedAt:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-03-01"
+        physicalFitnessExpiresAt:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-03-01"
+        physicalFitnessNotes:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: "Apto competitivo vigente"
+
+    MedicalRecordAuditLog:
+      type: object
+      description: Registro inmutable de auditoría por lectura o modificación de ficha médica.
+      required:
+        - id
+        - athleteId
+        - accessedByUserId
+        - action
+        - justification
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        accessedByUserId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        action:
+          type: string
+          enum: [Read, Create, Update]
+          example: "Read"
+        justification:
+          type: string
+          example: "Revisión médica previa a planificación de fuerza"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-18T15:00:00Z"
 
     UpdateHabitsPermissionRequest:
       type: object

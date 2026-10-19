@@ -11,7 +11,6 @@ public sealed class Athlete : BaseEntity
     public string Phone { get; private set; } = string.Empty;
     public bool IsMinor { get; private set; }
     public string? EmergencyContact { get; private set; }
-    public string? MedicalConditions { get; private set; }
     public bool Active { get; private set; } = true;
     public Guid? AccountId { get; private set; }
 
@@ -34,13 +33,11 @@ public sealed class Athlete : BaseEntity
         string? guardianPhone,
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
-        string? emergencyContact = null,
-        string? medicalConditions = null)
+        string? emergencyContact = null)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
         athlete.IsMinor = true;
-        athlete.MedicalConditions = medicalConditions?.Trim();
 
         athlete.DigitalConsent = DigitalConsent.RegisterForMinor(
             athlete.Id,
@@ -73,13 +70,11 @@ public sealed class Athlete : BaseEntity
         string? email,
         string? phone,
         bool signsInitialConsent = false,
-        string? emergencyContact = null,
-        string? medicalConditions = null)
+        string? emergencyContact = null)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
         athlete.IsMinor = false;
-        athlete.MedicalConditions = medicalConditions?.Trim();
 
         if (signsInitialConsent)
         {

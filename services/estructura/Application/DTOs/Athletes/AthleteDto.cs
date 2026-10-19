@@ -10,7 +10,6 @@ public sealed record AthleteDto(
     string Phone,
     bool IsMinor,
     string? EmergencyContact,
-    string? MedicalConditions,
     bool Active,
     bool AllowsHabitsRecommendations,
     GuardianConsentDto? GuardianConsent);
