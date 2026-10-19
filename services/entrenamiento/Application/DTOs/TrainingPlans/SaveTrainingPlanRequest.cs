@@ -5,7 +5,8 @@ public record PrescribedExerciseRequest(
     int Order,
     int Sets,
     int Reps,
-    decimal? TargetPercentage = null
+    decimal? TargetPercentage = null,
+    Guid? Id = null
 );
 
 public record TrainingSessionRequest(
@@ -13,12 +14,14 @@ public record TrainingSessionRequest(
     int Order,
     DayOfWeek DayOfWeek,
     string? CoachNotes = null,
-    List<PrescribedExerciseRequest>? Exercises = null
+    List<PrescribedExerciseRequest>? Exercises = null,
+    Guid? Id = null
 );
 
 public record TrainingWeekRequest(
     int WeekNumber,
-    List<TrainingSessionRequest>? Sessions = null
+    List<TrainingSessionRequest>? Sessions = null,
+    Guid? Id = null
 );
 
 public record SaveTrainingPlanRequest(

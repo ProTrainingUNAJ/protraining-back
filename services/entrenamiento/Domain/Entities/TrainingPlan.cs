@@ -45,6 +45,11 @@ public class TrainingPlan : BaseEntity
         _weeks.Add(week);
     }
 
+    public void RemoveWeek(TrainingWeek week)
+    {
+        _weeks.Remove(week);
+    }
+
     public void ClearWeeks()
     {
         _weeks.Clear();

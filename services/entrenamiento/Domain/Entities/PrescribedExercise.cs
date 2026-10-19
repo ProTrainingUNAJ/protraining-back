@@ -36,4 +36,19 @@ public sealed class PrescribedExercise : BaseEntity
 
         return new PrescribedExercise(order, sets, reps, targetPercentage, trainingSessionId, exerciseId);
     }
+
+    public void Update(int order, int sets, int reps, decimal? targetPercentage, Guid exerciseId)
+    {
+        if (order <= 0)
+            throw new DomainException("El orden debe ser mayor a cero.");
+
+        if (sets <= 0 || reps <= 0)
+            throw new DomainException("Las series y repeticiones deben ser mayores a cero.");
+
+        Order = order;
+        Sets = sets;
+        Reps = reps;
+        TargetPercentage = targetPercentage;
+        ExerciseId = exerciseId;
+    }
 }

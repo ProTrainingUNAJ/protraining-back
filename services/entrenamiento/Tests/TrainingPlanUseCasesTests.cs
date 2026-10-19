@@ -203,6 +203,147 @@ public class TrainingPlanUseCasesTests
     }
 
     [Fact]
+    public async Task UpdatePlan_DadoPlanExistente_CuandoSeEdita_DeberiaPreservarIdsDeSemanasSesionesYEjercicios()
+    {
+        // ARRANGE: Crear plan inicial con 1 semana, 1 sesión y 1 ejercicio
+        var planId = Guid.NewGuid();
+        var existingPlan = TrainingPlan.Create("Fuerza base", "Pretemporada");
+        var initialWeek = TrainingWeek.Create(1, planId);
+        var initialSession = TrainingSession.Create(initialWeek.Id, "Miércoles", 1, DayOfWeek.Wednesday, "Nota inicial");
+        var initialExercise = PrescribedExercise.Create(1, 4, 5, 80m, initialSession.Id, Guid.NewGuid());
+        initialSession.AddPrescribedExercise(initialExercise);
+        initialWeek.AddSession(initialSession);
+        existingPlan.AddWeek(initialWeek);
+
+        var originalWeekId = initialWeek.Id;
+        var originalSessionId = initialSession.Id;
+        var originalExerciseId = initialExercise.Id;
+
+        _planRepoMock.Setup(r => r.GetWithDetailsByIdAsync(planId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPlan);
+        _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        // ACT: PF edita el plan cambiando notas y repeticiones, y agregando una segunda sesión
+        var newCatalogExerciseId = Guid.NewGuid();
+        var updateRequest = new SaveTrainingPlanRequest(
+            "Fuerza base editada",
+            "Nuevo objetivo",
+            new List<TrainingWeekRequest>
+            {
+                new(
+                    1,
+                    new List<TrainingSessionRequest>
+                    {
+                        // Sesión existente modificada (mismo orden 1)
+                        new(
+                            "Miércoles Renombrado",
+                            1,
+                            DayOfWeek.Wednesday,
+                            "Nota modificada",
+                            new List<PrescribedExerciseRequest>
+                            {
+                                new(initialExercise.ExerciseId, 1, 5, 8, 85m)
+                            }
+                        ),
+                        // Nueva sesión agregada (orden 2)
+                        new(
+                            "Viernes",
+                            2,
+                            DayOfWeek.Friday,
+                            null,
+                            new List<PrescribedExerciseRequest>
+                            {
+                                new(newCatalogExerciseId, 1, 3, 10, 70m)
+                            }
+                        )
+                    }
+                )
+            }
+        );
+
+        var handler = new UpdateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
+        var result = await handler.Handle(new UpdateTrainingPlanCommand(planId, updateRequest));
+
+        // ASSERT: Los IDs originales de semana, sesión y ejercicio deben mantenerse idénticos
+        Assert.Single(result.Weeks);
+        Assert.Equal(originalWeekId, result.Weeks[0].Id);
+
+        Assert.Equal(2, result.Weeks[0].Sessions.Count);
+
+        // Sesión 1: Mismo ID que antes
+        var session1 = result.Weeks[0].Sessions[0];
+        Assert.Equal(originalSessionId, session1.Id);
+        Assert.Equal("Miércoles Renombrado", session1.Name);
+        Assert.Equal("Nota modificada", session1.CoachNotes);
+        Assert.Single(session1.Exercises);
+        Assert.Equal(originalExerciseId, session1.Exercises[0].Id);
+        Assert.Equal(5, session1.Exercises[0].Sets);
+        Assert.Equal(8, session1.Exercises[0].Reps);
+
+        // Sesión 2: Es nueva, tiene un ID nuevo diferente a la sesión 1
+        var session2 = result.Weeks[0].Sessions[1];
+        Assert.NotEqual(Guid.Empty, session2.Id);
+        Assert.NotEqual(originalSessionId, session2.Id);
+        Assert.Single(session2.Exercises);
+        Assert.NotEqual(Guid.Empty, session2.Exercises[0].Id);
+        Assert.NotEqual(originalExerciseId, session2.Exercises[0].Id);
+    }
+
+    [Fact]
+    public async Task UpdatePlan_DadoPlanExistente_CuandoSeEnvianIdsExplicitos_DeberiaEmparejarPorId()
+    {
+        var planId = Guid.NewGuid();
+        var existingPlan = TrainingPlan.Create("Fuerza base", "Pretemporada");
+        var initialWeek = TrainingWeek.Create(1, planId);
+        var initialSession = TrainingSession.Create(initialWeek.Id, "Miércoles", 1, DayOfWeek.Wednesday);
+        var initialExercise = PrescribedExercise.Create(1, 4, 5, 80m, initialSession.Id, Guid.NewGuid());
+        initialSession.AddPrescribedExercise(initialExercise);
+        initialWeek.AddSession(initialSession);
+        existingPlan.AddWeek(initialWeek);
+
+        _planRepoMock.Setup(r => r.GetWithDetailsByIdAsync(planId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingPlan);
+        _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        // Enviar request con Id explícito
+        var updateRequest = new SaveTrainingPlanRequest(
+            "Plan con Id",
+            null,
+            new List<TrainingWeekRequest>
+            {
+                new(
+                    1,
+                    new List<TrainingSessionRequest>
+                    {
+                        new(
+                            "Miércoles",
+                            1,
+                            DayOfWeek.Wednesday,
+                            "Notas con Id",
+                            new List<PrescribedExerciseRequest>
+                            {
+                                new(initialExercise.ExerciseId, 1, 3, 12, 60m, initialExercise.Id)
+                            },
+                            initialSession.Id
+                        )
+                    },
+                    initialWeek.Id
+                )
+            }
+        );
+
+        var handler = new UpdateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
+        var result = await handler.Handle(new UpdateTrainingPlanCommand(planId, updateRequest));
+
+        Assert.Equal(initialWeek.Id, result.Weeks[0].Id);
+        Assert.Equal(initialSession.Id, result.Weeks[0].Sessions[0].Id);
+        Assert.Equal(initialExercise.Id, result.Weeks[0].Sessions[0].Exercises[0].Id);
+        Assert.Equal(12, result.Weeks[0].Sessions[0].Exercises[0].Reps);
+    }
+
+    [Fact]
     public async Task UpdatePlan_DadoPlanInexistente_DeberiaLanzarNotFoundException()
     {
         var planId = Guid.NewGuid();
