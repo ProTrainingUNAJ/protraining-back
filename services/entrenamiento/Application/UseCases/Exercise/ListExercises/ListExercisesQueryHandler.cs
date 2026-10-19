@@ -1,10 +1,13 @@
-﻿using Application.DTOs.Exercise;
+using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
 
 namespace Application.UseCases.Exercise.ListExercises
 {
     public class ListExercisesQueryHandler
     {
+        private const int MaxPageSize = 100;
+        private const int DefaultPageSize = 20;
+
         private readonly IExerciseRepository exerciseRepository;
 
         public ListExercisesQueryHandler(IExerciseRepository exerciseRepository)
@@ -12,9 +15,18 @@ namespace Application.UseCases.Exercise.ListExercises
             this.exerciseRepository = exerciseRepository;
         }
 
-        public async Task<List<ExerciseDto>> Handle(ListExercisesQuery request, CancellationToken cancellationToken = default)
+        public async Task<PaginatedExerciseResponse> Handle(ListExercisesQuery request, CancellationToken cancellationToken = default)
         {
-            var exercises = await exerciseRepository.ListAsync( request.Search, request.Equipment, request.MuscleGroup, request.Page, request.PageSize, cancellationToken);
+            var page = request.Page < 1 ? 1 : request.Page;
+            var pageSize = request.PageSize < 1 ? DefaultPageSize : (request.PageSize > MaxPageSize ? MaxPageSize : request.PageSize);
+
+            var (exercises, totalCount) = await exerciseRepository.ListAsync(
+                request.Search,
+                request.Equipment,
+                request.MuscleGroup,
+                page,
+                pageSize,
+                cancellationToken);
 
             var exercisesDto = exercises.Select(e => new ExerciseDto
             {
@@ -30,7 +42,9 @@ namespace Application.UseCases.Exercise.ListExercises
                 SecondaryMuscles = e.SecondaryMuscles,
             }).ToList();
 
-            return exercisesDto;
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            return new PaginatedExerciseResponse(exercisesDto, page, pageSize, totalCount, totalPages);
         }
     }
 }
