@@ -56,6 +56,18 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         return count == distinctIds.Count;
     }
 
+    public async Task<Dictionary<Guid, string>> GetExerciseNamesAsync(IEnumerable<Guid> exerciseIds, CancellationToken cancellationToken = default)
+    {
+        var distinctIds = exerciseIds.Distinct().ToList();
+        if (distinctIds.Count == 0)
+            return [];
+
+        return await _context.Exercises
+            .AsNoTracking()
+            .Where(e => distinctIds.Contains(e.Id))
+            .ToDictionaryAsync(e => e.Id, e => e.Name, cancellationToken);
+    }
+
     public async Task AddAsync(TrainingPlan plan, CancellationToken cancellationToken = default)
     {
         await _context.TrainingPlans.AddAsync(plan, cancellationToken);

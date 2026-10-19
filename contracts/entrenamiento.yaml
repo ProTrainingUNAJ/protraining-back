@@ -1252,6 +1252,7 @@ components:
       required:
         - id
         - exerciseId
+        - exerciseName
         - order
         - sets
         - reps
@@ -1264,6 +1265,10 @@ components:
           type: string
           format: uuid
           example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        exerciseName:
+          type: string
+          description: Nombre del ejercicio en el catálogo, para mostrarlo en el editor sin pedir el catálogo completo.
+          example: "Sentadilla trasera con barra"
         order:
           type: integer
           example: 1

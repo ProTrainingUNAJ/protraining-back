@@ -19,6 +19,8 @@ public class GetTrainingPlanQueryHandler
         if (plan == null)
             throw new NotFoundException($"No se encontró la planificación con ID '{query.Id}'.");
 
-        return TrainingPlanMapper.ToDetailDto(plan);
+        var exerciseNames = await _planRepository.GetExerciseNamesAsync(TrainingPlanMapper.GetExerciseIds(plan), cancellationToken);
+
+        return TrainingPlanMapper.ToDetailDto(plan, exerciseNames);
     }
 }

@@ -3,6 +3,7 @@ namespace Application.DTOs.TrainingPlans;
 public record PrescribedExerciseDto(
     Guid Id,
     Guid ExerciseId,
+    string ExerciseName,
     int Order,
     int Sets,
     int Reps,

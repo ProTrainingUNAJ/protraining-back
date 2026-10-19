@@ -190,7 +190,9 @@ public class UpdateTrainingPlanCommandHandler
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return TrainingPlanMapper.ToDetailDto(plan);
+        var exerciseNames = await _planRepository.GetExerciseNamesAsync(TrainingPlanMapper.GetExerciseIds(plan), cancellationToken);
+
+        return TrainingPlanMapper.ToDetailDto(plan, exerciseNames);
     }
 
     private static bool MatchesWeek(TrainingWeek entity, TrainingWeekRequest request)
