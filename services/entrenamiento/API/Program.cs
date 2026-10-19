@@ -3,6 +3,8 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.AthleteRecord.ListAthleteRecords;
+using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
@@ -69,6 +71,8 @@ builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
 builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
 builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
 builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
+builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
+builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
 
 
 
