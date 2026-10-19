@@ -57,11 +57,17 @@ public sealed class PushSubscriptionsController(
     }
 
     [HttpDelete]
+    [HttpPost("unsubscribe")]
     public async Task<IActionResult> Unsubscribe(
-        [FromBody] UnsubscribePushRequest request,
+        [FromQuery] string? endpoint,
+        [FromBody] UnsubscribePushRequest? request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request?.Endpoint))
+        var targetEndpoint = !string.IsNullOrWhiteSpace(endpoint)
+            ? endpoint
+            : request?.Endpoint;
+
+        if (string.IsNullOrWhiteSpace(targetEndpoint))
         {
             return BadRequest(new ProblemDetails
             {
@@ -71,7 +77,7 @@ public sealed class PushSubscriptionsController(
             });
         }
 
-        await unsubscribeHandler.HandleAsync(new UnsubscribePushCommand(request.Endpoint), cancellationToken);
+        await unsubscribeHandler.HandleAsync(new UnsubscribePushCommand(targetEndpoint), cancellationToken);
 
         return NoContent();
     }
