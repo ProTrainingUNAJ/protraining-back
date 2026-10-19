@@ -41,11 +41,30 @@ public class TrainingSession : BaseEntity
         CoachNotes = notes;
     }
 
+    public void Update(string name, int order, DayOfWeek dayOfWeek, string? coachNotes)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("El nombre de la sesión no puede estar vacío.");
+
+        if (order <= 0)
+            throw new DomainException("El orden debe ser mayor a cero.");
+
+        Name = name;
+        Order = order;
+        DayOfWeek = dayOfWeek;
+        CoachNotes = coachNotes;
+    }
+
     public void AddPrescribedExercise(PrescribedExercise exercise)
     {
         if (_prescribedExercises.Any(e => e.Order == exercise.Order))
             throw new DomainException($"La sesión '{Name}' ya contiene un ejercicio con orden {exercise.Order}.");
 
         _prescribedExercises.Add(exercise);
+    }
+
+    public void RemovePrescribedExercise(PrescribedExercise exercise)
+    {
+        _prescribedExercises.Remove(exercise);
     }
 }

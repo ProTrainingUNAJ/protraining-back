@@ -33,4 +33,9 @@ public sealed class TrainingWeek : BaseEntity
 
         _sessions.Add(session);
     }
+
+    public void RemoveSession(TrainingSession session)
+    {
+        _sessions.Remove(session);
+    }
 }
