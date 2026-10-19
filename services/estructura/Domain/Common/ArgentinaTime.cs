@@ -2,7 +2,6 @@
 
 namespace Domain.Common;
 
-//voy a copiar argentinatime de seguimiento por que me parece que esta perfecto
 // El día del check-in se calcula en hora argentina, nunca en UTC (KAN-329).
 public static class ArgentinaTime
 {
