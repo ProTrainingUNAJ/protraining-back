@@ -45,6 +45,7 @@ public sealed class MedicalRecordConfiguration : IEntityTypeConfiguration<Medica
             .IsRequired();
 
         builder.HasIndex(record => record.AthleteId)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
     }
 }

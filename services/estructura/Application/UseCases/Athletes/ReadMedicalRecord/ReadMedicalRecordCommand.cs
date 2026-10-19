@@ -25,7 +25,7 @@ public sealed class ReadMedicalRecordCommandHandler(
         if (string.IsNullOrWhiteSpace(command.Justification))
             throw new DomainException("La justificación del acceso o modificación de la ficha médica es obligatoria.");
 
-        var athlete = await athleteRepository.GetByIdAsync(command.AthleteId, cancellationToken)
+        var athlete = await athleteRepository.GetByIdWithMedicalRecordAsync(command.AthleteId, cancellationToken)
             ?? throw new AthleteNotFoundException();
 
         var record = athlete.ReadMedicalRecord();

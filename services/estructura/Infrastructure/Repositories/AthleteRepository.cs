@@ -20,6 +20,12 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.Athletes
                 .Include(athlete => athlete.DigitalConsent)
+                .FirstOrDefaultAsync(athlete => athlete.Id == id, cancellationToken));
+
+    public async Task<Athlete?> GetByIdWithMedicalRecordAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.Athletes
+                .Include(athlete => athlete.DigitalConsent)
                 .Include(athlete => athlete.MedicalRecord)
                 .FirstOrDefaultAsync(athlete => athlete.Id == id, cancellationToken));
 

@@ -301,7 +301,8 @@ namespace Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AthleteId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("PfId");
 

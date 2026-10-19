@@ -5,6 +5,7 @@ using Domain.Entities;
 using Estructura.Tests.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 
 namespace Estructura.Tests.Integration;
 
@@ -204,6 +205,51 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, putResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, logsResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_AuditLogSaveFails_When_ReadingMedicalRecord_Then_ThrowsAndNeverReturnsMedicalData()
+    {
+        // arrange: si falla el guardado del registro de auditoría en SaveChangesAsync, el handler no debe devolver la ficha médica
+        var athlete = Athlete.CreateAdult("Diego", "Milito", "diego@club.com", "+5491133445566", signsInitialConsent: true);
+        athlete.CompleteOrUpdateMedicalRecord(
+            medicalHistory: "Antecedente confidencial",
+            surgeries: null,
+            pathologies: null,
+            hasPhysicalFitnessCertificate: true);
+
+        var athleteRepositoryMock = new Moq.Mock<Application.Interfaces.Persistence.IAthleteRepository>();
+        athleteRepositoryMock
+            .Setup(repo => repo.GetByIdWithMedicalRecordAsync(athlete.Id, Moq.It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athlete);
+
+        var auditLogRepositoryMock = new Moq.Mock<Application.Interfaces.Persistence.IMedicalRecordAuditLogRepository>();
+        var currentUserMock = new Moq.Mock<Application.Interfaces.Services.ICurrentUser>();
+        currentUserMock.Setup(u => u.UserId).Returns(_pfAUserId);
+        currentUserMock.Setup(u => u.PfId).Returns(_pfAId);
+
+        var unitOfWorkMock = new Moq.Mock<Application.Interfaces.Persistence.IUnitOfWork>();
+        unitOfWorkMock
+            .Setup(uow => uow.SaveChangesAsync(Moq.It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Fallo simulado al persistir el registro de auditoría médica."));
+
+        var handler = new Application.UseCases.Athletes.ReadMedicalRecord.ReadMedicalRecordCommandHandler(
+            athleteRepositoryMock.Object,
+            auditLogRepositoryMock.Object,
+            currentUserMock.Object,
+            unitOfWorkMock.Object);
+
+        // act & assert: falla la operación y nunca se entrega el MedicalRecordDto al llamador
+        MedicalRecordDto? leakedRecord = null;
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            leakedRecord = await handler.HandleAsync(
+                new Application.UseCases.Athletes.ReadMedicalRecord.ReadMedicalRecordCommand(
+                    athlete.Id,
+                    "Consulta previa a entrenamiento"));
+        });
+
+        Assert.Null(leakedRecord);
     }
 
     public async ValueTask DisposeAsync()
