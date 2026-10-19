@@ -83,6 +83,8 @@ public class CreateTrainingPlanCommandHandler
         await _planRepository.AddAsync(plan, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return TrainingPlanMapper.ToDetailDto(plan);
+        var exerciseNames = await _planRepository.GetExerciseNamesAsync(TrainingPlanMapper.GetExerciseIds(plan), cancellationToken);
+
+        return TrainingPlanMapper.ToDetailDto(plan, exerciseNames);
     }
 }

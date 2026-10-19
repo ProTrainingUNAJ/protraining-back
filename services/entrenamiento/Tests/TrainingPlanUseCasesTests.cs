@@ -17,6 +17,13 @@ public class TrainingPlanUseCasesTests
     private readonly Mock<ITrainingPlanRepository> _planRepoMock = new();
     private readonly Mock<IUnitOfWork> _unitOfWorkMock = new();
 
+    public TrainingPlanUseCasesTests()
+    {
+        // Por defecto el catálogo no devuelve nombres; los tests que los necesitan lo configuran.
+        _planRepoMock.Setup(r => r.GetExerciseNamesAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+    }
+
     [Fact]
     public async Task CreatePlan_DadoPlanConSemanaYSesiones_CuandoSeCrea_EntoncesRetornaArbolCompleto()
     {
@@ -354,6 +361,41 @@ public class TrainingPlanUseCasesTests
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             handler.Handle(new UpdateTrainingPlanCommand(planId, new SaveTrainingPlanRequest("Plan"))));
+    }
+
+    [Fact]
+    public async Task GetPlan_DadoPlanConEjercicios_DeberiaDevolverElNombreDeCadaEjercicio()
+    {
+        var planId = Guid.NewGuid();
+        var squatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+        var plan = TrainingPlan.Create("Fuerza base", "Pretemporada");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Lunes", 1, DayOfWeek.Monday);
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 80m, session.Id, squatId));
+        session.AddPrescribedExercise(PrescribedExercise.Create(2, 3, 8, 70m, session.Id, benchId));
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        _planRepoMock.Setup(r => r.GetWithDetailsByIdAsync(planId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(plan);
+        _planRepoMock.Setup(r => r.GetExerciseNamesAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>
+            {
+                [squatId] = "Sentadilla trasera con barra",
+                [benchId] = "Press de banca plano"
+            });
+
+        var handler = new GetTrainingPlanQueryHandler(_planRepoMock.Object);
+
+        var result = await handler.Handle(new GetTrainingPlanQuery(planId));
+
+        var exercises = result.Weeks[0].Sessions[0].Exercises;
+        Assert.Equal("Sentadilla trasera con barra", exercises[0].ExerciseName);
+        Assert.Equal("Press de banca plano", exercises[1].ExerciseName);
+        _planRepoMock.Verify(r => r.GetExerciseNamesAsync(
+            It.Is<IEnumerable<Guid>>(ids => ids.Count() == 2 && ids.Contains(squatId) && ids.Contains(benchId)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

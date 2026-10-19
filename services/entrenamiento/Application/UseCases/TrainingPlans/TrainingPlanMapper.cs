@@ -5,7 +5,15 @@ namespace Application.UseCases.TrainingPlans;
 
 public static class TrainingPlanMapper
 {
-    public static TrainingPlanDetailDto ToDetailDto(TrainingPlan plan)
+    // Ids de todos los ejercicios del plan, para buscar sus nombres en el catálogo.
+    public static IEnumerable<Guid> GetExerciseIds(TrainingPlan plan) =>
+        plan.Weeks
+            .SelectMany(w => w.Sessions)
+            .SelectMany(s => s.PrescribedExercises)
+            .Select(e => e.ExerciseId)
+            .Distinct();
+
+    public static TrainingPlanDetailDto ToDetailDto(TrainingPlan plan, IReadOnlyDictionary<Guid, string> exerciseNames)
     {
         var weekDtos = plan.Weeks
             .OrderBy(w => w.WeekNumber)
@@ -25,6 +33,7 @@ public static class TrainingPlanMapper
                             .Select(e => new PrescribedExerciseDto(
                                 e.Id,
                                 e.ExerciseId,
+                                exerciseNames.GetValueOrDefault(e.ExerciseId, string.Empty),
                                 e.Order,
                                 e.Sets,
                                 e.Reps,
