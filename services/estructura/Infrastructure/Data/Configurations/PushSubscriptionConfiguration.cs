@@ -46,6 +46,8 @@ public sealed class PushSubscriptionConfiguration : IEntityTypeConfiguration<Pus
 
         builder.HasIndex(p => p.UserId);
         builder.HasIndex(p => p.AthleteId);
-        builder.HasIndex(p => p.Endpoint);
+        builder.HasIndex(p => p.Endpoint)
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
     }
 }

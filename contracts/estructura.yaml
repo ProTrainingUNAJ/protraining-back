@@ -28,6 +28,8 @@ tags:
     description: Exportación de datos de estructura en formatos tabulares (CSV)
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
+  - name: PushSubscriptions
+    description: Gestión de suscripciones Web Push y claves públicas VAPID para notificaciones del navegador
 
 paths:
   /api/v1/athletes:
@@ -854,6 +856,107 @@ paths:
                     type: string
                     example: "Healthy"
 
+  /api/v1/push-subscriptions/public-key:
+    get:
+      tags:
+        - PushSubscriptions
+      summary: Obtener clave pública VAPID
+      description: Retorna la clave pública VAPID en formato Base64URL requerida para suscribir el navegador a Web Push.
+      operationId: getVapidPublicKey
+      responses:
+        "200":
+          description: Clave pública VAPID obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VapidPublicKey'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/push-subscriptions:
+    post:
+      tags:
+        - PushSubscriptions
+      summary: Registrar suscripción Web Push
+      description: Registra o actualiza una suscripción Web Push del dispositivo del usuario logueado.
+      operationId: registerPushSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPushSubscriptionRequest'
+      responses:
+        "200":
+          description: Suscripción registrada exitosamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Suscripción Web Push registrada con éxito."
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - PushSubscriptions
+      summary: Revocar suscripción Web Push
+      description: Revoca la suscripción Web Push asociada al endpoint especificado por query param o en el cuerpo.
+      operationId: unsubscribePush
+      parameters:
+        - name: endpoint
+          in: query
+          required: false
+          description: Endpoint de la suscripción a revocar
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnsubscribePushRequest'
+      responses:
+        "204":
+          description: Suscripción revocada exitosamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/push-subscriptions/unsubscribe:
+    post:
+      tags:
+        - PushSubscriptions
+      summary: Revocar suscripción Web Push (alias POST)
+      description: Alternativa POST para revocar suscripciones cuando proxies intermedios descartan el cuerpo en peticiones DELETE.
+      operationId: unsubscribePushPost
+      parameters:
+        - name: endpoint
+          in: query
+          required: false
+          description: Endpoint de la suscripción a revocar
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnsubscribePushRequest'
+      responses:
+        "204":
+          description: Suscripción revocada exitosamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1434,3 +1537,58 @@ components:
             type: array
             items:
               type: string
+
+    VapidPublicKey:
+      type: object
+      required:
+        - publicKey
+      properties:
+        publicKey:
+          type: string
+          description: Clave pública VAPID en Base64URL
+          example: "BMd4u3l1L..."
+
+    PushSubscriptionKeys:
+      type: object
+      required:
+        - p256dh
+        - auth
+      properties:
+        p256dh:
+          type: string
+          description: Clave pública del cliente p256dh generada por PushManager
+          example: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QT9tWV34YEAeuhNeNOSTq5JJthm8e..."
+        auth:
+          type: string
+          description: Secreto de autenticación generado por PushManager
+          example: "tBHItJI5svbpez7KI4CCXg=="
+
+    RegisterPushSubscriptionRequest:
+      type: object
+      required:
+        - endpoint
+        - keys
+      properties:
+        endpoint:
+          type: string
+          format: uri
+          description: URL del endpoint del servicio de push del navegador
+          example: "https://fcm.googleapis.com/fcm/send/c_zQ..."
+        keys:
+          $ref: '#/components/schemas/PushSubscriptionKeys'
+        userAgent:
+          type: string
+          nullable: true
+          description: Cadena de agente de usuario del dispositivo que registra la suscripción
+          example: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    UnsubscribePushRequest:
+      type: object
+      required:
+        - endpoint
+      properties:
+        endpoint:
+          type: string
+          format: uri
+          description: URL del endpoint de la suscripción a revocar
+          example: "https://fcm.googleapis.com/fcm/send/c_zQ..."
