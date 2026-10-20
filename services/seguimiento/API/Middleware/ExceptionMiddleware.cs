@@ -24,6 +24,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             {
                 ForbiddenException forbidden => (403, forbidden.Message, (string?)null),
                 NoAthleteLinkedException noAthlete => (404, noAthlete.Message, (string?)null),
+                CategoryNotFoundException category => (404, category.Message, (string?)null),
                 StructureUnavailableException => (503, "Estructura no disponible.",
                     "No se pudo validar el atleta. Inténtalo de nuevo en unos segundos."),
                 DomainException domain => (400, domain.Message, (string?)null),

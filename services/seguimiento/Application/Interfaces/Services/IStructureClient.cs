@@ -7,4 +7,7 @@ public interface IStructureClient
 {
     // Atleta del usuario autenticado; null si su cuenta no está vinculada a un atleta.
     Task<AthleteMeDto?> GetMeAsync(CancellationToken cancellationToken = default);
+
+    // Atletas de una categoría (rol PreparadorFisico); lanza CategoryNotFoundException si la categoría no existe.
+    Task<IReadOnlyList<CategoryAthleteDto>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default);
 }

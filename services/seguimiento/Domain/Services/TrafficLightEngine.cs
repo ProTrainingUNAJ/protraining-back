@@ -43,8 +43,10 @@ public sealed class TrafficLightEngine
         // Poco sueño: SleepHours por debajo del umbral
         bool littleSleep = checkInData?.SleepHours < SleepThreshold;
 
-        // Dolor nuevo: PainZones no vacío O HasNewPain explícito
-        bool newPain = !string.IsNullOrWhiteSpace(checkInData?.PainZones) ||
+        // Dolor nuevo: PainZones con contenido real O HasNewPain explícito (KAN-364).
+        // Un "[]" o "{}" (lista vacía serializada por el front) NO es dolor: se normaliza
+        // para evitar el falso positivo de amarillo "dolor nuevo".
+        bool newPain = HasPainZones(checkInData?.PainZones) ||
                        checkInData?.HasNewPain == true;
 
         // Enfermedad: IsSick es true en el check-in o en el contexto
@@ -52,9 +54,6 @@ public sealed class TrafficLightEngine
                       context?.IsSick == true;
 
         bool hasConcerningSigns = highEffort || littleSleep || newPain || isSick || noCheckIn;
-
-        // Prioridad 3: estado óptimo (sin señales de alerta, sin lesión activa) → Verde
-        bool isGoodState = !hasActiveInjury && !hasConcerningSigns;
 
         // Construir el motivo basado en la prioridad evaluada
         TrafficLight light;
@@ -85,7 +84,9 @@ public sealed class TrafficLightEngine
             reason = "Estado óptimo";
         }
 
-        int resultValue = isGoodState ? 90 : hasConcerningSigns ? 50 : 20;
+        // ResultValue con la misma prioridad estricta que el color: Rojo manda sobre Amarillo (KAN-364).
+        // Antes, con lesión activa Y otras señales, devolvía 50 (valor de Amarillo) contradiciendo el Rojo.
+        int resultValue = hasActiveInjury ? 20 : hasConcerningSigns ? 50 : 90;
 
         return new HeuristicEvaluationResult(resultValue, light, reason);
     }
@@ -122,6 +123,14 @@ public sealed class TrafficLightEngine
         }
 
         return Evaluate(checkInData, context);
+    }
+
+    // PainZones con contenido real: distingue "sin zonas" (null, vacío, "[]", "{}")
+    // de una lista con ítems. Evita el falso positivo de "dolor nuevo" con "[]" (KAN-364).
+    private static bool HasPainZones(string? painZones)
+    {
+        var normalized = painZones?.Trim();
+        return !string.IsNullOrEmpty(normalized) && normalized is not ("[]" or "{}");
     }
 }
 
