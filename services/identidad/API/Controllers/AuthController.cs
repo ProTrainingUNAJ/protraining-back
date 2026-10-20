@@ -1,6 +1,6 @@
 ﻿using Application.DTOs.Auth;
 using Application.UseCases.Auth.Login;
-using Application.UseCases.Auth.RefreshToken;
+using Application.UseCases.Auth.Refresh;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
@@ -10,7 +10,7 @@ namespace API.Controllers;
 [AllowAnonymous]
 [ApiController]
 [Route("api/v1/auth")]
-public class AuthController(LoginUseCase loginUseCase, RefreshTokenUseCase refreshTokenUseCase) : ControllerBase
+public class AuthController(LoginUseCase loginUseCase, RefreshUseCase refreshTokenUseCase) : ControllerBase
 {
     /// <summary>
     /// inicia sesion con email y contraseña, emitiendo un token JWT firmado
