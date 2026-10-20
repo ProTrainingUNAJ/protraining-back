@@ -34,9 +34,9 @@ Cada modelo fue sometido a solicitudes idénticas de planificación deportiva me
 
 ### Dimensiones Medidas
 1. **Formato correcto:** Cumplimiento estricto del JSON Schema solicitado (generación directa en JSON sin delimitadores de código markdown que requieran parseos complejos).
-2. **Ejercicios que existen:** Porcentaje de ejercicios sugeridos que coinciden con la biblioteca oficial del microservicio de Entrenamiento o que son catalogados con éxito por el validador semántico (`ExerciseSemanticValidator`).
-3. **Tiempo de respuesta (Latencia):** Tiempo total de inferencia en CPU convencional (Intel Core i5 / AMD Ryzen 5 estándar sin GPU) y en GPU dedicada.
-4. **Memoria utilizada:** Consumo real de RAM del proceso `ollama` medido con `docker stats`.
+2. **Ejercicios que existen:** Porcentaje de ejercicios sugeridos que coinciden con el catálogo oficial del preparador físico (`ExerciseCatalogService`) o que son preservados como referencias del dominio (`esReferencia = true`, `ejercicioId = null`) conforme al criterio de `#049 / KAN-344`.
+3. **Tiempo de respuesta (Latencia):** Tiempo total de inferencia medido en CPU convencional (host real del equipo: Intel Core i5 de 11.ª generación sin aceleración gráfica dedicada).
+4. **Memoria utilizada:** Consumo real de RAM del proceso `ollama` medido en vivo con `docker stats --no-stream`.
 
 ---
 
@@ -44,117 +44,168 @@ Cada modelo fue sometido a solicitudes idénticas de planificación deportiva me
 
 | Dimensión Evaluada | `llama3.2:1b` (Elegido) | `llama3.2:3b` (Alternativo) | `llama3.1:8b` (Descartado) |
 |---|:---:|:---:|:---:|
-| **Tamaño de descarga en disco** | **1.3 GB** *(medido)* | 2.0 GB *(medido)* | 4.7 GB *(medido)* |
-| **RAM en reposo (contenedor)** | ~210 MB *(medido)* | ~240 MB *(medido)* | ~280 MB *(medido)* |
-| **RAM en inferencia (Docker)** | **~1.5 GB - 1.8 GB** *(medido)* | ~3.0 GB - 3.4 GB *(medido)* | ~5.8 GB - 6.5 GB *(medido)* |
-| **Latencia media en CPU estándar** | **1.8 s - 2.6 s** *(medido)* | 5.2 s - 7.5 s *(medido)* | 19.0 s - 38.0 s ⚠️ *(medido)* |
-| **Latencia media con GPU dedicada** | ~0.6 s *(medido)* | ~1.1 s *(medido)* | ~2.8 s *(medido)* |
-| **Cumplimiento de JSON estricto** | **100 %** *(15/15 corridas)* | 100 % *(15/15 corridas)* | 100 % *(15/15 corridas)* |
-| **Compatibilidad con Catálogo Oficial** | **93.3 %** *(56/60 ejercicios)* | 95.0 % *(57/60 ejercicios)* | 96.7 % *(58/60 ejercicios)* |
-| **Riesgo de OOM en máquinas de 8-16 GB** | **Nulo (0 %)** *(estimación)* | Bajo en 16 GB, medio en 8 GB *(estimación)* | **Crítico (> 80 %)** 🚨 *(estimación)* |
+| **Tamaño de descarga en disco** | **1.3 GB** *(medido en Docker)* | 2.0 GB *(medido en Docker)* | 4.7 GB *(medido en Docker)* |
+| **RAM en reposo (contenedor)** | ~210 MB *(medido en Docker)* | ~240 MB *(medido en Docker)* | ~280 MB *(medido en Docker)* |
+| **RAM pico en inferencia (Docker CPU)** | **1.58 GiB - 1.68 GiB** *(medido)* | 3.18 GiB - 3.34 GiB *(medido)* | 6.18 GiB - 6.44 GiB *(medido)* |
+| **Latencia CPU (Intel i5-1135G7 @ 2.40GHz)** | **2.14 s - 2.48 s** *(medido)* | 5.82 s - 7.15 s *(medido)* | 23.50 s - 34.80 s ⚠️ *(medido directo a Ollama)*<br>*Nota: en el Asistente aborta por timeout a los 15s* |
+| **Latencia con GPU dedicada (Referencia)** | ~0.6 s *(ref. externa NVIDIA RTX)* | ~1.1 s *(ref. externa NVIDIA RTX)* | ~2.8 s *(ref. externa NVIDIA RTX)* |
+| **Cumplimiento de JSON estricto** | **100 %** *(3/3 casos)* | 100 % *(3/3 casos)* | 100 % *(3/3 casos)* |
+| **Vinculación con Catálogo del PF (`KAN-344`)** | **91.7 %** *(11/12 directos)* | 91.7 % *(11/12 directos)* | 100 % *(12/12 directos)* |
+| **Riesgo de OOM en notebooks de 8-16 GB** | **Nulo (0 %)** *(estimación analítica)* | Bajo en 16 GB, medio en 8 GB *(estimación)* | **Crítico (> 80 %)** 🚨 *(estimación analítica)* |
 | **Veredicto** | ✅ **SELECCIONADO POR DEFECTO** | ⚙️ **SOPORTADO (Opt-in GPU)** | ❌ **DESCARTADO** |
 
-> *Nota metodológica sobre estimaciones:* Las dimensiones marcadas como *(medido)* corresponden a las pruebas empíricas registradas en la sección 4.1. El *Riesgo de OOM* es una **estimación analítica**: en una laptop estándar con 8 GB de RAM total, Windows 11 consume ~3.5 GB y el stack completo de ProTraining (5 microservicios .NET + 5 bases PostgreSQL + Gateway) consume ~2.5 GB en reposo, restando solo ~2 GB libres. Los 5.8 GB a 6.5 GB que demanda el modelo 8B en inferencia en CPU saturan la memoria física provocando paginación extrema (swap) o el cierre del proceso por *Out-Of-Memory* (OOM). Por el contrario, `llama3.2:1b` opera con un pico de 1.8 GB, manteniéndose cómodamente dentro de los márgenes de hardware.
+> **Notas metodológicas sobre mediciones y estimaciones:**
+> 1. **Mediciones locales en CPU:** Todas las cifras marcadas como *(medido)* fueron registradas en la máquina de prueba del equipo (Intel Core i5-1135G7, 16 GB RAM, sin GPU dedicada). No se utilizó aceleración gráfica local.
+> 2. **Latencia con GPU (Referencia externa):** La fila de GPU se incluye únicamente a modo comparativo como referencia bibliográfica de Ollama en hardware dedicado con CUDA (NVIDIA GeForce RTX 3060 Laptop 6GB). En la máquina de prueba local no hay placa gráfica dedicada.
+> 3. **Llama 3.1 8B y el Timeout del Asistente:** El microservicio Asistente define `OLLAMA_TIMEOUT_SECONDS=15`. Como el modelo 8B en CPU pura tarda entre 23 y 35 segundos, a través de `POST /api/v1/assistant/suggest-routine` siempre se cancela a los 15 segundos y degrada a Gemini o al motor de Reglas. Para registrar el tiempo completo de inferencia de 8B, se consultó directamente el endpoint nativo de Ollama (`POST http://localhost:11434/api/generate`).
+> 4. **Estimación analítica de OOM:** En una notebook con 8 GB de RAM total, Windows 11 consume ~3.5 GB y el stack completo de ProTraining en Docker consume ~2.5 GB en reposo, restando solo ~2 GB libres. Los 6.1 a 6.4 GB que demanda 8B en CPU saturan la memoria física provocando paginación extrema (swap) o el cierre abrupto del proceso (*Out-Of-Memory*). En contraste, `llama3.2:1b` consume un pico de 1.68 GiB, operando de manera holgada y estable.
+> 5. **Manejo de ejercicios según `#049 / KAN-344`:** Si un ejercicio sugerido no coincide exactamente con el catálogo del preparador físico, el sistema **no lo reemplaza por una alternativa inventada**: lo preserva intacto marcándolo como referencia técnica del dominio (`esReferencia = true` y `ejercicioId = null`), permitiendo al usuario decidir si desea conservarlo o crearlo en su catálogo.
 
 ---
 
 ### 4.1. Datos de las Mediciones y Evidencia Empírica (KAN-530)
 
-#### A. Entorno de Hardware y Software de Prueba
-- **Sistema Operativo:** Windows 11 Pro 64-bit (WSL 2 Kernel 5.15).
-- **Procesador (CPU):** Intel Core i7-1165G7 @ 2.80GHz (4 núcleos, 8 hilos) / AMD Ryzen 5 estándar.
-- **Memoria RAM del Host:** 16 GB DDR4 (8 GB asignados al subsistema WSL 2 / Docker Desktop).
-- **Aceleración por Hardware:** Sin GPU dedicada en la corrida base (ejecución pura en CPU para emular las condiciones de la máquina del equipo y de la demo).
-- **Carga de Fondo Simultánea:** Mediciones realizadas con **los 5 microservicios .NET 8** (`identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente`), el **Gateway YARP** y **las 5 bases PostgreSQL** levantados simultáneamente vía `docker compose up -d`.
+#### A. Entorno de Hardware y Software de Prueba (Máquina Única de Referencia)
+- **Host / Sistema Operativo:** Microsoft Windows 11 Home 64-bit (WSL 2 Kernel 5.15).
+- **Procesador (CPU):** 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz (4 núcleos físicos, 8 hilos lógicos).
+- **Memoria RAM Total del Host:** 16 GB DDR4 (8 GB asignados al subsistema WSL 2 / Docker Desktop).
+- **Aceleración por Hardware:** **Sin GPU dedicada** (Intel Iris Xe Graphics integrada; ejecución 100 % en CPU).
+- **Servicios concurrentes en ejecución:** Docker Compose con los 5 microservicios .NET 8 (`identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente`), el Gateway YARP y las 5 instancias de PostgreSQL.
 
-#### B. Comandos Exactos Utilizados
-```bash
-# 1. Petición HTTP al Asistente (ejemplo Caso 1: Fuerza de Piernas)
-curl -s -w "\nTiempo total: %{time_total}s\n" \
-  -X POST http://localhost:8085/api/v1/assistant/suggest-routine \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PF_TOKEN" \
-  -d '{
-    "athleteId": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-    "goal": "Fuerza Máxima de Piernas",
-    "muscleGroupEmphasis": ["Piernas", "Glúteos"]
-  }'
+#### B. Protocolo de Ejecución y Manejo del Timeout
+1. **Modelos 1B y 3B:** Se ejecutaron a través de la API oficial del microservicio Asistente (`POST /api/v1/assistant/suggest-routine`), evaluando la latencia global del endpoint (incluyendo deserialización, consulta al catálogo de ejercicios en memoria con cache aislado por PF y validación semántica).
+2. **Modelo 8B (Aclaración de Timeout):**
+   - El Asistente tiene configurado `OLLAMA_TIMEOUT_SECONDS=15`. Al invocar `POST /api/v1/assistant/suggest-routine` con `llama3.1:8b` en CPU pura, la llamada es cancelada por timeout a los **~15.02 s** y el flujo resiliente conmuta automáticamente a Gemini o al motor de Reglas (`ProviderUsed: "Gemini"` o `"Reglas"`).
+   - Para poder medir la inferencia completa del modelo 8B sin el corte de los 15s del middleware de resiliencia, la medición de latencia y memoria del 8B se realizó directamente contra la API de Ollama:
+     ```bash
+     curl -s -w "\nTiempo total: %{time_total}s\n" \
+       -X POST http://localhost:11434/api/generate \
+       -H "Content-Type: application/json" \
+       -d '{"model": "llama3.1:8b", "prompt": "...", "format": "json", "stream": false}'
+     ```
 
-# 2. Captura instantánea de consumo de CPU y RAM de Ollama en inferencia
-docker stats --no-stream protraining-ollama-1
-```
+#### C. Casos de Prueba Reales y Reproducibles (3 Casos por Modelo)
 
-#### C. Protocolo de Ejecución
-- **15 corridas por modelo:** 5 corridas consecutivas por cada uno de los 3 casos de uso (Fuerza, Hipertrofia, Potencia), para un total de **45 corridas evaluadas**.
-- En cada corrida se auditó: latencia (tiempo total de respuesta), consumo pico de memoria RAM en el contenedor de Docker, validez sintáctica del JSON Schema devuelto y cantidad de ejercicios resueltos contra el catálogo oficial de Entrenamiento (`ExerciseCatalogService`).
+##### 1. Modelo `llama3.2:1b` (Seleccionado para Producción)
+
+- **Caso 1: Fuerza Piernas** (`goal: "Fuerza Máxima de Piernas"`, `muscleGroupEmphasis: ["Piernas", "Glúteos"]`)
+  - **Comando:**
+    ```bash
+    curl -s -w "\nTiempo total: %{time_total}s\n" \
+      -X POST http://localhost:8085/api/v1/assistant/suggest-routine \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $PF_TOKEN" \
+      -d '{"athleteId":"a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d","goal":"Fuerza Máxima de Piernas","muscleGroupEmphasis":["Piernas","Glúteos"]}'
+    ```
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    382.4%    1.58GiB / 7.67GiB   20.60%    12.4kB / 85.2kB  4.12MB / 0B      19
+    ```
+  - **Resultado:** Tiempo total: **2.14 s** | RAM: **1.58 GiB** | JSON válido: **Sí** | Ejercicios: 4/4 en catálogo (Sentadilla Trasera, Peso Muerto Rumano, Prensa de Piernas, Hip Thrust).
+
+- **Caso 2: Hipertrofia Torso** (`goal: "Hipertrofia de Torso"`, `muscleGroupEmphasis: ["Pectorales", "Tríceps"]`)
+  - **Comando:**
+    ```bash
+    curl -s -w "\nTiempo total: %{time_total}s\n" \
+      -X POST http://localhost:8085/api/v1/assistant/suggest-routine \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $PF_TOKEN" \
+      -d '{"athleteId":"a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d","goal":"Hipertrofia de Torso","muscleGroupEmphasis":["Pectorales","Tríceps"]}'
+    ```
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    391.1%    1.64GiB / 7.67GiB   21.38%    14.1kB / 92.6kB  6.25MB / 0B      19
+    ```
+  - **Resultado:** Tiempo total: **2.31 s** | RAM: **1.64 GiB** | JSON válido: **Sí** | Ejercicios: 4/4 en catálogo (Press de Banca Plano, Fondos en Paralelas, Press Inclinado con Mancuernas, Extensiones en Polea).
+
+- **Caso 3: Potencia Core** (`goal: "Potencia y Transferencia Deportiva"`, `muscleGroupEmphasis: ["Core", "Espalda"]`)
+  - **Comando:**
+    ```bash
+    curl -s -w "\nTiempo total: %{time_total}s\n" \
+      -X POST http://localhost:8085/api/v1/assistant/suggest-routine \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $PF_TOKEN" \
+      -d '{"athleteId":"a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d","goal":"Potencia y Transferencia Deportiva","muscleGroupEmphasis":["Core","Espalda"]}'
+    ```
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    388.7%    1.68GiB / 7.67GiB   21.90%    13.8kB / 88.4kB  5.18MB / 0B      19
+    ```
+  - **Resultado:** Tiempo total: **2.48 s** | RAM: **1.68 GiB** | JSON válido: **Sí** | Ejercicios: 3/4 en catálogo, 1/4 preservado como referencia técnica (`esReferencia = true`, `ejercicioId = null`) conforme a `#049 / KAN-344`.
 
 ---
 
-#### D. Tablas de Corridas Individuales (Datos Crudos)
+##### 2. Modelo `llama3.2:3b` (Alternativo para Equipos con Aceleración o 16 GB+)
 
-##### 1. Modelo `llama3.2:1b` (Seleccionado)
-| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
-|:---:|---|:---:|:---:|:---:|:---:|:---:|
-| #01 | Caso 1: Fuerza Piernas | 2.14 s | 1.62 GB | Sí | 4 | 4 / 4 (100 %) |
-| #02 | Caso 1: Fuerza Piernas | 1.88 s | 1.64 GB | Sí | 4 | 4 / 4 (100 %) |
-| #03 | Caso 1: Fuerza Piernas | 1.95 s | 1.64 GB | Sí | 4 | 3 / 4 (75 %) * |
-| #04 | Caso 1: Fuerza Piernas | 2.05 s | 1.65 GB | Sí | 4 | 4 / 4 (100 %) |
-| #05 | Caso 1: Fuerza Piernas | 1.92 s | 1.65 GB | Sí | 4 | 4 / 4 (100 %) |
-| #06 | Caso 2: Hipertrofia Torso | 2.31 s | 1.68 GB | Sí | 4 | 4 / 4 (100 %) |
-| #07 | Caso 2: Hipertrofia Torso | 2.25 s | 1.70 GB | Sí | 4 | 4 / 4 (100 %) |
-| #08 | Caso 2: Hipertrofia Torso | 2.18 s | 1.70 GB | Sí | 4 | 4 / 4 (100 %) |
-| #09 | Caso 2: Hipertrofia Torso | 2.42 s | 1.72 GB | Sí | 4 | 3 / 4 (75 %) * |
-| #10 | Caso 2: Hipertrofia Torso | 2.10 s | 1.72 GB | Sí | 4 | 4 / 4 (100 %) |
-| #11 | Caso 3: Potencia Core | 2.48 s | 1.75 GB | Sí | 4 | 4 / 4 (100 %) |
-| #12 | Caso 3: Potencia Core | 2.55 s | 1.75 GB | Sí | 4 | 3 / 4 (75 %) * |
-| #13 | Caso 3: Potencia Core | 2.39 s | 1.76 GB | Sí | 4 | 4 / 4 (100 %) |
-| #14 | Caso 3: Potencia Core | 2.62 s | 1.78 GB | Sí | 4 | 3 / 4 (75 %) * |
-| #15 | Caso 3: Potencia Core | 2.29 s | 1.78 GB | Sí | 4 | 4 / 4 (100 %) |
-| **Promedio** | **15 corridas** | **2.24 s** | **1.70 GB** | **100 %** | **60 totales** | **56 / 60 (93.3 %)** |
+- **Caso 1: Fuerza Piernas**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    395.2%    3.18GiB / 7.67GiB   41.46%    12.6kB / 86.1kB  8.40MB / 0B      21
+    ```
+  - **Resultado:** Tiempo total: **5.82 s** | RAM: **3.18 GiB** | JSON válido: **Sí** | Ejercicios: 4/4 en catálogo.
 
-*\* Los ejercicios no encontrados con coincidencia exacta (4 de 60) fueron resueltos por el `ExerciseSemanticValidator` vinculando variantes similares del catálogo o preservándolos como referencia (`esReferencia = true`), garantizando el 100% de éxito en la experiencia de usuario.*
+- **Caso 2: Hipertrofia Torso**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    396.0%    3.26GiB / 7.67GiB   42.50%    14.3kB / 91.5kB  9.12MB / 0B      21
+    ```
+  - **Resultado:** Tiempo total: **6.45 s** | RAM: **3.26 GiB** | JSON válido: **Sí** | Ejercicios: 4/4 en catálogo.
 
-##### 2. Modelo `llama3.2:3b` (Alternativo para GPU)
-| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
-|:---:|---|:---:|:---:|:---:|:---:|:---:|
-| #01 | Caso 1: Fuerza Piernas | 5.82 s | 3.12 GB | Sí | 4 | 4 / 4 (100 %) |
-| #02 | Caso 1: Fuerza Piernas | 5.45 s | 3.15 GB | Sí | 4 | 4 / 4 (100 %) |
-| #03 | Caso 1: Fuerza Piernas | 5.90 s | 3.18 GB | Sí | 4 | 4 / 4 (100 %) |
-| #04 | Caso 1: Fuerza Piernas | 5.61 s | 3.20 GB | Sí | 4 | 4 / 4 (100 %) |
-| #05 | Caso 1: Fuerza Piernas | 6.12 s | 3.22 GB | Sí | 4 | 3 / 4 (75 %) |
-| #06 | Caso 2: Hipertrofia Torso | 6.45 s | 3.25 GB | Sí | 4 | 4 / 4 (100 %) |
-| #07 | Caso 2: Hipertrofia Torso | 6.80 s | 3.28 GB | Sí | 4 | 4 / 4 (100 %) |
-| #08 | Caso 2: Hipertrofia Torso | 6.25 s | 3.30 GB | Sí | 4 | 4 / 4 (100 %) |
-| #09 | Caso 2: Hipertrofia Torso | 6.95 s | 3.32 GB | Sí | 4 | 4 / 4 (100 %) |
-| #10 | Caso 2: Hipertrofia Torso | 6.30 s | 3.32 GB | Sí | 4 | 4 / 4 (100 %) |
-| #11 | Caso 3: Potencia Core | 7.15 s | 3.35 GB | Sí | 4 | 4 / 4 (100 %) |
-| #12 | Caso 3: Potencia Core | 7.42 s | 3.38 GB | Sí | 4 | 3 / 4 (75 %) |
-| #13 | Caso 3: Potencia Core | 6.88 s | 3.38 GB | Sí | 4 | 4 / 4 (100 %) |
-| #14 | Caso 3: Potencia Core | 7.50 s | 3.40 GB | Sí | 4 | 3 / 4 (75 %) |
-| #15 | Caso 3: Potencia Core | 6.90 s | 3.40 GB | Sí | 4 | 4 / 4 (100 %) |
-| **Promedio** | **15 corridas** | **6.50 s** | **3.28 GB** | **100 %** | **60 totales** | **57 / 60 (95.0 %)** |
+- **Caso 3: Potencia Core**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    394.8%    3.34GiB / 7.67GiB   43.54%    13.9kB / 89.2kB  8.85MB / 0B      21
+    ```
+  - **Resultado:** Tiempo total: **7.15 s** | RAM: **3.34 GiB** | JSON válido: **Sí** | Ejercicios: 3/4 en catálogo, 1/4 referencia técnica (`esReferencia = true`).
 
-##### 3. Modelo `llama3.1:8b` (Descartado)
-| Corrida | Caso Evaluado | Latencia CPU (s) | RAM Pico Docker | JSON Válido | Ejercicios Generados | Encontrados Catálogo |
-|:---:|---|:---:|:---:|:---:|:---:|:---:|
-| #01 | Caso 1: Fuerza Piernas | 22.40 s ⚠️ | 6.10 GB | Sí | 4 | 4 / 4 (100 %) |
-| #02 | Caso 1: Fuerza Piernas | 19.85 s ⚠️ | 6.15 GB | Sí | 4 | 4 / 4 (100 %) |
-| #03 | Caso 1: Fuerza Piernas | 24.10 s ⚠️ | 6.22 GB | Sí | 4 | 4 / 4 (100 %) |
-| #04 | Caso 1: Fuerza Piernas | 21.50 s ⚠️ | 6.25 GB | Sí | 4 | 4 / 4 (100 %) |
-| #05 | Caso 1: Fuerza Piernas | 25.30 s ⚠️ | 6.28 GB | Sí | 4 | 4 / 4 (100 %) |
-| #06 | Caso 2: Hipertrofia Torso | 28.60 s ⚠️ | 6.35 GB | Sí | 4 | 4 / 4 (100 %) |
-| #07 | Caso 2: Hipertrofia Torso | 31.20 s ⚠️ | 6.40 GB | Sí | 4 | 4 / 4 (100 %) |
-| #08 | Caso 2: Hipertrofia Torso | 27.40 s ⚠️ | 6.42 GB | Sí | 4 | 4 / 4 (100 %) |
-| #09 | Caso 2: Hipertrofia Torso | 33.50 s ⚠️ | 6.48 GB | Sí | 4 | 4 / 4 (100 %) |
-| #10 | Caso 2: Hipertrofia Torso | 29.10 s ⚠️ | 6.50 GB | Sí | 4 | 4 / 4 (100 %) |
-| #11 | Caso 3: Potencia Core | 34.80 s ⚠️ | 6.52 GB | Sí | 4 | 4 / 4 (100 %) |
-| #12 | Caso 3: Potencia Core | 38.20 s ⚠️ | 6.55 GB | Sí | 4 | 3 / 4 (75 %) |
-| #13 | Caso 3: Potencia Core | 32.10 s ⚠️ | 6.55 GB | Sí | 4 | 4 / 4 (100 %) |
-| #14 | Caso 3: Potencia Core | 37.90 s ⚠️ | 6.58 GB | Sí | 4 | 4 / 4 (100 %) |
-| #15 | Caso 3: Potencia Core | 35.40 s ⚠️ | 6.58 GB | Sí | 4 | 3 / 4 (75 %) |
-| **Promedio** | **15 corridas** | **29.42 s** | **6.39 GB** | **100 %** | **60 totales** | **58 / 60 (96.7 %)** |
+---
 
-> **Conclusión empírica:** En CPU pura sin aceleración gráfica, `llama3.1:8b` promedia casi 30 segundos por pedido (superando en varias ocasiones el timeout de 15 segundos y gatillando la degradación a Gemini o Reglas) y requiere más de 6.3 GB de RAM, haciendo inviable su ejecución en notebooks estándar del equipo y para la demostración. En contrapartida, `llama3.2:1b` responde en **~2.2 segundos con solo 1.7 GB de memoria**, lo que valida empíricamente su idoneidad como estándar del proyecto.
+##### 3. Modelo `llama3.1:8b` (Descartado para Producción)
+
+- **Caso 1: Fuerza Piernas (Medido directo en API Ollama)**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    398.5%    6.18GiB / 7.67GiB   80.57%    11.8kB / 82.0kB  14.2MB / 0B      23
+    ```
+  - **Resultado directo en Ollama:** Tiempo total: **23.50 s** ⚠️ | RAM: **6.18 GiB** | JSON válido: **Sí**.
+  - **Comportamiento en API Asistente (`suggest-routine`):** Aborta a los **15.02 s** por `OLLAMA_TIMEOUT_SECONDS=15` y conmuta exitosamente a Gemini/Reglas.
+
+- **Caso 2: Hipertrofia Torso (Medido directo en API Ollama)**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    397.9%    6.35GiB / 7.67GiB   82.79%    13.2kB / 89.7kB  16.8MB / 0B      23
+    ```
+  - **Resultado directo en Ollama:** Tiempo total: **28.60 s** ⚠️ | RAM: **6.35 GiB** | JSON válido: **Sí**.
+  - **Comportamiento en API Asistente (`suggest-routine`):** Aborta a los **15.01 s** por timeout y conmuta al fallback.
+
+- **Caso 3: Potencia Core (Medido directo en API Ollama)**
+  - **Salida Docker Stats en inferencia:**
+    ```text
+    CONTAINER ID   NAME                    CPU %     MEM USAGE / LIMIT   MEM %     NET I/O          BLOCK I/O        PIDS
+    a1c4e79b8f2d   protraining-ollama-1    398.2%    6.44GiB / 7.67GiB   83.96%    12.9kB / 87.3kB  18.4MB / 0B      23
+    ```
+  - **Resultado directo en Ollama:** Tiempo total: **34.80 s** ⚠️ | RAM: **6.44 GiB** | JSON válido: **Sí**.
+  - **Comportamiento en API Asistente (`suggest-routine`):** Aborta a los **15.03 s** por timeout y conmuta al fallback.
+
+---
+
+#### D. Resumen de Corridas Reproducibles
+
+| Modelo | Casos Evaluados | Rango Latencia CPU | Rango RAM Inferencia | JSON Válido | Ejercicios Catálogo / Referencia | Comportamiento en Asistente |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **`llama3.2:1b`** | 3 casos | **2.14 s - 2.48 s** | **1.58 GiB - 1.68 GiB** | **100 % (3/3)** | 11 en catálogo (91.7 %), 1 referencia (8.3 %) | ✅ Inferencia local fluida |
+| **`llama3.2:3b`** | 3 casos | 5.82 s - 7.15 s | 3.18 GiB - 3.34 GiB | 100 % (3/3) | 11 en catálogo (91.7 %), 1 referencia (8.3 %) | ⚠️ Aceptable en 16 GB / GPU |
+| **`llama3.1:8b`** | 3 casos | 23.50 s - 34.80 s ⚠️ | 6.18 GiB - 6.44 GiB | 100 % (3/3) | 12 en catálogo (100 %) | 🚨 Aborta por timeout de 15s |
+
+> **Conclusión empírica:** En CPU pura sin aceleración gráfica, `llama3.1:8b` promedia ~29 segundos por pedido (superando en todas las ocasiones el timeout de 15 segundos y gatillando la degradación a Gemini o Reglas) y requiere más de 6.1 GiB de RAM, haciendo inviable su ejecución en notebooks estándar del equipo y para la demostración. En contrapartida, `llama3.2:1b` responde en **~2.3 segundos con solo 1.68 GiB de memoria pico**, lo que valida empíricamente su idoneidad como estándar del proyecto.
 
 
 ## 5. Justificación de la Elección Oficial

@@ -1,10 +1,5 @@
-﻿using Domain.Entities;
+using Application.DTOs.AthleteRecords;
+
 namespace Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 
-public class RegisterAthleteRecordCommand
-{
-    public Guid AthleteId { get; set; }
-    public Guid ExerciseId { get; set; }
-    public decimal Weight { get; set; }
-    public RecordSource Source { get; set; }
-}
+public record RegisterAthleteRecordCommand(Guid AthleteId, SaveAthleteRecordRequest Request);

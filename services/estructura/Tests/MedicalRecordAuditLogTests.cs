@@ -88,11 +88,14 @@ public sealed class MedicalRecordAuditLogTests : IAsyncDisposable
     {
         // arrange
         var pfId = Guid.NewGuid();
-        var athleteId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
         await using var dbContext = CreateDbContextForPf(pfId);
         await dbContext.Database.MigrateAsync();
+
+        var athlete = Athlete.CreateAdult("Lucas", "Fernandez", "lucas@club.com", "+5491112345678", signsInitialConsent: true);
+        dbContext.Athletes.Add(athlete);
+        var athleteId = athlete.Id;
 
         var repository = new MedicalRecordAuditLogRepository(dbContext);
         var auditLog = MedicalRecordAuditLog.CreateRead(
@@ -133,11 +136,14 @@ public sealed class MedicalRecordAuditLogTests : IAsyncDisposable
     {
         // arrange
         var pfId = Guid.NewGuid();
-        var athleteId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
         await using var dbContext = CreateDbContextForPf(pfId);
         await dbContext.Database.MigrateAsync();
+
+        var athlete = Athlete.CreateAdult("Martin", "Palermo", "martin@club.com", "+5491187654321", signsInitialConsent: true);
+        dbContext.Athletes.Add(athlete);
+        var athleteId = athlete.Id;
 
         var repository = new MedicalRecordAuditLogRepository(dbContext);
         var auditLog = MedicalRecordAuditLog.CreateUpdate(
@@ -179,11 +185,14 @@ public sealed class MedicalRecordAuditLogTests : IAsyncDisposable
         // arrange
         var pfA = Guid.NewGuid();
         var pfB = Guid.NewGuid();
-        var athleteId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
         await using var dbContextPfA = CreateDbContextForPf(pfA);
         await dbContextPfA.Database.MigrateAsync();
+
+        var athlete = Athlete.CreateAdult("Enzo", "Fernandez", "enzo@club.com", "+5491122334455", signsInitialConsent: true);
+        dbContextPfA.Athletes.Add(athlete);
+        var athleteId = athlete.Id;
 
         var repoPfA = new MedicalRecordAuditLogRepository(dbContextPfA);
         var firstLog = MedicalRecordAuditLog.CreateCreation(athleteId, userId, "Alta inicial de ficha médica");

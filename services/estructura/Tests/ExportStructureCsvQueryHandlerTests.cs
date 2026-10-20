@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -79,8 +79,9 @@ public class ExportStructureCsvQueryHandlerTests
         Assert.Contains("# CATEGORIAS", csvContent);
         Assert.Contains("Sub-20", csvContent);
 
-        // verifica presencia de atletas
+        // verifica presencia de atletas y ausencia de datos médicos (medical_conditions)
         Assert.Contains("# ATLETAS", csvContent);
+        Assert.DoesNotContain("medical_conditions", csvContent, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Lionel", csvContent);
         Assert.Contains("Messi", csvContent);
         Assert.Contains("lio@messi.com", csvContent);

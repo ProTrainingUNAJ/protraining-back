@@ -143,4 +143,117 @@ public class SubmitCheckInCommandHandlerTests
         Assert.NotNull(fechaRecibida);
         Assert.Equal(ArgentinaTime.Today, DateOnly.FromDateTime(fechaRecibida!.Value));
     }
+
+    [Fact]
+    public async Task HandleAsync_WithNegativeSleepHours_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            CommandValido(sleepHours: -1)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithSleepHoursAbove24_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            CommandValido(sleepHours: 24.1)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithSleepQualityOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 0, 1, 2, 4, 2, false, 4, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithMuscleSorenessOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 4, 6, 2, 4, 2, false, 4, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithFatigueLevelOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 4, 1, 0, 4, 2, false, 4, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithMoodRateOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 4, 1, 2, 6, 2, false, 4, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithStressLevelOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 4, 1, 2, 4, 0, false, 4, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithEffortRateOutOfRange_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(AthleteId, 8, 4, 1, 2, 4, 2, false, 11, null, false)));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_TrimsPainZones()
+    {
+        ConfigurarSinCheckInPrevio();
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        await CreateHandler().HandleAsync(
+            CommandValido() with { PainZones = "  rodilla  " });
+
+        Assert.NotNull(guardado);
+        Assert.Equal("rodilla", guardado!.PainZones);
+    }
 }

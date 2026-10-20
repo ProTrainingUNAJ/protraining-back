@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -65,7 +65,7 @@ public sealed class ExportStructureCsvQueryHandler(
 
         // seccion atletas
         sb.AppendLine("# ATLETAS");
-        sb.AppendLine("Id,Nombre,Apellido,Email,Telefono,EsMenor,ContactoEmergencia,CondicionesMedicas,Activo,PermiteHabitos");
+        sb.AppendLine("Id,Nombre,Apellido,Email,Telefono,EsMenor,ContactoEmergencia,Activo,PermiteHabitos");
         foreach (var a in athletes)
         {
             sb.Append(a.Id).Append(',');
@@ -75,7 +75,6 @@ public sealed class ExportStructureCsvQueryHandler(
             sb.Append(EscapeCsv(a.Phone)).Append(',');
             sb.Append(a.IsMinor ? "true" : "false").Append(',');
             sb.Append(EscapeCsv(a.EmergencyContact)).Append(',');
-            sb.Append(EscapeCsv(a.MedicalConditions)).Append(',');
             sb.Append(a.Active ? "true" : "false").Append(',');
             sb.Append(a.AllowsHabitsRecommendations ? "true" : "false").AppendLine();
         }
