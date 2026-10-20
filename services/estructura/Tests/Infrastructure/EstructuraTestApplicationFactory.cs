@@ -42,6 +42,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Estructura.Tests.Infrastructure;
@@ -50,9 +51,11 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
 {
     private readonly SqliteConnection _sqliteConnection;
     private readonly TestServer _server;
+    private readonly IWebPushClientWrapper? _customWebPushClient;
 
-    public EstructuraTestApplicationFactory()
+    public EstructuraTestApplicationFactory(IWebPushClientWrapper? customWebPushClient = null)
     {
+        _customWebPushClient = customWebPushClient;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -85,8 +88,27 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
                 services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
+                services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+
+                // Web Push and VAPID setup for testing
+                services.Configure<VapidOptions>(options =>
+                {
+                    options.Subject = "mailto:test@protraining.app";
+                    options.PublicKey = "BKdJWX-W5-ybxqXlLV85tGKQ2pwGcbj_L9RkLRoDcbBfISRe-qYuFHV1qz5qLIGga7lriZEBRYWGaKJzxogdU6s";
+                    options.PrivateKey = "9N3cywi7eeq5wpLmHZYPucIGuP2_1jNSm6auEJuLHIc";
+                });
+
+                if (_customWebPushClient is not null)
+                {
+                    services.AddSingleton(_customWebPushClient);
+                }
+                else
+                {
+                    services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
+                }
+                services.AddScoped<IPushNotificationService, PushNotificationService>();
 
                 // Handlers
                 services.AddScoped<ListAthletesQueryHandler>();
@@ -101,6 +123,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ReadMedicalRecordCommandHandler>();
                 services.AddScoped<UpdateMedicalRecordCommandHandler>();
                 services.AddScoped<ListMedicalRecordAuditLogsQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.GetMe.GetMeQueryHandler>();
                 services.AddScoped<ListMyCategoriesQueryHandler>();
                 services.AddScoped<ListOrganizationsQueryHandler>();
                 services.AddScoped<GetOrganizationQueryHandler>();
@@ -115,6 +138,8 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<DeleteCategoryCommandHandler>();
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<ExportStructureCsvQueryHandler>();
+                services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
+                services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
@@ -186,6 +211,8 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         return context;
     }
+
+    public IServiceScope CreateScope() => _server.Services.CreateScope();
 
     public async ValueTask DisposeAsync()
     {
