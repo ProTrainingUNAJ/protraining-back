@@ -45,9 +45,9 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
         {
             // Resiliencia (KAN-364): Estructura caída no puede tumbar el semáforo del PF.
             // Se devuelven los check-ins ya registrados hoy, aunque no tengamos sus nombres.
-            var checkInsDelDia = await checkInRepository.GetByDateAsync(date, cancellationToken);
+            var todaysCheckIns = await checkInRepository.GetByDateAsync(date, cancellationToken);
 
-            return checkInsDelDia
+            return todaysCheckIns
                 .Select(checkIn => new AthleteTrafficLightSummaryDto(
                     checkIn.AthleteId,
                     AthleteName: string.Empty,
@@ -58,16 +58,16 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
                 .ToList();
         }
 
-        var checkInsPorAtleta = checkIns.ToDictionary(checkIn => checkIn.AthleteId);
+        var checkInsByAthlete = checkIns.ToDictionary(checkIn => checkIn.AthleteId);
 
-        var resumen = new List<AthleteTrafficLightSummaryDto>(athletes.Count);
+        var summary = new List<AthleteTrafficLightSummaryDto>(athletes.Count);
 
         foreach (var athlete in athletes)
         {
-            if (checkInsPorAtleta.TryGetValue(athlete.Id, out var checkIn))
+            if (checkInsByAthlete.TryGetValue(athlete.Id, out var checkIn))
             {
                 // Ya reportó hoy: el color y el motivo salen del check-in persistido.
-                resumen.Add(new AthleteTrafficLightSummaryDto(
+                summary.Add(new AthleteTrafficLightSummaryDto(
                     athlete.Id,
                     athlete.FullName,
                     checkIn.TrafficLight.ToString(),
@@ -80,7 +80,7 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
                 // Sin check-in: el motor con entrada null produce Amarillo "sin check-in".
                 var evaluation = trafficLightEngine.Evaluate(checkInData: null, context: null);
 
-                resumen.Add(new AthleteTrafficLightSummaryDto(
+                summary.Add(new AthleteTrafficLightSummaryDto(
                     athlete.Id,
                     athlete.FullName,
                     evaluation.TriggeredLight.ToString(),
@@ -92,7 +92,7 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
 
         // Severidad Rojo → Amarillo → Verde. OrderBy es estable: dentro de cada grupo se
         // conserva el orden por apellido que trae Estructura.
-        return resumen
+        return summary
             .OrderBy(item => Severity(item.TrafficLight))
             .ToList();
     }

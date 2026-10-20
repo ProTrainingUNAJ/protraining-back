@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers.Categories;
 
-// Semáforo del día por categoría para el PF (KAN-364): los atletas salen de Estructura con el
-// token reenviado (que exige el rol PreparadorFisico) y los check-ins salen de esta base.
+// Semáforo del día por categoría para el PF (KAN-364): el rol PreparadorFisico se valida en
+// este servicio y Estructura vuelve a validarlo con el token reenviado; los check-ins salen de esta base.
 [ApiController]
 [Route("api/v1/categories")]
-[Authorize]
+[Authorize(Roles = "PreparadorFisico")]
 public sealed class CategoriesTrafficLightController(
     GetCategoryTrafficLightTodayQueryHandler handler) : ControllerBase
 {
