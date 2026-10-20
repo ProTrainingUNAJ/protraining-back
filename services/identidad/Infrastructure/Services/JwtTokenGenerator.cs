@@ -49,4 +49,11 @@ public class JwtTokenGenerator(IConfiguration configuration) : IJwtTokenGenerato
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+    public GeneratedToken GenerateToken(User user, IEnumerable<string> roles)
+    {
+        var primaryRole = roles.FirstOrDefault() ?? IJwtTokenGenerator.DefaultRole;
+        var token = GenerateToken(user, primaryRole);
+        return new GeneratedToken(token, primaryRole, IJwtTokenGenerator.DefaultExpirationSeconds);
+    }
+
 }

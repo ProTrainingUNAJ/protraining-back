@@ -2,11 +2,12 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Application.Common.Security;
 using Application.DTOs.Auth;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
-using Application.UseCases.Auth.RefreshToken;
+using Application.UseCases.Auth.Refresh;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Moq;
@@ -19,7 +20,7 @@ public class RefreshTokenUseCaseTests
     private readonly Mock<IRefreshTokenRepository> _mockRefreshTokenRepository;
     private readonly Mock<UserManager<User>> _mockUserManager;
     private readonly Mock<IJwtTokenGenerator> _mockJwtTokenGenerator;
-    private readonly RefreshTokenUseCase _useCase;
+    private readonly RefreshUseCase _useCase;
 
     public RefreshTokenUseCaseTests()
     {
@@ -27,7 +28,7 @@ public class RefreshTokenUseCaseTests
         _mockUserManager = CreateMockUserManager();
         _mockJwtTokenGenerator = new Mock<IJwtTokenGenerator>();
 
-        _useCase = new RefreshTokenUseCase(
+        _useCase = new RefreshUseCase(
             _mockRefreshTokenRepository.Object,
             _mockUserManager.Object,
             _mockJwtTokenGenerator.Object
@@ -57,7 +58,7 @@ public class RefreshTokenUseCaseTests
 
         var expiredToken = new RefreshToken
         {
-            Token = request.RefreshToken,
+            Token = TokenHasher.Hash(request.RefreshToken),
             DeviceId = request.DeviceId,
             UserId = user.Id,
             User = user,
@@ -65,7 +66,7 @@ public class RefreshTokenUseCaseTests
             ExpiresAt = DateTime.UtcNow.AddMinutes(-10) // ya expiro
         };
 
-        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(request.RefreshToken, It.IsAny<CancellationToken>()))
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expiredToken);
 
         // act & assert
@@ -90,7 +91,7 @@ public class RefreshTokenUseCaseTests
 
         var existingToken = new RefreshToken
         {
-            Token = request.RefreshToken,
+            Token = TokenHasher.Hash(request.RefreshToken),
             DeviceId = request.DeviceId,
             UserId = user.Id,
             User = user,
@@ -98,14 +99,14 @@ public class RefreshTokenUseCaseTests
             ExpiresAt = DateTime.UtcNow.AddDays(15) // todavia vigente
         };
 
-        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(request.RefreshToken, It.IsAny<CancellationToken>()))
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingToken);
         _mockUserManager.Setup(m => m.IsLockedOutAsync(user))
             .ReturnsAsync(false);
         _mockUserManager.Setup(m => m.GetRolesAsync(user))
-            .ReturnsAsync(new List<string> { "Atleta" });
-        _mockJwtTokenGenerator.Setup(j => j.GenerateToken(user, "Atleta"))
-            .Returns("nuevo.jwt.access.token");
+            .ReturnsAsync(["Atleta"]);
+        _mockJwtTokenGenerator.Setup(j => j.GenerateToken(user, It.IsAny<IEnumerable<string>>()))
+            .Returns(new GeneratedToken("nuevo.jwt.access.token", "Atleta", 3600));
 
         RefreshToken? rotatedToken = null;
         _mockRefreshTokenRepository.Setup(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()))
@@ -123,17 +124,18 @@ public class RefreshTokenUseCaseTests
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
         Assert.NotEqual(request.RefreshToken, result.RefreshToken);
 
-        // rotacion del token requerida por Enzo: el viejo queda revocado
+        // rotacion del token requerida por Enzo: el viejo queda revocado y con el hash del reemplazo
         Assert.True(existingToken.IsRevoked);
         Assert.NotNull(existingToken.RevokedAt);
-        Assert.Equal(result.RefreshToken, existingToken.ReplacedByToken);
+        Assert.Equal(TokenHasher.Hash(result.RefreshToken), existingToken.ReplacedByToken);
 
-        // persiste el nuevo token con 30 dias de duracion y el mismo deviceId
+        // persiste el nuevo token con su hash y 30 dias de duracion
         _mockRefreshTokenRepository.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockRefreshTokenRepository.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotNull(rotatedToken);
         Assert.Equal(request.DeviceId, rotatedToken.DeviceId);
         Assert.Equal(user.Id, rotatedToken.UserId);
+        Assert.Equal(TokenHasher.Hash(result.RefreshToken), rotatedToken.Token);
         Assert.True(rotatedToken.ExpiresAt > DateTime.UtcNow.AddDays(29));
     }
 
@@ -151,7 +153,7 @@ public class RefreshTokenUseCaseTests
 
         var existingToken = new RefreshToken
         {
-            Token = request.RefreshToken,
+            Token = TokenHasher.Hash(request.RefreshToken),
             DeviceId = "otro-dispositivo-distinto", // device no coincide
             UserId = user.Id,
             User = user,
@@ -159,7 +161,7 @@ public class RefreshTokenUseCaseTests
             ExpiresAt = DateTime.UtcNow.AddDays(10)
         };
 
-        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(request.RefreshToken, It.IsAny<CancellationToken>()))
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingToken);
 
         // act & assert
@@ -182,19 +184,21 @@ public class RefreshTokenUseCaseTests
 
         var existingToken = new RefreshToken
         {
-            Token = request.RefreshToken,
+            Token = TokenHasher.Hash(request.RefreshToken),
             DeviceId = request.DeviceId,
             UserId = user.Id,
             User = user,
-            IsRevoked = true, // ya habia sido revocado
+            IsRevoked = true, // ya habia sido revocado pero sin ReplacedByToken (ej. logout)
+            ReplacedByToken = null,
             ExpiresAt = DateTime.UtcNow.AddDays(10)
         };
 
-        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(request.RefreshToken, It.IsAny<CancellationToken>()))
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingToken);
 
         // act & assert
         await Assert.ThrowsAsync<InvalidRefreshTokenException>(() => _useCase.ExecuteAsync(request));
+        _mockRefreshTokenRepository.Verify(r => r.RevokeAllActiveByDeviceAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -211,7 +215,7 @@ public class RefreshTokenUseCaseTests
 
         var existingToken = new RefreshToken
         {
-            Token = request.RefreshToken,
+            Token = TokenHasher.Hash(request.RefreshToken),
             DeviceId = request.DeviceId,
             UserId = user.Id,
             User = user,
@@ -219,13 +223,47 @@ public class RefreshTokenUseCaseTests
             ExpiresAt = DateTime.UtcNow.AddDays(10)
         };
 
-        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(request.RefreshToken, It.IsAny<CancellationToken>()))
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingToken);
         _mockUserManager.Setup(m => m.IsLockedOutAsync(user))
             .ReturnsAsync(true); // usuario bloqueado por intentos fallidos
 
         // act & assert
         await Assert.ThrowsAsync<InvalidRefreshTokenException>(() => _useCase.ExecuteAsync(request));
+        _mockRefreshTokenRepository.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_RotatedRefreshToken_When_Refresh_Then_RevokesActiveTokensOfDevice_And_Throws_InvalidRefreshTokenException()
+    {
+        // arrange
+        var request = new RefreshRequestDto("token-robado-ya-rotado", "device-galaxy-s24");
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "victima@protraining.com",
+            IsActive = true
+        };
+
+        var reusedRotatedToken = new RefreshToken
+        {
+            Token = TokenHasher.Hash(request.RefreshToken),
+            DeviceId = request.DeviceId,
+            UserId = user.Id,
+            User = user,
+            IsRevoked = true,
+            ReplacedByToken = "hash-del-token-legitimo-reemplazo", // ya fue rotado
+            ExpiresAt = DateTime.UtcNow.AddDays(10)
+        };
+
+        _mockRefreshTokenRepository.Setup(r => r.GetByTokenAsync(TokenHasher.Hash(request.RefreshToken), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(reusedRotatedToken);
+
+        // act & assert
+        // deteccion de reuso: debe lanzar 401 y revocar todos los tokens activos del dispositivo
+        await Assert.ThrowsAsync<InvalidRefreshTokenException>(() => _useCase.ExecuteAsync(request));
+
+        _mockRefreshTokenRepository.Verify(r => r.RevokeAllActiveByDeviceAsync(user.Id, request.DeviceId, It.IsAny<CancellationToken>()), Times.Once);
         _mockRefreshTokenRepository.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
