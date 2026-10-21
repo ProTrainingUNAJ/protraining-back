@@ -16,6 +16,7 @@ public static class CatalogTestSeeder
         {
             // Fuerza
             new("Sentadilla Baja con Barra", MotorCapacity.Strength, "kg", 3),
+            new("Sentadilla 1RM", MotorCapacity.Strength, "kg", 3),
             new("Press Banca", MotorCapacity.Strength, "kg", 4),
             new("Dominadas", MotorCapacity.Strength, "repeticiones", 3),
             // Velocidad
@@ -23,6 +24,7 @@ public static class CatalogTestSeeder
             new("Sprint 60 m", MotorCapacity.Velocity, "s", 3),
             // Resistencia
             new("Test de Cooper (12 min)", MotorCapacity.Endurance, "m", 3),
+            new("Test de Bronco", MotorCapacity.Endurance, "m", 3),
             new("Carrera continua 1 km", MotorCapacity.Endurance, "min", 2),
             // Potencia
             new("Salto Vertical CMJ", MotorCapacity.Power, "cm", 3),
@@ -38,7 +40,7 @@ public static class CatalogTestSeeder
         };
 
         // Al no haber token en el arranque, SetBaseFields asigna PfId = Guid.Empty:
-        // las 14 pruebas quedan como catálogo global visibles para todos los PF.
+        // las 16 pruebas quedan como catálogo global visibles para todos los PF.
         await context.CatalogTests.AddRangeAsync(tests);
         await context.SaveChangesAsync();
         logger.LogInformation("Se sembraron {Count} pruebas del catálogo motor.", tests.Count);
