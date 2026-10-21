@@ -1,4 +1,5 @@
 using System.Text.Json;
+using API.BackgroundServices;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
@@ -8,10 +9,10 @@ using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
+using Application.UseCases.Athletes.GetMe;
 using Application.UseCases.Athletes.ListAthletes;
 using Application.UseCases.Athletes.ListCategoriesByAthlete;
 using Application.UseCases.Athletes.ListMedicalRecordAuditLogs;
-using Application.UseCases.Athletes.GetMe;
 using Application.UseCases.Athletes.ListMyCategories;
 using Application.UseCases.Athletes.ReadMedicalRecord;
 using Application.UseCases.Athletes.RemoveAthleteCategory;
@@ -24,20 +25,19 @@ using Application.UseCases.Categories.GetCategory;
 using Application.UseCases.Categories.ListAthletesByCategory;
 using Application.UseCases.Categories.ListCategories;
 using Application.UseCases.Categories.UpdateCategory;
+using Application.UseCases.Export.ExportStructureCsv;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Organizations.CreateOrganization;
 using Application.UseCases.Organizations.DeleteOrganization;
 using Application.UseCases.Organizations.GetOrganization;
 using Application.UseCases.Organizations.ListOrganizations;
 using Application.UseCases.Organizations.UpdateOrganization;
+using Application.UseCases.Reminders.SendDailyWellnessReminders;
 using Infrastructure;
+using Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
-using Application.UseCases.Export.ExportStructureCsv;
-using API.BackgroundServices;
-using Application.UseCases.Reminders.SendDailyWellnessReminders;
-
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -47,6 +47,7 @@ builder.Host.UseSerilog((context, services, logger) => logger
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
+
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
@@ -58,12 +59,12 @@ builder.Services.AddControllers()
                     entry => JsonNamingPolicy.CamelCase.ConvertName(entry.Key),
                     entry => entry.Value!.Errors.Select(error =>
                         string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? "El valor no es válido. Comprueba el JSON y los tipos de los campos."
+                            ? "El valor no es valido. Comprueba el JSON y los tipos de los campos."
                             : error.ErrorMessage).ToArray());
             return new BadRequestObjectResult(new ValidationProblemDetails(errors)
             {
                 Status = 400,
-                Title = "Solicitud no válida."
+                Title = "Solicitud no valida."
             });
         };
     });
@@ -71,8 +72,10 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
+
 // Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+
 builder.Services.AddScoped<ListAthletesQueryHandler>();
 builder.Services.AddScoped<GetAthleteQueryHandler>();
 builder.Services.AddScoped<CreateAthleteCommandHandler>();
@@ -103,6 +106,28 @@ builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
 builder.Services.AddScoped<SendDailyWellnessRemindersCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+
+// Clientes HTTP hacia Entrenamiento y Seguimiento para el worker de recordatorios
+var entrenamientoUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"] ?? "http://entrenamiento:8080";
+if (!Uri.TryCreate(entrenamientoUrl, UriKind.Absolute, out var entrenamientoUri))
+{
+    throw new InvalidOperationException("Falta la variable de configuracion Services__Entrenamiento__BaseUrl (URL absoluta).");
+}
+
+var seguimientoUrl = builder.Configuration["Services:Seguimiento:BaseUrl"] ?? "http://seguimiento:8080";
+if (!Uri.TryCreate(seguimientoUrl, UriKind.Absolute, out var seguimientoUri))
+{
+    throw new InvalidOperationException("Falta la variable de configuracion Services__Seguimiento__BaseUrl (URL absoluta).");
+}
+
+builder.Services.AddTransient<ServiceAuthenticationHandler>();
+
+builder.Services.AddHttpClient<ISessionScheduleService, SessionScheduleService>(client => client.BaseAddress = entrenamientoUri)
+    .AddHttpMessageHandler<ServiceAuthenticationHandler>();
+
+builder.Services.AddHttpClient<IWellnessCheckInService, WellnessCheckInService>(client => client.BaseAddress = seguimientoUri)
+    .AddHttpMessageHandler<ServiceAuthenticationHandler>();
+
 builder.Services.AddHostedService<WellnessReminderWorker>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
@@ -133,4 +158,3 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
-
