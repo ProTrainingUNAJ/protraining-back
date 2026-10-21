@@ -1,4 +1,5 @@
 using Application.DTOs.Structure;
+using Application.DTOs.TrafficLight;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -68,18 +69,24 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
         Assert.Equal("Red", result[0].TrafficLight);
         Assert.Equal("Lesión activa", result[0].TrafficLightReason);
         Assert.True(result[0].HasReportedToday);
+        Assert.Equal(20, result[0].ResultValue);
+        Assert.NotNull(result[0].Indicators);
 
-        // Sin check-in: Amarillo con el motivo del motor, sin fecha de reporte.
+        // Sin check-in: Amarillo con el motivo del motor, sin fecha de reporte ni indicadores.
         Assert.Equal(missingCheckIn, result[1].AthleteId);
         Assert.Equal("Yellow", result[1].TrafficLight);
         Assert.Contains("sin check-in", result[1].TrafficLightReason!, StringComparison.Ordinal);
         Assert.False(result[1].HasReportedToday);
         Assert.Null(result[1].ReportedAt);
+        Assert.Equal(50, result[1].ResultValue);
+        Assert.Null(result[1].Indicators);
 
         // Verde al final.
         Assert.Equal(greenTrafficLight, result[2].AthleteId);
         Assert.Equal("Green", result[2].TrafficLight);
         Assert.True(result[2].HasReportedToday);
+        Assert.Equal(90, result[2].ResultValue);
+        Assert.NotNull(result[2].Indicators);
     }
 
     [Fact]
@@ -87,6 +94,12 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
     {
         var athleteId = Guid.NewGuid();
         var checkIn = CreateCheckIn(athleteId, TrafficLight.Yellow, "Señales de alerta: poco sueño");
+        checkIn.SleepHours = 4.5;
+        checkIn.SleepQuality = 2;
+        checkIn.EffortRate = 8;
+        checkIn.IsSick = true;
+        checkIn.HasActiveInjury = false;
+        checkIn.PainZones = "cuadriceps_derecho:3";
         SetupAthletes(CreateAthleteDto(athleteId, "Lucas Fernández"));
         SetupCheckIns(checkIn);
 
@@ -97,6 +110,16 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
         Assert.Equal("Señales de alerta: poco sueño", summary.TrafficLightReason);
         Assert.True(summary.HasReportedToday);
         Assert.Equal(checkIn.CreatedAt, summary.ReportedAt);
+        Assert.Equal(50, summary.ResultValue);
+
+        // Los indicadores reflejan los valores crudos del check-in (KAN-365).
+        var indicators = Assert.IsType<TrafficLightIndicatorsDto>(summary.Indicators);
+        Assert.Equal(4.5, indicators.SleepHours);
+        Assert.Equal(2, indicators.SleepQuality);
+        Assert.Equal(8, indicators.EffortRate);
+        Assert.True(indicators.IsSick);
+        Assert.False(indicators.HasActiveInjury);
+        Assert.Equal(checkIn.PainZones, indicators.PainZones);
     }
 
     [Fact]
@@ -138,6 +161,7 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
         {
             Assert.Equal(string.Empty, item.AthleteName);
             Assert.True(item.HasReportedToday);
+            Assert.NotNull(item.Indicators);
         });
         Assert.Equal("Red", result[0].TrafficLight);
         Assert.Equal("Lesión activa", result[0].TrafficLightReason);
