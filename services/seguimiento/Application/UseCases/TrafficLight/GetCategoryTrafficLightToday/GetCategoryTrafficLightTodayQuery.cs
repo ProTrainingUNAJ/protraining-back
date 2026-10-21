@@ -3,6 +3,7 @@ using Application.DTOs.TrafficLight;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.Mappings;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Services;
@@ -54,7 +55,9 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
                     checkIn.TrafficLight.ToString(),
                     checkIn.TrafficLightReason,
                     HasReportedToday: true,
-                    checkIn.CreatedAt))
+                    checkIn.CreatedAt,
+                    Score(checkIn.TrafficLight.ToString()),
+                    CheckInMappings.ToIndicatorsDto(checkIn)))
                 .ToList();
         }
 
@@ -66,18 +69,22 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
         {
             if (checkInsByAthlete.TryGetValue(athlete.Id, out var checkIn))
             {
-                // Ya reportó hoy: el color y el motivo salen del check-in persistido.
+                // Ya reportó hoy: el color y el motivo salen del check-in persistido,
+                // y los indicadores traen sus valores crudos para la card (KAN-365).
                 summary.Add(new AthleteTrafficLightSummaryDto(
                     athlete.Id,
                     athlete.FullName,
                     checkIn.TrafficLight.ToString(),
                     checkIn.TrafficLightReason,
                     HasReportedToday: true,
-                    checkIn.CreatedAt));
+                    checkIn.CreatedAt,
+                    Score(checkIn.TrafficLight.ToString()),
+                    CheckInMappings.ToIndicatorsDto(checkIn)));
             }
             else
             {
-                // Sin check-in: el motor con entrada null produce Amarillo "sin check-in".
+                // Sin check-in: el motor con entrada null produce Amarillo "sin check-in",
+                // y los indicadores quedan null para que el front pinte gris "pendiente".
                 var evaluation = trafficLightEngine.Evaluate(checkInData: null, context: null);
 
                 summary.Add(new AthleteTrafficLightSummaryDto(
@@ -86,7 +93,9 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
                     evaluation.TriggeredLight.ToString(),
                     evaluation.Reason,
                     HasReportedToday: false,
-                    ReportedAt: null));
+                    ReportedAt: null,
+                    Score(evaluation.TriggeredLight.ToString()),
+                    Indicators: null));
             }
         }
 
@@ -102,5 +111,14 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
         nameof(TrafficLightColor.Red) => 0,
         nameof(TrafficLightColor.Yellow) => 1,
         _ => 2
+    };
+
+    // Escala del motor (KAN-363/364): Rojo 20, Amarillo 50, Verde 90. Se deriva del color
+    // persistido en vez de re-evaluar el motor, para no contradecir el color ya guardado.
+    private static int Score(string trafficLight) => trafficLight switch
+    {
+        nameof(TrafficLightColor.Red) => 20,
+        nameof(TrafficLightColor.Yellow) => 50,
+        _ => 90
     };
 }

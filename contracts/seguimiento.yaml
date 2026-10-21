@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.3.0
+  version: 1.4.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -627,12 +627,15 @@ components:
 
     AthleteTrafficLightSummary:
       type: object
-      description: Estado de bienestar diario del atleta para el semáforo consolidado de la categoría.
+      description: >
+        Estado de bienestar diario del atleta para el semáforo consolidado de la categoría,
+        con el desglose de indicadores del check-in para la visualización en la PWA (KAN-365).
       required:
         - athleteId
         - athleteName
         - trafficLight
         - hasReportedToday
+        - resultValue
       properties:
         athleteId:
           type: string
@@ -657,6 +660,54 @@ components:
           format: date-time
           nullable: true
           example: "2026-10-10T08:15:00Z"
+        resultValue:
+          type: integer
+          enum: [20, 50, 90]
+          description: Escala de severidad del motor del semáforo (Rojo 20, Amarillo 50, Verde 90).
+          example: 50
+        indicators:
+          $ref: '#/components/schemas/TrafficLightIndicators'
+
+    TrafficLightIndicators:
+      type: object
+      description: >
+        Valores crudos del check-in de hoy que alimentan los indicadores individuales
+        (sueño, esfuerzo, dolor, enfermedad, lesión) dentro de la card del semáforo.
+        Ausente (null) cuando el atleta no reportó hoy.
+      required:
+        - sleepHours
+        - sleepQuality
+        - isSick
+        - hasActiveInjury
+      properties:
+        sleepHours:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 24
+          example: 6.5
+        sleepQuality:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        effortRate:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 10
+          example: 8
+        isSick:
+          type: boolean
+          example: false
+        hasActiveInjury:
+          type: boolean
+          example: false
+        painZones:
+          type: string
+          nullable: true
+          description: Zonas de dolor del check-in como "muscleId:nivel" separadas por coma.
+          example: "cuadriceps_derecho:3,espalda_baja:2"
 
     GroupBenchmarkResponse:
       type: object
