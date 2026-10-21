@@ -4,6 +4,7 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
+using Polly;
 
 namespace Infrastructure.Services.Structure;
 
@@ -23,7 +24,14 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
         {
             throw;
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        // KAN-367: además de las caídas de red, el pipeline de resiliencia (Polly v8, aplicado en
+        // Program.cs con AddStandardResilienceHandler) puede rechazar la ejecución con
+        // BrokenCircuitException o TimeoutRejectedException (base común: ExecutionRejectedException).
+        // Sin este catch esas excepciones llegaban al middleware como 500; ahora degradan a
+        // StructureUnavailableException y el caso de uso responde 200 con los datos locales.
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or ExecutionRejectedException)
         {
             throw new StructureUnavailableException(exception);
         }
@@ -65,7 +73,11 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
         {
             throw;
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        // KAN-367: mismo criterio que GetMeAsync: las rejecciones del pipeline de resiliencia
+        // (breaker abierto o timeout) deben degradar a 200, nunca escapar como 500.
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or ExecutionRejectedException)
         {
             throw new StructureUnavailableException(exception);
         }

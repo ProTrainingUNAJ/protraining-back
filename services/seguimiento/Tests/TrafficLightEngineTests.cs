@@ -227,4 +227,154 @@ public class TrafficLightEngineTests
         Assert.All(luces, motivo => Assert.False(string.IsNullOrWhiteSpace(motivo),
             "El semáforo siempre debe informar el motivo en español."));
     }
+
+    // ---------- Amarillo: señales aisladas (KAN-367: exhaustividad de reglas) ----------
+
+    [Fact]
+    public void Evaluate_WithHighEffortOnly_ReturnsYellowWithSingleReason()
+    {
+        var result = _engine.Evaluate("""{"sleepHours": 8, "effortRate": 9}""", "{}");
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: esfuerzo alto", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithLittleSleepOnly_ReturnsYellowWithSingleReason()
+    {
+        var result = _engine.Evaluate("""{"sleepHours": 4, "effortRate": 4}""", "{}");
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: poco sueño", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithSicknessInCheckInOnly_ReturnsYellow()
+    {
+        // La enfermedad marcada en el propio check-in (sin contexto) también enciende Amarillo.
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = true },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: enfermedad", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithHasNewPainFlagOnly_ReturnsYellow()
+    {
+        // hasNewPain explícito dispara "dolor nuevo" aunque painZones venga vacío.
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false, HasNewPain = true },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: dolor nuevo", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithAllAlertSignals_ReturnsYellowWithConcatenatedReasons()
+    {
+        // Todas las señales amarillas a la vez: el motivo concatena en el orden fijo del motor.
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                SleepHours = 3,
+                EffortRate = 9,
+                PainZones = "cuadriceps_derecho:3",
+                IsSick = true,
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: esfuerzo alto, poco sueño, dolor nuevo, enfermedad", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    // ---------- Rojo: prioridad máxima exhaustiva (KAN-367) ----------
+
+    [Fact]
+    public void Evaluate_WithEveryInjuryKeyAndEveryAlert_KeepsOnlyInjuryReasonAndLowestValue()
+    {
+        // Las tres claves de lesión (canónica y heredadas) + TODAS las alertas y contexto enfermo:
+        // el motivo debe ser solo "Lesión activa" y el ResultValue el de Rojo (20), nunca 50.
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = true,
+                HasInjury = true,
+                HasWound = true,
+                SleepHours = 3,
+                EffortRate = 9,
+                PainZones = "espalda_baja:2",
+                IsSick = true,
+            },
+            new ContextData { IsSick = true });
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal("Lesión activa", result.Reason);
+        Assert.Equal(20, result.ResultValue);
+    }
+
+    // ---------- Verde: banderas explícitas en false (KAN-367) ----------
+
+    [Fact]
+    public void Evaluate_WithEveryInjuryAndPainFlagExplicitlyFalse_ReturnsGreen()
+    {
+        // false explícito en todas las banderas: ninguna debe encender Rojo ni Amarillo.
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                HasInjury = false,
+                HasWound = false,
+                HasNewPain = false,
+                IsSick = false,
+                SleepHours = 8,
+                EffortRate = 4,
+                PainZones = "[]",
+            },
+            new ContextData { IsSick = false });
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
+        Assert.Equal(90, result.ResultValue);
+    }
+
+    // ---------- Bordes: casing de JSON, contexto inválido y umbrales (KAN-367) ----------
+
+    [Fact]
+    public void Evaluate_WithUppercaseJsonKeys_IgnoresCasingAndReturnsYellow()
+    {
+        // PropertyNameCaseInsensitive: claves en mayúsculas siguen mapeando a los campos.
+        var result = _engine.Evaluate("""{"SLEEPHOURS": 3, "EFFORTRATE": 9}""", "{}");
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal("Señales de alerta: esfuerzo alto, poco sueño", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_WithInvalidContextJson_DoesNotThrowAndKeepsCheckInResult()
+    {
+        // Un contexto corrupto no invalida el check-in: se descarta el contexto y se evalúa el resto.
+        var result = _engine.Evaluate("""{"sleepHours": 8, "effortRate": 4}""", "contexto {{{ roto");
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
+    }
+
+    [Theory]
+    [InlineData(4, 8)] // justo pasando los umbrales: poco sueño (<5) y esfuerzo alto (>7)
+    [InlineData(0, 10)] // extremos de la escala
+    public void Evaluate_JustBeyondThresholds_ReturnsYellow(int sleepHours, int effortRate)
+    {
+        var result = _engine.Evaluate($$"""{"sleepHours": {{sleepHours}}, "effortRate": {{effortRate}}}""", "{}");
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal(50, result.ResultValue);
+    }
 }
