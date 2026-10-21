@@ -32,16 +32,14 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             {
                 athleteId = query.AthleteId.Value;
 
+                var athlete = await structureClient.GetAthleteByIdAsync(athleteId, cancellationToken)
+                    ?? throw new NotFoundException("El atleta no existe o no es tuyo");
+
+                athleteName = athlete.FullName;
+
                 var categories = await structureClient.GetAthleteCategoriesAsync(athleteId, cancellationToken);
 
                 categoryIds = categories?.Select(c => c.Id).ToList() ?? [];
-
-                var athlete = await structureClient.GetAthleteByIdAsync(athleteId, cancellationToken);
-
-                if (athlete != null)
-                {
-                    athleteName = athlete.FullName;
-                }
             }
             else
             {
