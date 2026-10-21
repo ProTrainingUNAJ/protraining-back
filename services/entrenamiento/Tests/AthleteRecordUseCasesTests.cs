@@ -4,14 +4,12 @@ using Application.Exceptions;
 using Application.Interfaces.Services;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
-using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Moq;
-using Xunit;
 
 namespace Tests;
 

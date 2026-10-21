@@ -1,4 +1,5 @@
 using Application.DTOs.Memberships;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Routines.GetTodayRoutine;
@@ -15,6 +16,14 @@ public class GetTodayRoutineQueryHandlerTests
     private readonly Mock<IAthleteRecordRepository> _athleteRecordRepoMock = new();
     private readonly Mock<IStructureClient> _structureClientMock = new();
     private readonly LoadCalculatorEngine _loadCalculatorEngine = new();
+
+    public GetTodayRoutineQueryHandlerTests()
+    {
+        // Por defecto el atleta existe; el test que prueba 404 lo sobreescribe
+        _structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new StructureAthleteDto(id, "Lucas Gómez"));
+    }
 
     private GetTodayRoutineQueryHandler CreateHandler()
     {
@@ -243,4 +252,23 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.Equal(80.0, item.WeightKg);
     }
 
+    [Fact]
+    public async Task Given_PreparadorFisicoPideRutinaDeAtletaQueNoExisteONoEsSuyo_When_ConsultaRutina_Then_LanzaNotFoundException()
+    {
+        // Arrange
+        var athleteId = Guid.NewGuid();
+
+        // Estructura responde null (404)
+        _structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StructureAthleteDto?)null);
+
+        var handler = CreateHandler();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId }));
+
+        Assert.Equal("El atleta no existe o no es tuyo", ex.Message);
+    }
 }

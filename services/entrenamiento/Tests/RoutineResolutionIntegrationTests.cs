@@ -157,6 +157,9 @@ public class RoutineResolutionIntegrationTests
         structureClientMock.Setup(c => c.GetAthleteCategoriesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Plantel Superior", null)]);
 
+        structureClientMock.Setup(c => c.GetAthleteByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new StructureAthleteDto(id, "Lucas Gómez"));
+
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var handler = new GetTodayRoutineQueryHandler(
