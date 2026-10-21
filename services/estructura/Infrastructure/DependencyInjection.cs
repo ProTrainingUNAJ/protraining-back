@@ -62,8 +62,7 @@ public static class DependencyInjection
         services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
         services.AddScoped<IPushNotificationService, PushNotificationService>();
         services.AddScoped<IWellnessReminderTracker, DbWellnessReminderTracker>();
-        services.AddScoped<ISessionScheduleService, SessionScheduleService>();
-        services.AddScoped<IWellnessCheckInService, WellnessCheckInService>();
+
 
 
         return services;
