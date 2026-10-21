@@ -510,7 +510,9 @@ namespace Infrastructure.Data.Migrations
 
                     b.HasIndex("AthleteId");
 
-                    b.HasIndex("Endpoint");
+                    b.HasIndex("Endpoint")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("PfId");
 
