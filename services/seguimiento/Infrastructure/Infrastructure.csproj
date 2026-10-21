@@ -8,6 +8,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.11" />
+    <!-- KAN-367: ExecutionRejectedException (breaker/timeout de Polly v8) para que StructureClient
+         degrade a 200 cuando el pipeline de resiliencia rechaza la ejecución. Versión alineada a la
+         transitiva de Microsoft.Extensions.Http.Resilience 8.10.0 usada en la API. -->
+    <PackageReference Include="Polly.Core" Version="8.4.2" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
   </ItemGroup>
 

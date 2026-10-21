@@ -6,6 +6,8 @@ using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace Seguimiento.Tests;
 
@@ -159,5 +161,53 @@ public class StructureClientTests
         var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused")));
 
         await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    // ---------- Rejecciones del pipeline de resiliencia (KAN-367) ----------
+    // El pipeline de Polly (AddStandardResilienceHandler en Program.cs) puede fallar ANTES de
+    // llegar a la red: breaker abierto o timeout rechazado. Esas excepciones deben degradar a
+    // StructureUnavailableException (el caso de uso responde 200), nunca escapar como 500.
+
+    [Fact]
+    public async Task Given_OpenCircuitBreaker_When_GetMe_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new BrokenCircuitException()));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetMeAsync());
+    }
+
+    [Fact]
+    public async Task Given_RejectedTimeout_When_GetMe_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new TimeoutRejectedException()));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetMeAsync());
+    }
+
+    [Fact]
+    public async Task Given_OpenCircuitBreaker_When_GetCategoryAthletes_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new BrokenCircuitException()));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_RejectedTimeout_When_GetCategoryAthletes_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new TimeoutRejectedException()));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetCategoryAthletesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_CallerCancelsTheRequest_When_GetMe_Then_PropagatesTheCancellation()
+    {
+        // El catch ampliado (KAN-367) no debe tragarse la cancelación real del caller.
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var client = CreateClient(new FakeStructureHandler(_ => throw new TaskCanceledException()));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetMeAsync(cancellation.Token));
     }
 }
