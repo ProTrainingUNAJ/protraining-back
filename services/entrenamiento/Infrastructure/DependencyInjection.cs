@@ -1,10 +1,13 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
+using Infrastructure.Data.Seeders;
+using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Infrastructure;
@@ -42,7 +45,24 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+        services.AddScoped<IExerciseRepository, ExerciseRepository>();
+        services.AddScoped<IAthleteRecordRepository, AthleteRecordRepository>();
+        services.AddScoped<ITrainingPlanRepository, TrainingPlanRepository>();
+        services.AddScoped<ITrainingSessionRepository, TrainingSessionRepository>();
 
         return services;
+    }
+
+    // Applies pending migrations on startup. Does nothing if the service has no migrations yet.
+    public static async Task ApplyMigrationsAsync(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (context.Database.GetMigrations().Any())
+            await context.Database.MigrateAsync();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
+        var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+
+        await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
     }
 }

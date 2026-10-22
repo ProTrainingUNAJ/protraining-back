@@ -42,9 +42,38 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)));
 
         services.AddScoped<IAthleteRepository, AthleteRepository>();
+        services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
+        services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+        services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
+        services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
+        // servicios para recordatorios y notificaciones Web Push (VAPID)
+        services.Configure<Infrastructure.Options.VapidOptions>(options =>
+        {
+            var section = configuration.GetSection(Infrastructure.Options.VapidOptions.SectionName);
+            options.Subject = section["Subject"] ?? "mailto:soporte@protraining.app";
+            options.PublicKey = section["PublicKey"] ?? string.Empty;
+            options.PrivateKey = section["PrivateKey"] ?? string.Empty;
+        });
+        services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
+        services.AddScoped<IPushNotificationService, PushNotificationService>();
+        services.AddScoped<IWellnessReminderTracker, DbWellnessReminderTracker>();
+
+
+
         return services;
+    }
+
+    // Applies pending migrations on startup. Does nothing if the service has no migrations yet.
+    public static async Task ApplyMigrationsAsync(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (context.Database.GetMigrations().Any())
+            await context.Database.MigrateAsync();
     }
 }

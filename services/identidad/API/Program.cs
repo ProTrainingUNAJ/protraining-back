@@ -1,17 +1,24 @@
 using System.Text.Json;
 using API.Extensions;
+using API.HealthChecks;
 using API.Middleware;
+using API.Services;
+using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.Auth.Login;
+using Application.UseCases.Auth.Refresh;
 
 var builder = WebApplication.CreateBuilder(args);
+var serviceName = builder.Configuration["Service"] ?? "API";
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
+    .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -37,17 +44,30 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
+// Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddScoped<LoginUseCase>();
+builder.Services.AddScoped<RefreshUseCase>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
+await app.Services.ApplyMigrationsAsync();
+
+// solo en dev creamos roles y el usuario inicial de prueba
+if (app.Environment.IsDevelopment())
+{
+    await Infrastructure.Data.IdentityDataSeed.SeedAsync(app.Services);
+}
+
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionMiddleware>();
@@ -63,4 +83,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
+

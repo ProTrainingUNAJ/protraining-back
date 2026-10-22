@@ -2,6 +2,10 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Infrastructure.Data;
 using Infrastructure.Services;
+using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Gemini;
+using Infrastructure.Services.Ai.Ollama;
+using Infrastructure.Services.Ai.Rules;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,7 +46,29 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+        services.AddScoped<IAiAuditService, AiAuditService>();
+
+        services.AddMemoryCache();
+        services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));
+        services.Configure<OllamaOptions>(configuration.GetSection(OllamaOptions.SectionName));
+        services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
+
+        services.AddSingleton<IAiResponseCache, Infrastructure.Services.Ai.Cache.AiResponseMemoryCache>();
+        services.AddHttpClient<OllamaClient>();
+        services.AddHttpClient<GeminiClient>();
+        services.AddScoped<RuleBasedAiClient>();
+        services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
+        services.AddScoped<IAiService, ResilientAiService>();
 
         return services;
+    }
+
+    // Applies pending migrations on startup. Does nothing if the service has no migrations yet.
+    public static async Task ApplyMigrationsAsync(this IServiceProvider serviceProvider)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        if (context.Database.GetMigrations().Any())
+            await context.Database.MigrateAsync();
     }
 }

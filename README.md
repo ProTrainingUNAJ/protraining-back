@@ -10,16 +10,19 @@
 | Seguimiento | `services/seguimiento` | 8084 | `seguimiento` (5436) |
 | Asistente | `services/asistente` | 8085 | `asistente` (5437) |
 
-Adentro de Docker, todos los servicios escuchan en el **8080**.
+Adelante está el **gateway** (`gateway/`, YARP) en el puerto **8000**: es la única entrada para el front.
+
+Adentro de Docker, todos los servicios y el gateway escuchan en el **8080**.
 
 Cada servicio tiene la misma estructura en capas (`Domain`, `Application`, `Infrastructure`, `API`) y ya trae:
-- `GET /api/health`: chequea la conexión a su base (200 si está bien, 503 si no).
+- `GET /health`: chequea la conexión a su base (200 si está bien, 503 si no). Lo usan el compose y el CI. `GET /api/health` sigue andando y devuelve el detalle en JSON.
 - Errores como ProblemDetails en español.
 - Logs JSON con Serilog y el header `X-Correlation-Id` (si no viene, se genera; vuelve en la respuesta y sale en cada log como `CorrelationId`).
 - Resiliencia estándar en todos los `HttpClient` (reintentos, timeout y circuit breaker).
 - CORS con los orígenes desde la configuración.
 - JWT Bearer configurado, todavía sin exigirlo en los endpoints.
-- Swagger en `/swagger` (solo en Development).
+- Swagger en `/swagger` (solo en Development), con el nombre del servicio.
+- La base del modelo de datos: entidad base, filtro por PF, borrado lógico y migraciones (ver más abajo).
 
 El CRUD de atletas (`/api/athletes`) es solo un ejemplo y está únicamente en Estructura.
 
@@ -30,10 +33,11 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Levanta los 5 servicios y sus 5 bases. Cada servicio espera a que su base esté sana, y si uno se cae, los demás siguen andando. Para probar:
+Levanta el gateway, los 5 servicios y sus 5 bases. Cada servicio espera a que su base esté sana, y si uno se cae, los demás siguen andando. Para probar:
 
 ```bash
-curl http://localhost:8082/api/health
+curl http://localhost:8082/health                     # Estructura directo
+curl http://localhost:8000/estructura/api/athletes   # Estructura por el gateway
 ```
 
 Para sumar el front (tiene que estar clonado al lado, en `../protraining-front`), queda en `http://localhost:3000`:
@@ -51,6 +55,85 @@ docker compose up -d --build estructura  # reconstruir un solo servicio
 docker compose down                      # bajar todo (los datos quedan en los volúmenes)
 docker compose down -v                   # bajar todo y borrar las bases
 ```
+
+### Usuarios y datos de prueba (Demo 1)
+
+En Development, Identidad crea estas cuentas al arrancar (todas con la contraseña `ProTraining2026!`):
+
+| Cuenta | Rol | Para qué |
+|---|---|---|
+| `pf@protraining.com` | PF | El preparador de prueba: dueño de todos los datos de la demo |
+| `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
+| `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
+| `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
+
+Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
+
+```bash
+docker compose down -v && docker compose up -d --build   # base de cero
+./scripts/demo-data.sh             # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
+./scripts/demo-data.sh checkins    # solo los check-ins de hoy (la mañana del ensayo y de la demo)
+./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
+```
+
+El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes.
+
+### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
+
+El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
+
+```bash
+docker compose --profile ia up -d
+curl http://localhost:11434/api/tags      # modelos instalados
+```
+
+#### Elección oficial del modelo: `llama3.2:1b` (#079 / KAN-374)
+Tras evaluar comparativamente tres versiones de Meta Llama (`llama3.2:1b`, `llama3.2:3b` y `llama3.1:8b`) con pedidos reales de planificación deportiva, se seleccionó **`llama3.2:1b`** como el modelo estándar y obligatorio por defecto:
+
+| Modelo | RAM en Inferencia | Latencia CPU (sin GPU) | Cumplimiento JSON | Veredicto |
+|---|:---:|:---:|:---:|:---:|
+| **`llama3.2:1b`** | **~1.5 GB** | **1.8 s - 2.6 s** | **98 %** | ✅ **Elegido por defecto (demo y laptops del equipo)** |
+| `llama3.2:3b` | ~3.2 GB | 5.2 s - 7.5 s | 99 % | ⚙️ Alternativa soportada en `.env` (si hay GPU) |
+| `llama3.1:8b` | ~6.0 GB | 19.0 s - 38.0 s | 99 % | ❌ Descartado (alto riesgo de OOM y timeout en CPU) |
+
+> 📖 **Informe técnico completo:** Consulta [services/asistente/README.md](services/asistente/README.md) para ver la matriz de evaluación detallada, consumo de memoria y comandos de prueba.
+
+El Asistente opera con una arquitectura resiliente de 3 niveles:
+1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
+2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
+3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
+
+El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
+
+- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
+- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
+- **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
+- **Memoria RAM requerida:**
+  - En reposo (inactivo): ~200 MB.
+  - En inferencia/ejecución: ~1.5 GB a 1.8 GB de RAM.
+  - *(Como referencia, `llama3.2:3b` requiere ~3.2 GB y `llama3.1:8b` ~6 GB).*
+
+
+## Gateway
+
+`gateway/` es un proxy con YARP. Sólo reparte los pedidos y resuelve CORS; **no valida tokens** (eso lo hace cada servicio).
+
+| Ruta en el gateway | Va a |
+|---|---|
+| `/identidad/...` | Identidad (`/...`) |
+| `/estructura/...` | Estructura |
+| `/entrenamiento/...` | Entrenamiento |
+| `/seguimiento/...` | Seguimiento |
+| `/asistente/...` | Asistente |
+
+Le saca el prefijo: `localhost:8000/estructura/api/athletes` llega a Estructura como `/api/athletes`. Las rutas están en `gateway/appsettings.json`.
+
+- **CORS en un solo lugar**: lo resuelve el gateway, y no le pasa el header `Origin` a los servicios, así no se duplican los permisos.
+- **`X-Correlation-Id`**: si el pedido no lo trae, el gateway lo genera y se lo pasa al servicio. El mismo id aparece en los logs de los dos.
+- **Si el gateway se cae**, cada servicio sigue respondiendo directo en su puerto (8081-8085). Si se cae un servicio, sólo falla su ruta (502).
+- `GET /health` del gateway dice si el gateway está vivo.
+
+El front llama a `/api/<servicio>/...` y su nginx (o el Vite en desarrollo) le saca el `/api` y se lo pasa al gateway. Ejemplo: `/api/estructura/api/athletes` → gateway `/estructura/api/athletes` → Estructura `/api/athletes`.
 
 ## Correr un servicio con `dotnet run`
 
@@ -78,6 +161,8 @@ En el `.env` (las usa el compose):
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
 | `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
+| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
+| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -88,11 +173,143 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
+| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
+| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
+
+## Modelo de datos
+
+### Entidad base
+
+Toda entidad hereda de `BaseEntity` (`Domain/Common/BaseEntity.cs`):
+
+| Campo | Columna | Quién lo completa |
+|---|---|---|
+| `Id` (Guid) | `id` | Se genera al crear la entidad |
+| `PfId` | `pf_id` | El `AppDbContext` al guardar, con el PF del token |
+| `CreatedAt` | `created_at` | El `AppDbContext` al guardar (UTC) |
+| `DeletedAt` | `deleted_at` | El `AppDbContext` al borrar |
+
+```csharp
+public sealed class CheckIn : BaseEntity
+{
+    public Guid AtletaId { get; private set; }   // id de otro servicio: Guid, sin relación de base
+    // ...
+}
+```
+
+Las columnas se nombran en `snake_case` con `HasColumnName` en la configuración de cada entidad (`Infrastructure/Data/Configurations`). Las columnas de la base ya vienen configuradas.
+
+### El PF del token
+
+Cada servicio lee el PF del claim **`pf_id`** del JWT (`ICurrentUser`). Identidad tiene que poner ese claim al emitir el token: para un PF es su propio id, y para un atleta el id de su PF.
+
+### Lo que hace solo el `AppDbContext`
+
+- **Filtro global**: toda consulta sobre una entidad que hereda de `BaseEntity` trae sólo los datos del PF del token y nunca los borrados. Sin token no trae nada. No hace falta agregar `Where(x => x.PfId == ...)` a mano.
+- **Al crear**: completa `PfId` y `CreatedAt`. Sin PF en el token, no deja guardar y responde 401.
+- **Al borrar** (`Remove`): no borra la fila, completa `DeletedAt` (borrado lógico). `PfId` y `CreatedAt` no se pueden cambiar.
+- Si en algún caso puntual hace falta ver todo (por ejemplo, un proceso interno), se usa `IgnoreQueryFilters()` a conciencia.
+
+### Migraciones
+
+Cada servicio aplica sus migraciones pendientes al arrancar. Para crear una (desde la raíz del repo):
+
+```bash
+dotnet tool restore   # la primera vez: instala dotnet-ef 8.0.11
+dotnet ef migrations add <Nombre> \
+  --project services/<servicio>/Infrastructure \
+  --startup-project services/<servicio>/API \
+  --output-dir Data/Migrations
+```
+
+No necesita la base ni variables de entorno. Va a mostrar un aviso de que falta `Database__User`: es normal, y sigue igual.
+
+Reglas:
+- Los cambios al modelo van por PR, **con una sola migración por PR**.
+- Si dos migraciones del mismo servicio chocan, el segundo en mergear borra la suya, hace pull de `develop` y la vuelve a generar.
+
+## Convenciones
+
+### Idioma
+
+**La regla: lo que lee una persona va en español; todo lo demás, en inglés.**
+
+| En **español** | En **inglés** |
+|---|---|
+| Textos de las pantallas del front | Carpetas y archivos (back y front) |
+| Mensajes de la API: errores (ProblemDetails), validaciones, excepciones | Clases, interfaces, métodos, propiedades, variables, parámetros |
+| Emails y notificaciones | Claves de configuración y valores internos (enums) |
+| Logs | Rutas de la API y campos del JSON (`/api/v1/athletes`, `firstName`) |
+| Documentación: README, Jira, PRs, notas de `/documentar` | Tablas y columnas de la base (en `snake_case`: `athletes`, `first_name`) |
+| Comentarios en el código, para que todo el equipo lo entienda | |
+
+**Las únicas excepciones** (quedan en español a propósito):
+- **`PfId` / `pf_id`** (preparador físico): término del dominio.
+- **Los nombres de los servicios**: carpetas `services/identidad`, `estructura`, `entrenamiento`, `seguimiento`, `asistente` y sus rutas en el gateway (`/estructura/...`).
+- **Los roles**: `PreparadorFisico`, `Atleta`, `Tutor`.
+
+Todo lo nuevo sigue esta regla. Lo que ya existe y no la cumple se va corrigiendo en las tareas de cada uno.
+
+**El catálogo de ejercicios va en español** (`services/entrenamiento/API/Data/exercises.json`): nombres, equipamiento, músculos e instrucciones, porque lo leen el PF y el atleta. Las instrucciones, en español rioplatense y de vos ("Acostate…", "Flexioná…"), sin mezclar usted ni tú.
+
+### Fechas: solo Argentina (UTC-3)
+
+La app es, por ahora, **solo para Argentina**.
+- En la base, los instantes se guardan en **UTC** (`created_at`, `deleted_at`…).
+- **"Hoy"** (la rutina del día, el check-in, el semáforo) se calcula en la hora de Argentina, con la zona `America/Argentina/Buenos_Aires`. Nunca `DateTime.UtcNow.Date` ni `DateTime.UtcNow.DayOfWeek`: después de las 21 h da el día siguiente.
+- Un día sin hora (fecha de inicio de un plan, fecha del check-in) va como `DateOnly`.
+
+### Carpetas
+
+DTOs y requests van por módulo dentro de `Application/DTOs/`:
+
+```
+Application/
+  DTOs/
+    Common/      ← HealthDto y lo compartido
+    Auth/        ← LoginRequestDto, LoginResponseDto, UserDto
+    Athletes/    ← AthleteDto, CreateAthleteRequest
+  UseCases/
+    Auth/Login/
+    Athletes/CreateAthlete/
+```
+
+Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
+
+### Casos de uso (CQRS liviano)
+
+Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handler:
+
+- **Escribe** (crear, modificar, borrar) → `XxxCommand` + `XxxCommandHandler`, que termina con `unitOfWork.SaveChangesAsync(...)`.
+- **Lee** → `XxxQuery` + `XxxQueryHandler`, con `AsNoTracking()`, y **nunca** guarda ni modifica nada.
+- Nada de `XxxUseCase`: si escribe es Command, si lee es Query. Sin MediatR: los handlers se registran en `Program.cs`.
+
+### API: REST nivel 2
+
+- URLs con **sustantivos**, en plural e inglés (`/api/v1/training-plans/{id}`), nunca acciones (`/sugerir-rutina`). Excepción: `/auth/login` y `/auth/refresh`.
+- **Verbos:** `GET` lee, `POST` crea, `PUT` reemplaza, `PATCH` cambia una parte, `DELETE` borra.
+- **Códigos:** `200` lectura, `201` creación **con la ubicación** (`Created($"/api/v1/<recurso>/{id}", dto)`), `204` sin cuerpo, `400` datos inválidos, `401` sin token, `403` sin permiso, `404` no existe, `409` conflicto. Un `500` es solo para errores inesperados: "no existe" va con una excepción propia mapeada a `404` en el `ExceptionMiddleware`.
+- Lo que solo puede hacer el PF lleva `[Authorize(Roles = "PreparadorFisico")]`, no un `[Authorize]` suelto.
+
+## Comandos de IA para el equipo
+
+En `.agents/` hay tres comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
+
+- **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
+- **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
+- **`/informe-po <servicio>`** (por ejemplo `/informe-po seguimiento`): arma el resumen del sprint de ese servicio para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene. Cuenta lo mergeado en `develop` del servicio y sus pantallas del front (`../protraining-front`), y lo publica en Notion, en **Documentación PO** > sprint > página del servicio. Necesita el MCP de Notion conectado; si no está, lo deja en `notas/` para pegarlo a mano.
+
+Cómo se usan:
+- **Antigravity**: escribí `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
+- **Otro asistente**: pedile "seguí las instrucciones de `.agents/skills/convenciones/SKILL.md`".
+
+Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. Si cambian las convenciones, se actualizan este README y ese archivo.
 
 ## Crear un servicio nuevo
 
 1. Copiá `services/identidad` (es el más limpio) a `services/<servicio>` y renombrá el `.slnx`.
 2. Sumá al `docker-compose.yml` su base `db-<servicio>` con su volumen y el servicio con su `Database__Host`, `Database__Name`, su puerto y el `depends_on`.
-3. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/api/health`.
+3. Sumá su ruta y su cluster en `gateway/appsettings.json`, y el servicio a la lista del CI (`.github/workflows/ci.yml`).
+4. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/health`.

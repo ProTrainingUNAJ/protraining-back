@@ -1,17 +1,36 @@
-using System.Text.Json;
 using API.Extensions;
+using API.HealthChecks;
 using API.Middleware;
+using API.Services;
+using Application.Interfaces.Services;
+using Application.UseCases.AthleteRecord.ListAthleteRecords;
+using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
+using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Memberships.ResolveActiveMemberships;
+using Application.UseCases.TrainingPlans.AssignPlan;
+using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.UpdatePlan;
+using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.UpdateCoachNotes;
+using Application.UseCases.Routines.GetTodayRoutine;
+using Domain.Services;
 using Infrastructure;
+using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+var serviceName = builder.Configuration["Service"] ?? "API";
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
+    .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -37,17 +56,44 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
+// Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<ListExercisesQueryHandler>();
+builder.Services.AddScoped<AssignPlanCommandHandler>();
+builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();
+builder.Services.AddScoped<UpdateTrainingPlanCommandHandler>();
+builder.Services.AddScoped<GetTrainingPlanQueryHandler>();
+builder.Services.AddScoped<ListTrainingPlansQueryHandler>();
+builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
+builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
+builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
+builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
+builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
+
+
+
+// Estructura por HTTP, con el token del usuario (#062).
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddScoped<ResolveActiveMembershipsQueryHandler>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
+await app.Services.ApplyMigrationsAsync();
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionMiddleware>();
@@ -61,6 +107,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseStaticFiles();
 
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();

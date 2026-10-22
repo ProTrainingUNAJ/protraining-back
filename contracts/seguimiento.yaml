@@ -1,0 +1,887 @@
+openapi: 3.0.3
+info:
+  title: ProTraining - Microservicio de Seguimiento
+  description: >
+    API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
+    carga de actividad en minutos con asistencia automática, comparativa frente al grupo
+    y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
+  version: 1.4.0
+servers:
+  - url: http://localhost:8084
+    description: Entorno local / Docker Compose
+  - url: http://seguimiento:8080
+    description: Red interna de Docker entre microservicios
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Check-in and Traffic Light
+    description: Reporte diario de bienestar subjetivo y semáforo tricolor para el preparador físico
+  - name: Loads and Attendance
+    description: Registro de minutos de actividad diaria y asistencia automática sin tomar lista
+  - name: Evolution and Benchmark
+    description: Comparativa anónima de métricas del atleta contra el promedio de su categoría
+  - name: Injuries
+    description: Registro clínico de lesiones y transiciones controladas de estado
+  - name: Fitness Tests
+    description: Catálogo de tests físicos estandarizados por capacidad motora para armar baterías de evaluación
+  - name: Health
+    description: Monitoreo de disponibilidad del servicio y base de datos
+
+paths:
+  /api/v1/athletes/{athleteId}/check-in:
+    post:
+      tags:
+        - Check-in and Traffic Light
+      summary: Enviar o actualizar check-in diario del atleta
+      description: >
+        Registra el reporte de bienestar en menos de 30 segundos. Evalúa las respuestas mediante
+        umbrales y clasifica de inmediato al atleta en el semáforo tricolor (Green, Yellow o Red).
+      operationId: submitCheckIn
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInRequest'
+      responses:
+        "200":
+          description: Check-in actualizado para el mismo día y semáforo recalculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        "201":
+          description: Check-in registrado exitosamente y semáforo calculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          description: La cuenta no tiene un atleta vinculado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/athletes/{athleteId}/check-ins:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Historial de check-ins de un atleta
+      description: Devuelve los registros de bienestar diarios del atleta (por defecto los últimos 14 registros).
+      operationId: listAthleteCheckIns
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 14
+      responses:
+        "200":
+          description: Historial de check-ins obtenido.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckIn'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{athleteId}/daily-load:
+    post:
+      tags:
+        - Loads and Attendance
+      summary: Registrar minutos de actividad física del día
+      description: >
+        El atleta reporta los minutos dedicados a gimnasio, práctica de su deporte, partido o
+        trabajo individual. De aquí se deducen el volumen diario y la asistencia automática sin tomar lista.
+      operationId: registerDailyLoad
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyLoadRequest'
+      responses:
+        "200":
+          description: Carga y asistencia registradas con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Carga del día registrada. Asistencia confirmada automáticamente."
+                  totalMinutes:
+                    type: integer
+                    example: 105
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/attendance-today:
+    get:
+      tags:
+        - Loads and Attendance
+      summary: Consultar asistencia automática del día por categoría
+      description: Consolida quiénes entrenaron hoy a partir de las cargas de entrenamiento cargadas por los propios atletas.
+      operationId: getCategoryAttendanceToday
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumen de asistencia de la categoría.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryAttendanceSummary'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/traffic-light-today:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Consultar semáforo tricolor de hoy por categoría
+      description: >
+        Pantalla central del preparador físico en el día a día. Consolida el estado tricolor de bienestar
+        (Green, Yellow, Red) de cada atleta de la división para la jornada actual, permitiendo detectar
+        rápidamente a quienes requieren atención o ajuste de cargas antes de iniciar la práctica.
+      operationId: getCategoryTrafficLightToday
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Semáforo de la categoría para el día de hoy obtenido exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteTrafficLightSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{athleteId}/group-benchmark:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar perfil del atleta frente al promedio de su grupo
+      description: >
+        Retorna la evolución del atleta comparada exclusivamente contra el promedio
+        anónimo de su categoría (garantía de seguridad: ningún atleta ve los datos individuales de sus compañeros).
+      operationId: getGroupBenchmark
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Métricas comparativas obtenidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBenchmarkResponse'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{athleteId}/injuries:
+    get:
+      tags:
+        - Injuries
+      summary: Listar lesiones de un atleta
+      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual.
+      operationId: listAthleteInjuries
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Active, InRecovery, Cleared]
+      responses:
+        "200":
+          description: Lista de lesiones obtenida con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Injury'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Injuries
+      summary: Registrar una nueva lesión
+      description: Da de alta una lesión para el atleta en estado inicial 'Active'.
+      operationId: createInjury
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInjuryRequest'
+      responses:
+        "201":
+          description: Lesión registrada con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Injury'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/injuries/{injuryId}/status:
+    patch:
+      tags:
+        - Injuries
+      summary: Actualizar estado de una lesión (Máquina de estados)
+      description: >
+        Realiza la transición de estado de una lesión. Regla de negocio estricta:
+        Una lesión 'Active' no puede pasar directamente a 'Cleared' sin haber transitado por 'InRecovery'.
+      operationId: updateInjuryStatus
+      parameters:
+        - name: injuryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInjuryStatusRequest'
+      responses:
+        "200":
+          description: Transición de estado aplicada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Injury'
+        "400":
+          description: Transición inválida (ej. intentar pasar de Active a Cleared directamente).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/fitness-tests:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Catálogo de tests físicos por capacidad motora
+      description: >
+        Devuelve el catálogo de tests de evaluación física activos (los tests desactivados
+        no se exponen). Con el parámetro opcional motorCapacity filtra por tipo de capacidad
+        motora (ej. Power devuelve Salto Vertical CMJ y Salto Abalakov); sin parámetro
+        devuelve todos los tests activos.
+      operationId: listFitnessTests
+      parameters:
+        - name: motorCapacity
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MotorCapacity'
+          description: Capacidad motora por la cual filtrar el catálogo.
+      responses:
+        "200":
+          description: Catálogo de tests obtenido (lista vacía si el filtro no tiene resultados).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FitnessTest'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Chequeo de salud del servicio
+      security: []
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Servicio saludable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Healthy"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Parámetros inválidos o violación de reglas de validación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: Token de autenticación ausente o inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Atleta o lesión no encontrados.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: "Acceso denegado: el token no corresponde al atleta de la ruta."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    CheckInRequest:
+      type: object
+      required:
+        - sleepHours
+        - sleepQuality
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
+      properties:
+        sleepHours:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 24
+          example: 7.5
+        sleepQuality:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Calidad de descanso de 1 (pésima) a 5 (óptima).
+          example: 4
+        muscleSoreness:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Nivel de dolor muscular/articular (1 = ninguno, 5 = dolor severo).
+          example: 1
+        fatigueLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        moodRate:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        stressLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        effortRate:
+          type: integer
+          minimum: 1
+          maximum: 10
+          nullable: true
+          example: 7
+        isSick:
+          type: boolean
+          default: false
+          example: false
+        painZones:
+          type: string
+          nullable: true
+          example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          default: false
+          description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
+          example: false
+
+    CheckInResponse:
+      type: object
+      required:
+        - message
+        - trafficLight
+        - checkIn
+      properties:
+        message:
+          type: string
+          example: "Check-in completado exitosamente."
+        trafficLight:
+          type: string
+          enum: [Green, Yellow, Red]
+          example: "Green"
+        trafficLightReason:
+          type: string
+          nullable: true
+          example: "Sin alertas de sobrecarga"
+        checkIn:
+          $ref: '#/components/schemas/CheckIn'
+
+    CheckIn:
+      type: object
+      description: Objeto compartido de Check-In.
+      required:
+        - id
+        - athleteId
+        - date
+        - trafficLight
+        - sleepHours
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
+        - isSick
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6c24fcf8-0fb5-48b2-b01f-0e4c67eb2581"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-10-10"
+        trafficLight:
+          type: string
+          enum: [Green, Yellow, Red]
+          example: "Green"
+        trafficLightReason:
+          type: string
+          nullable: true
+          example: "Sin alertas de sobrecarga"
+        sleepHours:
+          type: number
+          format: double
+          example: 7.5
+        sleepQuality:
+          type: integer
+          example: 4
+        muscleSoreness:
+          type: integer
+          example: 1
+        fatigueLevel:
+          type: integer
+          example: 2
+        moodRate:
+          type: integer
+          example: 4
+        stressLevel:
+          type: integer
+          example: 2
+        effortRate:
+          type: integer
+          example: 7
+        isSick:
+          type: boolean
+          example: false
+        painZones:
+          type: string
+          nullable: true
+          example: "Isquiotibial derecho"
+        hasActiveInjury:
+          type: boolean
+          example: false
+
+    DailyLoadRequest:
+      type: object
+      required:
+        - gymMinutes
+      properties:
+        gymMinutes:
+          type: integer
+          minimum: 0
+          example: 60
+        sportTrainingMinutes:
+          type: integer
+          minimum: 0
+          example: 45
+        matchMinutes:
+          type: integer
+          minimum: 0
+          example: 0
+        individualWorkMinutes:
+          type: integer
+          minimum: 0
+          example: 0
+
+    CategoryAttendanceSummary:
+      type: object
+      required:
+        - categoryId
+        - date
+        - totalRoster
+        - presentCount
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-10-10"
+        totalRoster:
+          type: integer
+          example: 32
+        presentCount:
+          type: integer
+          example: 29
+        attendancePercentage:
+          type: number
+          format: double
+          example: 90.6
+
+    AthleteTrafficLightSummary:
+      type: object
+      description: >
+        Estado de bienestar diario del atleta para el semáforo consolidado de la categoría,
+        con el desglose de indicadores del check-in para la visualización en la PWA (KAN-365).
+      required:
+        - athleteId
+        - athleteName
+        - trafficLight
+        - hasReportedToday
+        - resultValue
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          example: "Lucas Fernández"
+        trafficLight:
+          type: string
+          enum: [Green, Yellow, Red]
+          example: "Yellow"
+        trafficLightReason:
+          type: string
+          nullable: true
+          example: "Molestia muscular en rodilla reportada en check-in"
+        hasReportedToday:
+          type: boolean
+          example: true
+        reportedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-10T08:15:00Z"
+        resultValue:
+          type: integer
+          enum: [20, 50, 90]
+          description: Escala de severidad del motor del semáforo (Rojo 20, Amarillo 50, Verde 90).
+          example: 50
+        indicators:
+          $ref: '#/components/schemas/TrafficLightIndicators'
+
+    TrafficLightIndicators:
+      type: object
+      description: >
+        Valores crudos del check-in de hoy que alimentan los indicadores individuales
+        (sueño, esfuerzo, dolor, enfermedad, lesión) dentro de la card del semáforo.
+        Ausente (null) cuando el atleta no reportó hoy.
+      required:
+        - sleepHours
+        - sleepQuality
+        - isSick
+        - hasActiveInjury
+      properties:
+        sleepHours:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 24
+          example: 6.5
+        sleepQuality:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        effortRate:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 10
+          example: 8
+        isSick:
+          type: boolean
+          example: false
+        hasActiveInjury:
+          type: boolean
+          example: false
+        painZones:
+          type: string
+          nullable: true
+          description: Zonas de dolor del check-in como "muscleId:nivel" separadas por coma.
+          example: "cuadriceps_derecho:3,espalda_baja:2"
+
+    GroupBenchmarkResponse:
+      type: object
+      required:
+        - athleteId
+        - categoryId
+        - metrics
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        metrics:
+          type: array
+          items:
+            type: object
+            required:
+              - dimension
+              - athleteValue
+              - groupAverage
+            properties:
+              dimension:
+                type: string
+                example: "1RM Sentadilla (kg)"
+              athleteValue:
+                type: number
+                example: 140.0
+              groupAverage:
+                type: number
+                example: 125.5
+              trend:
+                type: string
+                example: "Superior al promedio (+11.5%)"
+
+    CreateInjuryRequest:
+      type: object
+      required:
+        - bodyZone
+        - notes
+      properties:
+        bodyZone:
+          type: string
+          example: "Hombro derecho"
+        notes:
+          type: string
+          example: "Molestia punzante al bloquear banco plano con 90 kg."
+
+    UpdateInjuryStatusRequest:
+      type: object
+      required:
+        - newStatus
+        - transitionNotes
+      properties:
+        newStatus:
+          type: string
+          enum: [Active, InRecovery, Cleared]
+          example: "InRecovery"
+        transitionNotes:
+          type: string
+          example: "Evolución favorable tras 5 días de kinesiología y movilidad."
+
+    Injury:
+      type: object
+      required:
+        - id
+        - athleteId
+        - bodyZone
+        - notes
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        bodyZone:
+          type: string
+          example: "Hombro derecho"
+        notes:
+          type: string
+          example: "Molestia punzante al bloquear banco plano. | [2026-10-10] Estado a InRecovery: Kinesiología favorable."
+        status:
+          type: string
+          enum: [Active, InRecovery, Cleared]
+          example: "InRecovery"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-05T10:15:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-10T09:30:00Z"
+
+    FitnessTest:
+      type: object
+      required:
+        - id
+        - name
+        - motorCapacity
+        - measurementUnit
+        - difficultyLevel
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        name:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          $ref: '#/components/schemas/MotorCapacity'
+        measurementUnit:
+          type: string
+          description: Unidad de medida del resultado del test.
+          example: "cm"
+        difficultyLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Nivel de dificultad del test (1 a 5).
+          example: 3
+        active:
+          type: boolean
+          description: Estado activo del test. El catálogo solo expone tests activos.
+          example: true
+
+    MotorCapacity:
+      type: string
+      description: Capacidades motoras estándar del catálogo de tests físicos.
+      enum:
+        - Strength
+        - Velocity
+        - Endurance
+        - Power
+        - Flexibility
+        - Agility
+        - Coordination
+      example: "Power"
+
+    ProblemDetails:
+      type: object
+      required:
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          example: "https://tools.ietf.org/html/rfc9110#section-15.5.1"
+        title:
+          type: string
+          example: "Regla de negocio violada"
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: "Una lesión activa no puede pasar directamente a Alta. Debe pasar primero por estado 'InRecovery'."
+        instance:
+          type: string
+          example: "/api/v1/injuries/2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab/status"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string

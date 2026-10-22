@@ -18,7 +18,7 @@ internal static class PersistenceErrors
         }
         catch (Exception exception) when (IsUnavailable(exception))
         {
-            // La frontera de persistencia no propaga detalles del proveedor ni credenciales.
+            // The persistence boundary does not leak provider details or credentials.
             throw new PersistenceUnavailableException();
         }
     }

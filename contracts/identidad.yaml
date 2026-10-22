@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: ProTraining - Microservicio de Identidad
+  description: >
+    API v1 para la gestión de autenticación, control de accesos (RBAC), emisión
+    y rotación de tokens JWT Bearer para preparadores físicos (PF), atletas y tutores.
+  version: 1.2.0
+servers:
+  - url: http://localhost:8081
+    description: Entorno local / Docker Compose
+  - url: http://identidad:8080
+    description: Red interna de Docker entre microservicios
+
+tags:
+  - name: Authentication
+    description: Endpoints para inicio de sesión y renovación de tokens
+  - name: Health
+    description: Monitoreo de disponibilidad del servicio y base de datos
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Iniciar sesión en el sistema
+      description: Valida credenciales de email y contraseña y emite un token JWT con la información del usuario autenticado.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Credenciales válidas. Devuelve el token JWT y los datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: Credenciales inválidas (email inexistente o contraseña incorrecta).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Renovar token de acceso
+      description: Renueva el access token rotando el refresh token para el dispositivo indicado.
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        "200":
+          description: Token renovado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: Refresh token inválido o expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Chequeo de salud del servicio
+      description: Comprueba que el microservicio esté activo y que la conexión con su base de datos PostgreSQL sea correcta.
+      operationId: healthCheck
+      security: []
+      responses:
+        "200":
+          description: Servicio saludable y base de datos conectada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        "503":
+          description: Base de datos inaccesible o falla crítica.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  responses:
+    BadRequest:
+      description: Solicitud con datos inválidos o formato erróneo.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+        - deviceId
+      properties:
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+        deviceId:
+          type: string
+          description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
+          example: "device-web-pwa-01"
+
+    User:
+      type: object
+      description: Información del usuario autenticado.
+      required:
+        - id
+        - email
+        - fullName
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        email:
+          type: string
+          format: email
+          example: "julian@protraining.com"
+        fullName:
+          type: string
+          example: "Prof. Julián Antúnez"
+        role:
+          type: string
+          enum: [PreparadorFisico, Atleta, Tutor]
+          description: Rol asignado en el sistema (excepción de dominio en español).
+          example: "PreparadorFisico"
+        pfId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del preparador físico asignado (excepción de dominio en español).
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+
+    LoginResponse:
+      type: object
+      description: Respuesta devuelta tras un inicio de sesión exitoso.
+      required:
+        - accessToken
+        - refreshToken
+        - tokenType
+        - expiresIn
+        - user
+      properties:
+        accessToken:
+          type: string
+          description: Token de acceso JWT emitido.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: Token de actualización para rotar la sesión sin reautenticar.
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        tokenType:
+          type: string
+          description: Tipo de esquema del token de autenticación.
+          example: "Bearer"
+        expiresIn:
+          type: integer
+          description: Segundos de vigencia del token de acceso.
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+        - deviceId
+      properties:
+        refreshToken:
+          type: string
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        deviceId:
+          type: string
+          example: "device-web-pwa-01"
+
+    RefreshResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - tokenType
+        - expiresIn
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        tokenType:
+          type: string
+          example: "Bearer"
+        expiresIn:
+          type: integer
+          example: 3600
+
+    HealthStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: "Healthy"
+        database:
+          type: string
+          example: "Connected"
+
+    ProblemDetails:
+      type: object
+      required:
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          example: "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+        title:
+          type: string
+          example: "Error de solicitud"
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: "Las credenciales ingresadas son incorrectas."
+        instance:
+          type: string
+          example: "/api/v1/auth/login"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["El email no tiene un formato válido."]

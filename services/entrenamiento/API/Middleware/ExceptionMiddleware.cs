@@ -13,7 +13,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            // El cliente cerró la solicitud; no intentar enviar otra respuesta.
+            
         }
         catch (Exception exception)
         {
@@ -23,12 +23,17 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             var (status, title, detail) = exception switch
             {
                 DomainException domain => (400, domain.Message, (string?)null),
+                NotFoundException notFound => (404, notFound.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
                 PersistenceUnavailableException => (503, "Base de datos no disponible.",
                     "Comprueba el estado de la base de datos y su configuración. Inténtalo de nuevo."),
+                StructureUnavailableException => (503, "Estructura no disponible.",
+                    "No se pudieron consultar las categorías del atleta. Inténtalo de nuevo."),
                 BadHttpRequestException badRequest => (badRequest.StatusCode, "Solicitud no válida.",
                     "Comprueba el JSON, los tipos de los campos y Content-Type: application/json."),
+                UnauthorizedAccessException => (401, "No autenticado.",
+                    "Falta el token o no tiene un PF asignado."),
                 _ => (500, "Error interno del servidor.", null)
             };
 

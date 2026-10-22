@@ -1,50 +1,159 @@
-using API.Requests;
-using Application.DTOs;
+using Application.DTOs.Athletes;
+using Application.DTOs.Categories;
+using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.ListAthletes;
-using Application.UseCases.Athletes.UpdateAthleteCategory;
+using Application.UseCases.Athletes.ListCategoriesByAthlete;
+using Application.UseCases.Athletes.ListMedicalRecordAuditLogs;
+using Application.UseCases.Athletes.ReadMedicalRecord;
+using Application.UseCases.Athletes.RemoveAthleteCategory;
+using Application.UseCases.Athletes.UpdateAthlete;
+using Application.UseCases.Athletes.UpdateHabitsPermission;
+using Application.UseCases.Athletes.UpdateMedicalRecord;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers;
 
 [ApiController]
-[Route("api/athletes")]
+[Route("api/v1/athletes")]
+[Authorize(Roles = "PreparadorFisico")]
 public sealed class AthletesController(
     ListAthletesQueryHandler listHandler,
     GetAthleteQueryHandler getHandler,
     CreateAthleteCommandHandler createHandler,
-    UpdateAthleteCategoryCommandHandler updateHandler,
-    DeleteAthleteCommandHandler deleteHandler) : ControllerBase
+    UpdateAthleteCommandHandler updateHandler,
+    UpdateHabitsPermissionCommandHandler updateHabitsPermissionHandler,
+    DeleteAthleteCommandHandler deleteHandler,
+    AssignAthleteCategoryCommandHandler assignCategoryHandler,
+    RemoveAthleteCategoryCommandHandler removeCategoryHandler,
+    ListCategoriesByAthleteQueryHandler listCategoriesHandler,
+    ReadMedicalRecordCommandHandler readMedicalRecordHandler,
+    UpdateMedicalRecordCommandHandler updateMedicalRecordHandler,
+    ListMedicalRecordAuditLogsQueryHandler listMedicalRecordAuditLogsHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
         Ok(await listHandler.HandleAsync(new ListAthletesQuery(), cancellationToken));
 
-    [HttpGet("{id:long}")]
-    public async Task<ActionResult<AthleteDto>> Get(long id, CancellationToken cancellationToken) =>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<AthleteDto>> Get(Guid id, CancellationToken cancellationToken) =>
         Ok(await getHandler.HandleAsync(new GetAthleteQuery(id), cancellationToken));
 
     [HttpPost]
     public async Task<ActionResult<AthleteDto>> Create(CreateAthleteRequest request, CancellationToken cancellationToken)
     {
         var athlete = await createHandler.HandleAsync(
-            new CreateAthleteCommand(request.FullName, request.Category, request.Record1RmKg), cancellationToken);
-        return Created($"/api/athletes/{athlete.Id}", athlete);
+            new CreateAthleteCommand(
+                request.FirstName,
+                request.LastName,
+                request.Email,
+                request.Phone,
+                request.IsMinor,
+                request.GuardianName,
+                request.GuardianEmail,
+                request.GuardianPhone,
+                request.AllowsPhysicalTraining,
+                request.AllowsHabitsRecommendations,
+                request.EmergencyContact),
+            cancellationToken);
+
+        return Created($"/api/v1/athletes/{athlete.Id}", athlete);
     }
 
-    [HttpPatch("{id:long}")]
-    public async Task<IActionResult> UpdateCategory(long id, UpdateAthleteCategoryRequest request, CancellationToken cancellationToken)
+    [HttpPatch("{id:guid}/habits-permission")]
+    public async Task<ActionResult<AthleteDto>> UpdateHabitsPermission(
+        Guid id,
+        UpdateHabitsPermissionRequest request,
+        CancellationToken cancellationToken)
     {
-        await updateHandler.HandleAsync(new UpdateAthleteCategoryCommand(id, request.Category), cancellationToken);
-        return NoContent();
+        var athlete = await updateHabitsPermissionHandler.HandleAsync(
+            new UpdateHabitsPermissionCommand(id, request.AllowsHabitsRecommendations),
+            cancellationToken);
+
+        return Ok(athlete);
     }
 
-    [HttpDelete("{id:long}")]
-    public async Task<IActionResult> Delete(long id, CancellationToken cancellationToken)
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         await deleteHandler.HandleAsync(new DeleteAthleteCommand(id), cancellationToken);
         return NoContent();
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<AthleteDto>> Update(
+        Guid id,
+        UpdateAthleteRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateHandler.HandleAsync(
+            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
+            cancellationToken));
+
+    [HttpGet("{id:guid}/medical-record")]
+    public async Task<ActionResult<MedicalRecordDto>> GetMedicalRecord(
+        Guid id,
+        [FromQuery] string? justification,
+        CancellationToken cancellationToken) =>
+        Ok(await readMedicalRecordHandler.HandleAsync(
+            new ReadMedicalRecordCommand(id, justification),
+            cancellationToken));
+
+    [HttpPut("{id:guid}/medical-record")]
+    public async Task<ActionResult<MedicalRecordDto>> UpdateMedicalRecord(
+        Guid id,
+        UpdateMedicalRecordRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateMedicalRecordHandler.HandleAsync(
+            new UpdateMedicalRecordCommand(
+                id,
+                request.Justification,
+                request.MedicalHistory,
+                request.Surgeries,
+                request.Pathologies,
+                request.HasPhysicalFitnessCertificate,
+                request.PhysicalFitnessIssuedAt,
+                request.PhysicalFitnessExpiresAt,
+                request.PhysicalFitnessNotes),
+            cancellationToken));
+
+    [HttpGet("{id:guid}/medical-record/audit-logs")]
+    public async Task<ActionResult<IReadOnlyList<MedicalRecordAuditLogDto>>> ListMedicalRecordAuditLogs(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await listMedicalRecordAuditLogsHandler.HandleAsync(
+            new ListMedicalRecordAuditLogsQuery(id),
+            cancellationToken));
+
+    [HttpPost("{id:guid}/categories/{categoryId:guid}")]
+    public async Task<IActionResult> AssignCategory(
+        Guid id,
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        var category = await assignCategoryHandler.HandleAsync(
+            new AssignAthleteCategoryCommand(id, categoryId),
+            cancellationToken);
+        return Ok(category);
+    }
+
+    [HttpDelete("{id:guid}/categories/{categoryId:guid}")]
+    public async Task<IActionResult> RemoveCategory(
+        Guid id,
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        await removeCategoryHandler.HandleAsync(
+            new RemoveAthleteCategoryCommand(id, categoryId),
+            cancellationToken);
+        return NoContent();
+    }
+
+    [HttpGet("{id:guid}/categories")]
+    public async Task<ActionResult<IReadOnlyList<CategoryDto>>> ListCategories(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await listCategoriesHandler.HandleAsync(new ListCategoriesByAthleteQuery(id), cancellationToken));
 }

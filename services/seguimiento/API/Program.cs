@@ -1,17 +1,27 @@
 using System.Text.Json;
 using API.Extensions;
+using API.HealthChecks;
 using API.Middleware;
+using API.Services;
+using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.SubmitCheckIn;
+using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
+using Domain.Services;
 using Infrastructure;
+using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
+var serviceName = builder.Configuration["Service"] ?? "API";
 builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
+    .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -37,17 +47,43 @@ builder.Services.AddControllers()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
-// Reintentos, timeouts y circuit breaker para todos los HttpClient que se registren.
+// Resiliencia por defecto (reintentos, timeouts y circuit breaker) para todo HttpClient registrado (KAN-364).
+// Regla: el semáforo se calcula solo con datos locales (check-ins y lesiones de esta base) y jamás llama
+// a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
+// opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
+// reintento y caída siempre al motivo local del TrafficLightEngine (plan B), nunca propagando el error al cliente.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 
+// Motor puro del semáforo (KAN-363) y caso de uso del check-in diario (KAN-364/Demo 1):
+// todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
+builder.Services.AddScoped<TrafficLightEngine>();
+builder.Services.AddScoped<SubmitCheckInCommandHandler>();
+// Catálogo de tests físicos por capacidad motora (KAN-333).
+builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
+// Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
+// (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
+builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+// Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
+// del token con el athleteId de la ruta antes de registrar el check-in.
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
+
 if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerWithBearer(serviceName);
 }
 
 var app = builder.Build();
+await app.Services.ApplyMigrationsAsync();
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionMiddleware>();
@@ -63,4 +99,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
