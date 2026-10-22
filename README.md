@@ -56,6 +56,28 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
+### Usuarios y datos de prueba (Demo 1)
+
+En Development, Identidad crea estas cuentas al arrancar (todas con la contraseña `ProTraining2026!`):
+
+| Cuenta | Rol | Para qué |
+|---|---|---|
+| `pf@protraining.com` | PF | El preparador de prueba: dueño de todos los datos de la demo |
+| `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
+| `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
+| `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
+
+Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
+
+```bash
+docker compose down -v && docker compose up -d --build   # base de cero
+./scripts/demo-data.sh             # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
+./scripts/demo-data.sh checkins    # solo los check-ins de hoy (la mañana del ensayo y de la demo)
+./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
+```
+
+El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes.
+
 ### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
 
 El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:

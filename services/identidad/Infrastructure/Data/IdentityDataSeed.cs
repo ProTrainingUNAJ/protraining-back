@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+using Application.Common.Security;
+using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +11,25 @@ namespace Infrastructure.Data;
 /// </summary>
 public static class IdentityDataSeed
 {
+    // misma contraseña para todas las cuentas de prueba (solo Development)
+    private const string DemoPassword = "ProTraining2026!";
+
+    private const string PfEmail = "pf@protraining.com";
+    private const string MainAthleteEmail = "atleta@protraining.com";
+
+    // atletas de la Demo 1 (KAN-524): sus cuentas quedan con el PF de prueba, así el token
+    // sale con su pf_id y Estructura los encuentra. El script scripts/demo-data.sh crea sus
+    // perfiles en Estructura y los vincula a estas cuentas.
+    private static readonly (string Email, string FullName)[] DemoAthletes =
+    [
+        (MainAthleteEmail, "Lucas Gómez"),
+        ("martin@protraining.com", "Martín Pérez"),
+        ("joaquin@protraining.com", "Joaquín Díaz"),
+        ("facundo@protraining.com", "Facundo Sosa"),
+        ("valentina@protraining.com", "Valentina Ruiz"),
+        ("camila@protraining.com", "Camila Torres")
+    ];
+
     public static async Task SeedAsync(IServiceProvider serviceProvider)
     {
         using var scope = serviceProvider.CreateScope();
@@ -28,58 +48,70 @@ public static class IdentityDataSeed
         }
 
         // 2. crear un Preparador Fisico de prueba si no existe
-        var pfEmail = "pf@protraining.com";
-        var existingPf = await userManager.FindByEmailAsync(pfEmail);
+        var pfUser = await userManager.FindByEmailAsync(PfEmail);
 
-        if (existingPf == null)
+        if (pfUser == null)
         {
-            var pfUser = new User
+            pfUser = new User
             {
-                UserName = pfEmail,
-                Email = pfEmail,
+                UserName = PfEmail,
+                Email = PfEmail,
                 FullName = "Prof. Alejandro Lopez",
                 EmailConfirmed = true,
                 IsActive = true
             };
 
-            var result = await userManager.CreateAsync(pfUser, "ProTraining2026!");
-            if (result.Succeeded)
+            var result = await userManager.CreateAsync(pfUser, DemoPassword);
+            if (!result.Succeeded)
             {
-                await userManager.AddToRoleAsync(pfUser, "PreparadorFisico");
+                return;
+            }
+
+            await userManager.AddToRoleAsync(pfUser, "PreparadorFisico");
+        }
+
+        // 3. crear los atletas de prueba con el PF de prueba; si ya existían sin PF
+        // (bases creadas antes de la KAN-524), se les asigna
+        foreach (var (email, fullName) in DemoAthletes)
+        {
+            var athleteUser = await userManager.FindByEmailAsync(email);
+
+            if (athleteUser == null)
+            {
+                athleteUser = new User
+                {
+                    UserName = email,
+                    Email = email,
+                    FullName = fullName,
+                    PfId = pfUser.Id,
+                    EmailConfirmed = true,
+                    IsActive = true
+                };
+
+                var result = await userManager.CreateAsync(athleteUser, DemoPassword);
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(athleteUser, "Atleta");
+                }
+            }
+            else if (athleteUser.PfId != pfUser.Id)
+            {
+                athleteUser.PfId = pfUser.Id;
+                await userManager.UpdateAsync(athleteUser);
             }
         }
 
-        // 3. crear un Atleta de prueba si no existe
-        var athleteEmail = "atleta@protraining.com";
-        var athleteUser = await userManager.FindByEmailAsync(athleteEmail);
-
-        if (athleteUser == null)
+        // 4. sembrar refresh tokens de prueba para verificar KAN-306; desde la KAN-515
+        // la tabla guarda el hash, así que se guarda el hash del valor conocido
+        var mainAthlete = await userManager.FindByEmailAsync(MainAthleteEmail);
+        if (mainAthlete != null)
         {
-            athleteUser = new User
-            {
-                UserName = athleteEmail,
-                Email = athleteEmail,
-                FullName = "Lucas Gomez",
-                EmailConfirmed = true,
-                IsActive = true
-            };
-
-            var result = await userManager.CreateAsync(athleteUser, "ProTraining2026!");
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(athleteUser, "Atleta");
-            }
-        }
-
-        // 4. sembrar refresh tokens de prueba para verificar KAN-306
-        if (athleteUser != null)
-        {
-            var validToken = "valid-athlete-refresh-token-30-days";
+            var validToken = TokenHasher.Hash("valid-athlete-refresh-token-30-days");
             if (!await dbContext.RefreshTokens.AnyAsync(r => r.Token == validToken))
             {
                 dbContext.RefreshTokens.Add(new RefreshToken
                 {
-                    UserId = athleteUser.Id,
+                    UserId = mainAthlete.Id,
                     Token = validToken,
                     DeviceId = "device-atleta-01",
                     ExpiresAt = DateTime.UtcNow.AddDays(30),
@@ -88,12 +120,12 @@ public static class IdentityDataSeed
                 });
             }
 
-            var revokedToken = "revoked-athlete-refresh-token";
+            var revokedToken = TokenHasher.Hash("revoked-athlete-refresh-token");
             if (!await dbContext.RefreshTokens.AnyAsync(r => r.Token == revokedToken))
             {
                 dbContext.RefreshTokens.Add(new RefreshToken
                 {
-                    UserId = athleteUser.Id,
+                    UserId = mainAthlete.Id,
                     Token = revokedToken,
                     DeviceId = "device-atleta-01",
                     ExpiresAt = DateTime.UtcNow.AddDays(30),
