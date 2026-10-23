@@ -7,6 +7,8 @@ namespace Application.DTOs.Routines
         public string Name { get; set; } = string.Empty;
         public string MuscleGroup { get; set; } = string.Empty;
         public string? VideoUrl { get; set; }
+        // Fotos del ejercicio (inicio y fin del movimiento), las mismas que la biblioteca
+        public List<string> Images { get; set; } = [];
         public int Sets { get; set; }
         public int Reps { get; set; }
         public double Percentage { get; set; }

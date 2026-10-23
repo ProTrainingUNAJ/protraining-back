@@ -102,8 +102,8 @@ load_check_ins() {
   check_in facundo@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
   # Valentina con dolor nuevo en el cuádriceps → amarillo
   check_in valentina@protraining.com '{"sleepHours":7.5,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
-  # Camila, todo bien → verde
-  check_in camila@protraining.com '{"sleepHours":8.5,"sleepQuality":5,"muscleSoreness":1,"fatigueLevel":1,"moodRate":5,"stressLevel":1,"effortRate":4,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  # Camila con lesión activa en el hombro → rojo (está en Alumnos particulares y en Musculación)
+  check_in camila@protraining.com '{"sleepHours":7.5,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":3,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"hombros:4","hasActiveInjury":true}'
 }
 
 load_live_parts() {
@@ -122,8 +122,8 @@ load_live_parts() {
     "{\"trainingPlanId\":\"$plan_id\",\"startDate\":\"$start\",\"categoryId\":\"$PRIMERA_ID\"}" >/dev/null
   echo "  plan \"Fuerza base\" asignado a Primera División desde el $start"
 
-  # Lucas con lesión activa → rojo; Martín bien → verde
-  check_in atleta@protraining.com '{"sleepHours":7,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":null,"hasActiveInjury":true}'
+  # Lucas con lesión activa en el isquiotibial → rojo (la zona se ve pintada en la ficha del PF); Martín bien → verde
+  check_in atleta@protraining.com '{"sleepHours":7,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
 }
 

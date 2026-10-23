@@ -31,4 +31,20 @@ public class PlanAssignment : BaseEntity
 
         return new PlanAssignment(trainingPlanId, categoryId, athleteId, startDate);
     }
+
+    // Sesión que toca en una fecha: la semana sale de los días desde el inicio (semana 1 = los
+    // primeros 7 días) y la sesión, del día de la semana. Necesita el plan con semanas y sesiones.
+    public TrainingSession? SessionOn(DateOnly date)
+    {
+        if (date < StartDate)
+            return null;
+
+        var weekNumber = WeekNumberOn(date);
+
+        return Plan.Weeks
+            .FirstOrDefault(week => week.WeekNumber == weekNumber)?
+            .Sessions.FirstOrDefault(session => session.DayOfWeek == date.DayOfWeek);
+    }
+
+    public int WeekNumberOn(DateOnly date) => (date.DayNumber - StartDate.DayNumber) / 7 + 1;
 }

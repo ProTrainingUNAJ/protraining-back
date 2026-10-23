@@ -40,7 +40,7 @@ public class GetTodayRoutineQueryHandlerTests
 
         // Simulamos que el repositorio de sesiones devuelve la sesión
         _sessionRepoMock
-            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
         // Simulamos que el atleta tiene un récord TESTEADO de 100 kg
@@ -70,7 +70,7 @@ public class GetTodayRoutineQueryHandlerTests
         var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
 
         _sessionRepoMock
-            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
         // Récord ESTIMADO de 100 kg
@@ -96,7 +96,7 @@ public class GetTodayRoutineQueryHandlerTests
         var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
 
         _sessionRepoMock
-            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
         // Sin récord activo para este ejercicio
@@ -139,6 +139,7 @@ public class GetTodayRoutineQueryHandlerTests
             .Setup(r => r.GetByAthleteIdAsync(
                 athleteId,
                 It.Is<IReadOnlyList<Guid>>(cats => cats.Contains(categoryId)),
+                It.IsAny<DateOnly>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
@@ -164,7 +165,7 @@ public class GetTodayRoutineQueryHandlerTests
 
         // En día de descanso el repositorio no encuentra sesión para el día de hoy
         _sessionRepoMock
-            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((TrainingSession?)null);
 
         var handler = CreateHandler();
@@ -182,7 +183,7 @@ public class GetTodayRoutineQueryHandlerTests
 
         // Si el plan no comenzó aún, el repositorio retorna null
         _sessionRepoMock
-            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((TrainingSession?)null);
 
         var handler = CreateHandler();
@@ -232,6 +233,7 @@ public class GetTodayRoutineQueryHandlerTests
             .Setup(r => r.GetByAthleteIdAsync(
                 athleteId,
                 It.Is<IReadOnlyList<Guid>>(cats => cats.Contains(categoryId)),
+                It.IsAny<DateOnly>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
@@ -270,5 +272,26 @@ public class GetTodayRoutineQueryHandlerTests
             handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId }));
 
         Assert.Equal("El atleta no existe o no es tuyo", ex.Message);
+    }
+
+    [Fact]
+    public async Task Given_FechaPedida_When_ConsultaRutina_Then_BuscaLaSesionDeEsaFechaYDevuelveLasFotos()
+    {
+        // Calendario del atleta: pide la rutina del viernes 23/10, y la ficha muestra las fotos del ejercicio
+        var athleteId = Guid.NewGuid();
+        var friday = new DateOnly(2026, 10, 23);
+        var images = new List<string> { "https://img/sentadilla/0.jpg", "https://img/sentadilla/1.jpg" };
+        var exercise = Exercise.Create("Sentadilla con barra", "Piernas", images: images);
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), friday, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = friday });
+
+        Assert.Equal(friday, result.Date);
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(images, item.Images);
     }
 }
