@@ -18,9 +18,9 @@ namespace API.Controllers
 
         [HttpGet("today-routine")]
         [Tags("Execution and Loads")]
-        public async Task<ActionResult<TodayRoutineResponseDto>> GetMyTodayRoutine(CancellationToken cancellationToken = default)
+        public async Task<ActionResult<TodayRoutineResponseDto>> GetMyTodayRoutine([FromQuery] DateOnly? date = null, CancellationToken cancellationToken = default)
         {
-            var result = await queryHandler.Handle(new GetTodayRoutineQuery(), cancellationToken);
+            var result = await queryHandler.Handle(new GetTodayRoutineQuery { Date = date }, cancellationToken);
 
             return Ok(result);
         }

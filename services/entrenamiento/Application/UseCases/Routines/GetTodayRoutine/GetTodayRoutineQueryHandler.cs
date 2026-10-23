@@ -24,6 +24,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
         {
+            // Fecha pedida (hora Argentina); sin fecha, la de hoy
+            var date = query.Date ?? ArgentinaTime.Today;
+
             Guid athleteId;
             string athleteName = string.Empty;
             IReadOnlyList<Guid> categoryIds = [];
@@ -52,7 +55,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 categoryIds = athlete.Categories.Select(c => c.Id).ToList();
             }
 
-            var routine = await trainingSessionRepository.GetByAthleteIdAsync(athleteId, categoryIds, cancellationToken);
+            var routine = await trainingSessionRepository.GetByAthleteIdAsync(athleteId, categoryIds, date, cancellationToken);
 
             if(routine == null)
             {
@@ -60,7 +63,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 {
                     AthleteId = athleteId,
                     AthleteName = athleteName,
-                    Date = ArgentinaTime.Today,
+                    Date = date,
                     HasActiveInjuries = false,
                     RoutineAdapted = false,
                     Exercises = []
@@ -90,6 +93,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     Name = exercise?.Name ?? string.Empty,
                     MuscleGroup = exercise?.MuscleGroup ?? string.Empty,
                     VideoUrl = exercise?.VideoUrl,
+                    Images = exercise?.Images.ToList() ?? [],
                     Sets = prescribed.Sets,
                     Reps = prescribed.Reps,
                     Percentage = (double)percentage,
@@ -103,7 +107,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             {
                 AthleteId = athleteId,
                 AthleteName = athleteName,
-                Date = ArgentinaTime.Today,
+                Date = date,
                 HasActiveInjuries = false,
                 RoutineAdapted = false,
                 CoachNotes = routine.CoachNotes,

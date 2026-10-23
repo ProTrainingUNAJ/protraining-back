@@ -50,7 +50,7 @@ public class TrainingSessionRepositoryTests
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var repository = new TrainingSessionRepository(context);
-            var result = await repository.GetByAthleteIdAsync(athleteId, [categoryId]);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [categoryId], ArgentinaTime.Today);
 
             Assert.NotNull(result);
             Assert.Equal(session.Id, result.Id);
@@ -91,7 +91,7 @@ public class TrainingSessionRepositoryTests
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var repository = new TrainingSessionRepository(context);
-            var result = await repository.GetByAthleteIdAsync(athleteId, []);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [], ArgentinaTime.Today);
 
             Assert.NotNull(result);
             Assert.Equal(sessionWeek2.Id, result.Id);
@@ -127,7 +127,7 @@ public class TrainingSessionRepositoryTests
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var repository = new TrainingSessionRepository(context);
-            var result = await repository.GetByAthleteIdAsync(athleteId, []);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [], ArgentinaTime.Today);
 
             Assert.Null(result);
         }
@@ -160,7 +160,7 @@ public class TrainingSessionRepositoryTests
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var repository = new TrainingSessionRepository(context);
-            var result = await repository.GetByAthleteIdAsync(athleteId, []);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [], ArgentinaTime.Today);
 
             Assert.Null(result);
         }
@@ -194,9 +194,48 @@ public class TrainingSessionRepositoryTests
         await using (var context = CreateInMemoryDbContext(pfId, dbName))
         {
             var repository = new TrainingSessionRepository(context);
-            var result = await repository.GetByAthleteIdAsync(athleteId, []);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [], ArgentinaTime.Today);
 
             Assert.Null(result);
+        }
+    }
+
+    [Fact]
+    public async Task GetByAthleteIdAsync_DadaUnaFechaDistintaDeHoy_EntoncesResuelveLaSesionDeEseDia()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        // Plan con sesión el jueves y el viernes, asignado desde el lunes 19/10/2026
+        var plan = TrainingPlan.Create("Fuerza base", "Pretemporada");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var thursday = TrainingSession.Create(week.Id, "Día B", 1, DayOfWeek.Thursday);
+        var friday = TrainingSession.Create(week.Id, "Día C", 2, DayOfWeek.Friday);
+        week.AddSession(thursday);
+        week.AddSession(friday);
+        plan.AddWeek(week);
+
+        var assignment = PlanAssignment.Create(plan.Id, new DateOnly(2026, 10, 19), athleteId: athleteId);
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            await context.TrainingPlans.AddAsync(plan);
+            await context.PlanAssignments.AddAsync(assignment);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            var repository = new TrainingSessionRepository(context);
+
+            var fridayResult = await repository.GetByAthleteIdAsync(athleteId, [], new DateOnly(2026, 10, 23));
+            var thursdayResult = await repository.GetByAthleteIdAsync(athleteId, [], new DateOnly(2026, 10, 22));
+            var saturdayResult = await repository.GetByAthleteIdAsync(athleteId, [], new DateOnly(2026, 10, 24));
+
+            Assert.Equal(friday.Id, fridayResult?.Id);
+            Assert.Equal(thursday.Id, thursdayResult?.Id);
+            Assert.Null(saturdayResult);
         }
     }
 }
