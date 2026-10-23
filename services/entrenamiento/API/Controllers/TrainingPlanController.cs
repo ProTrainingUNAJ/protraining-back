@@ -2,10 +2,12 @@ using Application.DTOs.TrainingPlans;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListPlans;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace API.Controllers;
 
@@ -19,19 +21,22 @@ public class TrainingPlanController : ControllerBase
     private readonly UpdateTrainingPlanCommandHandler _updatePlanHandler;
     private readonly GetTrainingPlanQueryHandler _getPlanHandler;
     private readonly ListTrainingPlansQueryHandler _listPlansHandler;
+    private readonly GetPlanScheduleQueryHandler _scheduleHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
         CreateTrainingPlanCommandHandler createPlanHandler,
         UpdateTrainingPlanCommandHandler updatePlanHandler,
         GetTrainingPlanQueryHandler getPlanHandler,
-        ListTrainingPlansQueryHandler listPlansHandler)
+        ListTrainingPlansQueryHandler listPlansHandler,
+        GetPlanScheduleQueryHandler scheduleHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
         _updatePlanHandler = updatePlanHandler;
         _getPlanHandler = getPlanHandler;
         _listPlansHandler = listPlansHandler;
+        _scheduleHandler = scheduleHandler;
     }
 
     [HttpPost]
@@ -64,6 +69,15 @@ public class TrainingPlanController : ControllerBase
     {
         var plans = await _listPlansHandler.Handle(new ListTrainingPlansQuery(), cancellationToken);
         return Ok(plans);
+    }
+
+    // Agenda del PF para el calendario: las sesiones que tocan en una fecha en todas sus asignaciones
+    [HttpGet("schedule")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<ActionResult<List<ScheduledSessionDto>>> GetSchedule([FromQuery, BindRequired] DateOnly date, CancellationToken cancellationToken = default)
+    {
+        var sessions = await _scheduleHandler.Handle(new GetPlanScheduleQuery(date), cancellationToken);
+        return Ok(sessions);
     }
 
     [HttpPost("assignments")]

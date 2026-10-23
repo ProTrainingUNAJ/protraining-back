@@ -29,9 +29,9 @@ namespace API.Controllers
 
         [HttpGet("{athleteId:guid}/today-routine")]
         [Tags("Execution and Loads")]
-        public async Task<ActionResult<TodayRoutineResponseDto>> GetTodayRoutine([FromRoute] Guid athleteId, CancellationToken cancellationToken = default)
+        public async Task<ActionResult<TodayRoutineResponseDto>> GetTodayRoutine([FromRoute] Guid athleteId, [FromQuery] DateOnly? date = null, CancellationToken cancellationToken = default)
         {
-            var query = new GetTodayRoutineQuery{ AthleteId = athleteId };
+            var query = new GetTodayRoutineQuery { AthleteId = athleteId, Date = date };
 
             var result = await queryHandler.Handle(query, cancellationToken);
 

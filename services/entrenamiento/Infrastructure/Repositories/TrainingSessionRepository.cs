@@ -1,5 +1,4 @@
 using Application.Interfaces.Persistence;
-using Domain.Common;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -22,11 +21,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
-    public async Task<TrainingSession?> GetByAthleteIdAsync(Guid athleteId, IReadOnlyList<Guid> categoryIds, CancellationToken cancellationToken = default)
+    public async Task<TrainingSession?> GetByAthleteIdAsync(Guid athleteId, IReadOnlyList<Guid> categoryIds, DateOnly date, CancellationToken cancellationToken = default)
     {
-        var today = ArgentinaTime.Today;
-        var todayDayOfWeek = ArgentinaTime.DayOfWeek;
-
         // 1. Obtenemos las asignaciones del atleta o sus categorías, incluyendo el plan completo con semanas y sesiones
         var assignments = await _context.PlanAssignments
             .Include(a => a.Plan)
@@ -40,30 +36,23 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .ThenByDescending(a => a.StartDate)          // Luego el más reciente
             .ToListAsync(cancellationToken);
 
-        // Evaluar cada asignación para ver cuál corresponde al día de hoy
-        foreach (var assignment in assignments)
-        {
-            if (today < assignment.StartDate)
-                continue;
+        // 2. La primera asignación (en ese orden) que tenga sesión en la fecha pedida
+        return assignments
+            .Select(assignment => assignment.SessionOn(date))
+            .FirstOrDefault(session => session != null);
+    }
 
-            int daysPassed = today.DayNumber - assignment.StartDate.DayNumber;
-
-            int weekNumber = (daysPassed / 7) + 1;
-
-            var week = assignment.Plan.Weeks
-                .FirstOrDefault(w => w.WeekNumber == weekNumber);
-
-            if (week == null)
-                continue;
-
-            var todaySession = week.Sessions
-                .FirstOrDefault(s => s.DayOfWeek == todayDayOfWeek);
-
-            if (todaySession != null)
-                return todaySession;
-        }
-
-        return null;
+    public async Task<List<PlanAssignment>> ListAssignmentsWithPlansAsync(CancellationToken cancellationToken = default)
+    {
+        // Todas las asignaciones del PF del token (filtro global), con el plan, sus semanas y sesiones
+        return await _context.PlanAssignments
+            .AsNoTracking()
+            .Include(a => a.Plan)
+                .ThenInclude(p => p.Weeks)
+                    .ThenInclude(w => w.Sessions)
+                        .ThenInclude(s => s.PrescribedExercises)
+            .OrderBy(a => a.StartDate)
+            .ToListAsync(cancellationToken);
     }
 
     public Task UpdateAsync(TrainingSession session, CancellationToken cancellationToken = default)
