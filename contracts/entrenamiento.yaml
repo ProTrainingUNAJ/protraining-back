@@ -284,7 +284,17 @@ paths:
         en kg en base a su 1RM vigente y redondeada al múltiplo de 2.5 kg más cercano.
         Si no cuenta con una marca previa, prescribe la serie como de referencia (isReference: true).
         Si hoy es día de descanso o no tiene sesión programada, responde 200 con la lista de ejercicios vacía.
+        Con `date` devuelve la rutina de otro día (calendario del atleta), con los récords vigentes de hoy.
       operationId: getMyTodayRoutine
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-10-23"
+          description: Fecha de la rutina (hora Argentina, UTC-3). Si no se manda, se usa la de hoy.
       responses:
         "200":
           description: OK
@@ -321,6 +331,14 @@ paths:
             type: string
             format: uuid
           description: Identificador del atleta
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-10-23"
+          description: Fecha de la rutina (hora Argentina, UTC-3). Si no se manda, se usa la de hoy.
       responses:
         "200":
           description: OK
@@ -487,6 +505,41 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/schedule:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Agenda del PF para una fecha
+      description: >
+        Devuelve las sesiones que tocan en la fecha indicada en todas las asignaciones del PF
+        (a categorías o a atletas), con la misma regla que la rutina del atleta: la semana sale de los
+        días desde el inicio de la asignación y la sesión, del día de la semana. Requiere rol PreparadorFisico.
+      operationId: getTrainingPlanSchedule
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-10-23"
+          description: Fecha a consultar (hora Argentina, UTC-3).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduledSession'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
 
   /api/v1/training-plans/assignments:
     post:
@@ -952,6 +1005,12 @@ components:
           type: string
           nullable: true
           example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+        images:
+          type: array
+          description: Fotos del ejercicio (inicio y fin del movimiento), las mismas que la biblioteca.
+          items:
+            type: string
+          example: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"]
         sets:
           type: integer
           example: 4
@@ -1385,6 +1444,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrainingWeekDetail'
+
+    ScheduledSession:
+      type: object
+      description: Sesión que toca en una fecha para una asignación del PF. La asignación es a una categoría o a un atleta.
+      required:
+        - assignmentId
+        - trainingPlanId
+        - planName
+        - sessionId
+        - sessionName
+        - weekNumber
+        - exerciseCount
+      properties:
+        assignmentId:
+          type: string
+          format: uuid
+        trainingPlanId:
+          type: string
+          format: uuid
+        planName:
+          type: string
+          example: "Fuerza base"
+        sessionId:
+          type: string
+          format: uuid
+        sessionName:
+          type: string
+          example: "Día C · Fuerza"
+        weekNumber:
+          type: integer
+          example: 1
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        exerciseCount:
+          type: integer
+          example: 3
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Controlar la técnica en el descenso."
 
     TrainingPlanSummary:
       type: object
