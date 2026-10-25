@@ -10,7 +10,13 @@ namespace API.Controllers;
 [Route("api/v1/assistant")]
 public sealed class AssistantController(SuggestRoutineUseCase suggestRoutineUseCase) : ControllerBase
 {
+    /// <summary>
+    /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
+    /// </summary>
     [HttpPost("suggest-routine")]
+    [ProducesResponseType(typeof(RoutineSuggestionResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<RoutineSuggestionResponseDto>> SuggestRoutine(
         [FromBody] RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken)
