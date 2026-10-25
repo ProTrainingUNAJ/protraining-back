@@ -24,6 +24,7 @@ public sealed class ResilientAiService : IAiService
     private readonly IAiResponseCache? _responseCache;
     private readonly ICurrentUser? _currentUser;
     private readonly IAiAuditService? _auditService;
+    private readonly IExerciseCatalogService? _catalogService;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -31,7 +32,7 @@ public sealed class ResilientAiService : IAiService
         GeminiClient geminiClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, logger)
     {
     }
 
@@ -41,7 +42,7 @@ public sealed class ResilientAiService : IAiService
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, logger)
     {
     }
 
@@ -52,7 +53,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, logger)
     {
     }
 
@@ -65,7 +66,21 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        ILogger<ResilientAiService> logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, logger)
     {
     }
 
@@ -74,7 +89,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, null, null, logger)
+        : this(providers, semanticValidator, responseCache, null, null, null, logger)
     {
     }
 
@@ -84,6 +99,18 @@ public sealed class ResilientAiService : IAiService
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
+        ILogger<ResilientAiService> logger)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
     {
         _providers = providers;
@@ -91,6 +118,7 @@ public sealed class ResilientAiService : IAiService
         _responseCache = responseCache;
         _currentUser = currentUser;
         _auditService = auditService;
+        _catalogService = catalogService;
         _logger = logger;
     }
 
@@ -148,6 +176,33 @@ public sealed class ResilientAiService : IAiService
                     AthleteId = request.AthleteId,
                     ProviderUsed = providerUsedWithCache
                 };
+            }
+        }
+
+        // 2. Enriquecer la solicitud con los ejercicios disponibles del catálogo oficial (#087 · KAN-382)
+        if (request.AvailableExercises == null && _catalogService != null)
+        {
+            try
+            {
+                var allExercises = await _catalogService.GetAllAsync(cancellationToken);
+                if (allExercises is { Count: > 0 })
+                {
+                    var filtered = RoutinePromptBuilder.FilterRelevantExercises(allExercises, request.MuscleGroupEmphasis);
+                    request = request with { AvailableExercises = filtered };
+                    _logger.LogInformation(
+                        "Se enriqueció la solicitud con {Count} ejercicios del catálogo oficial para armar el prompt de IA.",
+                        filtered.Count);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudieron obtener ejercicios del catálogo oficial desde el microservicio de Entrenamiento. Continuando con prompt general.");
             }
         }
 
