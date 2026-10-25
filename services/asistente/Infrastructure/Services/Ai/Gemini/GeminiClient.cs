@@ -27,7 +27,7 @@ public sealed class GeminiClient(
     {
         cancellationToken.ThrowIfCancellationRequested();
         var stopwatch = Stopwatch.StartNew();
-        var prompt = BuildAnonymousPrompt(request);
+        var prompt = RoutinePromptBuilder.BuildPrompt(request, request.AvailableExercises);
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
@@ -147,35 +147,6 @@ public sealed class GeminiClient(
                 errorMessage: ex.Message));
             return null;
         }
-    }
-
-    private static string BuildAnonymousPrompt(RoutineSuggestionRequestDto request)
-    {
-        var muscles = request.MuscleGroupEmphasis is { Count: > 0 }
-            ? string.Join(", ", request.MuscleGroupEmphasis)
-            : "General";
-
-        return $$"""
-            Eres un asistente de entrenamiento para preparadores físicos.
-            Diseña una propuesta de rutina para el atleta con identificador anónimo '{{request.AthleteId}}'.
-            Objetivo: {{request.Goal}}
-            Énfasis muscular: {{muscles}}
-
-            REGLA ESTRICTA DE PRIVACIDAD: No incluyas nombres de personas.
-            Responde ÚNICAMENTE con un JSON que tenga esta estructura exacta:
-            {
-              "tituloPropuesto": "Título de la rutina",
-              "resumenJustificacion": "Explicación breve del criterio y adaptaciones aplicadas",
-              "ejercicios": [
-                {
-                  "ejercicioNombre": "Nombre del ejercicio",
-                  "series": 3,
-                  "repeticiones": 10,
-                  "porcentajeSugerido": 70.0
-                }
-              ]
-            }
-            """;
     }
 
     private async Task<RoutineSuggestionResponseDto?> ParseAndLogGeminiResponseAsync(

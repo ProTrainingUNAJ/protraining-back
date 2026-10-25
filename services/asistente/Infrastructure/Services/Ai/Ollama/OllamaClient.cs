@@ -26,7 +26,7 @@ public sealed class OllamaClient(
     {
         cancellationToken.ThrowIfCancellationRequested();
         var stopwatch = Stopwatch.StartNew();
-        var prompt = BuildAnonymousPrompt(request);
+        var prompt = RoutinePromptBuilder.BuildPrompt(request, request.AvailableExercises);
 
         try
         {
@@ -173,33 +173,5 @@ public sealed class OllamaClient(
                 errorMessage: ex.Message));
             return null;
         }
-    }
-
-    private static string BuildAnonymousPrompt(RoutineSuggestionRequestDto request)
-    {
-        var muscles = request.MuscleGroupEmphasis is { Count: > 0 }
-            ? string.Join(", ", request.MuscleGroupEmphasis)
-            : "General";
-
-        return $$"""
-            Eres un asistente para preparadores físicos.
-            Diseña una propuesta de rutina para el atleta '{{request.AthleteId}}'.
-            Objetivo: {{request.Goal}}
-            Énfasis muscular: {{muscles}}
-
-            Responde únicamente con un JSON con esta estructura exacta:
-            {
-              "tituloPropuesto": "Título de la rutina",
-              "resumenJustificacion": "Explicación breve del criterio usado",
-              "ejercicios": [
-                {
-                  "ejercicioNombre": "Nombre del ejercicio",
-                  "series": 3,
-                  "repeticiones": 10,
-                  "porcentajeSugerido": 70.0
-                }
-              ]
-            }
-            """;
     }
 }

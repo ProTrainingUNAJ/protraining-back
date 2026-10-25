@@ -5,7 +5,8 @@ namespace Application.DTOs.Ai;
 public sealed record RoutineSuggestionRequestDto(
     [property: JsonPropertyName("athleteId")] Guid AthleteId,
     [property: JsonPropertyName("goal")] string Goal,
-    [property: JsonPropertyName("muscleGroupEmphasis")] List<string>? MuscleGroupEmphasis = null
+    [property: JsonPropertyName("muscleGroupEmphasis")] List<string>? MuscleGroupEmphasis = null,
+    [property: JsonIgnore] IReadOnlyList<CatalogExerciseDto>? AvailableExercises = null
 );
 
 public sealed record SuggestedExerciseDto(
