@@ -16,6 +16,8 @@ public sealed class SuggestRoutineUseCase(IAiService aiService)
         if (string.IsNullOrWhiteSpace(request.Goal))
             throw new DomainException("El objetivo de entrenamiento es obligatorio.");
 
-        return await aiService.SuggestRoutineAsync(request, cancellationToken);
+        var normalizedRequest = request with { Goal = request.Goal.Trim() };
+
+        return await aiService.SuggestRoutineAsync(normalizedRequest, cancellationToken);
     }
 }
