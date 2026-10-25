@@ -23,5 +23,6 @@ public sealed record RoutineSuggestionResponseDto(
     [property: JsonPropertyName("proposedTitle")] string ProposedTitle,
     [property: JsonPropertyName("justificationSummary")] string JustificationSummary,
     [property: JsonPropertyName("exercises")] List<SuggestedExerciseDto> Exercises,
-    [property: JsonPropertyName("aiProvider")] string ProviderUsed
+    [property: JsonPropertyName("aiProvider")] string ProviderUsed,
+    [property: JsonPropertyName("id")] Guid? Id = null
 );
