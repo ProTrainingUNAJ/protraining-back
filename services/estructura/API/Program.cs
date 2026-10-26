@@ -59,12 +59,12 @@ builder.Services.AddControllers()
                     entry => JsonNamingPolicy.CamelCase.ConvertName(entry.Key),
                     entry => entry.Value!.Errors.Select(error =>
                         string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? "El valor no es valido. Comprueba el JSON y los tipos de los campos."
+                            ? "El valor no es válido. Comprueba el JSON y los tipos de los campos."
                             : error.ErrorMessage).ToArray());
             return new BadRequestObjectResult(new ValidationProblemDetails(errors)
             {
                 Status = 400,
-                Title = "Solicitud no valida."
+                Title = "Solicitud no válida."
             });
         };
     });
@@ -119,7 +119,7 @@ if (!Uri.TryCreate(seguimientoUrl, UriKind.Absolute, out var seguimientoUri))
 {
     throw new InvalidOperationException("Falta la variable de configuracion Services__Seguimiento__BaseUrl (URL absoluta).");
 }
-
+builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddTransient<ServiceAuthenticationHandler>();
 
 builder.Services.AddHttpClient<ISessionScheduleService, SessionScheduleService>(client => client.BaseAddress = entrenamientoUri)

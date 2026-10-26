@@ -37,7 +37,7 @@ public class WellnessCheckInServiceTests
         var date = new DateOnly(2026, 10, 20);
 
         var handler = new FakeHttpMessageHandler(_ => Json(HttpStatusCode.OK,
-            $$"""[{"date":"{{date:yyyy-MM-dd}}"}]"""));
+            $$"""["{{athleteId}}"]"""));
         var service = CreateService(handler);
 
         // act
@@ -45,7 +45,8 @@ public class WellnessCheckInServiceTests
 
         // assert
         Assert.True(result);
-        Assert.Equal($"http://seguimiento:8080/api/v1/athletes/{athleteId}/check-ins?date=2026-10-20&limit=1", handler.LastRequest!.RequestUri!.ToString());
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("http://seguimiento:8080/api/v1/internal/check-ins/done", handler.LastRequest!.RequestUri!.ToString());
     }
 
     [Fact]
@@ -77,7 +78,7 @@ public class WellnessCheckInServiceTests
     [Fact]
     public async Task Given_SeguimientoDownOrTimeout_When_HasCompletedCheckIn_Then_DoesNotThrow_AndReturns_False()
     {
-        // criterio de aceptacion: si Seguimiento se cae o no responde, el worker no se interrumpe
+        // Criterio de aceptacion: si Seguimiento se cae o no responde, el worker no se interrumpe
         var athleteId = Guid.NewGuid();
         var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("Seguimiento timeout"));
         var service = CreateService(handler);

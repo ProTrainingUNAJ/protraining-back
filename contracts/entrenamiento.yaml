@@ -1,4 +1,4 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: ProTraining - Microservicio de Entrenamiento
   description: >
@@ -630,13 +630,15 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/training-sessions/scheduled-athletes:
+  /api/v1/internal/training-sessions/athletes-with-session:
     get:
       tags:
         - Routines and Templates
-      summary: Obtener atletas con sesion programada para una fecha
-      description: Devuelve los IDs de los atletas que tienen al menos una sesion de entrenamiento programada para la fecha indicada (KAN-528).
+      summary: Obtener atletas con sesión programada para una fecha
+      description: Endpoint interno para microservicios con rol Servicio (worker de recordatorios). Devuelve los IDs de los atletas que tienen sesión ese día.
       operationId: getScheduledAthletes
+      security:
+        - BearerAuth: []
       parameters:
         - name: date
           in: query
@@ -644,11 +646,19 @@ paths:
           schema:
             type: string
             format: date
-            example: "2026-10-20"
-          description: Fecha de la sesion a consultar (YYYY-MM-DD).
+            example: "2026-10-26"
+          description: Fecha de la sesión a consultar (YYYY-MM-DD).
+        - name: pfId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+            example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          description: Identificador del preparador físico para aislar datos.
       responses:
         "200":
-          description: Lista de IDs de atletas con sesion programada.
+          description: Lista de IDs de atletas con sesión programada.
           content:
             application/json:
               schema:

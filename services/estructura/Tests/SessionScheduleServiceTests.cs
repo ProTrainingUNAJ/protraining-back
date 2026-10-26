@@ -35,6 +35,7 @@ public class SessionScheduleServiceTests
         // arrange
         var athleteId1 = Guid.NewGuid();
         var athleteId2 = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
         var date = new DateOnly(2026, 10, 20);
 
         var handler = new FakeHttpMessageHandler(_ => Json(HttpStatusCode.OK,
@@ -42,13 +43,13 @@ public class SessionScheduleServiceTests
         var service = CreateService(handler);
 
         // act
-        var result = await service.GetAthletesWithScheduledSessionAsync(date);
+        var result = await service.GetAthletesWithScheduledSessionAsync(date, pfId);
 
         // assert
         Assert.Equal(2, result.Count);
         Assert.Contains(athleteId1, result);
         Assert.Contains(athleteId2, result);
-        Assert.Equal("http://entrenamiento:8080/api/v1/training-sessions/scheduled-athletes?date=2026-10-20", handler.LastRequest!.RequestUri!.ToString());
+        Assert.Equal($"http://entrenamiento:8080/api/v1/internal/training-sessions/athletes-with-session?date=2026-10-20&pfId={pfId}", handler.LastRequest!.RequestUri!.ToString());
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class SessionScheduleServiceTests
     [Fact]
     public async Task Given_EntrenamientoDownOrTimeout_When_GetAthletesWithScheduledSession_Then_DoesNotThrow_AndReturns_Empty()
     {
-        // criterio de aceptacion: si Entrenamiento se cae o no responde, el worker no se interrumpe
+        // Criterio de aceptacion: si Entrenamiento se cae o no responde, el worker no se interrumpe
         var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("Connection refused"));
         var service = CreateService(handler);
 
@@ -74,3 +75,4 @@ public class SessionScheduleServiceTests
         Assert.Empty(result);
     }
 }
+
