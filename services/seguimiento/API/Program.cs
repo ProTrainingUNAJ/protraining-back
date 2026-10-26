@@ -7,6 +7,8 @@ using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Injuries.CreateAthleteInjury;
+using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Domain.Services;
 using Infrastructure;
@@ -61,6 +63,9 @@ builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
 // Catálogo de tests físicos por capacidad motora (KAN-333).
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
+// Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
+builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
+builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();

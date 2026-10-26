@@ -1,0 +1,96 @@
+using Domain.Entities;
+using Domain.Exceptions;
+
+namespace Seguimiento.Tests;
+
+// Reglas de negocio de KAN-419: toda lesión nace en Active, con zona y descripción
+// obligatorias y una fecha de retorno estimada posterior a la de la lesión.
+// El rechazo es del dominio (DomainException → 400 con mensaje en español).
+public class AthleteInjuryTests
+{
+    private static readonly Guid AthleteId = Guid.NewGuid();
+    private static readonly DateTime InjuryDate = new(2026, 10, 20, 0, 0, 0, DateTimeKind.Unspecified);
+
+    private static AthleteInjury Crear(DateTime? estimatedReturnDate, string zone = "isquiotibiales", string description = "Gradación 3 tras sprint") =>
+        AthleteInjury.Create(AthleteId, zone, description, InjuryDate, estimatedReturnDate);
+
+    [Fact]
+    public void Create_WithValidData_StartsInActiveWithEstimatedReturnDate()
+    {
+        var injury = Crear(new DateTime(2026, 11, 5));
+
+        Assert.Equal(InjuryStatus.Active, injury.Status);
+        Assert.Equal(AthleteId, injury.AthleteId);
+        Assert.Equal(InjuryDate, injury.InjuryDate);
+        Assert.Equal(new DateTime(2026, 11, 5), injury.EstimatedReturnDate);
+        Assert.Null(injury.ClearedAt);
+    }
+
+    [Fact]
+    public void Create_WithValidData_TrimsTextAndNormalizesDatesToDay()
+    {
+        var injury = AthleteInjury.Create(
+            AthleteId,
+            "  isquiotibiales  ",
+            "  Molestia al correr  ",
+            InjuryDate.AddHours(18),
+            InjuryDate.AddDays(10).AddHours(23));
+
+        Assert.Equal("isquiotibiales", injury.Zone);
+        Assert.Equal("Molestia al correr", injury.Description);
+        Assert.Equal(InjuryDate, injury.InjuryDate);
+        Assert.Equal(InjuryDate.AddDays(10), injury.EstimatedReturnDate);
+    }
+
+    [Fact]
+    public void Create_WithoutEstimatedReturnDate_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(() => Crear(estimatedReturnDate: null));
+
+        Assert.Equal("La fecha de retorno estimada es obligatoria.", exception.Message);
+    }
+
+    [Fact]
+    public void Create_WithEstimatedReturnDateBeforeInjuryDate_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => Crear(InjuryDate.AddDays(-1)));
+
+        Assert.Equal("La fecha de retorno estimada debe ser posterior a la fecha de la lesión.", exception.Message);
+    }
+
+    [Fact]
+    public void Create_WithEstimatedReturnDateSameAsInjuryDate_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(() => Crear(InjuryDate));
+
+        Assert.Equal("La fecha de retorno estimada debe ser posterior a la fecha de la lesión.", exception.Message);
+    }
+
+    [Fact]
+    public void Create_WithEmptyZone_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => Crear(InjuryDate.AddDays(15), zone: "   "));
+
+        Assert.Equal("La zona de la lesión es obligatoria.", exception.Message);
+    }
+
+    [Fact]
+    public void Create_WithEmptyDescription_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => Crear(InjuryDate.AddDays(15), description: string.Empty));
+
+        Assert.Equal("La descripción de la lesión es obligatoria.", exception.Message);
+    }
+
+    [Fact]
+    public void Create_WithEmptyAthleteId_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => AthleteInjury.Create(Guid.Empty, "isquiotibiales", "Dolor", InjuryDate, InjuryDate.AddDays(15)));
+
+        Assert.Equal("El identificador del atleta es inválido.", exception.Message);
+    }
+}
