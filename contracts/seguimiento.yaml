@@ -77,6 +77,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/internal/check-ins/done:
+    post:
+      tags:
+        - Check-in and Traffic Light
+      summary: Consultar atletas que completaron el check-in en una fecha
+      description: Endpoint interno para microservicios con rol Servicio (worker de recordatorios). Devuelve los IDs de los atletas que ya completaron el check-in.
+      operationId: getCompletedCheckIns
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - date
+                - athleteIds
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2026-10-26"
+                pfId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                athleteIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Lista de IDs de atletas que ya completaron su check-in.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
 
   /api/v1/athletes/{athleteId}/check-ins:
     get:

@@ -11,17 +11,29 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Services;
 
 /// <summary>
-/// cliente HTTP hacia Entrenamiento para consultar atletas con sesion programada
+/// Cliente HTTP hacia Entrenamiento para consultar atletas con sesión programada
 /// </summary>
 public sealed class SessionScheduleService(
     HttpClient httpClient,
     ILogger<SessionScheduleService> logger) : ISessionScheduleService
 {
-    public const string ScheduledAthletesPath = "api/v1/training-sessions/scheduled-athletes";
+    public const string ScheduledAthletesPath = "api/v1/internal/training-sessions/athletes-with-session";
 
-    public async Task<IReadOnlyList<Guid>> GetAthletesWithScheduledSessionAsync(DateOnly date, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Guid>> GetAthletesWithScheduledSessionAsync(
+        DateOnly date,
+        CancellationToken cancellationToken = default)
     {
-        var url = $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}";
+        return await GetAthletesWithScheduledSessionAsync(date, null, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetAthletesWithScheduledSessionAsync(
+        DateOnly date,
+        Guid? pfId,
+        CancellationToken cancellationToken = default)
+    {
+        var url = pfId.HasValue
+            ? $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}&pfId={pfId.Value}"
+            : $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}";
 
         try
         {
@@ -39,7 +51,7 @@ public sealed class SessionScheduleService(
                 return Array.Empty<Guid>();
             }
 
-            logger.LogWarning("Entrenamiento respondio {StatusCode} al consultar sesiones de la fecha {Date}.", response.StatusCode, date);
+            logger.LogWarning("Entrenamiento respondió {StatusCode} al consultar sesiones de la fecha {Date}.", response.StatusCode, date);
             return Array.Empty<Guid>();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -48,8 +60,8 @@ public sealed class SessionScheduleService(
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            // resiliencia: si Entrenamiento no responde, el worker no se cae, loguea y continua
-            logger.LogWarning(ex, "Entrenamiento no responde o no esta disponible al consultar sesiones para {Date}.", date);
+            // Resiliencia: si Entrenamiento no responde, el worker no se cae, loguea y continúa
+            logger.LogWarning(ex, "Entrenamiento no responde o no está disponible al consultar sesiones para {Date}.", date);
             return Array.Empty<Guid>();
         }
     }
