@@ -135,6 +135,32 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
             log.AccessedByUserId == _pfAUserId &&
             log.Action == MedicalRecordAuditLog.ReadAction &&
             log.Justification == justification);
+
+        // assert: verificar en la base que las filas de auditoría tienen el pf_id del token, athlete_id, motivo y fecha dentro del último minuto
+        var nowUtc = DateTime.UtcNow;
+        using var verifyDbContext = _factory.CreateDbContext(_pfAId);
+        var persistedAuditLogs = await verifyDbContext.MedicalRecordAuditLogs
+            .AsNoTracking()
+            .Where(log => log.AthleteId == athlete.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, persistedAuditLogs.Count);
+        Assert.All(persistedAuditLogs, log =>
+        {
+            Assert.Equal(_pfAId, log.PfId);
+            Assert.Equal(athlete.Id, log.AthleteId);
+            Assert.Equal(_pfAUserId, log.AccessedByUserId);
+            Assert.Null(log.DeletedAt);
+            Assert.InRange(nowUtc - log.CreatedAt, TimeSpan.FromSeconds(-5), TimeSpan.FromMinutes(1));
+        });
+
+        Assert.Contains(persistedAuditLogs, log =>
+            log.Action == MedicalRecordAuditLog.CreateAction &&
+            log.Justification == "Carga inicial de apto físico y antecedentes deportivos");
+
+        Assert.Contains(persistedAuditLogs, log =>
+            log.Action == MedicalRecordAuditLog.ReadAction &&
+            log.Justification == justification);
     }
 
     [Fact]
@@ -179,6 +205,53 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         var logsCount = await verifyContext.MedicalRecordAuditLogs
             .IgnoreQueryFilters()
             .CountAsync(log => log.AthleteId == minor.Id);
+        Assert.Equal(0, logsCount);
+    }
+
+    [Fact]
+    public async Task Given_AdultAthleteWithoutSignedConsent_When_PfAttemptsToReadOrUpdateMedicalRecord_Then_Returns400BadRequestAndDoesNotInsertAuditLog()
+    {
+        // arrange: dar de alta un atleta adulto que aún no ha firmado el consentimiento digital
+        var adult = Athlete.CreateAdult(
+            firstName: "Carlos",
+            lastName: "Tevez",
+            email: "carlos.tevez@club.com",
+            phone: "+5491144556677",
+            signsInitialConsent: false);
+
+        using (var seedContext = _factory.CreateDbContext(_pfAId))
+        {
+            seedContext.Athletes.Add(adult);
+            await seedContext.SaveChangesAsync();
+        }
+
+        // act: intentar leer y editar la ficha médica con motivo válido pero sin consentimiento firmado del adulto
+        var getResponse = await _clientPfA.GetAsync(
+            $"/api/v1/athletes/{adult.Id}/medical-record?justification={Uri.EscapeDataString("Consulta rutinaria")}");
+
+        var putResponse = await _clientPfA.PutAsJsonAsync(
+            $"/api/v1/athletes/{adult.Id}/medical-record",
+            new UpdateMedicalRecordRequest(
+                Justification: "Carga inicial de apto físico",
+                MedicalHistory: "Sin antecedentes",
+                Surgeries: null,
+                Pathologies: null,
+                HasPhysicalFitnessCertificate: true));
+
+        // assert: bloqueado con 400 Bad Request tanto en lectura como en edición, y sin registro de auditoría
+        Assert.Equal(HttpStatusCode.BadRequest, getResponse.StatusCode);
+        var getProblem = await getResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(getProblem);
+        Assert.Contains("consentimiento digital", getProblem.Title ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.BadRequest, putResponse.StatusCode);
+        var putProblem = await putResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(putProblem);
+        Assert.Contains("consentimiento digital", putProblem.Title ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        using var verifyContext = _factory.CreateDbContext(_pfAId);
+        var logsCount = await verifyContext.MedicalRecordAuditLogs
+            .CountAsync(log => log.AthleteId == adult.Id);
         Assert.Equal(0, logsCount);
     }
 

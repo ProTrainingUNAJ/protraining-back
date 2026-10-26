@@ -207,6 +207,16 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
 
     public AppDbContext CreateDbContext(Guid? overridePfId = null)
     {
+        if (overridePfId.HasValue)
+        {
+            var currentUserMock = new Moq.Mock<ICurrentUser>();
+            currentUserMock.Setup(u => u.PfId).Returns(overridePfId.Value);
+            var options = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(_sqliteConnection)
+                .Options;
+            return new AppDbContext(options, currentUserMock.Object);
+        }
+
         var scope = _server.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         return context;

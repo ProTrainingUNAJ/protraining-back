@@ -6,6 +6,8 @@ using Infrastructure.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Npgsql;
+using Testcontainers.PostgreSql;
 
 namespace Estructura.Tests;
 
@@ -239,6 +241,77 @@ public sealed class MedicalRecordAuditLogTests : IAsyncDisposable
         Assert.Contains("BEFORE UPDATE OR DELETE ON medical_record_audit_logs", triggerSql);
         Assert.Contains("EXECUTE FUNCTION prevent_medical_record_audit_logs_modification()", triggerSql);
         Assert.Contains("BEFORE TRUNCATE ON medical_record_audit_logs", triggerSql);
+    }
+
+    [Fact]
+    public async Task Given_RealPostgreSqlWithMigrations_When_AttemptingSqlUpdateOrDeleteOnAuditLog_Then_TriggerRejectsOperationAndRecordRemainsIntact()
+    {
+        // arrange: levantar PostgreSQL real con Testcontainers para validar el trigger PL/pgSQL trg_medical_record_audit_logs_append_only
+        await using var postgresContainer = new PostgreSqlBuilder()
+            .WithImage("postgres:16-alpine")
+            .Build();
+
+        await postgresContainer.StartAsync();
+
+        var pfId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var connectionString = postgresContainer.GetConnectionString();
+
+        await using var dbContext = CreatePostgresDbContextForPf(connectionString, pfId);
+        await dbContext.Database.MigrateAsync();
+
+        var athlete = Athlete.CreateAdult("Julian", "Alvarez", "julian@club.com", "+5491133445566", signsInitialConsent: true);
+        dbContext.Athletes.Add(athlete);
+
+        var repository = new MedicalRecordAuditLogRepository(dbContext);
+        var auditLog = MedicalRecordAuditLog.CreateRead(
+            athleteId: athlete.Id,
+            accessedByUserId: userId,
+            justification: "Revisión de apto físico previo a competencia");
+
+        await repository.AddAsync(auditLog);
+        await dbContext.SaveChangesAsync();
+
+        // act & assert 1: un UPDATE directo contra PostgreSQL falla por el trigger prevent_medical_record_audit_logs_modification()
+        var updateException = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE medical_record_audit_logs SET justification = 'Justificación adulterada' WHERE id = {auditLog.Id}"));
+        Assert.Equal("23000", updateException.SqlState);
+        Assert.Contains("inmutables", updateException.MessageText, StringComparison.OrdinalIgnoreCase);
+
+        // act & assert 2: un DELETE directo contra PostgreSQL falla por el trigger prevent_medical_record_audit_logs_modification()
+        var deleteException = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM medical_record_audit_logs WHERE id = {auditLog.Id}"));
+        Assert.Equal("23000", deleteException.SqlState);
+        Assert.Contains("inmutables", deleteException.MessageText, StringComparison.OrdinalIgnoreCase);
+
+        // verificar que la fila sigue intacta en PostgreSQL con el pf_id, athlete_id, motivo y fecha dentro del último minuto
+        await using var verifyContext = CreatePostgresDbContextForPf(connectionString, pfId);
+        var persistedLog = await verifyContext.MedicalRecordAuditLogs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(log => log.Id == auditLog.Id);
+
+        Assert.NotNull(persistedLog);
+        Assert.Equal(pfId, persistedLog.PfId);
+        Assert.Equal(athlete.Id, persistedLog.AthleteId);
+        Assert.Equal(userId, persistedLog.AccessedByUserId);
+        Assert.Equal(MedicalRecordAuditLog.ReadAction, persistedLog.Action);
+        Assert.Equal("Revisión de apto físico previo a competencia", persistedLog.Justification);
+        Assert.Null(persistedLog.DeletedAt);
+        Assert.InRange(DateTime.UtcNow - persistedLog.CreatedAt, TimeSpan.FromSeconds(-5), TimeSpan.FromMinutes(1));
+    }
+
+    private static AppDbContext CreatePostgresDbContextForPf(string connectionString, Guid pfId)
+    {
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        return new AppDbContext(options, currentUserMock.Object);
     }
 
     private AppDbContext CreateDbContextForPf(Guid pfId)
