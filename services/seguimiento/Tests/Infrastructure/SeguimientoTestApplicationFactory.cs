@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using API.Controllers.Categories;
 using API.Extensions;
 using API.Middleware;
@@ -7,6 +9,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
+using Application.UseCases.Injuries.UpdateInjuryStatus;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Domain.Services;
 using Infrastructure.Data;
@@ -92,6 +95,9 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();
                 services.AddScoped<ListAthleteInjuriesQueryHandler>();
 
+                // Máquina de estados de las lesiones (KAN-420): mismo registro que en Program.cs.
+                services.AddScoped<UpdateInjuryStatusCommandHandler>();
+
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.
                 services.AddTransient<ForwardAuthorizationHandler>();
@@ -103,6 +109,10 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Autenticación y controllers reales: el endpoint exige rol PreparadorFisico.
                 services.AddJwtAuthentication(configuration);
                 services.AddControllers()
+                    // Mismo converter que Program.cs: los enums del contrato viajan como texto
+                    // ("InRecovery") y no como número (KAN-420).
+                    .AddJsonOptions(options =>
+                        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
                     .AddApplicationPart(typeof(CategoriesTrafficLightController).Assembly);
             })
             .Configure(app =>

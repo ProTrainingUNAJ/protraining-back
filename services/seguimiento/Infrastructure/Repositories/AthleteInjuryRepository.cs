@@ -27,4 +27,10 @@ public sealed class AthleteInjuryRepository(AppDbContext context) : IAthleteInju
         context.AthleteInjuries.Add(injury);
         return Task.CompletedTask;
     }
+
+    public Task AddStatusChangeAsync(AthleteInjuryStatusChange statusChange, CancellationToken cancellationToken = default)
+    {
+        context.AthleteInjuryStatusChanges.Add(statusChange);
+        return Task.CompletedTask;
+    }
 }
