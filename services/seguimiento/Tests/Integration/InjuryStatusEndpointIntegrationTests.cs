@@ -88,17 +88,22 @@ public sealed class InjuryStatusEndpointIntegrationTests
         Assert.Equal(400, problem!.Status);
         Assert.Equal(MensajeSaltoDirecto, problem.Title);
 
-        // La lesión queda intacta y no se escribe ninguna fila de historial.
+        // La lesión queda intacta y el salto no agrega ninguna fila de transición:
+        // solo está la fila inicial del alta (null → Active).
         var saved = await factory.ExecuteInDbContextAsync(db =>
             db.AthleteInjuries.IgnoreQueryFilters().SingleAsync(injury => injury.Id == injuryId));
 
         Assert.Equal(InjuryStatus.Active, saved.Status);
         Assert.Null(saved.ClearedAt);
 
-        var historyCount = await factory.ExecuteInDbContextAsync(db =>
-            db.AthleteInjuryStatusChanges.IgnoreQueryFilters().CountAsync(c => c.InjuryId == injuryId));
+        var history = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+                .Where(c => c.InjuryId == injuryId)
+                .ToListAsync());
 
-        Assert.Equal(0, historyCount);
+        Assert.Single(history);
+        Assert.Null(history[0].FromStatus);
+        Assert.Equal(InjuryStatus.Active, history[0].ToStatus);
     }
 
     // ---------- CA2: alta en dos pasos con nota clínica ----------
@@ -131,15 +136,19 @@ public sealed class InjuryStatusEndpointIntegrationTests
         Assert.Equal("MedicallyCleared", dtoAlta!.Status);
         Assert.NotNull(dtoAlta.ClearedAt);
 
-        // Una fila por cambio, con el pf del token como autor y la nota cargada.
+        // Una fila al crear (null → Active) y una por cambio, con el pf del token como autor
+        // y la nota cargada.
         var history = await factory.ExecuteInDbContextAsync(db =>
             db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
                 .Where(c => c.InjuryId == injuryId)
                 .ToListAsync());
 
-        Assert.Equal(2, history.Count);
+        Assert.Equal(3, history.Count);
         Assert.All(history, c => Assert.Equal(_pfId, c.ChangedBy));
         Assert.All(history, c => Assert.NotEqual(default, c.ChangedAt));
+        Assert.Contains(history, c =>
+            c.FromStatus == null &&
+            c.ToStatus == InjuryStatus.Active);
         Assert.Contains(history, c =>
             c.FromStatus == InjuryStatus.Active &&
             c.ToStatus == InjuryStatus.InRecovery &&

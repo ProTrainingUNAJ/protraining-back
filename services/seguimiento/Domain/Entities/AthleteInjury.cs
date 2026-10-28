@@ -54,6 +54,25 @@ public class AthleteInjury : BaseEntity
         };
     }
 
+    // Fila inicial del historial que acompaña al alta (null → Active): asienta el origen
+    // del ciclo de vida y quién registró la lesión, así toda fila posterior de KAN-420
+    // cuelga de una historia completa (observación de la revisión de Enzo).
+    public AthleteInjuryStatusChange InitialStatusChange(Guid changedBy, DateTime changedAt)
+    {
+        if (changedBy == Guid.Empty)
+            throw new DomainException("El usuario que realiza el cambio es inválido.");
+
+        return new AthleteInjuryStatusChange
+        {
+            InjuryId = Id,
+            FromStatus = null,
+            ToStatus = InjuryStatus.Active,
+            Note = "Lesión registrada.",
+            ChangedAt = changedAt,
+            ChangedBy = changedBy
+        };
+    }
+
     // Únicas transiciones permitidas: la máquina de estados es estricta (KAN-420),
     // no se saltea la readaptación ni se vuelve atrás.
     private static readonly IReadOnlyDictionary<InjuryStatus, InjuryStatus> AllowedTransitions =

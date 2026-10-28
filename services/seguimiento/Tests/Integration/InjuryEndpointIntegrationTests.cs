@@ -58,10 +58,17 @@ public sealed class InjuryEndpointIntegrationTests
         Assert.Equal(InjuryStatus.Active, saved.Status);
         Assert.Equal(_pfId, saved.PfId);
 
-        // El alta no escribe filas en el historial: eso lo hace la máquina de estados (KAN-420).
-        var historyCount = await factory.ExecuteInDbContextAsync(db =>
-            db.AthleteInjuryStatusChanges.IgnoreQueryFilters().CountAsync());
-        Assert.Equal(0, historyCount);
+        // El alta escribe su fila inicial en el historial: null → Active con el PF del token
+        // (la máquina de estados agrega una fila más por cada transición, KAN-420).
+        var initialRow = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+                .Where(row => row.InjuryId == dto.Id)
+                .SingleAsync());
+
+        Assert.Null(initialRow.FromStatus);
+        Assert.Equal(InjuryStatus.Active, initialRow.ToStatus);
+        Assert.Equal(_pfId, initialRow.ChangedBy);
+        Assert.False(string.IsNullOrWhiteSpace(initialRow.Note));
     }
 
     [Fact]

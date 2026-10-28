@@ -1,4 +1,5 @@
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -7,30 +8,43 @@ using Moq;
 namespace Seguimiento.Tests;
 
 // KAN-419: el alta persiste la lesión en Active con su fecha de retorno estimada y,
-// si el dominio la rechaza, no escribe nada (ni la lesión ni el historial).
+// si el dominio la rechaza, no escribe nada (ni la lesión ni el historial). Además deja
+// la fila inicial null → Active del historial clínico (revisión de Enzo).
 public class CreateAthleteInjuryCommandHandlerTests
 {
     private static readonly Guid AthleteId = Guid.NewGuid();
+    private static readonly Guid PfId = Guid.NewGuid();
     private static readonly DateTime InjuryDate = new(2026, 10, 20);
     private static readonly DateTime EstimatedReturnDate = new(2026, 11, 10);
 
     private readonly Mock<IAthleteInjuryRepository> _injuries = new();
+    private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
 
+    public CreateAthleteInjuryCommandHandlerTests()
+    {
+        _currentUser.Setup(user => user.PfId).Returns(PfId);
+    }
+
     private CreateAthleteInjuryCommandHandler CreateHandler() =>
-        new(_injuries.Object, _unitOfWork.Object);
+        new(_injuries.Object, _currentUser.Object, _unitOfWork.Object);
 
     private static CreateAthleteInjuryCommand CommandValido(DateTime? estimatedReturnDate) =>
         new(AthleteId, "isquiotibiales", "Gradación 3 tras sprint", InjuryDate,
             estimatedReturnDate);
 
     [Fact]
-    public async Task HandleAsync_WithValidCommand_PersistsInjuryActiveAndSavesOnce()
+    public async Task HandleAsync_WithValidCommand_PersistsInjuryActiveAndItsInitialHistoryRow()
     {
         AthleteInjury? guardada = null;
         _injuries
             .Setup(repo => repo.AddAsync(It.IsAny<AthleteInjury>(), It.IsAny<CancellationToken>()))
             .Callback<AthleteInjury, CancellationToken>((injury, _) => guardada = injury)
+            .Returns(Task.CompletedTask);
+        AthleteInjuryStatusChange? filaInicial = null;
+        _injuries
+            .Setup(repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()))
+            .Callback<AthleteInjuryStatusChange, CancellationToken>((row, _) => filaInicial = row)
             .Returns(Task.CompletedTask);
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
@@ -47,7 +61,33 @@ public class CreateAthleteInjuryCommandHandlerTests
         Assert.Equal("Active", dto.Status);
         Assert.Equal(guardada.Id, dto.Id);
 
+        // Fila inicial del historial: null → Active, atada a la lesión y al PF del token.
+        Assert.NotNull(filaInicial);
+        Assert.Equal(guardada.Id, filaInicial!.InjuryId);
+        Assert.Null(filaInicial.FromStatus);
+        Assert.Equal(InjuryStatus.Active, filaInicial.ToStatus);
+        Assert.Equal(PfId, filaInicial.ChangedBy);
+        Assert.NotEqual(default, filaInicial.ChangedAt);
+
+        _injuries.Verify(
+            repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()),
+            Times.Once);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithoutPfInToken_ThrowsUnauthorizedWithoutSaving()
+    {
+        _currentUser.Setup(user => user.PfId).Returns((Guid?)null);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => CreateHandler().HandleAsync(CommandValido(EstimatedReturnDate)));
+
+        _injuries.Verify(repo => repo.AddAsync(It.IsAny<AthleteInjury>(), It.IsAny<CancellationToken>()), Times.Never);
+        _injuries.Verify(
+            repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -93,4 +93,34 @@ public class AthleteInjuryTests
 
         Assert.Equal("El identificador del atleta es inválido.", exception.Message);
     }
+
+    // ---------- Fila inicial del historial (revisión de Enzo) ----------
+
+    [Fact]
+    public void InitialStatusChange_WithValidPf_ReturnsNullToActiveRowTiedToTheInjury()
+    {
+        var injury = Crear(InjuryDate.AddDays(15));
+        var changedAt = new DateTime(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
+        var pfId = Guid.NewGuid();
+
+        var row = injury.InitialStatusChange(pfId, changedAt);
+
+        Assert.Equal(injury.Id, row.InjuryId);
+        Assert.Null(row.FromStatus);
+        Assert.Equal(InjuryStatus.Active, row.ToStatus);
+        Assert.Equal(pfId, row.ChangedBy);
+        Assert.Equal(changedAt, row.ChangedAt);
+        Assert.False(string.IsNullOrWhiteSpace(row.Note));
+    }
+
+    [Fact]
+    public void InitialStatusChange_WithEmptyPf_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var injury = Crear(InjuryDate.AddDays(15));
+
+        var exception = Assert.Throws<DomainException>(
+            () => injury.InitialStatusChange(Guid.Empty, DateTime.UtcNow));
+
+        Assert.Equal("El usuario que realiza el cambio es inválido.", exception.Message);
+    }
 }
