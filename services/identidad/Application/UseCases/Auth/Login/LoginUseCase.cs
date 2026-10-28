@@ -77,8 +77,10 @@ public class LoginUseCase(
                 user.Email!,
                 user.FullName,
                 generatedToken.Role,
-                user.PfId ?? user.Id
+                user.PfId ?? user.Id,
+                user.PhoneNumber
             )
         );
+
     }
 }
