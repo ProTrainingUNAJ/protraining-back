@@ -1,4 +1,4 @@
-﻿using Domain.Services;
+using Domain.Services;
 using Xunit;
 
 namespace Identidad.Tests;

@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 
 /// <summary>
 /// respuesta devuelta tras un inicio de sesion exitoso

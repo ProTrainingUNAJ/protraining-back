@@ -1,4 +1,4 @@
-using Serilog;
+﻿using Serilog;
 using Serilog.Context;
 using Serilog.Formatting.Compact;
 
@@ -56,6 +56,20 @@ app.Use(async (context, next) =>
 
 app.UseSerilogRequestLogging();
 app.UseCors(CorsPolicyName);
+
+// Bloquea cualquier acceso externo a endpoints internos
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+    if (path.StartsWith("/api/v1/internal/", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/api/v1/internal", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next();
+});
 
 app.MapHealthChecks("/health");
 app.MapReverseProxy();

@@ -10,4 +10,6 @@ public interface ITrainingSessionRepository
     // Asignaciones del PF con el plan completo (semanas y sesiones), para la agenda del día
     Task<List<PlanAssignment>> ListAssignmentsWithPlansAsync(CancellationToken cancellationToken = default);
     Task UpdateAsync(TrainingSession session, CancellationToken cancellationToken = default);
+    // Asignaciones de un PF específico (para el worker desatendido con rol Servicio)
+    Task<List<PlanAssignment>> ListAssignmentsWithPlansByPfIdAsync(Guid pfId, CancellationToken cancellationToken = default);
 }

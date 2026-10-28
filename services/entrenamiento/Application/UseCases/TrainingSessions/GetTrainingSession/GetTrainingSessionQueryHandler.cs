@@ -1,4 +1,4 @@
-﻿using Application.DTOs.TrainingSessions;
+using Application.DTOs.TrainingSessions;
 using Application.Interfaces.Persistence;
 
 namespace Application.UseCases.TrainingSessions.GetTrainingSession;

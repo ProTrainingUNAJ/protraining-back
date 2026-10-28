@@ -10,4 +10,5 @@ public interface IAthleteRepository
     Task<Athlete?> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default);
     Task AddAsync(Athlete athlete, CancellationToken cancellationToken = default);
     Task DeleteAsync(Athlete athlete, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetDistinctPfIdsAsync(CancellationToken cancellationToken = default);
 }

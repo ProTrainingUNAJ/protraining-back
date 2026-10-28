@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Reminders.SendDailyWellnessReminders;
 using Microsoft.EntityFrameworkCore;
@@ -15,20 +16,33 @@ namespace Estructura.Tests;
 
 public class SendDailyWellnessRemindersCommandHandlerTests
 {
+    private readonly Mock<IAthleteRepository> _mockAthleteRepository;
+    private readonly Mock<ICurrentUser> _mockCurrentUser;
     private readonly Mock<ISessionScheduleService> _mockSessionScheduleService;
     private readonly Mock<IWellnessCheckInService> _mockWellnessCheckInService;
     private readonly Mock<IWellnessReminderTracker> _mockReminderTracker;
     private readonly Mock<IPushNotificationService> _mockPushNotificationService;
     private readonly SendDailyWellnessRemindersCommandHandler _handler;
+    private readonly Guid _defaultPfId = Guid.NewGuid();
 
     public SendDailyWellnessRemindersCommandHandlerTests()
     {
+        _mockAthleteRepository = new Mock<IAthleteRepository>();
+        _mockCurrentUser = new Mock<ICurrentUser>();
         _mockSessionScheduleService = new Mock<ISessionScheduleService>();
         _mockWellnessCheckInService = new Mock<IWellnessCheckInService>();
         _mockReminderTracker = new Mock<IWellnessReminderTracker>();
         _mockPushNotificationService = new Mock<IPushNotificationService>();
 
+        _mockAthleteRepository.Setup(r => r.GetDistinctPfIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid> { _defaultPfId });
+
+        _mockCurrentUser.Setup(c => c.UsePfContext(It.IsAny<Guid>()))
+            .Returns(EmptyDisposable.Instance);
+
         _handler = new SendDailyWellnessRemindersCommandHandler(
+            _mockAthleteRepository.Object,
+            _mockCurrentUser.Object,
             _mockSessionScheduleService.Object,
             _mockWellnessCheckInService.Object,
             _mockReminderTracker.Object,
@@ -43,11 +57,12 @@ public class SendDailyWellnessRemindersCommandHandlerTests
         var athleteId = Guid.NewGuid();
         var today = new DateOnly(2026, 10, 16);
 
-        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, _defaultPfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid> { athleteId });
 
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athleteId, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _mockWellnessCheckInService.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, _defaultPfId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid>());
 
         _mockReminderTracker.Setup(s => s.HasReminderBeenSentAsync(athleteId, today, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
@@ -76,11 +91,12 @@ public class SendDailyWellnessRemindersCommandHandlerTests
         var athleteId = Guid.NewGuid();
         var today = new DateOnly(2026, 10, 16);
 
-        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, _defaultPfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid> { athleteId });
 
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athleteId, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _mockWellnessCheckInService.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, _defaultPfId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid> { athleteId });
 
         // act
         var result = await _handler.HandleAsync(new SendDailyWellnessRemindersCommand(today));
@@ -103,11 +119,12 @@ public class SendDailyWellnessRemindersCommandHandlerTests
         var athleteId = Guid.NewGuid();
         var today = new DateOnly(2026, 10, 16);
 
-        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, _defaultPfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid> { athleteId });
 
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athleteId, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _mockWellnessCheckInService.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, _defaultPfId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid>());
 
         _mockReminderTracker.Setup(s => s.HasReminderBeenSentAsync(athleteId, today, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -132,7 +149,7 @@ public class SendDailyWellnessRemindersCommandHandlerTests
         // arrange: dia sin sesiones programadas
         var today = new DateOnly(2026, 10, 16);
 
-        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, _defaultPfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid>());
 
         // act
@@ -159,16 +176,13 @@ public class SendDailyWellnessRemindersCommandHandlerTests
         var athlete4NoSession = Guid.NewGuid(); // sin sesion programada -> NO RECIBE
 
         // solo los atletas 1, 2 y 3 tienen sesion hoy
-        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, _defaultPfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid> { athlete1NeedsReminder, athlete2AlreadyCheckedIn, athlete3AlreadyReminded });
 
-        // estados de check-in
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athlete1NeedsReminder, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athlete2AlreadyCheckedIn, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        _mockWellnessCheckInService.Setup(s => s.HasCompletedCheckInAsync(athlete3AlreadyReminded, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        // estados de check-in: atleta 2 ya completo
+        _mockWellnessCheckInService.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, _defaultPfId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid> { athlete2AlreadyCheckedIn });
 
         // estados de recordatorios previos hoy
         _mockReminderTracker.Setup(s => s.HasReminderBeenSentAsync(athlete1NeedsReminder, today, It.IsAny<CancellationToken>()))
@@ -198,6 +212,45 @@ public class SendDailyWellnessRemindersCommandHandlerTests
     }
 
     [Fact]
+    public async Task Given_MultiplePfs_When_Handle_Then_ProcessesEachPfWithItsOwnContext()
+    {
+        // arrange: dos PFs distintos con un atleta cada uno
+        var today = new DateOnly(2026, 10, 16);
+        var pfA = Guid.NewGuid();
+        var pfB = Guid.NewGuid();
+        var athleteA = Guid.NewGuid();
+        var athleteB = Guid.NewGuid();
+
+        _mockAthleteRepository.Setup(r => r.GetDistinctPfIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid> { pfA, pfB });
+
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, pfA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid> { athleteA });
+        _mockSessionScheduleService.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, pfB, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid> { athleteB });
+
+        _mockWellnessCheckInService.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid>());
+
+        _mockReminderTracker.Setup(s => s.HasReminderBeenSentAsync(It.IsAny<Guid>(), today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        // act
+        var result = await _handler.HandleAsync(new SendDailyWellnessRemindersCommand(today));
+
+        // assert: se envian recordatorios para los atletas de ambos PFs
+        Assert.Equal(2, result.RemindersSent);
+
+        // verifica que se haya activado el contexto ambiental de cada PF
+        _mockCurrentUser.Verify(c => c.UsePfContext(pfA), Times.Once);
+        _mockCurrentUser.Verify(c => c.UsePfContext(pfB), Times.Once);
+
+        _mockPushNotificationService.Verify(p => p.SendNotificationAsync(athleteA, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockPushNotificationService.Verify(p => p.SendNotificationAsync(athleteB, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Given_AthleteWithSessionAndNoCheckIn_When_HandlerRunsTwice_Then_DoesNotSendDuplicateReminder_UsingRealDbTracker()
     {
         // arrange: base de datos sqlite en memoria para usar la persistencia real de wellness_reminders_sent
@@ -214,20 +267,28 @@ public class SendDailyWellnessRemindersCommandHandlerTests
 
         var realTracker = new global::Infrastructure.Services.DbWellnessReminderTracker(dbContext);
 
+        var pfId = Guid.NewGuid();
         var athleteId = Guid.NewGuid();
         var today = new DateOnly(2026, 10, 16);
 
+        var mockAthleteRepo = new Mock<IAthleteRepository>();
+        mockAthleteRepo.Setup(r => r.GetDistinctPfIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid> { pfId });
+
         var mockSchedule = new Mock<ISessionScheduleService>();
-        mockSchedule.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, It.IsAny<CancellationToken>()))
+        mockSchedule.Setup(s => s.GetAthletesWithScheduledSessionAsync(today, pfId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid> { athleteId });
 
         var mockCheckIn = new Mock<IWellnessCheckInService>();
-        mockCheckIn.Setup(s => s.HasCompletedCheckInAsync(athleteId, today, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        mockCheckIn.Setup(s => s.GetCompletedCheckInAthleteIdsAsync(
+                It.IsAny<IReadOnlyList<Guid>>(), today, pfId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid>());
 
         var mockPush = new Mock<IPushNotificationService>();
 
         var handlerWithRealTracker = new SendDailyWellnessRemindersCommandHandler(
+            mockAthleteRepo.Object,
+            mockCurrentUser.Object,
             mockSchedule.Object,
             mockCheckIn.Object,
             realTracker,

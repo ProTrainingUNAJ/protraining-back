@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Routines;
+using Application.DTOs.Routines;
 using Application.UseCases.Routines.GetTodayRoutine;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
