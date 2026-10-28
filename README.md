@@ -58,7 +58,9 @@ docker compose down -v                   # bajar todo y borrar las bases
 
 ### Usuarios y datos de prueba (Demo 1)
 
-En Development, Identidad crea estas cuentas al arrancar (todas con la contraseña `ProTraining2026!`):
+En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas están en Confluence:** [🔑 Usuarios de demo](https://protraining.atlassian.net/wiki/spaces/KAN/pages/13238300/Usuarios+de+demo).
+
+> **Nunca despliegues en un servidor con `ASPNETCORE_ENVIRONMENT=Development`:** crea estas cuentas con una contraseña conocida y deja Swagger abierto. El `docker-compose.yml` usa `Production` por defecto; Development se activa solo si el `.env` lo pide (como el `.env.example`).
 
 | Cuenta | Rol | Para qué |
 |---|---|---|
