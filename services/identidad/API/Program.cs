@@ -4,13 +4,14 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.Login;
+using Application.UseCases.Auth.Refresh;
+using Application.UseCases.Auth.UpdatePhone;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
-using Application.UseCases.Auth.Login;
-using Application.UseCases.Auth.Refresh;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -49,6 +50,7 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
+builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
