@@ -12,7 +12,7 @@ namespace Entrenamiento.Tests.Security;
 public sealed class AthletePrivacyTests
 {
     // Endpoints con id abiertos al atleta que validan que el id sea el suyo (y si no, responden 404).
-    private static readonly HashSet<string> AllowedForAthletes = [];
+    private static readonly HashSet<string> AllowedForAthletes = ["ExerciseController.GetSubstitutes"];
 
     [Fact]
     public void Given_EveryEndpointWithIdInRoute_When_CheckingRoles_Then_NoneIsOpenToAthletes()
