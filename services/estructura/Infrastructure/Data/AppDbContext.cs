@@ -27,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<WellnessReminderSent> WellnessRemindersSent => Set<WellnessReminderSent>();
 
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<CompetitiveEvent> CompetitiveEvents => Set<CompetitiveEvent>();
+    public DbSet<SeasonPhase> SeasonPhases => Set<SeasonPhase>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
