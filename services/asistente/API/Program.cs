@@ -5,6 +5,9 @@ using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.PlanDrafts.DiscardPlanDraft;
+using Application.UseCases.PlanDrafts.GetPlanDraft;
+using Application.UseCases.PlanDrafts.UpdatePlanDraft;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -60,8 +63,23 @@ builder.Services.AddHttpClient<IExerciseCatalogService, Infrastructure.Services.
     client.Timeout = TimeSpan.FromSeconds(5);
 }).AddHttpMessageHandler<ForwardAuthorizationHandler>();
 
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services.Structure.StructureCalendarClient>(client =>
+{
+    if (Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+    {
+        var uriString = structureUri.ToString().TrimEnd('/') + "/";
+        client.BaseAddress = new Uri(uriString);
+    }
+
+    client.Timeout = TimeSpan.FromSeconds(5);
+}).AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
+builder.Services.AddScoped<GetPlanDraftQueryHandler>();
+builder.Services.AddScoped<UpdatePlanDraftCommandHandler>();
+builder.Services.AddScoped<DiscardPlanDraftCommandHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");

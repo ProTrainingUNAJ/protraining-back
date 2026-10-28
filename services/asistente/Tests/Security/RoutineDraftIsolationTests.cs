@@ -1,4 +1,12 @@
+using API.Controllers;
+using Application.Common.PlanDrafts;
+using Application.DTOs.Ai;
+using Application.DTOs.PlanDrafts;
+using Application.Exceptions;
 using Application.Interfaces.Services;
+using Application.UseCases.PlanDrafts.DiscardPlanDraft;
+using Application.UseCases.PlanDrafts.GetPlanDraft;
+using Application.UseCases.PlanDrafts.UpdatePlanDraft;
 using Domain.Entities;
 using Infrastructure.Data;
 using Infrastructure.Data.Repositories;
@@ -9,12 +17,14 @@ using Xunit;
 
 namespace Asistente.Tests.Security;
 
-// KAN-430: un PF no ve ni toca los borradores del Asistente de otro PF. Se prueba contra Postgres real
-// con el filtro global por PF. El 404 por HTTP se suma cuando exista GET /plan-drafts/{id} (KAN-383).
+// KAN-430 y KAN-410: un PF no ve ni toca los borradores del Asistente de otro PF. Se prueba contra Postgres real
+// con el filtro global por PF y a través del controlador PlanDraftsController (GET, PUT y POST /discard -> 404).
 [Trait("Category", "Isolation")]
 [Trait("Category", "RequiresDocker")]
 public sealed class RoutineDraftIsolationTests : IAsyncLifetime
 {
+    private static readonly Guid ExerciseId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build();
     private readonly Guid _pfAId = Guid.NewGuid();
     private readonly Guid _pfBId = Guid.NewGuid();
@@ -73,6 +83,57 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
         Assert.DoesNotContain(draftsSeenByPfA, draft => draft.Id == draftOfPfB);
     }
 
+    [Fact]
+    public async Task Given_PlanDraftOfPfB_When_PfAGetsUpdatesOrDiscardsViaController_Then_ThrowsNotFound404AndDraftRemainsIntact()
+    {
+        // arrange: PF-B crea un borrador de planificación (plan_drafts)
+        var planDraftId = await SavePlanDraftAsPfBAsync();
+
+        await using var contextPfA = CreateContext(_pfAId);
+        var controllerPfA = CreateControllerForContext(contextPfA);
+
+        var maliciousUpdate = new UpdatePlanDraftRequestDto(
+            Name: "Intento de modificación cruzada",
+            Objective: "Alterar borrador de otro PF",
+            JustificationSummary: "No debería aplicarse",
+            Weeks:
+            [
+                new PlanDraftWeekDto(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new PlanDraftSessionDto(
+                            Name: "Sesión intrusa",
+                            DayOfWeek: DayOfWeek.Monday,
+                            Order: 1,
+                            CoachNotes: null,
+                            Exercises:
+                            [
+                                new PlanDraftExerciseDto(ExerciseId, Order: 1, Sets: 3, Reps: 5, TargetPercentage: 50m)
+                            ])
+                    ])
+            ]);
+
+        // act & assert: PF-A recibe 404 (NotFoundException) en GET, PUT y POST /discard
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            controllerPfA.GetById(planDraftId, CancellationToken.None));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            controllerPfA.Update(planDraftId, maliciousUpdate, CancellationToken.None));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            controllerPfA.Discard(planDraftId, CancellationToken.None));
+
+        // y el borrador de PF-B permanece intacto en la base de datos
+        await using var contextPfB = CreateContext(_pfBId);
+        var intactDraft = await new PlanDraftRepository(contextPfB).GetByIdAsNoTrackingAsync(planDraftId);
+        Assert.NotNull(intactDraft);
+        Assert.Equal(PlanDraftStatus.Draft, intactDraft.Status);
+        var intactContent = PlanDraftMapper.DeserializeContent(intactDraft.Content);
+        Assert.Equal("Plan Original de PF-B", intactContent.Name);
+        Assert.Equal(80m, intactContent.Weeks[0].Sessions[0].Exercises[0].TargetPercentage);
+    }
+
     private async Task<Guid> SaveDraftAsPfBAsync()
     {
         await using var contextPfB = CreateContext(_pfBId);
@@ -82,6 +143,44 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
         return draft.Id;
     }
 
+    private async Task<Guid> SavePlanDraftAsPfBAsync()
+    {
+        await using var contextPfB = CreateContext(_pfBId);
+        var content = new PlanDraftContentDto(
+            Name: "Plan Original de PF-B",
+            Objective: "Fuerza de piernas",
+            JustificationSummary: "Progresión lineal de 4 semanas",
+            Weeks:
+            [
+                new PlanDraftWeekDto(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new PlanDraftSessionDto(
+                            Name: "Sesión 1",
+                            DayOfWeek: DayOfWeek.Monday,
+                            Order: 1,
+                            CoachNotes: null,
+                            Exercises:
+                            [
+                                new PlanDraftExerciseDto(ExerciseId, Order: 1, Sets: 4, Reps: 6, TargetPercentage: 80m)
+                            ])
+                    ])
+            ]);
+
+        var planDraft = PlanDraft.Create(
+            categoryId: null,
+            athleteId: _athleteOfPfB,
+            goal: "Fuerza de piernas",
+            startDate: new DateOnly(2026, 11, 2),
+            content: PlanDraftMapper.SerializeContent(content),
+            provider: "Rules");
+
+        await new PlanDraftRepository(contextPfB).AddAsync(planDraft);
+        await contextPfB.SaveChangesAsync();
+        return planDraft.Id;
+    }
+
     private RoutineDraft NewDraft(string goal) => RoutineDraft.Create(
         athleteId: _athleteOfPfB,
         goal: goal,
@@ -89,6 +188,34 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
         justificationSummary: "Progresión lineal de 4 semanas",
         providerUsed: "Rules",
         exercisesJson: """[{"exerciseId":"00000000-0000-0000-0000-000000000001","sets":3,"reps":8}]""");
+
+    private static PlanDraftsController CreateControllerForContext(AppDbContext context)
+    {
+        var draftRepository = new PlanDraftRepository(context);
+        var decisionRepository = new PfDecisionRepository(context);
+        var unitOfWork = new UnitOfWork(context);
+
+        var catalogMock = new Mock<IExerciseCatalogService>();
+        catalogMock
+            .Setup(c => c.FindByIdAsync(ExerciseId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CatalogExerciseDto(ExerciseId, "Sentadilla trasera con barra", "Piernas"));
+
+        var calendarMock = new Mock<IStructureCalendarClient>();
+        calendarMock
+            .Setup(c => c.GetMatchDatesAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        return new PlanDraftsController(
+            new GetPlanDraftQueryHandler(draftRepository),
+            new UpdatePlanDraftCommandHandler(
+                draftRepository,
+                decisionRepository,
+                catalogMock.Object,
+                new MatchDayLoadValidator(),
+                calendarMock.Object,
+                unitOfWork),
+            new DiscardPlanDraftCommandHandler(draftRepository, unitOfWork));
+    }
 
     private AppDbContext CreateContext(Guid pfId)
     {
