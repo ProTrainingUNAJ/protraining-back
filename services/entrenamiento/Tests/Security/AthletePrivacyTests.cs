@@ -8,6 +8,7 @@ namespace Entrenamiento.Tests.Security;
 // KAN-450: un atleta no puede ver datos de otro. Guardián: todo endpoint que recibe un id en la ruta
 // tiene que ser solo para PF (o para servicios internos). Si alguien abre uno a cualquier rol sin
 // validar que el id sea del atleta del token, este test falla.
+[Trait("Category", "Isolation")]
 public sealed class AthletePrivacyTests
 {
     // Endpoints con id abiertos al atleta que validan que el id sea el suyo (y si no, responden 404).

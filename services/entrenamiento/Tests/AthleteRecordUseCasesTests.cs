@@ -126,6 +126,7 @@ public class AthleteRecordUseCasesTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Listar_DadoRecordsDeOtroPf_NoDeberiaDevolverlos()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Estructura.Tests.Integration;
 
+[Trait("Category", "Isolation")]
 public sealed class MultitenantIsolationTests : IAsyncDisposable
 {
     private readonly EstructuraTestApplicationFactory _factory;

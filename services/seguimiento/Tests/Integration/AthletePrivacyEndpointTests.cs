@@ -7,6 +7,7 @@ using Seguimiento.Tests.Infrastructure;
 namespace Seguimiento.Tests.Integration;
 
 // KAN-450: un atleta no ve ni toca datos de un compañero. Por HTTP, de punta a punta.
+[Trait("Category", "Isolation")]
 public sealed class AthletePrivacyEndpointTests
 {
     private readonly Guid _pfId = Guid.NewGuid();
