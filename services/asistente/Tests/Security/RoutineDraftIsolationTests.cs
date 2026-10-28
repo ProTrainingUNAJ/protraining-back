@@ -4,6 +4,7 @@ using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Application.UseCases.PlanDrafts.ApprovePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
@@ -17,8 +18,8 @@ using Xunit;
 
 namespace Asistente.Tests.Security;
 
-// KAN-430 y KAN-410: un PF no ve ni toca los borradores del Asistente de otro PF. Se prueba contra Postgres real
-// con el filtro global por PF y a través del controlador PlanDraftsController (GET, PUT y POST /discard -> 404).
+// KAN-430, KAN-410 y KAN-411: un PF no ve ni toca los borradores del Asistente de otro PF. Se prueba contra Postgres real
+// con el filtro global por PF y a través del controlador PlanDraftsController (GET, PUT, POST /approve y POST /discard -> 404).
 [Trait("Category", "Isolation")]
 [Trait("Category", "RequiresDocker")]
 public sealed class RoutineDraftIsolationTests : IAsyncLifetime
@@ -114,12 +115,15 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
                     ])
             ]);
 
-        // act & assert: PF-A recibe 404 (NotFoundException) en GET, PUT y POST /discard
+        // act & assert: PF-A recibe 404 (NotFoundException) en GET, PUT, POST /approve y POST /discard
         await Assert.ThrowsAsync<NotFoundException>(() =>
             controllerPfA.GetById(planDraftId, CancellationToken.None));
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             controllerPfA.Update(planDraftId, maliciousUpdate, CancellationToken.None));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            controllerPfA.Approve(planDraftId, CancellationToken.None));
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             controllerPfA.Discard(planDraftId, CancellationToken.None));
@@ -205,6 +209,8 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
             .Setup(c => c.GetMatchDatesAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
+        var trainingClientMock = new Mock<ITrainingPlanServiceClient>();
+
         return new PlanDraftsController(
             new GetPlanDraftQueryHandler(draftRepository),
             new UpdatePlanDraftCommandHandler(
@@ -214,6 +220,7 @@ public sealed class RoutineDraftIsolationTests : IAsyncLifetime
                 new MatchDayLoadValidator(),
                 calendarMock.Object,
                 unitOfWork),
+            new ApprovePlanDraftCommandHandler(draftRepository, trainingClientMock.Object, unitOfWork),
             new DiscardPlanDraftCommandHandler(draftRepository, unitOfWork));
     }
 

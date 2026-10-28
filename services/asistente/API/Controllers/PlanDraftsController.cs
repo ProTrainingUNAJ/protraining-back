@@ -1,4 +1,5 @@
 using Application.DTOs.PlanDrafts;
+using Application.UseCases.PlanDrafts.ApprovePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
@@ -13,6 +14,7 @@ namespace API.Controllers;
 public sealed class PlanDraftsController(
     GetPlanDraftQueryHandler getPlanDraftHandler,
     UpdatePlanDraftCommandHandler updatePlanDraftHandler,
+    ApprovePlanDraftCommandHandler approvePlanDraftHandler,
     DiscardPlanDraftCommandHandler discardPlanDraftHandler) : ControllerBase
 {
     /// <summary>
@@ -46,6 +48,23 @@ public sealed class PlanDraftsController(
         CancellationToken cancellationToken)
     {
         var result = await updatePlanDraftHandler.HandleAsync(new UpdatePlanDraftCommand(id, request), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Aprueba el borrador de planificación, creándolo y asignándolo en el microservicio de Entrenamiento (#116 · KAN-411).
+    /// </summary>
+    [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(typeof(ApprovePlanDraftResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApprovePlanDraftResponseDto>> Approve(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await approvePlanDraftHandler.HandleAsync(new ApprovePlanDraftCommand(id), cancellationToken);
         return Ok(result);
     }
 
