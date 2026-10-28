@@ -66,11 +66,12 @@ public class CheckInsControllerTests
     }
 
     [Fact]
-    public async Task Submit_WithTokenOfAnotherAthlete_Throws_Forbidden_And_Does_Not_Save()
+    // KAN-431: el id de otro atleta responde 404 (no 403), para no revelar si existe.
+    public async Task Submit_WithTokenOfAnotherAthlete_Throws_AthleteNotFound_And_Does_Not_Save()
     {
         ResponderMe(Guid.NewGuid());
 
-        await Assert.ThrowsAsync<ForbiddenException>(() =>
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
             CreateController().Submit(Guid.NewGuid(), RequestValida(), CancellationToken.None));
 
         _checkIns.Verify(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);

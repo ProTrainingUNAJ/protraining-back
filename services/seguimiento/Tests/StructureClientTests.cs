@@ -210,4 +210,35 @@ public class StructureClientTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetMeAsync(cancellation.Token));
     }
+
+    // ---------- IsOwnAthleteAsync (KAN-431) ----------
+
+    [Fact]
+    public async Task Given_AthleteOfThePf_When_IsOwnAthlete_Then_ReturnsTrueAndCallsAthleteById()
+    {
+        var athleteId = Guid.NewGuid();
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK, "{}"));
+        var client = CreateClient(handler);
+
+        var isOwn = await client.IsOwnAthleteAsync(athleteId);
+
+        Assert.True(isOwn);
+        Assert.Equal($"http://estructura:8080/api/v1/athletes/{athleteId}", handler.LastRequest!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task Given_AthleteOfAnotherPfOrMissing_When_IsOwnAthlete_Then_ReturnsFalse()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => Json(HttpStatusCode.NotFound, "{}")));
+
+        Assert.False(await client.IsOwnAthleteAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_StructureDown_When_IsOwnAthlete_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused.")));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.IsOwnAthleteAsync(Guid.NewGuid()));
+    }
 }
