@@ -53,5 +53,10 @@ namespace Infrastructure.Repositories
 
             return (items, totalCount);
         }
+
+        public async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await context.Exercises.AnyAsync(e => e.Id == id, cancellationToken);
+        }
     }
 }

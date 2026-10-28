@@ -83,4 +83,14 @@ public sealed class ExerciseRestriction
         _substitutes.Add(substitute);
         return substitute;
     }
+
+    public ExerciseSubstitute AddSubstitute(Exercise substituteExercise, int order)
+    {
+        if (substituteExercise == null)
+            throw new DomainException("El ejercicio sustituto es obligatorio.");
+
+        var substitute = AddSubstitute(substituteExercise.Id, order);
+        substitute.SubstituteExercise = substituteExercise;
+        return substitute;
+    }
 }

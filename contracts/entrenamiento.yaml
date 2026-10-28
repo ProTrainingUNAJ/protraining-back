@@ -86,6 +86,74 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/exercises/restrictions/check:
+    post:
+      tags:
+        - Exercises
+      summary: Chequear restricciones de una lista de ejercicios por zonas de dolor
+      description: >
+        Evalúa una lista de ejercicios contra las zonas de dolor reportadas (formato "zona:nivel").
+        Devuelve por cada ejercicio si está restringido y, en su caso, la zona, nivel de dolor,
+        motivo y lista ordenada de sustitutos biomecánicos.
+      operationId: checkExerciseRestrictions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckExerciseRestrictionsRequest'
+      responses:
+        "200":
+          description: Chequeo de restricciones realizado exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseRestrictionCheckResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/exercises/{id}/substitutes:
+    get:
+      tags:
+        - Exercises
+      summary: Obtener ejercicios sustitutos para una zona de dolor
+      description: Devuelve la lista ordenada de ejercicios sustitutos recomendados para un ejercicio y una zona anatómica de dolor específica.
+      operationId: getExerciseSubstitutes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del ejercicio restringido.
+        - name: zone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Zona anatómica de dolor (ej. cuadriceps, espalda_baja).
+          example: "cuadriceps"
+      responses:
+        "200":
+          description: Lista ordenada de sustitutos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSubstitute'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/records:
     get:
       tags:
@@ -725,6 +793,77 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    CheckExerciseRestrictionsRequest:
+      type: object
+      required:
+        - exerciseIds
+      properties:
+        painZones:
+          type: string
+          nullable: true
+          description: Zonas de dolor reportadas en el check-in (formato "zona:nivel" separadas por comas).
+          example: "cuadriceps:2,espalda_baja:1"
+        exerciseIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de ejercicios a verificar.
+          example: ["b501d51c-4b53-4dc9-985f-8646f9037cfa", "c8a14358-bf87-41a4-94e0-7ee429d7c679"]
+
+    ExerciseSubstitute:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio sustituto.
+          example: "7e3b97f0-2581-4ebc-b3b0-642cf38a0f02"
+        name:
+          type: string
+          description: Nombre del ejercicio sustituto.
+          example: "Prensa de piernas"
+
+    ExerciseRestrictionCheckResult:
+      type: object
+      required:
+        - exerciseId
+        - restricted
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio evaluado.
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        restricted:
+          type: boolean
+          description: Indica si el ejercicio debe ser restringido/reemplazado por dolor.
+          example: true
+        zone:
+          type: string
+          nullable: true
+          description: Zona de dolor que disparó la restricción.
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          nullable: true
+          description: Nivel de dolor reportado para la zona (1 a 10).
+          example: 2
+        reason:
+          type: string
+          nullable: true
+          description: Motivo biomecánico de la contraindicación.
+          example: "Alta compresión femororrotuliana y tensión en el tendón rotuliano con sobrecarga axial."
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseSubstitute'
+          description: Lista ordenada de ejercicios sustitutos recomendados.
+
     Exercise:
       type: object
       required:

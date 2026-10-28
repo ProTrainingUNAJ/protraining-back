@@ -8,7 +8,7 @@ public sealed class ExerciseSubstitute
     public Guid RestrictionId { get; private set; }
     public ExerciseRestriction Restriction { get; private set; } = null!;
     public Guid SubstituteExerciseId { get; private set; }
-    public Exercise SubstituteExercise { get; private set; } = null!;
+    public Exercise SubstituteExercise { get; internal set; } = null!;
     public int Order { get; private set; }
 
     private ExerciseSubstitute() { }
