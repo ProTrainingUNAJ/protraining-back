@@ -30,6 +30,16 @@ public sealed record PlanDraftContentDto(
     [property: JsonPropertyName("weeks")] List<PlanDraftWeekDto> Weeks
 );
 
+public sealed record CreatePlanDraftRequestDto(
+    [property: JsonPropertyName("goal")] string Goal,
+    [property: JsonPropertyName("athleteId")] Guid? AthleteId = null,
+    [property: JsonPropertyName("categoryId")] Guid? CategoryId = null,
+    [property: JsonPropertyName("weeks")] int Weeks = 4,
+    [property: JsonPropertyName("daysPerWeek")] int DaysPerWeek = 3,
+    [property: JsonPropertyName("trainingDays")] List<string>? TrainingDays = null,
+    [property: JsonPropertyName("startDate")] DateOnly? StartDate = null
+);
+
 public sealed record UpdatePlanDraftRequestDto(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("objective")] string Objective,

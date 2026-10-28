@@ -6,6 +6,7 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.PlanDrafts.ApprovePlanDraft;
+using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
@@ -85,6 +86,7 @@ builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services
 
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
+builder.Services.AddScoped<CreatePlanDraftCommandHandler>();
 builder.Services.AddScoped<GetPlanDraftQueryHandler>();
 builder.Services.AddScoped<UpdatePlanDraftCommandHandler>();
 builder.Services.AddScoped<ApprovePlanDraftCommandHandler>();

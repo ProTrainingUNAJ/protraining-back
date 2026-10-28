@@ -25,8 +25,7 @@ public sealed class RoutineDraft : BaseEntity
         string proposedTitle,
         string justificationSummary,
         string providerUsed,
-        string exercisesJson,
-        Guid? id = null)
+        string exercisesJson)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es obligatorio.");
@@ -43,7 +42,7 @@ public sealed class RoutineDraft : BaseEntity
         if (string.IsNullOrWhiteSpace(exercisesJson))
             throw new DomainException("El borrador debe contener al menos un ejercicio en formato JSON.");
 
-        var draft = new RoutineDraft
+        return new RoutineDraft
         {
             AthleteId = athleteId,
             Goal = goal.Trim(),
@@ -52,12 +51,5 @@ public sealed class RoutineDraft : BaseEntity
             ProviderUsed = string.IsNullOrWhiteSpace(providerUsed) ? "Unknown" : providerUsed.Trim(),
             ExercisesJson = exercisesJson.Trim()
         };
-
-        if (id.HasValue && id.Value != Guid.Empty)
-        {
-            draft.Id = id.Value;
-        }
-
-        return draft;
     }
 }

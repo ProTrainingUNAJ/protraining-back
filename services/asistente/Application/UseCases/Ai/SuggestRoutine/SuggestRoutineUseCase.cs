@@ -6,10 +6,13 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Domain.Exceptions;
+using Microsoft.Extensions.Logging;
+
 public sealed class SuggestRoutineUseCase(
     IAiService aiService,
     IRoutineDraftRepository? routineDraftRepository = null,
-    IUnitOfWork? unitOfWork = null)
+    IUnitOfWork? unitOfWork = null,
+    ILogger<SuggestRoutineUseCase>? logger = null)
 {
     public async Task<RoutineSuggestionResponseDto> ExecuteAsync(
         RoutineSuggestionRequestDto request,
@@ -44,9 +47,9 @@ public sealed class SuggestRoutineUseCase(
                 await unitOfWork.SaveChangesAsync(cancellationToken);
                 persistedDraftId = draft.Id;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // La persistencia del borrador no debe interrumpir la entrega de la propuesta al preparador físico
+                logger?.LogError(ex, "Error al persistir el borrador de rutina generado por IA para el atleta {AthleteId}", request.AthleteId);
             }
         }
 
