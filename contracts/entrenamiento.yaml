@@ -546,7 +546,7 @@ paths:
       tags:
         - Routines and Templates
       summary: Asignar planificacion a categoria o atleta
-      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico.
+      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico. Responde 404 si la planificacion, la categoria o el atleta no existen o son de otro PF.
       operationId: assignTrainingPlan
       requestBody:
         required: true
