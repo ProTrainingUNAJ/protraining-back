@@ -36,41 +36,11 @@ namespace Infrastructure.Data.Seeders
 
                     var equipment = elem.TryGetProperty("equipment", out var eq) ? eq.GetString() : null;
 
-                    var images = new List<string>();
+                    var images = ReadStringArray(elem, "images", FreeExerciseDbRawUrl);
 
-                    if (elem.TryGetProperty("images", out var imgs))
-                    {
-                        foreach (var img in imgs.EnumerateArray())
-                        {
-                            var imgPath = img.GetString();
-                            if (!string.IsNullOrWhiteSpace(imgPath))
-                                images.Add($"{FreeExerciseDbRawUrl}{imgPath}");
-                        }
-                    }
+                    var primaryMuscles = ReadStringArray(elem, "primaryMuscles");
 
-                    var primaryMuscles = new List<string>();
-
-                    if (elem.TryGetProperty("primaryMuscles", out var pm))
-                    {
-                        foreach (var m in pm.EnumerateArray())
-                        {
-                            var muscle = m.GetString();
-                            if (!string.IsNullOrWhiteSpace(muscle))
-                                primaryMuscles.Add(muscle);
-                        }
-                    }
-
-                    var secondaryMuscles = new List<string>();
-
-                    if (elem.TryGetProperty("secondaryMuscles", out var sm))
-                    {
-                        foreach (var m in sm.EnumerateArray())
-                        {
-                            var muscle = m.GetString();
-                            if (!string.IsNullOrWhiteSpace(muscle))
-                                secondaryMuscles.Add(muscle);
-                        }
-                    }
+                    var secondaryMuscles = ReadStringArray(elem, "secondaryMuscles");
 
                     // Mapear grupo muscular con el primer primaryMuscle
                     var firstMuscle = primaryMuscles.FirstOrDefault() ?? "general";
@@ -144,7 +114,25 @@ namespace Infrastructure.Data.Seeders
             ["abdominales"] = "Core"
         };
 
-        private static string NormalizeMuscleGroup(string muscle) =>
+        public static string NormalizeMuscleGroup(string muscle) =>
             MuscleGroupMap.TryGetValue(muscle.Trim(), out var group) ? group : "Cuerpo Completo";
+
+        private static List<string> ReadStringArray(JsonElement elem, string propertyName, string? urlPrefix = null)
+        {
+            var list = new List<string>();
+
+            if (elem.TryGetProperty(propertyName, out var items))
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    var val = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                        list.Add(urlPrefix != null ? $"{urlPrefix}{val}" : val);
+                }
+            }
+
+            return list;
+        }
+
     }
 }
