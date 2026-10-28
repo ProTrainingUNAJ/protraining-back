@@ -64,5 +64,6 @@ public static class DependencyInjection
         var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
 
         await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
+        await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
     }
 }

@@ -22,6 +22,7 @@ public sealed class TenantFilterGuardTests
     private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new()
     {
         ["ExerciseCatalogSeeder.cs"] = "Al arrancar, revisa si el catálogo compartido de ejercicios ya está cargado.",
+        ["ExerciseRestrictionSeeder.cs"] = "Al arrancar, revisa si las restricciones compartidas ya están cargadas y consulta los ejercicios del catálogo.",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.
