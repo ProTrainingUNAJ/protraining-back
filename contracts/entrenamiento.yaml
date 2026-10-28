@@ -546,7 +546,7 @@ paths:
       tags:
         - Routines and Templates
       summary: Asignar planificacion a categoria o atleta
-      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico.
+      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico. Responde 404 si la planificacion, la categoria o el atleta no existen o son de otro PF.
       operationId: assignTrainingPlan
       requestBody:
         required: true
@@ -575,7 +575,7 @@ paths:
       tags:
         - Routines and Templates
       summary: Obtener sesion de entrenamiento
-      description: Obtiene los detalles de una sesion de entrenamiento por su identificador.
+      description: Obtiene los detalles de una sesion de entrenamiento por su identificador. Requiere rol PreparadorFisico (el atleta ve su sesion del dia en /api/v1/me/today-routine).
       operationId: getTrainingSession
       parameters:
         - name: id
@@ -594,6 +594,8 @@ paths:
                 $ref: '#/components/schemas/TrainingSession'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 

@@ -10,4 +10,7 @@ public interface IStructureClient
 
     // Atletas de una categoría (rol PreparadorFisico); lanza CategoryNotFoundException si la categoría no existe.
     Task<IReadOnlyList<CategoryAthleteDto>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
+    // true si el atleta existe y es del PF del token (rol PreparadorFisico); false si no existe o es de otro PF.
+    Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default);
 }

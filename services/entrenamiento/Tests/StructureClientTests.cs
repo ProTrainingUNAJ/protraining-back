@@ -101,4 +101,33 @@ public class StructureClientTests
 
         Assert.Equal("Bearer token-del-atleta", structure.LastRequest!.Headers.Authorization!.ToString());
     }
+
+    // ---------- IsOwnCategoryAsync (KAN-431) ----------
+
+    [Fact]
+    public async Task Given_CategoryOfThePf_When_IsOwnCategory_Then_ReturnsTrueAndCallsCategoryById()
+    {
+        var categoryId = Guid.NewGuid();
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK, "{}"));
+        var client = CreateClient(handler);
+
+        Assert.True(await client.IsOwnCategoryAsync(categoryId));
+        Assert.Equal($"http://estructura:8080/api/v1/categories/{categoryId}", handler.LastRequest!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task Given_CategoryOfAnotherPfOrMissing_When_IsOwnCategory_Then_ReturnsFalse()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => Json(HttpStatusCode.NotFound, "{}")));
+
+        Assert.False(await client.IsOwnCategoryAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_StructureDown_When_IsOwnCategory_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused.")));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.IsOwnCategoryAsync(Guid.NewGuid()));
+    }
 }

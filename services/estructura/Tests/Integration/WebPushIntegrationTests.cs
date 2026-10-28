@@ -259,6 +259,7 @@ public sealed class WebPushIntegrationTests : IAsyncDisposable
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_TwoSeparateTenantsPfAAndPfB_When_DispatchingForPfA_Then_NoSubscriptionsFromPfBAreSelectedOrNotified()
     {
         // 1. Arrange: PF-A y PF-B con atletas y suscripciones independientes

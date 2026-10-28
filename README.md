@@ -58,7 +58,9 @@ docker compose down -v                   # bajar todo y borrar las bases
 
 ### Usuarios y datos de prueba (Demo 1)
 
-En Development, Identidad crea estas cuentas al arrancar (todas con la contraseña `ProTraining2026!`):
+En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas están en Confluence:** [🔑 Usuarios de demo](https://protraining.atlassian.net/wiki/spaces/KAN/pages/13238300/Usuarios+de+demo).
+
+> **Nunca despliegues en un servidor con `ASPNETCORE_ENVIRONMENT=Development`:** crea estas cuentas con una contraseña conocida y deja Swagger abierto. El `docker-compose.yml` usa `Production` por defecto; Development se activa solo si el `.env` lo pide (como el `.env.example`).
 
 | Cuenta | Rol | Para qué |
 |---|---|---|
@@ -229,6 +231,7 @@ No necesita la base ni variables de entorno. Va a mostrar un aviso de que falta 
 Reglas:
 - Los cambios al modelo van por PR, **con una sola migración por PR**.
 - Si dos migraciones del mismo servicio chocan, el segundo en mergear borra la suya, hace pull de `develop` y la vuelve a generar.
+- Cada servicio tiene un test (`Tests/Database/PostgresDatabaseTests.cs`) que **falla si cambiaste una entidad y no creaste la migración**. Si te pasa, creá la migración con el comando de arriba.
 
 ## Convenciones
 
@@ -277,6 +280,24 @@ Application/
 ```
 
 Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
+
+Los tests corren contra SQLite en memoria, salvo los que necesitan **Postgres real**: esos lo levantan con Testcontainers (`postgres:16-alpine`, la misma imagen del compose) y llevan `[Trait("Category", "RequiresDocker")]`. Necesitan Docker corriendo; en el CI corren siempre. Para correr el resto sin Docker:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category!=RequiresDocker"
+```
+
+**Aislamiento entre PFs (KAN-432).** Los tests que prueban que un PF no ve datos de otro (y que un atleta no ve datos de un compañero) llevan `[Trait("Category", "Isolation")]`. El CI los corre primero, en el paso **"Aislamiento entre PFs"**: si alguno falla, el PR no se puede mergear. Para correrlos en local:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category=Isolation"
+```
+
+Dos guardianes en `Tests/Security/` de cada servicio:
+- `TenantFilterGuardTests`: falla si una tabla nueva no tiene el filtro por PF (la entidad no hereda de `BaseEntity`) o si el código de producción usa `IgnoreQueryFilters()`. Las excepciones (catálogos compartidos, el worker de recordatorios, las tablas de login) están en una lista dentro del test, cada una con su motivo.
+- `AthletePrivacyTests` (Estructura, Entrenamiento y Seguimiento): falla si un endpoint que recibe un id en la ruta queda abierto al rol Atleta sin validar que el id sea el suyo.
+
+Si escribís un test de aislamiento nuevo, ponele el trait `Isolation`.
 
 ### Casos de uso (CQRS liviano)
 

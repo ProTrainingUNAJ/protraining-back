@@ -244,6 +244,7 @@ public sealed class MedicalRecordAuditLogTests : IAsyncDisposable
     }
 
     [Fact]
+    [Trait("Category", "RequiresDocker")]
     public async Task Given_RealPostgreSqlWithMigrations_When_AttemptingSqlUpdateOrDeleteOnAuditLog_Then_TriggerRejectsOperationAndRecordRemainsIntact()
     {
         // arrange: levantar PostgreSQL real con Testcontainers para validar el trigger PL/pgSQL trg_medical_record_audit_logs_append_only

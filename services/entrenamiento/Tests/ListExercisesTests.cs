@@ -291,4 +291,49 @@ public class ListExercisesTests : IAsyncLifetime
             Assert.Equal(25, totalCount);
         }
     }
+
+    [Fact]
+    public void DadoExerciseCreateSinImagesNiAnimationUrl_CuandoSeLlama_EntoncesNoFalla()
+    {
+        // Arrange & Act
+        var exercise = Exercise.Create(
+            name: "Press de Banca",
+            muscleGroup: "Pecho",
+            description: null,
+            animationUrl: null,
+            videoUrl: null,
+            equipment: null,
+            images: null
+        );
+
+        // Assert
+        Assert.NotNull(exercise);
+        Assert.Null(exercise.AnimationUrl);
+        Assert.Empty(exercise.Images);
+    }
+
+    [Fact]
+    public async Task DadoBusquedaConErrorDeTipeo_CuandoConsulta_EntoncesRetornaResultadosPorSimilitud()
+    {
+        // ARRANGE: Simula que el repositorio (con pg_trgm en Postgres) resolvió la similitud de "setnadilla" a "Sentadilla"
+        var repoMock = new Mock<IExerciseRepository>();
+        var sentadillas = new List<Exercise>
+    {
+        Exercise.Create("Sentadilla completa con barra", "Piernas"),
+        Exercise.Create("Sentadilla frontal", "Piernas")
+    };
+
+        repoMock.Setup(r => r.ListAsync("setnadilla", null, null, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((sentadillas, 2));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object);
+
+        // ACT
+        var query = new ListExercisesQuery { Search = "setnadilla", Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        // ASSERT
+        Assert.Equal(2, result.Items.Count);
+        Assert.Contains(result.Items, e => e.Name.Contains("Sentadilla"));
+    }
 }

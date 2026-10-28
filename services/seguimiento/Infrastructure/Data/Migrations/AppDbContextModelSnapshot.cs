@@ -274,6 +274,83 @@ namespace Infrastructure.Data.Migrations
 
                     b.ToTable("check_ins", (string)null);
                 });
+
+            modelBuilder.Entity("Domain.Entities.DailyLoad", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("GymMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("gym_minutes");
+
+                    b.Property<int?>("GymRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("gym_rpe");
+
+                    b.Property<int>("IndividualWorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("individual_work_minutes");
+
+                    b.Property<int?>("IndividualWorkRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("individual_work_rpe");
+
+                    b.Property<int>("Match1Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("match1_minutes");
+
+                    b.Property<int?>("Match1Rpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("match1_rpe");
+
+                    b.Property<int>("Match2Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("match2_minutes");
+
+                    b.Property<int?>("Match2Rpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("match2_rpe");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("SportTrainingMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("sport_training_minutes");
+
+                    b.Property<int?>("SportTrainingRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("sport_training_rpe");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "Date")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("daily_loads", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

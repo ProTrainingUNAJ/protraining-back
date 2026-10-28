@@ -53,6 +53,72 @@ public class AthleteInjury : BaseEntity
             Status = InjuryStatus.Active
         };
     }
+
+    // Únicas transiciones permitidas: la máquina de estados es estricta (KAN-420),
+    // no se saltea la readaptación ni se vuelve atrás.
+    private static readonly IReadOnlyDictionary<InjuryStatus, InjuryStatus> AllowedTransitions =
+        new Dictionary<InjuryStatus, InjuryStatus>
+        {
+            [InjuryStatus.Active] = InjuryStatus.InRecovery,
+            [InjuryStatus.InRecovery] = InjuryStatus.MedicallyCleared
+        };
+
+    // Cambia el estado de la lesión si la transición está permitida y devuelve la fila del
+    // historial clínico que el caso de uso debe persistir. Toda violación de regla sale como
+    // DomainException → 400 con mensaje en español (ExceptionMiddleware).
+    public AthleteInjuryStatusChange TransitionTo(
+        InjuryStatus newStatus,
+        string? note,
+        Guid changedBy,
+        DateTime changedAt)
+    {
+        if (!AllowedTransitions.TryGetValue(Status, out var next) || next != newStatus)
+        {
+            // Regla médica rígida del CA1: prohibido dar de alta una lesión activa sin
+            // haber pasado antes por el periodo de readaptación (En recuperación).
+            if (Status == InjuryStatus.Active && newStatus == InjuryStatus.MedicallyCleared)
+                throw new DomainException(
+                    "Una lesión activa no puede pasar directamente a 'Alta médica'. Debe pasar primero por 'En recuperación'.");
+
+            if (newStatus == Status)
+                throw new DomainException($"La lesión ya está en el estado '{Label(Status)}'.");
+
+            throw new DomainException(
+                $"Transición de estado no permitida: de '{Label(Status)}' a '{Label(newStatus)}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(note))
+            throw new DomainException("La nota clínica es obligatoria.");
+
+        if (changedBy == Guid.Empty)
+            throw new DomainException("El usuario que realiza el cambio es inválido.");
+
+        var previousStatus = Status;
+        Status = newStatus;
+
+        // Alta médica: se libera al atleta, quedando asentado cuándo ocurrió.
+        if (newStatus == InjuryStatus.MedicallyCleared)
+            ClearedAt = changedAt;
+
+        return new AthleteInjuryStatusChange
+        {
+            InjuryId = Id,
+            FromStatus = previousStatus,
+            ToStatus = newStatus,
+            Note = note.Trim(),
+            ChangedAt = changedAt,
+            ChangedBy = changedBy
+        };
+    }
+
+    // Etiquetas en español de los estados, para los mensajes que lee una persona.
+    private static string Label(InjuryStatus status) => status switch
+    {
+        InjuryStatus.Active => "Activa",
+        InjuryStatus.InRecovery => "En recuperación",
+        InjuryStatus.MedicallyCleared => "Alta médica",
+        _ => status.ToString()
+    };
 }
 
 // Ciclo de vida de una lesión. La máquina de estados y sus reglas son la KAN-420.

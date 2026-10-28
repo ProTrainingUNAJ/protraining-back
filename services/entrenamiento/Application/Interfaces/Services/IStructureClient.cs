@@ -10,4 +10,7 @@ public interface IStructureClient
     Task<AthleteMeDto?> GetMeAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AthleteCategoryDto>> GetAthleteCategoriesAsync(Guid athleteId, CancellationToken cancellationToken = default);
     Task<StructureAthleteDto?> GetAthleteByIdAsync(Guid athleteId, CancellationToken cancellationToken = default);
+
+    // true si la categoría existe y es del PF del token; false si no existe o es de otro PF (KAN-431).
+    Task<bool> IsOwnCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
 }

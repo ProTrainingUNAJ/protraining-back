@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.4.0
+  version: 1.5.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -72,7 +72,7 @@ paths:
         "403":
           $ref: '#/components/responses/Forbidden'
         "404":
-          description: La cuenta no tiene un atleta vinculado.
+          description: La cuenta no tiene un atleta vinculado, o el atleta de la ruta no es el del token (nunca 403, para no revelar si el id existe).
           content:
             application/json:
               schema:
@@ -182,20 +182,41 @@ paths:
               $ref: '#/components/schemas/DailyLoadRequest'
       responses:
         "200":
-          description: Carga y asistencia registradas con éxito.
+          description: Carga del día actualizada.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Carga del día registrada. Asistencia confirmada automáticamente."
-                  totalMinutes:
-                    type: integer
-                    example: 105
+                $ref: '#/components/schemas/DailyLoadResponse'
+        "201":
+          description: Carga del día registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyLoadResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags:
+        - Loads and Attendance
+      summary: Obtener la carga del día del atleta
+      operationId: getDailyLoad
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Carga del día obtenida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyLoadResponse'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -287,7 +308,7 @@ paths:
       tags:
         - Injuries
       summary: Listar lesiones de un atleta
-      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual.
+      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual. Responde 404 si el atleta no existe o es de otro PF.
       operationId: listAthleteInjuries
       parameters:
         - name: athleteId
@@ -320,7 +341,7 @@ paths:
       tags:
         - Injuries
       summary: Registrar una nueva lesión
-      description: Da de alta una lesión para el atleta en estado inicial 'Active'.
+      description: Da de alta una lesión para el atleta en estado inicial 'Active'. Responde 404 si el atleta no existe o es de otro PF.
       operationId: createInjury
       parameters:
         - name: athleteId
@@ -622,27 +643,66 @@ components:
           type: boolean
           example: false
 
-    DailyLoadRequest:
+    DailyLoadActivity:
       type: object
-      required:
-        - gymMinutes
       properties:
-        gymMinutes:
+        minutes:
           type: integer
           minimum: 0
           example: 60
-        sportTrainingMinutes:
+        rpe:
           type: integer
+          nullable: true
           minimum: 0
-          example: 45
-        matchMinutes:
+          maximum: 10
+          example: 7
+
+    DailyLoadRequest:
+      type: object
+      properties:
+        gym:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        sportTraining:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match1:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match2:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        individualWork:
+          $ref: '#/components/schemas/DailyLoadActivity'
+
+    DailyLoadResponse:
+      type: object
+      required:
+        - message
+        - totalMinutes
+        - date
+        - gym
+        - sportTraining
+        - match1
+        - match2
+        - individualWork
+      properties:
+        message:
+          type: string
+          example: "Carga del día registrada."
+        totalMinutes:
           type: integer
-          minimum: 0
-          example: 0
-        individualWorkMinutes:
-          type: integer
-          minimum: 0
-          example: 0
+          example: 60
+        date:
+          type: string
+          format: date
+          example: "2026-10-26"
+        gym:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        sportTraining:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match1:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match2:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        individualWork:
+          $ref: '#/components/schemas/DailyLoadActivity'
 
     CategoryAttendanceSummary:
       type: object
