@@ -6,9 +6,8 @@ using Domain.Entities;
 
 namespace Application.UseCases.Injuries.CreateAthleteInjury;
 
-// Registra una lesión nueva: nace en Active con su fecha de retorno estimada (KAN-419) y
-// deja su fila inicial null → Active en el historial clínico (observación de la revisión de
-// Enzo), en un único SaveChanges. Las reglas de negocio viven en AthleteInjury.Create
+// Registra una lesión nueva: nace en Active y deja su fila inicial null → Active en el
+// historial clínico, en un único SaveChanges. Las reglas de negocio viven en el dominio
 // (DomainException → 400 en español).
 public sealed class CreateAthleteInjuryCommandHandler(
     IAthleteInjuryRepository repository,
@@ -26,8 +25,7 @@ public sealed class CreateAthleteInjuryCommandHandler(
             command.InjuryDate,
             command.EstimatedReturnDate);
 
-        // Quién registra la lesión sale del token (claim pf_id), igual que en la máquina
-        // de estados de KAN-420.
+        // El autor del alta sale del token (claim pf_id).
         var changedBy = currentUser.PfId
             ?? throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token.");
 

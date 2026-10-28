@@ -8,8 +8,8 @@ using Moq;
 namespace Seguimiento.Tests;
 
 // KAN-419: el alta persiste la lesión en Active con su fecha de retorno estimada y,
-// si el dominio la rechaza, no escribe nada (ni la lesión ni el historial). Además deja
-// la fila inicial null → Active del historial clínico (revisión de Enzo).
+// si el dominio la rechaza, no escribe nada (ni la lesión ni el historial). Además
+// deja la fila inicial null → Active del historial clínico.
 public class CreateAthleteInjuryCommandHandlerTests
 {
     private static readonly Guid AthleteId = Guid.NewGuid();
@@ -120,8 +120,6 @@ public class CreateAthleteInjuryCommandHandlerTests
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Zona fuera del vocabulario de las 19 del check-in (revisión de Enzo): el dominio
-    // la rechaza y no se escribe ni la lesión ni la fila inicial del historial.
     [Fact]
     public async Task HandleAsync_WithUnknownZone_ThrowsDomainExceptionWithoutSaving()
     {

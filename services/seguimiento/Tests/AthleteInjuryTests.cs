@@ -3,9 +3,8 @@ using Domain.Exceptions;
 
 namespace Seguimiento.Tests;
 
-// Reglas de negocio de KAN-419: toda lesión nace en Active, con descripción obligatoria
-// y una fecha de retorno estimada posterior a la de la lesión. La zona debe pertenecer
-// a las 19 zonas del check-in (revisión de Enzo).
+// Reglas de negocio de KAN-419: toda lesión nace en Active, con zona y descripción
+// obligatorias y una fecha de retorno estimada posterior a la de la lesión.
 // El rechazo es del dominio (DomainException → 400 con mensaje en español).
 public class AthleteInjuryTests
 {
@@ -95,10 +94,8 @@ public class AthleteInjuryTests
         Assert.Equal("El identificador del atleta es inválido.", exception.Message);
     }
 
-    // ---------- Vocabulario de zonas del check-in (revisión de Enzo) ----------
+    // ---------- Zonas del check-in ----------
 
-    // Las 19 zonas del check-in (KAN-385): el mismo vocabulario que ofrece el mapa de
-    // dolor del atleta. Cada una debe poder registrarse como lesión.
     [Theory]
     [InlineData("pecho")]
     [InlineData("hombros")]
@@ -126,8 +123,6 @@ public class AthleteInjuryTests
         Assert.Equal(zone, injury.Zone);
     }
 
-    // La zona puede viajar con espacios y en mayúsculas (el front es texto libre):
-    // el dominio normaliza y compara sin distinguir mayúsculas.
     [Theory]
     [InlineData("  cuadriceps  ")]
     [InlineData("ISQUIOTIBIALES")]
@@ -149,7 +144,7 @@ public class AthleteInjuryTests
             exception.Message);
     }
 
-    // ---------- Fila inicial del historial (revisión de Enzo) ----------
+    // ---------- Fila inicial del historial ----------
 
     [Fact]
     public void InitialStatusChange_WithValidPf_ReturnsNullToActiveRowTiedToTheInjury()

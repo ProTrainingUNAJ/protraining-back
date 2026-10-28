@@ -6,8 +6,6 @@ namespace Domain.Entities;
 // Lesión de un atleta con su ciclo de vida (KAN-419). Siempre nace en Active, con una
 // fecha estimada de retorno obligatoria y posterior a la de la lesión. Los cambios de
 // estado posteriores (KAN-420) dejan su fila en AthleteInjuryStatusChange.
-// Zone es texto libre obligatorio con una de las 19 zonas del check-in (KAN-385),
-// por ejemplo "isquiotibiales".
 public class AthleteInjury : BaseEntity
 {
     public Guid AthleteId { get; set; }
@@ -18,12 +16,7 @@ public class AthleteInjury : BaseEntity
     public InjuryStatus Status { get; set; } = InjuryStatus.Active;
     public DateTime? ClearedAt { get; set; }
 
-    // Única puerta de entrada de una lesión nueva: aplica las reglas de negocio del dominio
-    // (DomainException → 400 con mensaje en español vía ExceptionMiddleware).
-    //
-    // Las 19 zonas del check-in (KAN-385): los mismos identificadores genéricos que ofrece
-    // el mapa de dolor del atleta (LEGACY_GROUPS en protraining-front). La zona es texto
-    // obligatorio pero no arbitrario: fuera de ese vocabulario el alta se rechaza.
+    // Las 19 zonas del check-in (KAN-385): los mismos ids del mapa de dolor del atleta.
     private static readonly IReadOnlySet<string> CheckInZones =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -33,6 +26,8 @@ public class AthleteInjury : BaseEntity
             "antebrazos", "manos", "pies", "cuello_trapecios"
         };
 
+    // Única puerta de entrada de una lesión nueva: sus reglas se rechazan como
+    // DomainException → 400 con mensaje en español (ExceptionMiddleware).
     public static AthleteInjury Create(
         Guid athleteId,
         string zone,
@@ -71,9 +66,7 @@ public class AthleteInjury : BaseEntity
         };
     }
 
-    // Fila inicial del historial que acompaña al alta (null → Active): asienta el origen
-    // del ciclo de vida y quién registró la lesión, así toda fila posterior de KAN-420
-    // cuelga de una historia completa (observación de la revisión de Enzo).
+    // Fila inicial del historial que acompaña al alta (null → Active), con el autor del registro.
     public AthleteInjuryStatusChange InitialStatusChange(Guid changedBy, DateTime changedAt)
     {
         if (changedBy == Guid.Empty)

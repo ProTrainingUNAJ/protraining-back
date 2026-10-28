@@ -59,8 +59,7 @@ public sealed class InjuryEndpointIntegrationTests
         Assert.Equal(InjuryStatus.Active, saved.Status);
         Assert.Equal(_pfId, saved.PfId);
 
-        // El alta escribe su fila inicial en el historial: null → Active con el PF del token
-        // (la máquina de estados agrega una fila más por cada transición, KAN-420).
+        // El alta escribe su fila inicial en el historial: null → Active con el PF del token.
         var initialRow = await factory.ExecuteInDbContextAsync(db =>
             db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
                 .Where(row => row.InjuryId == dto.Id)
@@ -118,7 +117,6 @@ public sealed class InjuryEndpointIntegrationTests
         Assert.Equal("La fecha de retorno estimada es obligatoria.", problem!.Title);
     }
 
-    // Zona fuera del vocabulario de las 19 del check-in (revisión de Enzo).
     [Fact]
     public async Task Given_UnknownZone_When_PostInjury_Then_Returns400WithSpanishMessage()
     {

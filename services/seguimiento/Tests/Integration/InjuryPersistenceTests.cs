@@ -14,7 +14,7 @@ namespace Seguimiento.Tests.Integration;
 
 // KAN-419: la lesión queda en la tabla con su PF, en Active y con sus fechas; el filtro por
 // pf_id lo aplica el AppDbContext (igual que el resto de Seguimiento) y el alta escribe su
-// fila inicial null → Active en el historial clínico (revisión de Enzo).
+// fila inicial null → Active en el historial clínico.
 public sealed class InjuryPersistenceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
