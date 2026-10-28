@@ -50,4 +50,57 @@ public static class PlanDraftMapper
             Warnings: warnings ?? []
         );
     }
+
+    public static SaveTrainingPlanRequestDto ToSaveTrainingPlanRequest(
+        PlanDraft draft,
+        PlanDraftContentDto? parsedContent = null)
+    {
+        var content = parsedContent ?? DeserializeContent(draft.Content);
+        return ToSaveTrainingPlanRequest(content, draft.Goal);
+    }
+
+    public static SaveTrainingPlanRequestDto ToSaveTrainingPlanRequest(
+        PlanDraftContentDto content,
+        string? fallbackObjective = null)
+    {
+        var objective = !string.IsNullOrWhiteSpace(content.Objective)
+            ? content.Objective.Trim()
+            : fallbackObjective?.Trim();
+
+        var weeks = (content.Weeks ?? [])
+            .Select(w => new SaveTrainingPlanWeekRequestDto(
+                WeekNumber: w.WeekNumber,
+                Sessions: (w.Sessions ?? [])
+                    .Select(s => new SaveTrainingPlanSessionRequestDto(
+                        Name: s.Name,
+                        Order: s.Order,
+                        DayOfWeek: s.DayOfWeek,
+                        CoachNotes: s.CoachNotes,
+                        Exercises: (s.Exercises ?? [])
+                            .Select(e => new SaveTrainingPlanExerciseRequestDto(
+                                ExerciseId: e.ExerciseId,
+                                Order: e.Order,
+                                Sets: e.Sets,
+                                Reps: e.Reps,
+                                TargetPercentage: e.TargetPercentage))
+                            .ToList()))
+                    .ToList()))
+            .ToList();
+
+        return new SaveTrainingPlanRequestDto(
+            Name: content.Name.Trim(),
+            Objective: objective,
+            Weeks: weeks
+        );
+    }
+
+    public static AssignTrainingPlanRequestDto ToAssignTrainingPlanRequest(
+        PlanDraft draft,
+        Guid trainingPlanId) =>
+        new(
+            TrainingPlanId: trainingPlanId,
+            StartDate: draft.StartDate,
+            CategoryId: draft.CategoryId,
+            AthleteId: draft.AthleteId
+        );
 }

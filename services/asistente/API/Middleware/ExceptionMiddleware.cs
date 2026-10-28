@@ -29,6 +29,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
                 PersistenceUnavailableException => (503, "Base de datos no disponible.",
                     "Comprueba el estado de la base de datos y su configuración. Inténtalo de nuevo."),
+                TrainingServiceUnavailableException trainingUnavailable => (503, trainingUnavailable.Message, (string?)null),
                 BadHttpRequestException badRequest => (badRequest.StatusCode, "Solicitud no válida.",
                     "Comprueba el JSON, los tipos de los campos y Content-Type: application/json."),
                 UnauthorizedAccessException => (401, "No autenticado.",

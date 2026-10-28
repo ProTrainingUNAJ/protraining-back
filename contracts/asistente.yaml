@@ -241,6 +241,40 @@ paths:
         "409":
           $ref: '#/components/responses/Conflict'
 
+  /api/v1/assistant/plan-drafts/{id}/approve:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Aprobar borrador de planificación y crearlo en Entrenamiento
+      description: >
+        Transforma el borrador aprobado en un SaveTrainingPlanRequest, lo crea en el microservicio de
+        Entrenamiento reenviando el token del preparador físico y lo asigna a la categoría o atleta con la
+        fecha de inicio configurada. Si el borrador ya estaba aprobado, devuelve el planId existente sin
+        duplicar la planificación.
+      operationId: approvePlanDraft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Borrador aprobado y planificación creada en Entrenamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovePlanDraftResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/assistant/plan-drafts/{id}/discard:
     post:
       tags:
@@ -370,6 +404,12 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     Conflict:
       description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: El microservicio dependiente no está disponible.
       content:
         application/json:
           schema:
@@ -695,6 +735,49 @@ components:
           items:
             type: string
           example: ["Ajustado por el partido del sábado 7/11: Sentadilla trasera con barra 85 % → 60 %"]
+
+    ApprovePlanDraftResponse:
+      type: object
+      required:
+        - id
+        - planId
+        - approvedPlanId
+        - status
+        - assigned
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+        planId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        approvedPlanId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        status:
+          type: string
+          enum: [Approved]
+          example: "Approved"
+        assigned:
+          type: boolean
+          example: true
+        assignmentId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "f1e2d3c4-b5a6-4789-8012-3456789abcde"
+        warning:
+          type: string
+          nullable: true
+          example: null
+        warnings:
+          type: array
+          items:
+            type: string
+          example: []
 
     HabitsRecommendationResponse:
       type: object
