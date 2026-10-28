@@ -22,7 +22,10 @@ public class TrainingSessionController : ControllerBase
         _getSessionHandler = getSessionHandler;
     }
 
+    // Solo PF (KAN-450): una sesión puede ser de la planificación de otro atleta. El atleta ve
+    // la suya, con las notas del PF, en GET /api/v1/me/today-routine.
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "PreparadorFisico")]
     public async Task<ActionResult<TrainingSessionDto>> GetSession(Guid id, CancellationToken cancellationToken = default)
     {
         var session = await _getSessionHandler.Handle(new GetTrainingSessionQuery(id), cancellationToken);
