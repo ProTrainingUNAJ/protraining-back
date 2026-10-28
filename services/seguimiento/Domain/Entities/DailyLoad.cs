@@ -25,4 +25,12 @@ public class DailyLoad : BaseEntity
 
     public int TotalMinutes =>
         GymMinutes + SportTrainingMinutes + Match1Minutes + Match2Minutes + IndividualWorkMinutes;
+
+    // Carga del día = Σ (minutos × RPE) por actividad (issue #148).
+    public int TotalLoad =>
+        GymMinutes * (GymRpe ?? 0) +
+        SportTrainingMinutes * (SportTrainingRpe ?? 0) +
+        Match1Minutes * (Match1Rpe ?? 0) +
+        Match2Minutes * (Match2Rpe ?? 0) +
+        IndividualWorkMinutes * (IndividualWorkRpe ?? 0);
 }

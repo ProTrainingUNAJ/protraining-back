@@ -689,6 +689,9 @@ components:
         totalMinutes:
           type: integer
           example: 60
+        totalLoad:
+          type: integer
+          example: 420
         date:
           type: string
           format: date
