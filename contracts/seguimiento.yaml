@@ -795,15 +795,25 @@ components:
     CreateInjuryRequest:
       type: object
       required:
-        - bodyZone
-        - notes
+        - zone
+        - description
+        - injuryDate
+        - estimatedReturnDate
       properties:
-        bodyZone:
+        zone:
           type: string
-          example: "Hombro derecho"
-        notes:
+          example: "isquiotibiales"
+        description:
           type: string
-          example: "Molestia punzante al bloquear banco plano con 90 kg."
+          example: "Gradación 3 tras sprint."
+        injuryDate:
+          type: string
+          format: date
+          example: "2026-10-01"
+        estimatedReturnDate:
+          type: string
+          format: date
+          example: "2026-11-01"
 
     UpdateInjuryStatusRequest:
       type: object
@@ -813,7 +823,7 @@ components:
       properties:
         newStatus:
           type: string
-          enum: [Active, InRecovery, Cleared]
+          enum: [Active, InRecovery, MedicallyCleared]
           example: "InRecovery"
         transitionNotes:
           type: string
@@ -824,8 +834,10 @@ components:
       required:
         - id
         - athleteId
-        - bodyZone
-        - notes
+        - zone
+        - description
+        - injuryDate
+        - estimatedReturnDate
         - status
         - createdAt
       properties:
@@ -837,16 +849,29 @@ components:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        bodyZone:
+        zone:
           type: string
-          example: "Hombro derecho"
-        notes:
+          example: "isquiotibiales"
+        description:
           type: string
-          example: "Molestia punzante al bloquear banco plano. | [2026-10-10] Estado a InRecovery: Kinesiología favorable."
+          example: "Gradación 3 tras sprint."
+        injuryDate:
+          type: string
+          format: date
+          example: "2026-10-01"
+        estimatedReturnDate:
+          type: string
+          format: date
+          example: "2026-11-01"
         status:
           type: string
-          enum: [Active, InRecovery, Cleared]
+          enum: [Active, InRecovery, MedicallyCleared]
           example: "InRecovery"
+        clearedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T00:00:00Z"
         createdAt:
           type: string
           format: date-time
