@@ -285,6 +285,18 @@ Los tests corren contra SQLite en memoria, salvo los que necesitan **Postgres re
 dotnet test services/<servicio>/Tests --filter "Category!=RequiresDocker"
 ```
 
+**Aislamiento entre PFs (KAN-432).** Los tests que prueban que un PF no ve datos de otro (y que un atleta no ve datos de un compañero) llevan `[Trait("Category", "Isolation")]`. El CI los corre primero, en el paso **"Aislamiento entre PFs"**: si alguno falla, el PR no se puede mergear. Para correrlos en local:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category=Isolation"
+```
+
+Dos guardianes en `Tests/Security/` de cada servicio:
+- `TenantFilterGuardTests`: falla si una tabla nueva no tiene el filtro por PF (la entidad no hereda de `BaseEntity`) o si el código de producción usa `IgnoreQueryFilters()`. Las excepciones (catálogos compartidos, el worker de recordatorios, las tablas de login) están en una lista dentro del test, cada una con su motivo.
+- `AthletePrivacyTests` (Estructura, Entrenamiento y Seguimiento): falla si un endpoint que recibe un id en la ruta queda abierto al rol Atleta sin validar que el id sea el suyo.
+
+Si escribís un test de aislamiento nuevo, ponele el trait `Isolation`.
+
 ### Casos de uso (CQRS liviano)
 
 Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handler:

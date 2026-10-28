@@ -42,7 +42,20 @@ jobs:
       - name: Build
         run: dotnet build ${{ matrix.proyecto }} --no-restore -c Release
 
-      # Corre los proyectos de tests de la carpeta (los que terminan en Tests.csproj), si hay.
+      # Suite de aislamiento entre PFs (KAN-432): tests con [Trait("Category", "Isolation")].
+      # Corre primero y en su propio paso: si falla, se ve en el PR qué se rompió y no se puede mergear.
+      - name: Aislamiento entre PFs
+        run: |
+          tests=$(find ${{ matrix.carpeta }} -name '*Tests.csproj')
+          if [ -z "$tests" ]; then
+            echo "${{ matrix.nombre }} todavía no tiene proyectos de tests."
+            exit 0
+          fi
+          for project in $tests; do
+            dotnet test "$project" -c Release --filter "Category=Isolation"
+          done
+
+      # El resto de los tests del servicio (los que terminan en Tests.csproj), si hay.
       - name: Test
         run: |
           tests=$(find ${{ matrix.carpeta }} -name '*Tests.csproj')
@@ -51,7 +64,7 @@ jobs:
             exit 0
           fi
           for project in $tests; do
-            dotnet test "$project" -c Release
+            dotnet test "$project" -c Release --filter "Category!=Isolation"
           done
 
   smoke:

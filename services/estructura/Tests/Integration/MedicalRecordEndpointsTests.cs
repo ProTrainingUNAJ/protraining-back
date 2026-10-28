@@ -256,6 +256,7 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOwnedByPfB_When_PfAAttemptsToReadOrUpdateMedicalRecord_Then_Returns404NotFound()
     {
         // arrange: PF-B crea un atleta

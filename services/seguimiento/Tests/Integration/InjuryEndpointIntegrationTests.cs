@@ -192,6 +192,7 @@ public sealed class InjuryEndpointIntegrationTests
     // ---------- Aislamiento: atleta de otro PF (KAN-431) ----------
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOfAnotherPf_When_PostInjury_Then_Returns404AndPersistsNothing()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
@@ -210,6 +211,7 @@ public sealed class InjuryEndpointIntegrationTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOfAnotherPf_When_ListInjuries_Then_Returns404NotEmptyList()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);

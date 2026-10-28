@@ -67,6 +67,7 @@ public class CheckInsControllerTests
 
     [Fact]
     // KAN-431: el id de otro atleta responde 404 (no 403), para no revelar si existe.
+    [Trait("Category", "Isolation")]
     public async Task Submit_WithTokenOfAnotherAthlete_Throws_AthleteNotFound_And_Does_Not_Save()
     {
         ResponderMe(Guid.NewGuid());
