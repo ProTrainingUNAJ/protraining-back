@@ -229,6 +229,7 @@ No necesita la base ni variables de entorno. Va a mostrar un aviso de que falta 
 Reglas:
 - Los cambios al modelo van por PR, **con una sola migración por PR**.
 - Si dos migraciones del mismo servicio chocan, el segundo en mergear borra la suya, hace pull de `develop` y la vuelve a generar.
+- Cada servicio tiene un test (`Tests/Database/PostgresDatabaseTests.cs`) que **falla si cambiaste una entidad y no creaste la migración**. Si te pasa, creá la migración con el comando de arriba.
 
 ## Convenciones
 
@@ -277,6 +278,12 @@ Application/
 ```
 
 Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
+
+Los tests corren contra SQLite en memoria, salvo los que necesitan **Postgres real**: esos lo levantan con Testcontainers (`postgres:16-alpine`, la misma imagen del compose) y llevan `[Trait("Category", "RequiresDocker")]`. Necesitan Docker corriendo; en el CI corren siempre. Para correr el resto sin Docker:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category!=RequiresDocker"
+```
 
 ### Casos de uso (CQRS liviano)
 
