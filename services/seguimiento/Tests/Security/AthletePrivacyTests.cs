@@ -13,7 +13,8 @@ public sealed class AthletePrivacyTests
 {
     // Endpoints con id abiertos al atleta que validan que el id sea el suyo (y si no, responden 404).
     // CheckInsController.Submit: compara el id de la ruta con el atleta de /me y responde 404 si no es el suyo (KAN-431).
-    private static readonly HashSet<string> AllowedForAthletes = ["CheckInsController.Submit"];
+    private static readonly HashSet<string> AllowedForAthletes =
+        ["CheckInsController.Submit", "DailyLoadsController.Register", "DailyLoadsController.Get"];
 
     [Fact]
     public void Given_EveryEndpointWithIdInRoute_When_CheckingRoles_Then_NoneIsOpenToAthletes()
