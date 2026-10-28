@@ -20,6 +20,19 @@ public class AthleteInjury : BaseEntity
 
     // Única puerta de entrada de una lesión nueva: aplica las reglas de negocio del dominio
     // (DomainException → 400 con mensaje en español vía ExceptionMiddleware).
+    //
+    // Las 19 zonas del check-in (KAN-385): los mismos identificadores genéricos que ofrece
+    // el mapa de dolor del atleta (LEGACY_GROUPS en protraining-front). La zona es texto
+    // obligatorio pero no arbitrario: fuera de ese vocabulario el alta se rechaza.
+    private static readonly IReadOnlySet<string> CheckInZones =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "pecho", "hombros", "biceps", "abdominales", "cuadriceps",
+            "espalda_alta", "espalda_media", "espalda_baja", "triceps", "gluteos",
+            "isquiotibiales", "gemelos", "trapecios", "dorsales", "oblicuos",
+            "antebrazos", "manos", "pies", "cuello_trapecios"
+        };
+
     public static AthleteInjury Create(
         Guid athleteId,
         string zone,
@@ -32,6 +45,10 @@ public class AthleteInjury : BaseEntity
 
         if (string.IsNullOrWhiteSpace(zone))
             throw new DomainException("La zona de la lesión es obligatoria.");
+
+        if (!CheckInZones.Contains(zone.Trim()))
+            throw new DomainException(
+                "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).");
 
         if (string.IsNullOrWhiteSpace(description))
             throw new DomainException("La descripción de la lesión es obligatoria.");

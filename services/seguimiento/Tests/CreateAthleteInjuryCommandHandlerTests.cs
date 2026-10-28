@@ -119,4 +119,23 @@ public class CreateAthleteInjuryCommandHandlerTests
         _injuries.Verify(repo => repo.AddAsync(It.IsAny<AthleteInjury>(), It.IsAny<CancellationToken>()), Times.Never);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    // Zona fuera del vocabulario de las 19 del check-in (revisión de Enzo): el dominio
+    // la rechaza y no se escribe ni la lesión ni la fila inicial del historial.
+    [Fact]
+    public async Task HandleAsync_WithUnknownZone_ThrowsDomainExceptionWithoutSaving()
+    {
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(CommandValido(EstimatedReturnDate) with { Zone = "femoral" }));
+
+        Assert.Equal(
+            "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).",
+            exception.Message);
+
+        _injuries.Verify(repo => repo.AddAsync(It.IsAny<AthleteInjury>(), It.IsAny<CancellationToken>()), Times.Never);
+        _injuries.Verify(
+            repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

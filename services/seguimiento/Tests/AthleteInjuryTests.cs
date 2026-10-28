@@ -3,8 +3,9 @@ using Domain.Exceptions;
 
 namespace Seguimiento.Tests;
 
-// Reglas de negocio de KAN-419: toda lesión nace en Active, con zona y descripción
-// obligatorias y una fecha de retorno estimada posterior a la de la lesión.
+// Reglas de negocio de KAN-419: toda lesión nace en Active, con descripción obligatoria
+// y una fecha de retorno estimada posterior a la de la lesión. La zona debe pertenecer
+// a las 19 zonas del check-in (revisión de Enzo).
 // El rechazo es del dominio (DomainException → 400 con mensaje en español).
 public class AthleteInjuryTests
 {
@@ -92,6 +93,60 @@ public class AthleteInjuryTests
             () => AthleteInjury.Create(Guid.Empty, "isquiotibiales", "Dolor", InjuryDate, InjuryDate.AddDays(15)));
 
         Assert.Equal("El identificador del atleta es inválido.", exception.Message);
+    }
+
+    // ---------- Vocabulario de zonas del check-in (revisión de Enzo) ----------
+
+    // Las 19 zonas del check-in (KAN-385): el mismo vocabulario que ofrece el mapa de
+    // dolor del atleta. Cada una debe poder registrarse como lesión.
+    [Theory]
+    [InlineData("pecho")]
+    [InlineData("hombros")]
+    [InlineData("biceps")]
+    [InlineData("abdominales")]
+    [InlineData("cuadriceps")]
+    [InlineData("espalda_alta")]
+    [InlineData("espalda_media")]
+    [InlineData("espalda_baja")]
+    [InlineData("triceps")]
+    [InlineData("gluteos")]
+    [InlineData("isquiotibiales")]
+    [InlineData("gemelos")]
+    [InlineData("trapecios")]
+    [InlineData("dorsales")]
+    [InlineData("oblicuos")]
+    [InlineData("antebrazos")]
+    [InlineData("manos")]
+    [InlineData("pies")]
+    [InlineData("cuello_trapecios")]
+    public void Create_WithAnyCheckInZone_IsAccepted(string zone)
+    {
+        var injury = Crear(InjuryDate.AddDays(15), zone: zone);
+
+        Assert.Equal(zone, injury.Zone);
+    }
+
+    // La zona puede viajar con espacios y en mayúsculas (el front es texto libre):
+    // el dominio normaliza y compara sin distinguir mayúsculas.
+    [Theory]
+    [InlineData("  cuadriceps  ")]
+    [InlineData("ISQUIOTIBIALES")]
+    public void Create_WithZoneVariants_IsNormalizedAndAccepted(string zone)
+    {
+        var injury = Crear(InjuryDate.AddDays(15), zone: zone);
+
+        Assert.Equal(zone.Trim().ToLowerInvariant(), injury.Zone.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void Create_WithUnknownZone_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => Crear(InjuryDate.AddDays(15), zone: "femoral"));
+
+        Assert.Equal(
+            "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).",
+            exception.Message);
     }
 
     // ---------- Fila inicial del historial (revisión de Enzo) ----------
