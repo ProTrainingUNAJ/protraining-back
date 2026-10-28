@@ -30,14 +30,14 @@ namespace Infrastructure.Repositories
            
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.Where(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name) > 0.3);
+                exercises = exercises.Where(e => EF.Functions.TrigramsAreWordSimilar(searchTerm, e.Name));
             }
 
             var totalCount = await exercises.CountAsync(cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name));
+                exercises = exercises.OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name)).ThenBy(e => e.Name);
             }
             else
             {
