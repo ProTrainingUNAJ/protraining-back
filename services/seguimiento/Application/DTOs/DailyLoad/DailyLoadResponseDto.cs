@@ -3,6 +3,7 @@ namespace Application.DTOs.DailyLoad;
 public sealed record DailyLoadResponseDto(
     string Message,
     int TotalMinutes,
+    int TotalLoad,
     DateOnly Date,
     ActivityLoadDto Gym,
     ActivityLoadDto SportTraining,

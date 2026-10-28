@@ -9,6 +9,7 @@ public static class DailyLoadMappings
         new(
             message,
             load.TotalMinutes,
+            load.TotalLoad,
             DateOnly.FromDateTime(load.Date),
             new ActivityLoadDto { Minutes = load.GymMinutes, Rpe = load.GymRpe },
             new ActivityLoadDto { Minutes = load.SportTrainingMinutes, Rpe = load.SportTrainingRpe },
