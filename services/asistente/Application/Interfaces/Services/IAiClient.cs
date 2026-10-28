@@ -1,6 +1,7 @@
 namespace Application.Interfaces.Services;
 
 using Application.DTOs.Ai;
+using Application.DTOs.PlanDrafts;
 
 public interface IAiClient
 {
@@ -8,5 +9,9 @@ public interface IAiClient
 
     Task<RoutineSuggestionResponseDto?> TrySuggestRoutineAsync(
         RoutineSuggestionRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<PlanDraftContentDto?> TryGeneratePlanDraftAsync(
+        CreatePlanDraftRequestDto request,
         CancellationToken cancellationToken = default);
 }

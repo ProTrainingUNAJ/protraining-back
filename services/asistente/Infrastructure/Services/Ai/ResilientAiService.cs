@@ -1,3 +1,7 @@
+using Application.Common.PlanDrafts;
+using Application.DTOs.PlanDrafts;
+using Application.Exceptions;
+using Domain.Exceptions;
 using System.Diagnostics;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
@@ -294,5 +298,93 @@ public sealed class ResilientAiService : IAiService
 
         totalStopwatch.Stop();
         throw new InvalidOperationException("Ningún proveedor de la cadena resiliente pudo generar la rutina.");
+    }
+
+    public async Task<(PlanDraftContentDto Content, string Provider)> GeneratePlanDraftAsync(
+        CreatePlanDraftRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _logger.LogInformation("Iniciando generación de borrador de planificación multisesión para objetivo '{Goal}' ({Weeks} semanas, {Days} días/semana).",
+            request.Goal, request.Weeks, request.DaysPerWeek);
+
+        var totalStopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var content = await provider.TryGeneratePlanDraftAsync(request, cancellationToken);
+                if (content == null)
+                {
+                    tierStopwatch.Stop();
+                    if (!isLast)
+                    {
+                        _logger.LogWarning(
+                            "El proveedor '{Provider}' no pudo generar el borrador tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                            provider.ProviderName,
+                            tierStopwatch.ElapsedMilliseconds);
+                    }
+                    continue;
+                }
+
+                if (_catalogService != null)
+                {
+                    try
+                    {
+                        await PlanDraftContentValidator.ValidateAsync(content, _catalogService, cancellationToken);
+                    }
+                    catch (DomainException ex)
+                    {
+                        tierStopwatch.Stop();
+                        _logger.LogWarning(
+                            "El borrador generado por '{Provider}' fue descartado por fallar validación de catálogo o esquema: {Message}. Pasando al siguiente proveedor.",
+                            provider.ProviderName,
+                            ex.Message);
+
+                        if (_auditService != null)
+                        {
+                            await _auditService.LogAsync(AiLog.Create(
+                                provider.ProviderName,
+                                request.Goal,
+                                tierStopwatch.ElapsedMilliseconds,
+                                isValid: false,
+                                validationResult: "DescartadoPorEsquemaOCatalogo",
+                                athleteId: request.AthleteId,
+                                errorMessage: ex.Message));
+                        }
+                        continue;
+                    }
+                }
+
+                tierStopwatch.Stop();
+                totalStopwatch.Stop();
+                _logger.LogInformation(
+                    "Borrador de planificación generado exitosamente por proveedor '{Provider}' en {ElapsedMs} ms (tiempo total: {TotalMs} ms).",
+                    provider.ProviderName,
+                    tierStopwatch.ElapsedMilliseconds,
+                    totalStopwatch.ElapsedMilliseconds);
+
+                return (content, provider.ProviderName);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(ex, "Excepción en proveedor '{Provider}' al generar borrador de planificación. Pasando al siguiente respaldo.", provider.ProviderName);
+            }
+        }
+
+        totalStopwatch.Stop();
+        _logger.LogError("Los tres proveedores de IA fallaron al generar el borrador de planificación tras {ElapsedMs} ms.", totalStopwatch.ElapsedMilliseconds);
+
+        throw new AiServiceUnavailableException("El servicio de generación de planificaciones con inteligencia artificial no se encuentra disponible. Por favor intente más tarde.");
     }
 }

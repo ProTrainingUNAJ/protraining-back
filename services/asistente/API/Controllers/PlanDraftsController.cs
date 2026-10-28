@@ -1,5 +1,6 @@
 using Application.DTOs.PlanDrafts;
 using Application.UseCases.PlanDrafts.ApprovePlanDraft;
+using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
@@ -15,8 +16,28 @@ public sealed class PlanDraftsController(
     GetPlanDraftQueryHandler getPlanDraftHandler,
     UpdatePlanDraftCommandHandler updatePlanDraftHandler,
     ApprovePlanDraftCommandHandler approvePlanDraftHandler,
-    DiscardPlanDraftCommandHandler discardPlanDraftHandler) : ControllerBase
+    DiscardPlanDraftCommandHandler discardPlanDraftHandler,
+    CreatePlanDraftCommandHandler? createPlanDraftHandler = null) : ControllerBase
 {
+    /// <summary>
+    /// Genera y persiste un nuevo borrador de planificación multisesión asistido por IA (KAN-381 / KAN-383).
+    /// </summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(PlanDraftResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PlanDraftResponseDto>> Create(
+        [FromBody] CreatePlanDraftRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (createPlanDraftHandler == null)
+            throw new InvalidOperationException("CreatePlanDraftCommandHandler no está configurado.");
+
+        var result = await createPlanDraftHandler.HandleAsync(new CreatePlanDraftCommand(request), cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
     /// <summary>
     /// Obtiene un borrador de planificación por su identificador (KAN-383 / KAN-410).
     /// </summary>

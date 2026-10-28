@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Ai;
+using Application.Common.PlanDrafts;
 using Application.DTOs.Ai;
+using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -14,7 +16,8 @@ public sealed class OllamaClient(
     HttpClient httpClient,
     IOptions<OllamaOptions> options,
     IAiAuditService aiAuditService,
-    ILogger<OllamaClient> logger) : IAiClient
+    ILogger<OllamaClient> logger,
+    IExerciseCatalogService? catalogService = null) : IAiClient
 {
     private readonly OllamaOptions _options = options.Value;
 
@@ -44,11 +47,11 @@ public sealed class OllamaClient(
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
-            var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            using var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
             if (!response.IsSuccessStatusCode)
             {
                 stopwatch.Stop();
-                logger.LogWarning("Ollama respondió con error {StatusCode}. Activando respaldo.", response.StatusCode);
+                logger?.LogWarning("Ollama respondió con error {StatusCode}. Activando respaldo.", response.StatusCode);
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,
                     prompt,
@@ -69,7 +72,7 @@ public sealed class OllamaClient(
             if (!document.RootElement.TryGetProperty("response", out var rawTextProp))
             {
                 stopwatch.Stop();
-                logger.LogWarning("La respuesta de Ollama no contuvo la propiedad 'response'. Activando respaldo.");
+                logger?.LogWarning("La respuesta de Ollama no contuvo la propiedad 'response'. Activando respaldo.");
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,
                     prompt,
@@ -87,7 +90,7 @@ public sealed class OllamaClient(
             if (string.IsNullOrWhiteSpace(rawText))
             {
                 stopwatch.Stop();
-                logger.LogWarning("El modelo de Ollama devolvió una respuesta vacía. Activando respaldo.");
+                logger?.LogWarning("El modelo de Ollama devolvió una respuesta vacía. Activando respaldo.");
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,
                     prompt,
@@ -106,7 +109,7 @@ public sealed class OllamaClient(
             {
                 stopwatch.Stop();
                 var validationTag = validationResult.IsSyntaxError ? "JsonInvalido" : "SchemaInvalido";
-                logger.LogWarning("La respuesta de Ollama no cumple con el esquema JSON o rangos válidos ({ValidationTag}): {Errors}. Activando respaldo.", validationTag, validationResult.ErrorMessage);
+                logger?.LogWarning("La respuesta de Ollama no cumple con el esquema JSON o rangos válidos ({ValidationTag}): {Errors}. Activando respaldo.", validationTag, validationResult.ErrorMessage);
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,
                     prompt,
@@ -148,7 +151,7 @@ public sealed class OllamaClient(
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             stopwatch.Stop();
-            logger.LogWarning("La llamada a Ollama superó el tiempo límite de {Seconds} segundos. Activando respaldo.", _options.TimeoutSeconds);
+            logger?.LogWarning("La llamada a Ollama superó el tiempo límite de {Seconds} segundos. Activando respaldo.", _options.TimeoutSeconds);
             await aiAuditService.LogAsync(AiLog.Create(
                 ProviderName,
                 prompt,
@@ -162,7 +165,171 @@ public sealed class OllamaClient(
         catch (Exception ex)
         {
             stopwatch.Stop();
-            logger.LogWarning(ex, "Ollama no está disponible ({Message}). Activando respaldo.", ex.Message);
+            logger?.LogWarning(ex, "Ollama no está disponible ({Message}). Activando respaldo.", ex.Message);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "ErrorConexion",
+                athleteId: request.AthleteId,
+                errorMessage: ex.Message));
+            return null;
+        }
+    }
+
+    public async Task<PlanDraftContentDto?> TryGeneratePlanDraftAsync(
+        CreatePlanDraftRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var stopwatch = Stopwatch.StartNew();
+
+        IReadOnlyList<CatalogExerciseDto> catalog = [];
+        if (catalogService != null)
+        {
+            catalog = await catalogService.GetAllAsync(cancellationToken);
+        }
+
+        var availableExercises = catalog.Count > 0
+            ? catalog.Take(25).ToList()
+            : [
+                new CatalogExerciseDto(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Sentadilla trasera con barra", "Piernas", "Barra"),
+                new CatalogExerciseDto(Guid.Parse("22222222-2222-2222-2222-222222222222"), "Press de banca plano", "Pecho", "Barra"),
+                new CatalogExerciseDto(Guid.Parse("33333333-3333-3333-3333-333333333333"), "Peso muerto convencional", "Espalda", "Barra")
+            ];
+
+        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises);
+
+        try
+        {
+            var payload = new
+            {
+                model = _options.Model,
+                prompt,
+                format = "json",
+                stream = false
+            };
+
+            var url = $"{_options.BaseUrl.TrimEnd('/')}/api/generate";
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
+            using var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("Ollama respondió con error {StatusCode}. Activando respaldo.", response.StatusCode);
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "ErrorHttp",
+                    athleteId: request.AthleteId,
+                    errorMessage: $"Ollama HTTP {(int)response.StatusCode} ({response.StatusCode})"));
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var document = JsonDocument.Parse(responseBody);
+
+            int? promptTokens = document.RootElement.TryGetProperty("prompt_eval_count", out var pProp) ? pProp.GetInt32() : null;
+            int? completionTokens = document.RootElement.TryGetProperty("eval_count", out var eProp) ? eProp.GetInt32() : null;
+
+            if (!document.RootElement.TryGetProperty("response", out var rawTextProp))
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("La respuesta de Ollama no contuvo la propiedad 'response'. Activando respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "FormatoInvalido",
+                    athleteId: request.AthleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: "La respuesta no contuvo la propiedad 'response'."));
+                return null;
+            }
+
+            var rawText = rawTextProp.GetString();
+            if (string.IsNullOrWhiteSpace(rawText))
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("El modelo de Ollama devolvió una respuesta vacía. Activando respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "RespuestaVacia",
+                    athleteId: request.AthleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: "El modelo devolvió texto vacío."));
+                return null;
+            }
+
+            var (isValid, parsedContent, errorMessage, isSyntaxError) = PlanDraftAiParser.Parse(rawText);
+            if (!isValid)
+            {
+                stopwatch.Stop();
+                var validationTag = isSyntaxError ? "JsonInvalido" : "SchemaInvalido";
+                logger?.LogWarning("La respuesta de Ollama no cumple con el esquema del borrador ({ValidationTag}): {Errors}. Activando respaldo.", validationTag, errorMessage);
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: validationTag,
+                    response: rawText,
+                    athleteId: request.AthleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: errorMessage));
+                return null;
+            }
+
+            stopwatch.Stop();
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: true,
+                validationResult: "Valido",
+                response: rawText,
+                athleteId: request.AthleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens));
+
+            return parsedContent;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning("La llamada a Ollama superó el tiempo límite de {Seconds} segundos. Activando respaldo.", _options.TimeoutSeconds);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "Timeout",
+                athleteId: request.AthleteId,
+                errorMessage: $"Superó el tiempo límite de {_options.TimeoutSeconds} segundos."));
+            return null;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning(ex, "Ollama no está disponible ({Message}). Activando respaldo.", ex.Message);
             await aiAuditService.LogAsync(AiLog.Create(
                 ProviderName,
                 prompt,
