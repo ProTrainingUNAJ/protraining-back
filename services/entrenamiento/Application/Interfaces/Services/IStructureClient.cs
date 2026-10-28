@@ -13,4 +13,7 @@ public interface IStructureClient
 
     // true si la categoría existe y es del PF del token; false si no existe o es de otro PF (KAN-431).
     Task<bool> IsOwnCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
+    // Obtiene los IDs de los atletas de una categoría consultando a Estructura
+    Task<IReadOnlyList<Guid>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default);
 }

@@ -33,4 +33,27 @@ public sealed class CheckInRepository(AppDbContext context) : ICheckInRepository
         context.CheckIns.Add(checkIn);
         return Task.CompletedTask;
     }
+
+    public async Task<IReadOnlyList<Guid>> GetCompletedCheckInAthleteIdsAsync(
+        DateOnly date,
+        Guid pfId,
+        IReadOnlyList<Guid> athleteIds,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            if (athleteIds.Count == 0)
+                return [];
+
+            var targetDate = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            var localDate = date.ToDateTime(TimeOnly.MinValue);
+
+            return await context.CheckIns
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(c => c.PfId == pfId && (c.Date == targetDate || c.Date == localDate) && athleteIds.Contains(c.AthleteId))
+                .Select(c => c.AthleteId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+        );
 }

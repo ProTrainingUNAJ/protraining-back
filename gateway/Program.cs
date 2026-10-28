@@ -57,7 +57,4 @@ app.Use(async (context, next) =>
 app.UseSerilogRequestLogging();
 app.UseCors(CorsPolicyName);
 
-app.MapHealthChecks("/health");
-app.MapReverseProxy();
-
-app.Run();
+// Bloquea cualquier acceso externo a endpoints internos

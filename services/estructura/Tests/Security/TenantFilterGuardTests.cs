@@ -21,6 +21,7 @@ public sealed class TenantFilterGuardTests
     private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new()
     {
         ["PushSubscriptionRepository.cs"] = "El worker de recordatorios busca suscripciones sin PF logueado (por dispositivo, usuario o atleta).",
+        ["AthleteRepository.cs"] = "Consulta los PFs distintos para el worker de recordatorios de wellness.",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.

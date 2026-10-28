@@ -1,3 +1,3 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 
 public record UpdatePhoneRequestDto(string PhoneNumber);

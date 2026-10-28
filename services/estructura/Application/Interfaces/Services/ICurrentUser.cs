@@ -1,3 +1,5 @@
+using System;
+
 namespace Application.Interfaces.Services;
 
 public interface ICurrentUser
@@ -7,4 +9,13 @@ public interface ICurrentUser
 
     // Cuenta de Identidad del usuario (claim "sub" del token). Null sin un token válido.
     Guid? UserId { get; }
+
+    // Permite establecer un contexto ambiental de PF para background workers / tareas sin HttpContext.
+    IDisposable UsePfContext(Guid pfId) => EmptyDisposable.Instance;
+}
+
+public sealed class EmptyDisposable : IDisposable
+{
+    public static readonly EmptyDisposable Instance = new();
+    public void Dispose() { }
 }

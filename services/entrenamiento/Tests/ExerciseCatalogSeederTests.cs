@@ -1,4 +1,4 @@
-﻿using Infrastructure.Data.Seeders;
+using Infrastructure.Data.Seeders;
 
 namespace Entrenamiento.Tests;
 

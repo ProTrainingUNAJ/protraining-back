@@ -18,6 +18,7 @@ public sealed class TenantFilterGuardTests
     private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new()
     {
         ["CatalogTestSeeder.cs"] = "Al arrancar, revisa si el catálogo compartido de tests ya está cargado.",
+        ["CheckInRepository.cs"] = "Endpoint interno del worker de recordatorios (rol Servicio): consulta los check-ins de un PF que llega por parámetro, sin PF logueado.",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.
