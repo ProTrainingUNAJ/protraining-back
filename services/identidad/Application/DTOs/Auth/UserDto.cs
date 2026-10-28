@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 
 /// <summary>
 /// DTO con la informacion basica del usuario autenticado

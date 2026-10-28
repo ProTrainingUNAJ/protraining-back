@@ -720,7 +720,7 @@ paths:
           description: Fecha de la sesión a consultar (YYYY-MM-DD).
         - name: pfId
           in: query
-          required: false
+          required: true
           schema:
             type: string
             format: uuid
@@ -738,6 +738,8 @@ paths:
                   format: uuid
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
 
   /api/health:
     get:

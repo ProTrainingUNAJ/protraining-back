@@ -23,6 +23,7 @@ public sealed class TenantFilterGuardTests
     {
         ["ExerciseCatalogSeeder.cs"] = "Al arrancar, revisa si el catálogo compartido de ejercicios ya está cargado.",
         ["ExerciseRestrictionSeeder.cs"] = "Al arrancar, revisa si las restricciones compartidas ya están cargadas y consulta los ejercicios del catálogo.",
+        ["TrainingSessionRepository.cs"] = "Endpoint interno del worker de recordatorios (rol Servicio): consulta las asignaciones de un PF que llega por parámetro, sin PF logueado.",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.

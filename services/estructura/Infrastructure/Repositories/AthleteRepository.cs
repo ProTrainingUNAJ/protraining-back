@@ -46,4 +46,12 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
         context.Athletes.Remove(athlete);
         return Task.CompletedTask;
     }
+    public async Task<IReadOnlyList<Guid>> GetDistinctPfIdsAsync(CancellationToken cancellationToken = default) =>
+    await PersistenceErrors.ExecuteAsync(async () =>
+        await context.Athletes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Select(a => a.PfId)
+            .Distinct()
+            .ToListAsync(cancellationToken));
 }
