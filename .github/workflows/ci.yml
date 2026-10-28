@@ -17,7 +17,7 @@ permissions:
 jobs:
   build:
     name: Build y test (${{ matrix.nombre }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -29,9 +29,9 @@ jobs:
           - { nombre: asistente, carpeta: services/asistente, proyecto: services/asistente/API/API.csproj }
           - { nombre: gateway, carpeta: gateway, proyecto: gateway/Gateway.csproj }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -57,9 +57,9 @@ jobs:
   smoke:
     name: Smoke test (docker compose)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Levantar los servicios y sus bases
         run: |
@@ -88,9 +88,9 @@ jobs:
 
   contracts:
     name: Validar contratos OpenAPI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validar especificaciones con Redocly
         run: |
@@ -101,7 +101,7 @@ jobs:
     name: CI ok
     if: always()
     needs: [build, smoke, contracts]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Verificar que todo pasó
         run: |
