@@ -90,6 +90,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Semáforo del día (KAN-367): motor y caso de uso registrados como en Program.cs.
                 services.AddScoped<TrafficLightEngine>();
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();
