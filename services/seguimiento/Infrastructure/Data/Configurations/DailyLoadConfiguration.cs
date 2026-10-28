@@ -22,6 +22,7 @@ public sealed class DailyLoadConfiguration : IEntityTypeConfiguration<DailyLoad>
         builder.Property(load => load.IndividualWorkMinutes).HasColumnName("individual_work_minutes").IsRequired();
         builder.Property(load => load.IndividualWorkRpe).HasColumnName("individual_work_rpe");
         builder.Ignore(load => load.TotalMinutes);
+        builder.Ignore(load => load.TotalLoad);
 
         builder.HasIndex(load => new { load.AthleteId, load.Date })
             .IsUnique()

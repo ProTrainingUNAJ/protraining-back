@@ -12,7 +12,11 @@ namespace Entrenamiento.Tests.Security;
 public sealed class TenantFilterGuardTests
 {
     // Tablas sin filtro por PF a propósito, con el motivo.
-    private static readonly Dictionary<string, string> EntitiesWithoutPfFilter = new();
+    private static readonly Dictionary<string, string> EntitiesWithoutPfFilter = new()
+    {
+        [nameof(Domain.Entities.ExerciseRestriction)] = "Catálogo global de restricciones por zonas de dolor.",
+        [nameof(Domain.Entities.ExerciseSubstitute)] = "Catálogo global de sustitutos sugeridos por restricción.",
+    };
 
     // Archivos que pueden usar IgnoreQueryFilters(), con el motivo.
     private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new()
