@@ -37,6 +37,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_ValidInjury_When_PostInjury_Then_Returns201ActiveAndPersists()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateAuthenticatedClient(_pfId)
             .PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
@@ -68,6 +69,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_ReturnDateBeforeInjuryDate_When_PostInjury_Then_Returns400WithSpanishMessage()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateAuthenticatedClient(_pfId)
             .PostAsJsonAsync(Endpoint(_athleteId), new CreateAthleteInjuryRequest
@@ -94,6 +96,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_WithoutEstimatedReturnDate_When_PostInjury_Then_Returns400WithSpanishMessage()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateAuthenticatedClient(_pfId)
             .PostAsJsonAsync(Endpoint(_athleteId), new CreateAthleteInjuryRequest
@@ -116,6 +119,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_Injuries_When_ListInjuries_Then_Returns200WithFilteredStatus()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
         var first = await client.PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
@@ -148,6 +152,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_NoInjuriesForOtherAthlete_When_ListInjuries_Then_Returns200WithEmptyList()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateAuthenticatedClient(_pfId)
             .GetAsync(Endpoint(_athleteId));
@@ -163,6 +168,7 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_NoToken_When_PostInjury_Then_Returns401()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var post = await factory.CreateClient().PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
         var get = await factory.CreateClient().GetAsync(Endpoint(_athleteId));
@@ -175,10 +181,58 @@ public sealed class InjuryEndpointIntegrationTests
     public async Task Given_AthleteRoleToken_When_PostInjury_Then_Returns403()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateAuthenticatedClient(_pfId, role: "Atleta")
             .PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ---------- Aislamiento: atleta de otro PF (KAN-431) ----------
+
+    [Fact]
+    public async Task Given_AthleteOfAnotherPf_When_PostInjury_Then_Returns404AndPersistsNothing()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        // Estructura responde 404: el atleta no existe o es de otro PF.
+        factory.Structure.RespondWith(HttpStatusCode.NotFound, "{}");
+
+        var response = await factory.CreateAuthenticatedClient(_pfId)
+            .PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.EndsWith($"api/v1/athletes/{_athleteId}", factory.Structure.LastRequest!.RequestUri!.ToString());
+
+        var injuriesCount = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuries.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(0, injuriesCount);
+    }
+
+    [Fact]
+    public async Task Given_AthleteOfAnotherPf_When_ListInjuries_Then_Returns404NotEmptyList()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondWith(HttpStatusCode.NotFound, "{}");
+
+        var response = await factory.CreateAuthenticatedClient(_pfId)
+            .GetAsync(Endpoint(_athleteId));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_StructureDown_When_PostInjury_Then_Returns503AndPersistsNothing()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.SimulateDown();
+
+        var response = await factory.CreateAuthenticatedClient(_pfId)
+            .PostAsJsonAsync(Endpoint(_athleteId), RequestValida());
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var injuriesCount = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuries.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(0, injuriesCount);
     }
 }

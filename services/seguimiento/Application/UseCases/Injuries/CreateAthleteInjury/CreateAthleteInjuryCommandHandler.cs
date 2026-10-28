@@ -1,5 +1,7 @@
 using Application.DTOs.Injuries;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
 using Application.Mappings;
 using Domain.Entities;
 
@@ -9,12 +11,17 @@ namespace Application.UseCases.Injuries.CreateAthleteInjury;
 // Las reglas de negocio viven en AthleteInjury.Create (DomainException → 400 en español).
 public sealed class CreateAthleteInjuryCommandHandler(
     IAthleteInjuryRepository repository,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    IStructureClient structureClient)
 {
     public async Task<AthleteInjuryDto> HandleAsync(
         CreateAthleteInjuryCommand command,
         CancellationToken cancellationToken = default)
     {
+        // Atleta de otro PF o inexistente → 404 (KAN-431): no se guarda una lesión de un atleta ajeno.
+        if (!await structureClient.IsOwnAthleteAsync(command.AthleteId, cancellationToken))
+            throw new AthleteNotFoundException();
+
         var injury = AthleteInjury.Create(
             command.AthleteId,
             command.Zone,

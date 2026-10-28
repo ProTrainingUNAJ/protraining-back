@@ -72,7 +72,7 @@ paths:
         "403":
           $ref: '#/components/responses/Forbidden'
         "404":
-          description: La cuenta no tiene un atleta vinculado.
+          description: La cuenta no tiene un atleta vinculado, o el atleta de la ruta no es el del token (nunca 403, para no revelar si el id existe).
           content:
             application/json:
               schema:
@@ -287,7 +287,7 @@ paths:
       tags:
         - Injuries
       summary: Listar lesiones de un atleta
-      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual.
+      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual. Responde 404 si el atleta no existe o es de otro PF.
       operationId: listAthleteInjuries
       parameters:
         - name: athleteId
@@ -320,7 +320,7 @@ paths:
       tags:
         - Injuries
       summary: Registrar una nueva lesión
-      description: Da de alta una lesión para el atleta en estado inicial 'Active'.
+      description: Da de alta una lesión para el atleta en estado inicial 'Active'. Responde 404 si el atleta no existe o es de otro PF.
       operationId: createInjury
       parameters:
         - name: athleteId
