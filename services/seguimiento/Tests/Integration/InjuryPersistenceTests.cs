@@ -105,6 +105,7 @@ public sealed class InjuryPersistenceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_InjuriesOfTwoPfs_When_ListedByAthlete_Then_ReturnsOnlyCurrentPfRows()
     {
         var otherPf = Guid.NewGuid();

@@ -40,6 +40,7 @@ public class AssignPlanCommandHandlerTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_CategoryOfAnotherPf_When_Assigning_Then_ThrowsNotFoundAndSavesNothing()
     {
         var categoryId = Guid.NewGuid();
@@ -65,6 +66,7 @@ public class AssignPlanCommandHandlerTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOfAnotherPf_When_Assigning_Then_ThrowsNotFoundAndSavesNothing()
     {
         var athleteId = Guid.NewGuid();
@@ -78,6 +80,7 @@ public class AssignPlanCommandHandlerTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_PlanOfAnotherPf_When_Assigning_Then_ThrowsNotFoundWithoutAskingStructure()
     {
         var foreignPlanId = Guid.NewGuid();

@@ -153,6 +153,72 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("exercises", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<int>("MinPainLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_pain_level");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("Zone");
+
+                    b.HasIndex("Zone", "ExerciseId")
+                        .IsUnique();
+
+                    b.ToTable("exercise_restrictions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseSubstitute", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<Guid>("RestrictionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("restriction_id");
+
+                    b.Property<Guid>("SubstituteExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("substitute_exercise_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubstituteExerciseId");
+
+                    b.HasIndex("RestrictionId", "SubstituteExerciseId")
+                        .IsUnique();
+
+                    b.ToTable("exercise_substitutes", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -390,6 +456,36 @@ namespace Infrastructure.Data.Migrations
                     b.Navigation("Exercise");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseSubstitute", b =>
+                {
+                    b.HasOne("Domain.Entities.ExerciseRestriction", "Restriction")
+                        .WithMany("Substitutes")
+                        .HasForeignKey("RestrictionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Exercise", "SubstituteExercise")
+                        .WithMany()
+                        .HasForeignKey("SubstituteExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restriction");
+
+                    b.Navigation("SubstituteExercise");
+                });
+
             modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
                 {
                     b.HasOne("Domain.Entities.TrainingPlan", "Plan")
@@ -440,6 +536,11 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("TrainingPlan");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.Navigation("Substitutes");
                 });
 
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>

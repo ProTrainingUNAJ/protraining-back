@@ -200,6 +200,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_InjuryBelongingToAnotherPf_When_PatchStatus_Then_Returns404()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);

@@ -7,6 +7,7 @@ using API.Middleware;
 using API.Services;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
@@ -81,6 +82,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<ICheckInRepository, CheckInRepository>();
                 services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
+                services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
                 services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
@@ -90,6 +92,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Semáforo del día (KAN-367): motor y caso de uso registrados como en Program.cs.
                 services.AddScoped<TrafficLightEngine>();
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();
@@ -97,6 +100,9 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
                 // Máquina de estados de las lesiones (KAN-420): mismo registro que en Program.cs.
                 services.AddScoped<UpdateInjuryStatusCommandHandler>();
+
+                // Carga del día (KAN-442): mismo registro que en Program.cs.
+                services.AddScoped<RegisterDailyLoadCommandHandler>();
 
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.

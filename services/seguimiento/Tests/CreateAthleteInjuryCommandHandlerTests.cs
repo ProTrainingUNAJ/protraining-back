@@ -93,6 +93,7 @@ public class CreateAthleteInjuryCommandHandlerTests
 
     // KAN-431: atleta de otro PF (o inexistente) → 404 y no se guarda nada.
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task HandleAsync_WithAthleteOfAnotherPf_ThrowsAthleteNotFoundWithoutSaving()
     {
         _structure

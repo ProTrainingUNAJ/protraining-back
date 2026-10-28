@@ -8,4 +8,5 @@ public record UserDto(
     string Email,
     string FullName,
     string Role,
-    Guid? PfId);
+    Guid? PfId,
+    string? PhoneNumber = null);
