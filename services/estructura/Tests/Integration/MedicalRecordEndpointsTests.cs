@@ -281,6 +281,51 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NotFound, logsResponse.StatusCode);
     }
 
+    // KAN-430: además del 404, el intento del PF A no deja rastro: la ficha del PF B queda igual
+    // y no se registra ningún acceso del PF A en la auditoría del atleta del PF B.
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task Given_AthleteOwnedByPfB_When_PfAAttemptsToUpdateMedicalRecord_Then_PfBRecordIsUnchangedAndNoPfAAuditLogIsWritten()
+    {
+        // arrange: PF-B crea un atleta y carga su ficha médica
+        var createResponse = await _clientPfB.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("Gabriel", "Batistuta", "gabriel@club.com", "+5491155556666", IsMinor: false));
+        var athleteB = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athleteB);
+
+        var pfBPut = await _clientPfB.PutAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record",
+            new UpdateMedicalRecordRequest("Carga inicial", "Historial original de PF-B", null, null, true));
+        Assert.Equal(HttpStatusCode.OK, pfBPut.StatusCode);
+
+        // act: PF-A intenta pisar la ficha médica del atleta de PF-B
+        var pfAPut = await _clientPfA.PutAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record",
+            new UpdateMedicalRecordRequest("Motivo válido", "Historial adulterado por PF-A", null, null, false));
+
+        // assert: 404 y la ficha de PF-B sigue igual
+        Assert.Equal(HttpStatusCode.NotFound, pfAPut.StatusCode);
+
+        var pfBGet = await _clientPfB.GetAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record?justification={Uri.EscapeDataString("Control")}");
+        Assert.Equal(HttpStatusCode.OK, pfBGet.StatusCode);
+        var record = await pfBGet.Content.ReadFromJsonAsync<MedicalRecordDto>();
+        Assert.NotNull(record);
+        Assert.Equal("Historial original de PF-B", record.MedicalHistory);
+        Assert.True(record.HasPhysicalFitnessCertificate);
+
+        // y en la auditoría solo hay accesos de PF-B (la carga y la lectura de control), ninguno de PF-A
+        using var dbContext = _factory.CreateDbContext();
+        var auditLogPfIds = await dbContext.MedicalRecordAuditLogs
+            .IgnoreQueryFilters()
+            .Where(log => log.AthleteId == athleteB.Id)
+            .Select(log => log.PfId)
+            .ToListAsync();
+        Assert.NotEmpty(auditLogPfIds);
+        Assert.All(auditLogPfIds, pfId => Assert.Equal(_pfBId, pfId));
+    }
+
     [Fact]
     public async Task Given_AuditLogSaveFails_When_ReadingMedicalRecord_Then_ThrowsAndNeverReturnsMedicalData()
     {
