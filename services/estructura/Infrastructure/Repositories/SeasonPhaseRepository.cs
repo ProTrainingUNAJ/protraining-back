@@ -13,6 +13,7 @@ public sealed class SeasonPhaseRepository(AppDbContext context) : ISeasonPhaseRe
                 .AsNoTracking()
                 .Where(p => p.CategoryId == categoryId)
                 .OrderBy(p => p.StartDate)
+                .ThenBy(p => p.Id)
                 .ToListAsync(cancellationToken));
 
     public async Task<SeasonPhase?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>

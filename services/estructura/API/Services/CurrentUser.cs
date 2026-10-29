@@ -22,6 +22,9 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
             ? userId
             : null;
 
+    public string? Role =>
+        httpContextAccessor.HttpContext?.User.FindFirst("role")?.Value;
+
     public IDisposable UsePfContext(Guid pfId)
     {
         AmbientPfId.Value = pfId;

@@ -32,6 +32,15 @@ using Application.UseCases.Organizations.DeleteOrganization;
 using Application.UseCases.Organizations.GetOrganization;
 using Application.UseCases.Organizations.ListOrganizations;
 using Application.UseCases.Organizations.UpdateOrganization;
+using Application.Services;
+using Application.UseCases.Categories.Events.CreateCompetitiveEvent;
+using Application.UseCases.Categories.Events.DeleteCompetitiveEvent;
+using Application.UseCases.Categories.Events.ListCategoryEvents;
+using Application.UseCases.Categories.Events.UpdateCompetitiveEvent;
+using Application.UseCases.Categories.SeasonPhases.CreateSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.DeleteSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.ListCategorySeasonPhases;
+using Application.UseCases.Categories.SeasonPhases.UpdateSeasonPhase;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
@@ -52,10 +61,14 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
     private readonly SqliteConnection _sqliteConnection;
     private readonly TestServer _server;
     private readonly IWebPushClientWrapper? _customWebPushClient;
+    private readonly TimeProvider _timeProvider;
 
-    public EstructuraTestApplicationFactory(IWebPushClientWrapper? customWebPushClient = null)
+    public EstructuraTestApplicationFactory(
+        IWebPushClientWrapper? customWebPushClient = null,
+        TimeProvider? customTimeProvider = null)
     {
         _customWebPushClient = customWebPushClient;
+        _timeProvider = customTimeProvider ?? TimeProvider.System;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -89,6 +102,11 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
                 services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
                 services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
+                services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
+                services.AddScoped<ISeasonPhaseRepository, SeasonPhaseRepository>();
+                services.AddScoped<ISeasonPhaseValidationService, SeasonPhaseValidationService>();
+                services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
+                services.AddSingleton<TimeProvider>(_timeProvider);
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
@@ -140,6 +158,14 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ExportStructureCsvQueryHandler>();
                 services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
                 services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+                services.AddScoped<ListCategoryEventsQueryHandler>();
+                services.AddScoped<CreateCompetitiveEventCommandHandler>();
+                services.AddScoped<UpdateCompetitiveEventCommandHandler>();
+                services.AddScoped<DeleteCompetitiveEventCommandHandler>();
+                services.AddScoped<ListCategorySeasonPhasesQueryHandler>();
+                services.AddScoped<CreateSeasonPhaseCommandHandler>();
+                services.AddScoped<UpdateSeasonPhaseCommandHandler>();
+                services.AddScoped<DeleteSeasonPhaseCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();

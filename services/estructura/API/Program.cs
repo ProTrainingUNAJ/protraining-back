@@ -33,6 +33,15 @@ using Application.UseCases.Organizations.GetOrganization;
 using Application.UseCases.Organizations.ListOrganizations;
 using Application.UseCases.Organizations.UpdateOrganization;
 using Application.UseCases.Reminders.SendDailyWellnessReminders;
+using Application.Services;
+using Application.UseCases.Categories.Events.CreateCompetitiveEvent;
+using Application.UseCases.Categories.Events.DeleteCompetitiveEvent;
+using Application.UseCases.Categories.Events.ListCategoryEvents;
+using Application.UseCases.Categories.Events.UpdateCompetitiveEvent;
+using Application.UseCases.Categories.SeasonPhases.CreateSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.DeleteSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.ListCategorySeasonPhases;
+using Application.UseCases.Categories.SeasonPhases.UpdateSeasonPhase;
 using Infrastructure;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -106,6 +115,20 @@ builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
 builder.Services.AddScoped<SendDailyWellnessRemindersCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
+builder.Services.AddScoped<ISeasonPhaseValidationService, SeasonPhaseValidationService>();
+
+builder.Services.AddScoped<ListCategoryEventsQueryHandler>();
+builder.Services.AddScoped<CreateCompetitiveEventCommandHandler>();
+builder.Services.AddScoped<UpdateCompetitiveEventCommandHandler>();
+builder.Services.AddScoped<DeleteCompetitiveEventCommandHandler>();
+
+builder.Services.AddScoped<ListCategorySeasonPhasesQueryHandler>();
+builder.Services.AddScoped<CreateSeasonPhaseCommandHandler>();
+builder.Services.AddScoped<UpdateSeasonPhaseCommandHandler>();
+builder.Services.AddScoped<DeleteSeasonPhaseCommandHandler>();
 
 // Clientes HTTP hacia Entrenamiento y Seguimiento para el worker de recordatorios
 var entrenamientoUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"] ?? "http://entrenamiento:8080";

@@ -805,6 +805,339 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{categoryId}/events:
+    get:
+      tags:
+        - Categories
+      summary: Listar eventos competitivos de una categoría
+      description: >
+        Retorna los eventos competitivos activos de la categoría dentro del rango de fechas especificado.
+        Si 'from' se omite, toma la fecha actual de calendario en la zona horaria America/Argentina/Buenos_Aires.
+        Si 'to' se omite, toma 'from + 14 días'. Ambas cotas son inclusivas.
+        Los resultados se ordenan cronológicamente por 'date' ascendente, 'startTime' ascendente e 'id' ascendente.
+        Excluye eventos con borrado lógico (soft-deleted).
+      operationId: listCategoryEvents
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          description: Fecha inicio (inclusiva) en formato ISO YYYY-MM-DD. Por defecto fecha actual de Argentina.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-02"
+        - name: to
+          in: query
+          required: false
+          description: Fecha fin (inclusiva) en formato ISO YYYY-MM-DD. Por defecto from + 14 días.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-29"
+      responses:
+        "200":
+          description: Lista de eventos competitivos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Categories
+      summary: Crear evento competitivo
+      description: >
+        Registra un nuevo partido o evento competitivo asociado a la categoría.
+        Operación restringida exclusivamente al preparador físico dueño de la categoría.
+      operationId: createCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompetitiveEventRequest'
+      responses:
+        "201":
+          description: Evento competitivo creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden crear eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/events/{id}:
+    put:
+      tags:
+        - Categories
+      summary: Actualizar evento competitivo
+      description: >
+        Actualiza los detalles o reprogramación de un evento competitivo existente.
+        Solo permitido para el preparador físico dueño de la categoría. No permite modificar eventos eliminados.
+      operationId: updateCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompetitiveEventRequest'
+      responses:
+        "200":
+          description: Evento competitivo actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden actualizar eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Categories
+      summary: Eliminar evento competitivo (borrado lógico)
+      description: >
+        Aplica soft-delete registrando deleted_at en el evento.
+        No borra físicamente la fila y lo excluye de futuras consultas.
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: deleteCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Evento competitivo eliminado lógicamente con éxito.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden eliminar eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/season-phases:
+    get:
+      tags:
+        - Categories
+      summary: Listar fases de temporada de una categoría
+      description: >
+        Retorna las fases de temporada activas asociadas a la categoría ordenadas cronológicamente por startDate ascendente.
+        Excluye fases eliminadas lógicamente.
+      operationId: listCategorySeasonPhases
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de fases de temporada obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeasonPhase'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Categories
+      summary: Crear fase de temporada
+      description: >
+        Registra una nueva fase de temporada para la categoría.
+        Valida que endDate >= startDate y rechaza superposiciones con otras fases activas de la misma categoría (HTTP 400).
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: createCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSeasonPhaseRequest'
+      responses:
+        "201":
+          description: Fase de temporada creada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeasonPhase'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden crear fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/season-phases/{id}:
+    put:
+      tags:
+        - Categories
+      summary: Actualizar fase de temporada
+      description: >
+        Actualiza el nombre, tipo y rango de fechas de una fase de temporada.
+        Valida que no se superponga con otras fases activas de la categoría (excluyendo la fase en edición).
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: updateCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSeasonPhaseRequest'
+      responses:
+        "200":
+          description: Fase de temporada actualizada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeasonPhase'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden modificar fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Categories
+      summary: Eliminar fase de temporada (borrado lógico)
+      description: >
+        Aplica soft-delete registrando deleted_at en la fase de temporada.
+        No se elimina físicamente y deja de ser tenida en cuenta en futuras validaciones de solapamiento.
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: deleteCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Fase de temporada eliminada lógicamente con éxito.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden eliminar fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/export/csv:
     get:
       tags:
@@ -1592,3 +1925,181 @@ components:
           format: uri
           description: URL del endpoint de la suscripción a revocar
           example: "https://fcm.googleapis.com/fcm/send/c_zQ..."
+
+    CompetitiveEvent:
+      type: object
+      required:
+        - id
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Partido clave por el torneo"
+
+    CreateCompetitiveEventRequest:
+      type: object
+      required:
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Partido clave por el torneo"
+
+    UpdateCompetitiveEventRequest:
+      type: object
+      required:
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Reprogramado para las 15:30"
+
+    SeasonPhase:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"
+
+    CreateSeasonPhaseRequest:
+      type: object
+      required:
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"
+
+    UpdateSeasonPhaseRequest:
+      type: object
+      required:
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"
