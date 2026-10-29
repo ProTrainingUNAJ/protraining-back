@@ -36,4 +36,15 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
     {
         return Math.Round(weight / PlateStep, MidpointRounding.AwayFromZero) * PlateStep;
     }
+
+    public double? CalculateWeightPerSide(double? totalWeightKg, double barWeightKg = 20.0)
+    {
+        if (!totalWeightKg.HasValue)
+            return null;
+
+        if (totalWeightKg.Value <= barWeightKg)
+            return 0.0;
+
+        return (totalWeightKg.Value - barWeightKg) / 2.0;
+    }
 }
