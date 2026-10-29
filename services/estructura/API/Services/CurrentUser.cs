@@ -17,4 +17,7 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
         Guid.TryParse(httpContextAccessor.HttpContext?.User.FindFirst("sub")?.Value, out var userId)
             ? userId
             : null;
+
+    public string? Role =>
+        httpContextAccessor.HttpContext?.User.FindFirst("role")?.Value;
 }
