@@ -1,3 +1,5 @@
+using System;
+
 namespace Application.Interfaces.Services;
 
 public interface ICurrentUser
@@ -10,4 +12,13 @@ public interface ICurrentUser
 
     // Rol principal del usuario en el token (claim "role"). Null sin un token válido.
     string? Role { get; }
+
+    // Permite establecer un contexto ambiental de PF para background workers / tareas sin HttpContext.
+    IDisposable UsePfContext(Guid pfId) => EmptyDisposable.Instance;
+}
+
+public sealed class EmptyDisposable : IDisposable
+{
+    public static readonly EmptyDisposable Instance = new();
+    public void Dispose() { }
 }

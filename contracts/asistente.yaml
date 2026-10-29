@@ -178,6 +178,36 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/assistant/plan-drafts:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Generar y persistir un nuevo borrador de planificación con IA
+      description: >
+        Genera un borrador de planificación multisesión a través de la cadena resiliente de IA
+        (Ollama -> Gemini -> Reglas), validando esquema e identificadores del catálogo oficial y
+        persistiéndolo en la base de datos bajo aislamiento multi-tenant.
+      operationId: createPlanDraftWithAi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanDraftRequest'
+      responses:
+        "201":
+          description: Borrador de planificación generado y persistido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanDraftResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/assistant/plan-drafts/{id}:
     get:
       tags:
@@ -646,6 +676,55 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanDraftSession'
+
+    CreatePlanDraftRequest:
+      type: object
+      required:
+        - goal
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del atleta destinatario (mutuamente excluyente con categoryId).
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la categoría grupal destinataria (mutuamente excluyente con athleteId).
+          example: "11111111-1111-1111-1111-111111111111"
+        goal:
+          type: string
+          maxLength: 500
+          description: Objetivo deportivo o fisiológico del ciclo de entrenamiento.
+          example: "Desarrollar fuerza explosiva y potencia muscular para fase competitiva."
+        weeks:
+          type: integer
+          minimum: 1
+          maximum: 8
+          default: 4
+          description: Cantidad de semanas del plan (1 a 8).
+          example: 4
+        daysPerWeek:
+          type: integer
+          minimum: 1
+          maximum: 6
+          default: 3
+          description: Frecuencia semanal de sesiones (1 a 6).
+          example: 3
+        trainingDays:
+          type: array
+          items:
+            type: string
+          description: Días sugeridos de entrenamiento dentro de la semana.
+          example: ["Lunes", "Miércoles", "Viernes"]
+        startDate:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de inicio del plan (por defecto el próximo lunes en Argentina).
+          example: "2026-11-02"
 
     UpdatePlanDraftRequest:
       type: object

@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Auth;
+using Application.DTOs.Auth;
 using Application.UseCases.Auth.UpdatePhone;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;

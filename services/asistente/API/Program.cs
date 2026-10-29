@@ -6,6 +6,7 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.PlanDrafts.ApprovePlanDraft;
+using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
@@ -72,19 +73,23 @@ builder.Services.AddHttpClient<ITrainingPlanServiceClient, Infrastructure.Servic
 }).AddHttpMessageHandler<ForwardAuthorizationHandler>();
 
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
+if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
+{
+    structureUri = new Uri("http://localhost:8082/");
+}
+
 builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services.Structure.StructureCalendarClient>(client =>
 {
-    if (Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
-    {
-        var uriString = structureUri.ToString().TrimEnd('/') + "/";
-        client.BaseAddress = new Uri(uriString);
-    }
-
+    var uriString = structureUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
     client.Timeout = TimeSpan.FromSeconds(5);
-}).AddHttpMessageHandler<ForwardAuthorizationHandler>();
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddStandardResilienceHandler();
 
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
+builder.Services.AddScoped<CreatePlanDraftCommandHandler>();
 builder.Services.AddScoped<GetPlanDraftQueryHandler>();
 builder.Services.AddScoped<UpdatePlanDraftCommandHandler>();
 builder.Services.AddScoped<ApprovePlanDraftCommandHandler>();

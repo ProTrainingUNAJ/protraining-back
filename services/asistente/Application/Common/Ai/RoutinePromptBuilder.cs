@@ -2,6 +2,7 @@ namespace Application.Common.Ai;
 
 using System.Text;
 using Application.DTOs.Ai;
+using Application.DTOs.PlanDrafts;
 
 /// <summary>
 /// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382).
@@ -61,6 +62,78 @@ public static class RoutinePromptBuilder
                   "series": 3,
                   "repeticiones": 10,
                   "porcentajeSugerido": 70.0
+                }
+              ]
+            }
+            """);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383).
+    /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo.
+    /// </summary>
+    public static string BuildPlanDraftPrompt(
+        CreatePlanDraftRequestDto request,
+        IReadOnlyList<CatalogExerciseDto> availableExercises)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("You are an expert strength and conditioning AI assistant for ProTraining coaches.");
+        sb.AppendLine("Generate a structured multi-week training plan draft.");
+        sb.AppendLine($"Goal: {request.Goal}");
+        sb.AppendLine($"Weeks: {request.Weeks}");
+        sb.AppendLine($"Days per week: {request.DaysPerWeek}");
+        if (request.TrainingDays is { Count: > 0 })
+        {
+            sb.AppendLine($"Preferred training days: {string.Join(", ", request.TrainingDays)}");
+        }
+        if (request.StartDate.HasValue)
+        {
+            sb.AppendLine($"Start date: {request.StartDate.Value:yyyy-MM-dd}");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("OFFICIAL CATALOG EXERCISES (USE ONLY THESE IDS):");
+        foreach (var ex in availableExercises)
+        {
+            var groupInfo = !string.IsNullOrWhiteSpace(ex.MuscleGroup) ? $" | Muscle: {ex.MuscleGroup}" : "";
+            sb.AppendLine($"- [Id: {ex.Id}] {ex.Name}{groupInfo}");
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("STRICT DIRECTIVES:");
+        sb.AppendLine("1. USE ONLY THE IDS FROM THE LIST ABOVE. DO NOT INVENT EXERCISE IDS.");
+        sb.AppendLine("2. Every exercise in the plan MUST have an 'exerciseId' matching an ID from the list above.");
+        sb.AppendLine("3. Sets must be an integer between 1 and 10.");
+        sb.AppendLine("4. Reps must be an integer between 1 and 30.");
+        sb.AppendLine("5. Target percentage must be a number between 0 and 100 or null.");
+        sb.AppendLine("6. Output ONLY valid JSON in English, matching this EXACT schema with NO markdown fences, NO extra text:");
+        sb.AppendLine("""
+            {
+              "name": "Mesocycle Name",
+              "objective": "Training cycle objective",
+              "justificationSummary": "Scientific rationale and periodization explanation",
+              "weeks": [
+                {
+                  "weekNumber": 1,
+                  "sessions": [
+                    {
+                      "name": "Lower Body Strength",
+                      "dayOfWeek": "Monday",
+                      "order": 1,
+                      "coachNotes": "Focus on explosive drive",
+                      "exercises": [
+                        {
+                          "exerciseId": "exact-catalog-guid-here",
+                          "order": 1,
+                          "sets": 4,
+                          "reps": 6,
+                          "targetPercentage": 80.0
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }

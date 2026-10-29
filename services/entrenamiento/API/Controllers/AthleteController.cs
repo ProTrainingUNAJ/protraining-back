@@ -1,4 +1,4 @@
-﻿using Application.DTOs.AthleteRecords;
+using Application.DTOs.AthleteRecords;
 using Application.DTOs.Routines;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;

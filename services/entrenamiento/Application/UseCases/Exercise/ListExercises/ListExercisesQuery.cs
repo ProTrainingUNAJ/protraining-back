@@ -1,4 +1,4 @@
-﻿
+
 namespace Application.UseCases.Exercise.ListExercises
 {
     public class ListExercisesQuery
