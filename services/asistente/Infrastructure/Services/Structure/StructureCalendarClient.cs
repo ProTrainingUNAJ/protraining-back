@@ -13,7 +13,7 @@ public sealed class StructureCalendarClient(
     HttpClient httpClient,
     ILogger<StructureCalendarClient> logger) : IStructureCalendarClient
 {
-    private sealed record CategoryCalendarEventDto(
+    public sealed record CategoryCalendarEventDto(
         [property: JsonPropertyName("date")] DateOnly Date,
         [property: JsonPropertyName("type")] string? Type = null
     );
@@ -51,7 +51,11 @@ public sealed class StructureCalendarClient(
                 .OrderBy(d => d)
                 .ToList();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
         {
             logger.LogWarning(
                 "Error al consultar el calendario de partidos en Estructura para la categoría {CategoryId}: {ErrorType}.",
