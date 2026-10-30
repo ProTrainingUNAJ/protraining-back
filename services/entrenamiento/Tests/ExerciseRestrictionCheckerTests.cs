@@ -9,59 +9,60 @@ public class ExerciseRestrictionCheckerTests
     private readonly ExerciseRestrictionChecker _checker = new();
 
     [Fact]
-    public void Check_SentadillaRestringidaYPressNo()
+    public void Check_DadoAtletaConDolorDeHombrosNivel2_CuandoSeEvaluaPressMilitarTrasNuca_EntoncesLoMarcaContraindicadoYConSustitutosEnOrden()
     {
-        var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
-        var prensa = Exercise.Create("Prensa de piernas", "Piernas");
-        var bandas = Exercise.Create("Sentadillas con bandas elásticas", "Piernas");
-        var pressDeBanca = Exercise.Create("Press de banca plano", "Pecho");
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
+        var sub1 = Exercise.Create("Press militar con mancuernas", "Hombros");
+        var sub2 = Exercise.Create("Elevaciones laterales", "Hombros");
 
-        var restrictionSentadilla = ExerciseRestriction.Create("cuadriceps", sentadilla.Id, "Sobrecarga patelofemoral", minPainLevel: 1);
-        restrictionSentadilla.AddSubstitute(prensa, 1);
-        restrictionSentadilla.AddSubstitute(bandas, 2);
+        var restriction = ExerciseRestriction.Create(
+            zone: "hombros",
+            exerciseId: pressMilitar.Id,
+            reason: "Pinzamiento subacromial y fricción articular",
+            minPainLevel: 1);
 
-        var restrictions = new[] { restrictionSentadilla };
-        var exerciseIds = new[] { sentadilla.Id, pressDeBanca.Id };
+        // Agregamos sustitutos desordenados para verificar que se ordenen por Order
+        restriction.AddSubstitute(sub2, order: 2);
+        restriction.AddSubstitute(sub1, order: 1);
+
+        var restrictions = new[] { restriction };
+        var exerciseIds = new[] { pressMilitar.Id };
 
         // Act
-        var results = _checker.Check(exerciseIds, "cuadriceps:2", restrictions);
+        var results = _checker.Check(exerciseIds, "hombros:2", restrictions);
 
         // Assert
-        Assert.Equal(2, results.Count);
-
-        var sentadillaResult = results.First(r => r.ExerciseId == sentadilla.Id);
-        Assert.True(sentadillaResult.Restricted);
-        Assert.Equal("cuadriceps", sentadillaResult.Zone);
-        Assert.Equal(2, sentadillaResult.PainLevel);
-        Assert.Equal("Sobrecarga patelofemoral", sentadillaResult.Reason);
-        Assert.Equal(2, sentadillaResult.Substitutes.Count);
-        Assert.Equal(prensa.Id, sentadillaResult.Substitutes[0].ExerciseId);
-        Assert.Equal("Prensa de piernas", sentadillaResult.Substitutes[0].Name);
-        Assert.Equal(bandas.Id, sentadillaResult.Substitutes[1].ExerciseId);
-        Assert.Equal("Sentadillas con bandas elásticas", sentadillaResult.Substitutes[1].Name);
-
-        var pressResult = results.First(r => r.ExerciseId == pressDeBanca.Id);
-        Assert.False(pressResult.Restricted);
-        Assert.Null(pressResult.Zone);
-        Assert.Null(pressResult.PainLevel);
-        Assert.Null(pressResult.Reason);
-        Assert.Empty(pressResult.Substitutes);
+        Assert.Single(results);
+        var result = results[0];
+        Assert.Equal(pressMilitar.Id, result.ExerciseId);
+        Assert.True(result.Restricted, "El ejercicio debe estar marcado contraindicado");
+        Assert.Equal("hombros", result.Zone);
+        Assert.Equal(2, result.PainLevel);
+        Assert.Equal("Pinzamiento subacromial y fricción articular", result.Reason);
+        Assert.NotEmpty(result.Substitutes);
+        Assert.Equal(2, result.Substitutes.Count);
+        Assert.Equal(sub1.Id, result.Substitutes[0].ExerciseId);
+        Assert.Equal("Press militar con mancuernas", result.Substitutes[0].Name);
+        Assert.Equal(sub2.Id, result.Substitutes[1].ExerciseId);
+        Assert.Equal("Elevaciones laterales", result.Substitutes[1].Name);
     }
 
     [Fact]
-    public void Check_DolorMenorAMinPainLevel_NoRestringe()
+    public void Check_NivelDeDolorMenorQueMinPainLevel_NoRestringido()
     {
-        var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
-        var prensa = Exercise.Create("Prensa de piernas", "Piernas");
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
+        var sub = Exercise.Create("Press militar con mancuernas", "Hombros");
 
-        var restriction = ExerciseRestriction.Create("cuadriceps", sentadilla.Id, "Dolor articular moderado a severo", minPainLevel: 2);
-        restriction.AddSubstitute(prensa, 1);
+        var restriction = ExerciseRestriction.Create("hombros", pressMilitar.Id, "Dolor articular moderado a severo", minPainLevel: 2);
+        restriction.AddSubstitute(sub, 1);
 
         var restrictions = new[] { restriction };
-        var exerciseIds = new[] { sentadilla.Id };
+        var exerciseIds = new[] { pressMilitar.Id };
 
-        // Act
-        var results = _checker.Check(exerciseIds, "cuadriceps:1", restrictions);
+        // Act: Nivel 1 menor que minPainLevel 2
+        var results = _checker.Check(exerciseIds, "hombros:1", restrictions);
 
         // Assert
         Assert.Single(results);
@@ -73,19 +74,144 @@ public class ExerciseRestrictionCheckerTests
         Assert.Empty(result.Substitutes);
     }
 
+    [Fact]
+    public void Check_DosZonasConDolorYEjercicioRestringidoEnLasDos_ApareceUnaVezConZonaDeMayorNivel()
+    {
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
+        var subHombros = Exercise.Create("Press militar con mancuernas", "Hombros");
+        var subTrapecios = Exercise.Create("Press de pecho en máquina", "Pecho");
+
+        var restHombros = ExerciseRestriction.Create("hombros", pressMilitar.Id, "Pinzamiento subacromial", minPainLevel: 1);
+        restHombros.AddSubstitute(subHombros, 1);
+
+        var restTrapecios = ExerciseRestriction.Create("trapecios", pressMilitar.Id, "Tensión cervical y trapecio", minPainLevel: 1);
+        restTrapecios.AddSubstitute(subTrapecios, 1);
+
+        var restrictions = new[] { restTrapecios, restHombros };
+        var exerciseIds = new[] { pressMilitar.Id };
+
+        // Act: trapecios nivel 1 y hombros nivel 3 -> debe priorizar hombros
+        var results = _checker.Check(exerciseIds, "trapecios:1,hombros:3", restrictions);
+
+        // Assert: aparece una sola vez con los datos de hombros
+        Assert.Single(results);
+        var result = results[0];
+        Assert.Equal(pressMilitar.Id, result.ExerciseId);
+        Assert.True(result.Restricted);
+        Assert.Equal("hombros", result.Zone);
+        Assert.Equal(3, result.PainLevel);
+        Assert.Equal("Pinzamiento subacromial", result.Reason);
+        Assert.Single(result.Substitutes);
+        Assert.Equal(subHombros.Id, result.Substitutes[0].ExerciseId);
+    }
+
+    [Fact]
+    public void Check_ZonaConDolorSinRestriccionesCargadas_NadaRestringido()
+    {
+        // Arrange
+        var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
+        var press = Exercise.Create("Press de banca plano", "Pecho");
+
+        var restrictionHombros = ExerciseRestriction.Create("hombros", press.Id, "Molestia articular", minPainLevel: 1);
+        var restrictions = new[] { restrictionHombros };
+
+        // Act: dolor en zona sin restricciones ("gemelos:3")
+        var results = _checker.Check(new[] { sentadilla.Id, press.Id }, "gemelos:3", restrictions);
+
+        // Assert: ningún ejercicio se restringe
+        Assert.Equal(2, results.Count);
+        Assert.All(results, r =>
+        {
+            Assert.False(r.Restricted);
+            Assert.Null(r.Zone);
+            Assert.Null(r.PainLevel);
+            Assert.Null(r.Reason);
+            Assert.Empty(r.Substitutes);
+        });
+    }
+
+    [Fact]
+    public void Check_EjercicioQueNoEstaEnLaTabla_Permitido()
+    {
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
+        var dominadas = Exercise.Create("Dominadas", "Espalda");
+
+        var restriction = ExerciseRestriction.Create("hombros", pressMilitar.Id, "Pinzamiento subacromial", minPainLevel: 1);
+        var restrictions = new[] { restriction };
+
+        // Act: evaluamos dominadas (no está en la tabla de restricciones) ante dolor en hombros
+        var results = _checker.Check(new[] { dominadas.Id }, "hombros:2", restrictions);
+
+        // Assert
+        Assert.Single(results);
+        var result = results[0];
+        Assert.Equal(dominadas.Id, result.ExerciseId);
+        Assert.False(result.Restricted);
+        Assert.Null(result.Zone);
+        Assert.Null(result.PainLevel);
+        Assert.Null(result.Reason);
+        Assert.Empty(result.Substitutes);
+    }
+
+    [Theory]
+    [InlineData("cuadriceps")]
+    [InlineData("xyz:abc")]
+    [InlineData("cuadriceps,xyz:abc")]
+    [InlineData("cuadriceps:")]
+    [InlineData(":2")]
+    [InlineData("cuadriceps::2")]
+    [InlineData("hombros:0")]
+    [InlineData("hombros:-1")]
+    public void ParsePainZones_MalFormado_SeIgnoraEsaParteSinExcepcion(string malformed)
+    {
+        // Act: no debe lanzar ninguna excepción y debe ignorar las partes malformadas
+        var parsed = _checker.ParsePainZones(malformed);
+
+        // Assert
+        Assert.Empty(parsed);
+    }
+
+    [Fact]
+    public void Check_PainZonesMalFormado_SeIgnoraSinExcepcionYPermiteValidos()
+    {
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
+        var sub = Exercise.Create("Press militar con mancuernas", "Hombros");
+        var restriction = ExerciseRestriction.Create("hombros", pressMilitar.Id, "Pinzamiento", minPainLevel: 1);
+        restriction.AddSubstitute(sub, 1);
+
+        var restrictions = new[] { restriction };
+
+        // Act A: painZones totalmente malformado -> no lanza excepción y nada es restringido
+        var resultsA = _checker.Check(new[] { pressMilitar.Id }, "cuadriceps,xyz:abc,invalido:", restrictions);
+        Assert.Single(resultsA);
+        Assert.False(resultsA[0].Restricted);
+
+        // Act B: painZones con partes inválidas y una válida ("cuadriceps,xyz:abc,hombros:2")
+        var resultsB = _checker.Check(new[] { pressMilitar.Id }, "cuadriceps,xyz:abc,hombros:2", restrictions);
+        Assert.Single(resultsB);
+        Assert.True(resultsB[0].Restricted);
+        Assert.Equal("hombros", resultsB[0].Zone);
+        Assert.Equal(2, resultsB[0].PainLevel);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Check_SinDolor_NoRestringeNada(string? painZones)
+    public void Check_PainZonesVacioONulo_NadaRestringido(string? painZones)
     {
+        // Arrange
+        var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
         var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
-        var press = Exercise.Create("Press de banca", "Pecho");
 
-        var restriction = ExerciseRestriction.Create("cuadriceps", sentadilla.Id, "Sobrecarga patelar", minPainLevel: 1);
+        var restHombros = ExerciseRestriction.Create("hombros", pressMilitar.Id, "Pinzamiento", minPainLevel: 1);
+        var restPiernas = ExerciseRestriction.Create("cuadriceps", sentadilla.Id, "Sobrecarga patelar", minPainLevel: 1);
 
-        var restrictions = new[] { restriction };
-        var exerciseIds = new[] { sentadilla.Id, press.Id };
+        var restrictions = new[] { restHombros, restPiernas };
+        var exerciseIds = new[] { pressMilitar.Id, sentadilla.Id };
 
         // Act
         var results = _checker.Check(exerciseIds, painZones, restrictions);
@@ -148,33 +274,5 @@ public class ExerciseRestrictionCheckerTests
 
         Assert.Single(parsed);
         Assert.Equal(3, parsed["cuadriceps"]);
-    }
-
-    [Fact]
-    public void Check_EjercicioConMultiplesZonasRestringidas_PriorizaLaDeMayorDolor()
-    {
-        var pesoMuerto = Exercise.Create("Peso Muerto", "Espalda");
-        var sub1 = Exercise.Create("Puente de glúteos", "Glúteos");
-        var sub2 = Exercise.Create("Remo con mancuernas", "Espalda");
-
-        var restEspalda = ExerciseRestriction.Create("espalda_baja", pesoMuerto.Id, "Carga lumbar", minPainLevel: 1);
-        restEspalda.AddSubstitute(sub2, 1);
-
-        var restIsquios = ExerciseRestriction.Create("isquiotibiales", pesoMuerto.Id, "Tensión isquiosural", minPainLevel: 1);
-        restIsquios.AddSubstitute(sub1, 1);
-
-        var restrictions = new[] { restEspalda, restIsquios };
-
-        // Dolor en espalda_baja es 3, isquiotibiales es 1 -> debe priorizar espalda_baja
-        var results = _checker.Check(new[] { pesoMuerto.Id }, "isquiotibiales:1,espalda_baja:3", restrictions);
-
-        Assert.Single(results);
-        var result = results[0];
-        Assert.True(result.Restricted);
-        Assert.Equal("espalda_baja", result.Zone);
-        Assert.Equal(3, result.PainLevel);
-        Assert.Equal("Carga lumbar", result.Reason);
-        Assert.Single(result.Substitutes);
-        Assert.Equal(sub2.Id, result.Substitutes[0].ExerciseId);
     }
 }
