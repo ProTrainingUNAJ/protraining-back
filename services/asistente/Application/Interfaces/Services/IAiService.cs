@@ -11,5 +11,6 @@ public interface IAiService
 
     Task<(PlanDraftContentDto Content, string Provider)> GeneratePlanDraftAsync(
         CreatePlanDraftRequestDto request,
+        IReadOnlyList<DateOnly>? matchDates = null,
         CancellationToken cancellationToken = default);
 }

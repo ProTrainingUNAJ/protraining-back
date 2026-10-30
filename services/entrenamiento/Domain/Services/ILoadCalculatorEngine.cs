@@ -7,4 +7,5 @@ public interface ILoadCalculatorEngine
 {
     LoadResult CalculateLoad(decimal? current1Rm, RecordSource? source, decimal targetPercentage);
     decimal RoundToNearestPlate(decimal weight);
+    double? CalculateWeightPerSide(double? totalWeightKg, double barWeightKg = 20.0);
 }

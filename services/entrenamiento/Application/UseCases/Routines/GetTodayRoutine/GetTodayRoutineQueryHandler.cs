@@ -4,6 +4,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Services;
+using Domain.Entities;
 
 namespace Application.UseCases.Routines.GetTodayRoutine
 {
@@ -85,6 +86,14 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
                 var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
 
+                bool isBarbell = Equipment.IsBarbell(prescribed.Exercise?.Equipment);
+
+                double? barWeight = isBarbell ? 20 : null;
+
+                double? totalWeight = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null;
+
+                double? weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
+
                 var exercise = prescribed.Exercise;
 
                 exercisesDto.Add(new TodayRoutineExerciseDto
@@ -97,7 +106,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     Sets = prescribed.Sets,
                     Reps = prescribed.Reps,
                     Percentage = (double)percentage,
-                    WeightKg = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null,
+                    WeightKg = totalWeight,
+                    BarWeight = barWeight,
+                    WeightPerSide = weightPerSide,
                     Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
                     IsReference = loadResult.IsReference
                 });

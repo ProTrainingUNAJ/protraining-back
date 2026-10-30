@@ -5,6 +5,8 @@ using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.PfDecisions.GetAthleteDecisions;
+using Application.UseCases.PfDecisions.RecordDayAdjustmentDecision;
 using Application.UseCases.PlanDrafts.ApprovePlanDraft;
 using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
@@ -87,6 +89,15 @@ builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddStandardResilienceHandler();
 
+builder.Services.AddHttpClient<IStructureAthleteClient, Infrastructure.Services.Structure.StructureAthleteClient>(client =>
+{
+    var uriString = structureUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    client.Timeout = TimeSpan.FromSeconds(5);
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddStandardResilienceHandler();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddScoped<CreatePlanDraftCommandHandler>();
@@ -94,6 +105,8 @@ builder.Services.AddScoped<GetPlanDraftQueryHandler>();
 builder.Services.AddScoped<UpdatePlanDraftCommandHandler>();
 builder.Services.AddScoped<ApprovePlanDraftCommandHandler>();
 builder.Services.AddScoped<DiscardPlanDraftCommandHandler>();
+builder.Services.AddScoped<GetAthleteDecisionsQueryHandler>();
+builder.Services.AddScoped<RecordDayAdjustmentDecisionCommandHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");

@@ -3,9 +3,10 @@ namespace Application.Common.Ai;
 using System.Text;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
+using Domain.Common;
 
 /// <summary>
-/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382).
+/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382 / KAN-407 / KAN-563).
 /// Inyecta los ejercicios disponibles del catálogo oficial, reglas de privacidad y directivas JSON.
 /// </summary>
 public static class RoutinePromptBuilder
@@ -71,12 +72,14 @@ public static class RoutinePromptBuilder
     }
 
     /// <summary>
-    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383).
-    /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo.
+    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383 / KAN-407 / KAN-563).
+    /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo y a respetar
+    /// las directivas de periodización competitiva pre-partido (D-1 <= 60 %, D-2 <= 75 %, D sin pesas).
     /// </summary>
     public static string BuildPlanDraftPrompt(
         CreatePlanDraftRequestDto request,
-        IReadOnlyList<CatalogExerciseDto> availableExercises)
+        IReadOnlyList<CatalogExerciseDto> availableExercises,
+        IReadOnlyList<DateOnly>? matchDates = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are an expert strength and conditioning AI assistant for ProTraining coaches.");
@@ -93,6 +96,36 @@ public static class RoutinePromptBuilder
             sb.AppendLine($"Start date: {request.StartDate.Value:yyyy-MM-dd}");
         }
         sb.AppendLine();
+
+        // KAN-407: Periodización competitiva pre-partido
+        if (request.StartDate.HasValue && matchDates is { Count: > 0 })
+        {
+            var startDate = request.StartDate.Value;
+            var endDate = startDate.AddDays(request.Weeks * 7 - 1);
+            var relevantMatches = matchDates
+                .Where(m => m >= startDate && m <= endDate)
+                .OrderBy(m => m)
+                .ToList();
+
+            if (relevantMatches.Count > 0)
+            {
+                sb.AppendLine("COMPETITIVE MATCH SCHEDULE (CALENDAR):");
+                foreach (var match in relevantMatches)
+                {
+                    var daysDiff = match.DayNumber - startDate.DayNumber;
+                    var weekNumber = (daysDiff / 7) + 1;
+                    var dayName = match.DayOfWeek.ToString();
+                    sb.AppendLine($"- Week {weekNumber}, {dayName} ({match:yyyy-MM-dd}): Official Match");
+                }
+                sb.AppendLine();
+                sb.AppendLine("MANDATORY MATCHDAY PERIODIZATION AND TAPERING RULES:");
+                sb.AppendLine("1. MATCH DAY (Day D): Do NOT schedule any strength or gym sessions on the day of the match.");
+                sb.AppendLine($"2. DAY BEFORE MATCH (Day D-1): Target percentage MUST NOT exceed {MatchDayLoadRules.MaxPercentageOneDayBeforeMatch:0}% for any exercise (low neuromuscular load).");
+                sb.AppendLine($"3. TWO DAYS BEFORE MATCH (Day D-2): Target percentage MUST NOT exceed {MatchDayLoadRules.MaxPercentageTwoDaysBeforeMatch:0}% for any exercise (moderate load).");
+                sb.AppendLine("4. Rest of the days: Normal training intensities according to the goal.");
+                sb.AppendLine();
+            }
+        }
 
         sb.AppendLine("OFFICIAL CATALOG EXERCISES (USE ONLY THESE IDS):");
         foreach (var ex in availableExercises)
@@ -140,6 +173,137 @@ public static class RoutinePromptBuilder
             """);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563).
+    /// </summary>
+    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal))
+            return [];
+
+        var text = goal.Trim().ToLowerInvariant()
+            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+        var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Piernas / Tren Inferior
+        if (text.Contains("pierna") || text.Contains("cuadriceps") ||
+            text.Contains("isquio") || text.Contains("gluteo") ||
+            text.Contains("gemelo") || text.Contains("pantorrilla") ||
+            text.Contains("tren inferior") || text.Contains("lower body") ||
+            text.Contains("sentadilla") || text.Contains("peso muerto") ||
+            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada"))
+        {
+            groups.Add("Piernas");
+        }
+
+        // Pecho / Empuje
+        if (text.Contains("pecho") || text.Contains("pectoral") ||
+            text.Contains("empuje") || text.Contains("push") ||
+            text.Contains("press de banca") || text.Contains("press banca") ||
+            text.Contains("fondo"))
+        {
+            groups.Add("Pecho");
+        }
+
+        // Espalda / Tracción
+        if (text.Contains("espalda") || text.Contains("dorsal") ||
+            text.Contains("traccion") || text.Contains("pull") ||
+            text.Contains("remo") || text.Contains("dominada") ||
+            text.Contains("lumbar") || text.Contains("trapecio"))
+        {
+            groups.Add("Espalda");
+        }
+
+        // Hombros
+        if (text.Contains("hombro") || text.Contains("deltoides") || text.Contains("press militar"))
+        {
+            groups.Add("Hombros");
+        }
+
+        // Brazos
+        if (text.Contains("brazo") || text.Contains("biceps") || text.Contains("triceps"))
+        {
+            groups.Add("Brazos");
+        }
+
+        // Core / Abdomen
+        if (text.Contains("core") || text.Contains("abdominal") ||
+            text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
+        {
+            groups.Add("Core");
+        }
+
+        return groups.ToList();
+    }
+
+    /// <summary>
+    /// Filtra y prioriza los ejercicios del catálogo oficial según el objetivo deportivo solicitado (#158 · KAN-563).
+    /// Si el objetivo enfatiza grupos específicos (ej. piernas), se priorizan ejercicios de esos grupos.
+    /// Si el objetivo es general (ej. fuerza general, pretemporada), distribuye equitativamente básicos de cada grupo.
+    /// </summary>
+    public static IReadOnlyList<CatalogExerciseDto> FilterExercisesForGoal(
+        IReadOnlyList<CatalogExerciseDto> catalog,
+        string? goal,
+        int maxExercises = 25)
+    {
+        if (catalog == null || catalog.Count == 0)
+            return [];
+
+        if (maxExercises <= 0)
+            maxExercises = 25;
+
+        var extractedGroups = ExtractMuscleGroups(goal);
+
+        if (extractedGroups.Count > 0)
+        {
+            return FilterRelevantExercises(catalog, extractedGroups, maxExercises);
+        }
+
+        // Objetivo general: distribuir una mezcla balanceada de básicos de cada grupo
+        var targetGroups = new[] { "Piernas", "Pecho", "Espalda", "Hombros", "Core", "Brazos" };
+        var selected = new List<CatalogExerciseDto>();
+        var selectedIds = new HashSet<Guid>();
+
+        var perGroupLimit = Math.Max(2, maxExercises / targetGroups.Length);
+        foreach (var group in targetGroups)
+        {
+            var groupExercises = catalog
+                .Where(e => !selectedIds.Contains(e.Id) &&
+                            e.MuscleGroup != null &&
+                            e.MuscleGroup.Trim().Equals(group, StringComparison.OrdinalIgnoreCase))
+                .Take(perGroupLimit);
+
+            foreach (var ex in groupExercises)
+            {
+                if (selected.Count >= maxExercises)
+                    break;
+
+                selected.Add(ex);
+                selectedIds.Add(ex.Id);
+            }
+
+            if (selected.Count >= maxExercises)
+                break;
+        }
+
+        // Si todavía quedan cupos, completar con los restantes del catálogo
+        if (selected.Count < maxExercises)
+        {
+            foreach (var ex in catalog)
+            {
+                if (!selectedIds.Contains(ex.Id))
+                {
+                    selected.Add(ex);
+                    selectedIds.Add(ex.Id);
+                    if (selected.Count >= maxExercises)
+                        break;
+                }
+            }
+        }
+
+        return selected;
     }
 
     /// <summary>

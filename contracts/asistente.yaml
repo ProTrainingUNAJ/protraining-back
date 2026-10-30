@@ -333,6 +333,44 @@ paths:
         "409":
           $ref: '#/components/responses/Conflict'
 
+  /api/v1/assistant/athletes/{athleteId}/decisions:
+    get:
+      tags:
+        - Copilot and Planning
+      summary: Consultar decisiones históricas del PF sobre propuestas del asistente
+      description: >
+        Devuelve el historial reciente de decisiones (aprobaciones, cambios o rechazos) tomadas por el preparador físico
+        autenticado sobre ejercicios sugeridos para el atleta especificado, con filtro opcional por zona anatómica y limitado
+        a las últimas 50 decisiones. Responde 404 si el atleta no existe o no pertenece al preparador físico.
+      operationId: getAthleteDecisions
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+        - name: zone
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtro opcional por zona anatómica o de molestia (ej. espalda_baja).
+      responses:
+        "200":
+          description: Lista de decisiones recuperadas (hasta 50).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PfDecisionResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/habits-recommendation:
     get:
       tags:
@@ -898,6 +936,69 @@ components:
         approvedByPf:
           type: boolean
           example: false
+
+    PfDecisionResponse:
+      type: object
+      required:
+        - id
+        - date
+        - source
+        - sourceId
+        - suggestedExerciseId
+        - decision
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-10-30"
+        source:
+          type: string
+          enum: [DayAdjustment, PlanDraft]
+          example: "DayAdjustment"
+        sourceId:
+          type: string
+          format: uuid
+          example: "8a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+        zone:
+          type: string
+          nullable: true
+          example: "espalda_baja"
+        suggestedExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000001"
+        decision:
+          type: string
+          enum: [Approved, Modified, Rejected]
+          example: "Modified"
+        finalExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "00000000-0000-0000-0000-000000000002"
+        finalPercentage:
+          type: number
+          format: double
+          nullable: true
+          example: 75.0
+        reason:
+          type: string
+          nullable: true
+          example: "Prefiero que descanse"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-30T02:40:00Z"
 
     ProblemDetails:
       type: object

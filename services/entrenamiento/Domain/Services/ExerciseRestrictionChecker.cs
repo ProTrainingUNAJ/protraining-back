@@ -15,18 +15,12 @@ public class ExerciseRestrictionChecker : IExerciseRestrictionChecker
         foreach (var entry in entries)
         {
             var parts = entry.Split(':', StringSplitOptions.TrimEntries);
-            if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]))
                 continue;
 
             var zone = parts[0].ToLowerInvariant();
-            var painLevel = 1;
 
-            if (parts.Length > 1 && int.TryParse(parts[1], out var parsedLevel))
-            {
-                painLevel = parsedLevel;
-            }
-
-            if (painLevel < 1)
+            if (!int.TryParse(parts[1], out var painLevel) || painLevel < 1)
                 continue;
 
             if (result.TryGetValue(zone, out var currentMax))
@@ -133,4 +127,3 @@ public class ExerciseRestrictionChecker : IExerciseRestrictionChecker
             .ToList();
     }
 }
-
