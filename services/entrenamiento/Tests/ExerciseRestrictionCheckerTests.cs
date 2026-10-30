@@ -8,8 +8,10 @@ public class ExerciseRestrictionCheckerTests
 {
     private readonly ExerciseRestrictionChecker _checker = new();
 
+    // Caso 1: Dolor en hombros nivel 2 y "Press militar tras nuca" restringido para hombros -> restringido, con sus sustitutos en orden.
+    // Criterio: DADO un atleta con dolor de hombro CUANDO se evalúa "Press militar tras nuca" ENTONCES el validador lo marca contraindicado y no lo deja pasar sin sustituto.
     [Fact]
-    public void Check_DadoAtletaConDolorDeHombrosNivel2_CuandoSeEvaluaPressMilitarTrasNuca_EntoncesLoMarcaContraindicadoYConSustitutosEnOrden()
+    public void Check_ShoulderPainLevel2AndBehindNeckPressRestricted_ReturnsContraindicatedWithSubstitutesInOrder()
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -48,8 +50,9 @@ public class ExerciseRestrictionCheckerTests
         Assert.Equal("Elevaciones laterales", result.Substitutes[1].Name);
     }
 
+    // Caso 2: Nivel de dolor menor que min_pain_level -> no restringido.
     [Fact]
-    public void Check_NivelDeDolorMenorQueMinPainLevel_NoRestringido()
+    public void Check_PainLevelBelowMinPainLevel_ReturnsNotRestricted()
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -74,8 +77,9 @@ public class ExerciseRestrictionCheckerTests
         Assert.Empty(result.Substitutes);
     }
 
+    // Caso 3: Dos zonas con dolor y un ejercicio restringido en las dos -> aparece una vez, con la zona de mayor nivel.
     [Fact]
-    public void Check_DosZonasConDolorYEjercicioRestringidoEnLasDos_ApareceUnaVezConZonaDeMayorNivel()
+    public void Check_TwoPainZonesAndExerciseRestrictedInBoth_AppearsOnceWithHigherPainLevelZone()
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -106,8 +110,9 @@ public class ExerciseRestrictionCheckerTests
         Assert.Equal(subHombros.Id, result.Substitutes[0].ExerciseId);
     }
 
+    // Caso 4: Zona con dolor sin restricciones cargadas -> nada restringido.
     [Fact]
-    public void Check_ZonaConDolorSinRestriccionesCargadas_NadaRestringido()
+    public void Check_PainZoneWithoutConfiguredRestrictions_ReturnsNothingRestricted()
     {
         // Arrange
         var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
@@ -131,8 +136,9 @@ public class ExerciseRestrictionCheckerTests
         });
     }
 
+    // Caso 5: Ejercicio que no está en la tabla -> permitido.
     [Fact]
-    public void Check_EjercicioQueNoEstaEnLaTabla_Permitido()
+    public void Check_ExerciseNotInRestrictionsTable_ReturnsAllowed()
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -155,6 +161,7 @@ public class ExerciseRestrictionCheckerTests
         Assert.Empty(result.Substitutes);
     }
 
+    // Caso 6: painZones mal formado (por ejemplo cuadriceps sin nivel, o xyz:abc) -> se ignora esa parte, sin excepción.
     [Theory]
     [InlineData("cuadriceps")]
     [InlineData("xyz:abc")]
@@ -164,7 +171,7 @@ public class ExerciseRestrictionCheckerTests
     [InlineData("cuadriceps::2")]
     [InlineData("hombros:0")]
     [InlineData("hombros:-1")]
-    public void ParsePainZones_MalFormado_SeIgnoraEsaParteSinExcepcion(string malformed)
+    public void ParsePainZones_MalformedInput_IgnoresInvalidPartWithoutException(string malformed)
     {
         // Act: no debe lanzar ninguna excepción y debe ignorar las partes malformadas
         var parsed = _checker.ParsePainZones(malformed);
@@ -174,7 +181,7 @@ public class ExerciseRestrictionCheckerTests
     }
 
     [Fact]
-    public void Check_PainZonesMalFormado_SeIgnoraSinExcepcionYPermiteValidos()
+    public void Check_MalformedPainZones_IgnoresInvalidPartsWithoutExceptionAndAppliesValidParts()
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -197,11 +204,12 @@ public class ExerciseRestrictionCheckerTests
         Assert.Equal(2, resultsB[0].PainLevel);
     }
 
+    // Caso 7: painZones vacío o nulo -> nada restringido.
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Check_PainZonesVacioONulo_NadaRestringido(string? painZones)
+    public void Check_NullOrEmptyPainZones_ReturnsNothingRestricted(string? painZones)
     {
         // Arrange
         var pressMilitar = Exercise.Create("Press militar tras nuca", "Hombros");
@@ -229,7 +237,7 @@ public class ExerciseRestrictionCheckerTests
     }
 
     [Fact]
-    public void GetSubstitutesForZone_DevuelveSustitutosEnOrden()
+    public void GetSubstitutesForZone_ValidExerciseAndZone_ReturnsSubstitutesInOrder()
     {
         var sentadilla = Exercise.Create("Sentadilla Trasera", "Piernas");
         var sub1 = Exercise.Create("Prensa 45", "Piernas");
@@ -253,7 +261,7 @@ public class ExerciseRestrictionCheckerTests
     }
 
     [Fact]
-    public void ParsePainZones_MultiplesZonasYEspacios_ParseaCorrectamente()
+    public void ParsePainZones_MultipleZonesAndWhitespaces_ParsesCorrectly()
     {
         var raw = " cuadriceps:2 , espalda_baja:3 , isquiotibiales: 1 ";
 
@@ -266,7 +274,7 @@ public class ExerciseRestrictionCheckerTests
     }
 
     [Fact]
-    public void ParsePainZones_ZonaRepetida_MantieneElMayorNivelDeDolor()
+    public void ParsePainZones_DuplicateZone_KeepsHighestPainLevel()
     {
         var raw = "cuadriceps:1,cuadriceps:3";
 
