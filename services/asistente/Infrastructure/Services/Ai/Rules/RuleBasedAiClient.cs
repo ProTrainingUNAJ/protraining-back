@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Services;
+using Domain.Common;
 using Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -54,6 +55,7 @@ public sealed class RuleBasedAiClient(
 
     public async Task<PlanDraftContentDto?> TryGeneratePlanDraftAsync(
         CreatePlanDraftRequestDto request,
+        IReadOnlyList<DateOnly>? matchDates = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -79,15 +81,55 @@ public sealed class RuleBasedAiClient(
         var exerciseIndex = 0;
 
         DayOfWeek[] defaultDays = [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday, DayOfWeek.Tuesday, DayOfWeek.Thursday, DayOfWeek.Saturday];
+        var selectedDays = defaultDays.Take(Math.Min(request.DaysPerWeek, defaultDays.Length))
+            .OrderBy(d => d == DayOfWeek.Sunday ? 7 : (int)d)
+            .ToList();
+
+        var matchSet = matchDates != null && matchDates.Count > 0
+            ? new HashSet<DateOnly>(matchDates)
+            : null;
+
+        var startDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         for (var w = 1; w <= request.Weeks; w++)
         {
+            var weekStart = startDate.AddDays((w - 1) * 7);
             var sessions = new List<PlanDraftSessionDto>();
-            for (var d = 1; d <= request.DaysPerWeek; d++)
-            {
-                var dayOfWeek = defaultDays[(d - 1) % defaultDays.Length];
-                var sessionExercises = new List<PlanDraftExerciseDto>();
 
+            foreach (var dayOfWeek in selectedDays)
+            {
+                var sessionDate = weekStart;
+                for (var i = 0; i < 7; i++)
+                {
+                    var candidate = weekStart.AddDays(i);
+                    if (candidate.DayOfWeek == dayOfWeek)
+                    {
+                        sessionDate = candidate;
+                        break;
+                    }
+                }
+
+                if (matchSet != null && matchSet.Contains(sessionDate) && !MatchDayLoadRules.AllowStrengthSessionOnMatchDay)
+                {
+                    // Día de partido (D): no se programa sesión de fuerza
+                    continue;
+                }
+
+                var targetPercentage = 80m;
+                var notes = "Progresión base 3x8 al 80%. Enfoque en técnica y control excéntrico.";
+
+                if (matchSet != null && matchSet.Contains(sessionDate.AddDays(1)))
+                {
+                    targetPercentage = MatchDayLoadRules.MaxPercentageOneDayBeforeMatch;
+                    notes = $"Tapering pre-partido (D-1): Carga reducida al {targetPercentage:0.#}% para optimizar recuperación.";
+                }
+                else if (matchSet != null && matchSet.Contains(sessionDate.AddDays(2)))
+                {
+                    targetPercentage = MatchDayLoadRules.MaxPercentageTwoDaysBeforeMatch;
+                    notes = $"Tapering pre-partido (D-2): Carga moderada al {targetPercentage:0.#}% para preservar frescura neuromuscular.";
+                }
+
+                var sessionExercises = new List<PlanDraftExerciseDto>();
                 for (var e = 1; e <= 2; e++)
                 {
                     var catEx = availableExercises[exerciseIndex % availableExercises.Count];
@@ -98,15 +140,16 @@ public sealed class RuleBasedAiClient(
                         Order: e,
                         Sets: 3,
                         Reps: 8,
-                        TargetPercentage: 70m
+                        TargetPercentage: targetPercentage
                     ));
                 }
 
+                var sessionOrder = sessions.Count + 1;
                 sessions.Add(new PlanDraftSessionDto(
-                    Name: $"Sesión {d} - Acondicionamiento y Fuerza",
+                    Name: $"Sesión {sessionOrder} - Acondicionamiento y Fuerza",
                     DayOfWeek: dayOfWeek,
-                    Order: d,
-                    CoachNotes: "Progresión lineal 3x8 al 70%. Enfoque en técnica y control excéntrico.",
+                    Order: sessionOrder,
+                    CoachNotes: notes,
                     Exercises: sessionExercises
                 ));
             }
@@ -119,14 +162,18 @@ public sealed class RuleBasedAiClient(
 
         stopwatch.Stop();
 
+        var justification = matchSet != null && matchSet.Count > 0
+            ? $"Planificación adaptada con periodización competitiva ({matchSet.Count} partido(s) oficial(es) considerados). Base 3x8 al 80% con tapering pre-partido (D-1 <= 60%, D-2 <= 75%)."
+            : "Planificación base generada por motor de reglas determinísticas con rotación de ejercicios oficiales (3x8 al 80%).";
+
         var content = new PlanDraftContentDto(
             Name: $"Planificación {request.Goal}",
             Objective: request.Goal,
-            JustificationSummary: "Planificación base generada por motor de reglas determinísticas con rotación de ejercicios oficiales (3x8 al 70%).",
+            JustificationSummary: justification,
             Weeks: weeks
         );
 
-        var prompt = $"Objetivo: {request.Goal}. Semanas: {request.Weeks}. Días: {request.DaysPerWeek}";
+        var prompt = $"Objetivo: {request.Goal}. Semanas: {request.Weeks}. Días: {request.DaysPerWeek}. Partidos: {matchSet?.Count ?? 0}";
         await aiAuditService.LogAsync(AiLog.Create(
             ProviderName,
             prompt,

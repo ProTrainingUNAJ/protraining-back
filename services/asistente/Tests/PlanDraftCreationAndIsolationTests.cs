@@ -69,7 +69,7 @@ public sealed class PlanDraftCreationAndIsolationTests
 
         var aiServiceMock = new Mock<IAiService>();
         aiServiceMock
-            .Setup(s => s.GeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<IReadOnlyList<DateOnly>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((sampleContent, "Reglas"));
 
         PlanDraft? savedDraft = null;
@@ -222,7 +222,7 @@ public sealed class PlanDraftCreationAndIsolationTests
 
         var aiServiceMock = new Mock<IAiService>();
         aiServiceMock
-            .Setup(s => s.GeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<IReadOnlyList<DateOnly>?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new AiServiceUnavailableException("El servicio de IA no está disponible en este momento."));
 
         var draftRepoMock = new Mock<IPlanDraftRepository>();

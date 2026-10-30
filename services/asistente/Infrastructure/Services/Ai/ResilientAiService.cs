@@ -302,6 +302,7 @@ public sealed class ResilientAiService : IAiService
 
     public async Task<(PlanDraftContentDto Content, string Provider)> GeneratePlanDraftAsync(
         CreatePlanDraftRequestDto request,
+        IReadOnlyList<DateOnly>? matchDates = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -318,7 +319,7 @@ public sealed class ResilientAiService : IAiService
 
             try
             {
-                var content = await provider.TryGeneratePlanDraftAsync(request, cancellationToken);
+                var content = await provider.TryGeneratePlanDraftAsync(request, matchDates, cancellationToken);
                 if (content == null)
                 {
                     tierStopwatch.Stop();
