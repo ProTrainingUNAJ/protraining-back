@@ -1,4 +1,4 @@
-﻿namespace Application.Exceptions;
+namespace Application.Exceptions;
 
 /// <summary>
 /// excepción lanzada cuando el refresh token es invalido, expiro, fue revocado o el dispositivo no coincide

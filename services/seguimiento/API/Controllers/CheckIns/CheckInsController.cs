@@ -26,8 +26,9 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStr
         var me = await structureClient.GetMeAsync(cancellationToken);
         if (me is null)
             throw new NoAthleteLinkedException();
+        // Id de otro atleta → 404, no 403: no revela si ese id existe (KAN-431).
         if (me.AthleteId != athleteId)
-            throw new ForbiddenException();
+            throw new AthleteNotFoundException();
 
         var result = await handler.HandleAsync(
             new SubmitCheckInCommand(
@@ -41,7 +42,8 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStr
                 request.IsSick,
                 request.EffortRate,
                 request.PainZones,
-                request.HasActiveInjury),
+                request.HasActiveInjury,
+                request.Date),
             cancellationToken);
 
         return result.Created

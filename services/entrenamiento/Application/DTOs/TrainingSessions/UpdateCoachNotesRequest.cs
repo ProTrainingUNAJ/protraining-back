@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.TrainingSessions;
+namespace Application.DTOs.TrainingSessions;
 
 public record UpdateCoachNotesRequest(
     string? CoachNotes

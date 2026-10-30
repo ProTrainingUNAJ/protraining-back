@@ -41,6 +41,13 @@ public sealed class InjuryPersistenceTests : IDisposable
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<CreateAthleteInjuryCommandHandler>();
 
+        // Estos tests prueban la persistencia: el atleta siempre es del PF (el 404 se prueba en los de endpoint).
+        var structureClient = new Mock<IStructureClient>();
+        structureClient
+            .Setup(client => client.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        services.AddSingleton(structureClient.Object);
+
         var currentUser = new Mock<ICurrentUser>();
         currentUser.Setup(user => user.PfId).Returns(() => _currentPfId);
         services.AddSingleton(currentUser.Object);
@@ -109,6 +116,7 @@ public sealed class InjuryPersistenceTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_InjuriesOfTwoPfs_When_ListedByAthlete_Then_ReturnsOnlyCurrentPfRows()
     {
         var otherPf = Guid.NewGuid();

@@ -1,4 +1,4 @@
-﻿using Application.UseCases.Export.ExportStructureCsv;
+using Application.UseCases.Export.ExportStructureCsv;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

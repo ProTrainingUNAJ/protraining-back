@@ -1,5 +1,6 @@
-﻿using Application.DTOs.Routines;
+using Application.DTOs.Routines;
 using Application.UseCases.Routines.GetTodayRoutine;
+using Application.UseCases.Routines.RecordPerformedSets;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,9 +12,14 @@ namespace API.Controllers
     public class MeController : ControllerBase
     {
         private readonly GetTodayRoutineQueryHandler queryHandler;
-        public MeController(GetTodayRoutineQueryHandler queryHandler)
+        private readonly RecordPerformedSetsCommandHandler recordPerformedSetsHandler;
+
+        public MeController(
+            GetTodayRoutineQueryHandler queryHandler,
+            RecordPerformedSetsCommandHandler recordPerformedSetsHandler)
         {
             this.queryHandler = queryHandler;
+            this.recordPerformedSetsHandler = recordPerformedSetsHandler;
         }
 
         [HttpGet("today-routine")]
@@ -25,5 +31,15 @@ namespace API.Controllers
             return Ok(result);
         }
 
+        [HttpPost("today-routine/performed-sets")]
+        [Tags("Execution and Loads")]
+        public async Task<ActionResult<RecordPerformedSetsResponseDto>> RecordPerformedSets(
+            [FromBody] List<PerformedSetInputDto> sets,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await recordPerformedSetsHandler.Handle(new RecordPerformedSetsCommand(sets), cancellationToken);
+
+            return Ok(result);
+        }
     }
 }

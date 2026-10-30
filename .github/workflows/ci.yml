@@ -17,7 +17,7 @@ permissions:
 jobs:
   build:
     name: Build y test (${{ matrix.nombre }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -29,9 +29,9 @@ jobs:
           - { nombre: asistente, carpeta: services/asistente, proyecto: services/asistente/API/API.csproj }
           - { nombre: gateway, carpeta: gateway, proyecto: gateway/Gateway.csproj }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -42,7 +42,20 @@ jobs:
       - name: Build
         run: dotnet build ${{ matrix.proyecto }} --no-restore -c Release
 
-      # Corre los proyectos de tests de la carpeta (los que terminan en Tests.csproj), si hay.
+      # Suite de aislamiento entre PFs (KAN-432): tests con [Trait("Category", "Isolation")].
+      # Corre primero y en su propio paso: si falla, se ve en el PR qué se rompió y no se puede mergear.
+      - name: Aislamiento entre PFs
+        run: |
+          tests=$(find ${{ matrix.carpeta }} -name '*Tests.csproj')
+          if [ -z "$tests" ]; then
+            echo "${{ matrix.nombre }} todavía no tiene proyectos de tests."
+            exit 0
+          fi
+          for project in $tests; do
+            dotnet test "$project" -c Release --filter "Category=Isolation"
+          done
+
+      # El resto de los tests del servicio (los que terminan en Tests.csproj), si hay.
       - name: Test
         run: |
           tests=$(find ${{ matrix.carpeta }} -name '*Tests.csproj')
@@ -51,15 +64,15 @@ jobs:
             exit 0
           fi
           for project in $tests; do
-            dotnet test "$project" -c Release
+            dotnet test "$project" -c Release --filter "Category!=Isolation"
           done
 
   smoke:
     name: Smoke test (docker compose)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Levantar los servicios y sus bases
         run: |
@@ -88,9 +101,9 @@ jobs:
 
   contracts:
     name: Validar contratos OpenAPI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validar especificaciones con Redocly
         run: |
@@ -101,7 +114,7 @@ jobs:
     name: CI ok
     if: always()
     needs: [build, smoke, contracts]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Verificar que todo pasó
         run: |

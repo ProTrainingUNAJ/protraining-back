@@ -1,3 +1,4 @@
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Injuries.CreateAthleteInjury;
@@ -20,14 +21,20 @@ public class CreateAthleteInjuryCommandHandlerTests
     private readonly Mock<IAthleteInjuryRepository> _injuries = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IStructureClient> _structure = new();
 
     public CreateAthleteInjuryCommandHandlerTests()
     {
         _currentUser.Setup(user => user.PfId).Returns(PfId);
+
+        // Por defecto el atleta es del PF; el test de KAN-431 lo cambia.
+        _structure
+            .Setup(client => client.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
     }
 
     private CreateAthleteInjuryCommandHandler CreateHandler() =>
-        new(_injuries.Object, _currentUser.Object, _unitOfWork.Object);
+        new(_injuries.Object, _unitOfWork.Object, _currentUser.Object, _structure.Object);
 
     private static CreateAthleteInjuryCommand CommandValido(DateTime? estimatedReturnDate) =>
         new(AthleteId, "isquiotibiales", "Gradación 3 tras sprint", InjuryDate,
@@ -134,6 +141,22 @@ public class CreateAthleteInjuryCommandHandlerTests
         _injuries.Verify(
             repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()),
             Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // KAN-431: atleta de otro PF (o inexistente) → 404 y no se guarda nada.
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task HandleAsync_WithAthleteOfAnotherPf_ThrowsAthleteNotFoundWithoutSaving()
+    {
+        _structure
+            .Setup(client => client.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(
+            () => CreateHandler().HandleAsync(CommandValido(EstimatedReturnDate)));
+
+        _injuries.Verify(repo => repo.AddAsync(It.IsAny<AthleteInjury>(), It.IsAny<CancellationToken>()), Times.Never);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }

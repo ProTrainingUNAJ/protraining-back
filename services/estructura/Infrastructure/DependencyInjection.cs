@@ -44,10 +44,14 @@ public static class DependencyInjection
         services.AddScoped<IAthleteRepository, AthleteRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<ICategoryInvitationRepository, CategoryInvitationRepository>();
         services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
         services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
         services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
         services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
+        services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
+        services.AddScoped<ISeasonPhaseRepository, SeasonPhaseRepository>();
+        services.AddScoped<ISeasonPhaseValidationService, Application.Services.SeasonPhaseValidationService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 

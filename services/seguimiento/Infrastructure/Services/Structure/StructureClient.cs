@@ -108,4 +108,48 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
             }
         }
     }
+
+    public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync($"api/v1/athletes/{athleteId}", cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or ExecutionRejectedException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return true;
+
+                // Estructura responde 404 si el atleta no existe o es de otro PF (filtro global).
+                case HttpStatusCode.NotFound:
+                    return false;
+
+                case HttpStatusCode.Unauthorized:
+                    throw new UnauthorizedAccessException();
+
+                // Estructura exige el rol PreparadorFisico: sin él, 403.
+                case HttpStatusCode.Forbidden:
+                    throw new ForbiddenException("La cuenta del token no está autorizada como preparador físico.");
+
+                default:
+                    logger.LogError("Estructura respondió {Status} al consultar el atleta {AthleteId}.",
+                        (int)response.StatusCode, athleteId);
+                    throw new StructureUnavailableException();
+            }
+        }
+    }
 }

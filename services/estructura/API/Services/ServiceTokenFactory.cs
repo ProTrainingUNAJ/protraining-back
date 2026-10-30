@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -27,7 +27,9 @@ public sealed class ServiceTokenFactory(IConfiguration configuration) : IService
             throw new InvalidOperationException("Jwt__Key debe tener al menos 32 caracteres.");
         }
 
-        var issuer = configuration["Jwt:Issuer"] ?? "protraining-estructura";
+        var issuer = configuration["Jwt:Issuer"]
+            ?? configuration["Jwt__Issuer"]
+            ?? throw new InvalidOperationException("Falta la variable de configuración Jwt__Issuer.");
         var audience = configuration["Jwt:Audience"] ?? "protraining";
 
         var claims = new List<Claim>

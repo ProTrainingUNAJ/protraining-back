@@ -25,7 +25,8 @@ x-api: &api
     start_period: 15s
 
 x-api-env: &api-env
-  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+  # Por defecto Production: Development (Swagger y cuentas de demo) solo si el .env lo pide.
+  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
   Database__Port: "5432"
   Database__User: ${POSTGRES_USER}
   Database__Password: ${POSTGRES_PASSWORD}
@@ -135,6 +136,7 @@ services:
       Database__Host: db-asistente
       Database__Name: asistente
       Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
+      Services__Estructura__BaseUrl: http://estructura:8080
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
       Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}
@@ -176,7 +178,7 @@ services:
     <<: *api
     build: gateway
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: http://localhost:3000
     ports: ["8000:8080"]

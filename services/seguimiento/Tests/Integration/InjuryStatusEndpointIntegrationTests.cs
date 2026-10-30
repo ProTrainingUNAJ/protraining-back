@@ -75,6 +75,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_ActiveInjury_When_PatchDirectlyToMedicallyCleared_Then_Returns400WithRecoveryMessageAndPersistsNothing()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
         var injuryId = await CrearLesionActivaAsync(client);
 
@@ -112,6 +113,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_ActiveInjury_When_PatchThroughRecovery_Then_Returns200ClearsAthleteAndWritesHistory()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
         var injuryId = await CrearLesionActivaAsync(client);
 
@@ -169,6 +171,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_MissingTransitionNotes_When_PatchStatus_Then_Returns400WithSpanishMessage()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
         var injuryId = await CrearLesionActivaAsync(client);
 
@@ -193,6 +196,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_UnknownInjuryId_When_PatchStatus_Then_Returns404()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
         var response = await CambiarEstadoAsync(
@@ -205,9 +209,11 @@ public sealed class InjuryStatusEndpointIntegrationTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_InjuryBelongingToAnotherPf_When_PatchStatus_Then_Returns404()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
         // Lesión sembrada a mano con el pf_id de otro preparador: el filtro global del
@@ -244,6 +250,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_NoToken_When_PatchStatus_Then_Returns401()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         var response = await factory.CreateClient().PatchAsJsonAsync(
             StatusEndpoint(Guid.NewGuid()),
@@ -261,6 +268,7 @@ public sealed class InjuryStatusEndpointIntegrationTests
     public async Task Given_AthleteRoleToken_When_PatchStatus_Then_Returns403()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
         var injuryId = await CrearLesionActivaAsync(factory.CreateAuthenticatedClient(_pfId));
 
         var response = await CambiarEstadoAsync(

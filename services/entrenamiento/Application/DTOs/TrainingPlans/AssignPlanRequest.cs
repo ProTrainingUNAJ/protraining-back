@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.TrainingPlans;
+namespace Application.DTOs.TrainingPlans;
 
 public record AssignPlanRequest(
     Guid TrainingPlanId,

@@ -5,6 +5,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.SubmitCheckIn;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -66,11 +67,13 @@ public class CheckInsControllerTests
     }
 
     [Fact]
-    public async Task Submit_WithTokenOfAnotherAthlete_Throws_Forbidden_And_Does_Not_Save()
+    // KAN-431: el id de otro atleta responde 404 (no 403), para no revelar si existe.
+    [Trait("Category", "Isolation")]
+    public async Task Submit_WithTokenOfAnotherAthlete_Throws_AthleteNotFound_And_Does_Not_Save()
     {
         ResponderMe(Guid.NewGuid());
 
-        await Assert.ThrowsAsync<ForbiddenException>(() =>
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
             CreateController().Submit(Guid.NewGuid(), RequestValida(), CancellationToken.None));
 
         _checkIns.Verify(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -107,5 +110,31 @@ public class CheckInsControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(200, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_WithOriginalDate_SavesThatDate()
+    {
+        var athleteId = Guid.NewGuid();
+        ResponderMe(athleteId);
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CheckIn?)null);
+        _checkIns
+            .Setup(r => r.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+        _unitOfWork
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var originalDate = ArgentinaTime.Today.AddDays(-1);
+        var request = RequestValida() with { Date = originalDate };
+
+        await CreateController().Submit(athleteId, request, CancellationToken.None);
+
+        Assert.NotNull(guardado);
+        Assert.Equal(originalDate, DateOnly.FromDateTime(guardado!.Date));
     }
 }

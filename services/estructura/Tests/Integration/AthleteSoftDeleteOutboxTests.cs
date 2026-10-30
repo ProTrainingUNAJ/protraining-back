@@ -86,6 +86,7 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOwnedByPfB_When_PfAAttemptsToDelete_Then_Returns404AndDoesNotRegisterPendingPurge()
     {
         // 1. Arrange: Create Athlete with PF-B

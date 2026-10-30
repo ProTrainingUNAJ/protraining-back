@@ -48,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IAiAuditService, AiAuditService>();
         services.AddScoped<IRoutineDraftRepository, Infrastructure.Data.Repositories.RoutineDraftRepository>();
+        services.AddScoped<IPlanDraftRepository, Infrastructure.Data.Repositories.PlanDraftRepository>();
+        services.AddScoped<IPfDecisionRepository, Infrastructure.Data.Repositories.PfDecisionRepository>();
+        services.AddScoped<IMatchDayLoadValidator, Application.Common.PlanDrafts.MatchDayLoadValidator>();
 
         services.AddMemoryCache();
         services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));

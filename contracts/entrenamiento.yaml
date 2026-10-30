@@ -57,6 +57,13 @@ paths:
           schema:
             type: string
           description: Filtrar por equipamiento requerido (ej. Barra Olímpica, Mancuerna, Máquina).
+        - name: usedByPf
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Si es true, filtra únicamente los ejercicios utilizados por el PF en sus planificaciones o con récords (1RM) cargados.
         - name: page
           in: query
           required: false
@@ -85,6 +92,74 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/exercises/restrictions/check:
+    post:
+      tags:
+        - Exercises
+      summary: Chequear restricciones de una lista de ejercicios por zonas de dolor
+      description: >
+        Evalúa una lista de ejercicios contra las zonas de dolor reportadas (formato "zona:nivel").
+        Devuelve por cada ejercicio si está restringido y, en su caso, la zona, nivel de dolor,
+        motivo y lista ordenada de sustitutos biomecánicos.
+      operationId: checkExerciseRestrictions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckExerciseRestrictionsRequest'
+      responses:
+        "200":
+          description: Chequeo de restricciones realizado exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseRestrictionCheckResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/exercises/{id}/substitutes:
+    get:
+      tags:
+        - Exercises
+      summary: Obtener ejercicios sustitutos para una zona de dolor
+      description: Devuelve la lista ordenada de ejercicios sustitutos recomendados para un ejercicio y una zona anatómica de dolor específica.
+      operationId: getExerciseSubstitutes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del ejercicio restringido.
+        - name: zone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Zona anatómica de dolor (ej. cuadriceps, espalda_baja).
+          example: "cuadriceps"
+      responses:
+        "200":
+          description: Lista ordenada de sustitutos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSubstitute'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/records:
     get:
@@ -312,6 +387,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/me/today-routine/performed-sets:
+    post:
+      tags:
+        - Execution and Loads
+      summary: Registrar series ejecutadas de la rutina de hoy
+      description: >
+        Permite al atleta registrar lo levantado en su sesión de hoy (una entrada por ejercicio con su mejor serie).
+        Calcula el 1RM estimado con la fórmula de Epley (1 a 10 repeticiones) y redondeo hacia abajo a múltiplo de 2.5 kg.
+        Si la estimación supera el récord vigente, genera una propuesta de récord pendiente sin modificar el récord actual.
+        Si algún ejercicio no pertenece a la rutina de hoy, responde 400.
+      operationId: recordPerformedSets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerformedSetInput'
+      responses:
+        "200":
+          description: Series registradas correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPerformedSetsResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/today-routine:
     get:
@@ -546,7 +656,7 @@ paths:
       tags:
         - Routines and Templates
       summary: Asignar planificacion a categoria o atleta
-      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico.
+      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico. Responde 404 si la planificacion, la categoria o el atleta no existen o son de otro PF.
       operationId: assignTrainingPlan
       requestBody:
         required: true
@@ -575,7 +685,7 @@ paths:
       tags:
         - Routines and Templates
       summary: Obtener sesion de entrenamiento
-      description: Obtiene los detalles de una sesion de entrenamiento por su identificador.
+      description: Obtiene los detalles de una sesion de entrenamiento por su identificador. Requiere rol PreparadorFisico (el atleta ve su sesion del dia en /api/v1/me/today-routine).
       operationId: getTrainingSession
       parameters:
         - name: id
@@ -594,6 +704,8 @@ paths:
                 $ref: '#/components/schemas/TrainingSession'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -650,7 +762,7 @@ paths:
           description: Fecha de la sesión a consultar (YYYY-MM-DD).
         - name: pfId
           in: query
-          required: false
+          required: true
           schema:
             type: string
             format: uuid
@@ -668,6 +780,8 @@ paths:
                   format: uuid
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
 
   /api/health:
     get:
@@ -723,6 +837,77 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    CheckExerciseRestrictionsRequest:
+      type: object
+      required:
+        - exerciseIds
+      properties:
+        painZones:
+          type: string
+          nullable: true
+          description: Zonas de dolor reportadas en el check-in (formato "zona:nivel" separadas por comas).
+          example: "cuadriceps:2,espalda_baja:1"
+        exerciseIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de ejercicios a verificar.
+          example: ["b501d51c-4b53-4dc9-985f-8646f9037cfa", "c8a14358-bf87-41a4-94e0-7ee429d7c679"]
+
+    ExerciseSubstitute:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio sustituto.
+          example: "7e3b97f0-2581-4ebc-b3b0-642cf38a0f02"
+        name:
+          type: string
+          description: Nombre del ejercicio sustituto.
+          example: "Prensa de piernas"
+
+    ExerciseRestrictionCheckResult:
+      type: object
+      required:
+        - exerciseId
+        - restricted
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio evaluado.
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        restricted:
+          type: boolean
+          description: Indica si el ejercicio debe ser restringido/reemplazado por dolor.
+          example: true
+        zone:
+          type: string
+          nullable: true
+          description: Zona de dolor que disparó la restricción.
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          nullable: true
+          description: Nivel de dolor reportado para la zona (1 a 10).
+          example: 2
+        reason:
+          type: string
+          nullable: true
+          description: Motivo biomecánico de la contraindicación.
+          example: "Alta compresión femororrotuliana y tensión en el tendón rotuliano con sobrecarga axial."
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseSubstitute'
+          description: Lista ordenada de ejercicios sustitutos recomendados.
+
     Exercise:
       type: object
       required:
@@ -1037,6 +1222,18 @@ components:
           nullable: true
           description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg). Es null en series de referencia sin récord previo.
           example: 112.5
+        barWeight:
+          type: number
+          format: double
+          nullable: true
+          description: Peso de la barra en kg (por defecto 20 kg en ejercicios con barra). Es null en ejercicios sin barra.
+          example: 20.0
+        weightPerSide:
+          type: number
+          format: double
+          nullable: true
+          description: Peso a colocar por cada lado de la barra en kg. Es 0 si el peso total es menor o igual a la barra ("solo la barra") y null si el ejercicio no es con barra.
+          example: 46.25
         current1RmKg:
           type: number
           format: double
@@ -1081,6 +1278,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+
+    PerformedSetInput:
+      type: object
+      required:
+        - exerciseId
+        - weight
+        - reps
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        weight:
+          type: number
+          format: double
+          example: 90.0
+        reps:
+          type: integer
+          example: 6
+
+    RecordPerformedSetsResponse:
+      type: object
+      required:
+        - recordedSetsCount
+        - proposalsGeneratedCount
+      properties:
+        recordedSetsCount:
+          type: integer
+          example: 1
+        proposalsGeneratedCount:
+          type: integer
+          example: 1
 
     LogExecutionRequest:
       type: object

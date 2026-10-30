@@ -1,4 +1,4 @@
-﻿namespace Application.Exceptions;
+namespace Application.Exceptions;
 
 /// <summary>
 /// excepcion lanzada cuando las credenciales enviadas son incorrectas o la cuenta está bloqueada.

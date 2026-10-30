@@ -1,6 +1,5 @@
 using Domain.Entities;
 using Domain.Services;
-using Xunit;
 
 namespace Entrenamiento.Tests;
 
@@ -62,5 +61,23 @@ public class LoadCalculatorEngineTests
         var result = _engine.RoundToNearestPlate(theoreticalWeight);
 
         Assert.Equal(expectedWeight, result);
+    }
+
+    [Theory]
+    [InlineData(80.0, 30.0)]
+    [InlineData(20.0, 0.0)]
+    [InlineData(15.0, 0.0)]
+    [InlineData(102.5, 41.25)]
+    public void CalculateWeightPerSide_ConBarraEstandar_DeberiaCalcularPesoPorLado(double totalWeight, double expectedWeightPerSide)
+    {
+        var result = _engine.CalculateWeightPerSide(totalWeight);
+        Assert.Equal(expectedWeightPerSide, result);
+    }
+
+    [Fact]
+    public void CalculateWeightPerSide_SinPesoTotal_DeberiaDevolverNull()
+    {
+        var result = _engine.CalculateWeightPerSide(null);
+        Assert.Null(result);
     }
 }

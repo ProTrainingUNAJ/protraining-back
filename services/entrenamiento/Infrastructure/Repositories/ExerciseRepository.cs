@@ -14,9 +14,18 @@ namespace Infrastructure.Repositories
             this.context = context;
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
             var exercises = context.Exercises.AsNoTracking();
+
+            if (usedByPf)
+            {
+                var planExerciseIds = context.PrescribedExercises.Select(pe => pe.ExerciseId);
+                var recordExerciseIds = context.AthleteRecords.Select(r => r.ExerciseId);
+                var usedExerciseIds = planExerciseIds.Union(recordExerciseIds);
+
+                exercises = exercises.Where(e => usedExerciseIds.Contains(e.Id));
+            }
             
             if (!string.IsNullOrWhiteSpace(equipment))
             {
@@ -30,14 +39,14 @@ namespace Infrastructure.Repositories
            
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.Where(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name) > 0.3);
+                exercises = exercises.Where(e => EF.Functions.TrigramsAreWordSimilar(searchTerm, e.Name));
             }
 
             var totalCount = await exercises.CountAsync(cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                exercises = exercises.OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name));
+                exercises = exercises.OrderByDescending(e => EF.Functions.TrigramsWordSimilarity(searchTerm, e.Name)).ThenBy(e => e.Name);
             }
             else
             {
@@ -52,6 +61,11 @@ namespace Infrastructure.Repositories
             var items = await exercises.ToListAsync(cancellationToken);
 
             return (items, totalCount);
+        }
+
+        public async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await context.Exercises.AnyAsync(e => e.Id == id, cancellationToken);
         }
     }
 }

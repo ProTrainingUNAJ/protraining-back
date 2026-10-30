@@ -26,6 +26,10 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
                 AthleteNotFoundException => (404, "Atleta no encontrado.", null),
                 OrganizationNotFoundException => (404, "Organización no encontrada.", null),
                 CategoryNotFoundException => (404, "Categoría no encontrada.", null),
+                CompetitiveEventNotFoundException => (404, "Evento competitivo no encontrado.", null),
+                SeasonPhaseNotFoundException => (404, "Fase de temporada no encontrada.", null),
+                InvitationExpiredException => (410, "Invitación caducada.", "El token de invitación ha caducado."),
+                InvitationNotFoundException => (404, "Invitación no encontrada.", "El token de invitación no es válido o no existe."),
                 ConflictException conflict => (409, conflict.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
@@ -45,3 +49,4 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
         }
     }
 }
+ 

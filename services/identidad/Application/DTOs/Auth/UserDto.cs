@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 
 /// <summary>
 /// DTO con la informacion basica del usuario autenticado
@@ -8,4 +8,5 @@ public record UserDto(
     string Email,
     string FullName,
     string Role,
-    Guid? PfId);
+    Guid? PfId,
+    string? PhoneNumber = null);

@@ -46,9 +46,12 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IExerciseRepository, ExerciseRepository>();
+        services.AddScoped<IExerciseRestrictionRepository, ExerciseRestrictionRepository>();
         services.AddScoped<IAthleteRecordRepository, AthleteRecordRepository>();
         services.AddScoped<ITrainingPlanRepository, TrainingPlanRepository>();
         services.AddScoped<ITrainingSessionRepository, TrainingSessionRepository>();
+        services.AddScoped<IPerformedSetRepository, PerformedSetRepository>();
+        services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
 
         return services;
     }
@@ -64,5 +67,6 @@ public static class DependencyInjection
         var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
 
         await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
+        await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
     }
 }

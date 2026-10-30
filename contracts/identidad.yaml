@@ -16,6 +16,9 @@ tags:
     description: Endpoints para inicio de sesión y renovación de tokens
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
+  - name: Users
+    description: Gestión del perfil y datos de usuarios
+
 
 paths:
   /api/v1/auth/login:
@@ -78,6 +81,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/users/me/phone:
+    put:
+      tags:
+        - Users
+      summary: Actualizar teléfono de WhatsApp del usuario
+      description: Actualiza y normaliza el número de teléfono de WhatsApp del usuario autenticado. Responde 400 con mensaje en español si el formato es inválido.
+      operationId: updateWhatsAppPhone
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhoneRequest'
+      responses:
+        "200":
+          description: Teléfono de WhatsApp actualizado y normalizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatePhoneResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+
   /api/health:
     get:
       tags:
@@ -109,6 +144,14 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
 
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT Bearer emitido por este microservicio.
+
   schemas:
     LoginRequest:
       type: object
@@ -129,6 +172,7 @@ components:
           type: string
           description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
           example: "device-web-pwa-01"
+        
 
     User:
       type: object
@@ -161,6 +205,12 @@ components:
           nullable: true
           description: Identificador del preparador físico asignado (excepción de dominio en español).
           example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        phoneNumber:
+          type: string
+          nullable: true
+          description: Número de teléfono de WhatsApp normalizado (solo dígitos).
+          example: "5491123456789"
+
 
     LoginResponse:
       type: object
@@ -224,6 +274,28 @@ components:
         expiresIn:
           type: integer
           example: 3600
+
+    UpdatePhoneRequest:
+          type: object
+          required:
+            - phoneNumber
+          properties:
+            phoneNumber:
+              type: string
+              description: Número de teléfono de WhatsApp con código de país.
+              example: "+54 9 11 2345-6789"
+
+    UpdatePhoneResponse:
+      type: object
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          description: Número de teléfono normalizado en estándar E.164 (solo dígitos).
+          example: "5491123456789"
+
+    
 
     HealthStatus:
       type: object

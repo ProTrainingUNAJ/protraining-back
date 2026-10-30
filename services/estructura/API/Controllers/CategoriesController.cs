@@ -3,6 +3,7 @@ using Application.DTOs.Categories;
 using Application.UseCases.Categories.CreateCategory;
 using Application.UseCases.Categories.DeleteCategory;
 using Application.UseCases.Categories.GetCategory;
+using Application.UseCases.Categories.Invitations.GenerateCategoryInvitationToken;
 using Application.UseCases.Categories.ListAthletesByCategory;
 using Application.UseCases.Categories.ListCategories;
 using Application.UseCases.Categories.UpdateCategory;
@@ -20,8 +21,11 @@ public sealed class CategoriesController(
     CreateCategoryCommandHandler createHandler,
     UpdateCategoryCommandHandler updateHandler,
     DeleteCategoryCommandHandler deleteHandler,
-    ListAthletesByCategoryQueryHandler listAthletesHandler) : ControllerBase
+    ListAthletesByCategoryQueryHandler listAthletesHandler,
+    GenerateCategoryInvitationTokenCommandHandler generateInvitationTokenHandler) : ControllerBase
 {
+    // ... (los endpoints anteriores quedan iguales) ...
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CategoryDto>>> List(
         [FromQuery] Guid organizationId,
@@ -75,4 +79,13 @@ public sealed class CategoriesController(
         Guid id,
         CancellationToken cancellationToken) =>
         Ok(await listAthletesHandler.HandleAsync(new ListAthletesByCategoryQuery(id), cancellationToken));
+
+    [HttpPost("{id:guid}/invitation-token")]
+    [HttpPost("{id:guid}/invitation")]
+    public async Task<ActionResult<CategoryInvitationDto>> GenerateInvitationToken(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        Ok(await generateInvitationTokenHandler.HandleAsync(
+            new GenerateCategoryInvitationTokenCommand(id),
+            cancellationToken));
 }
