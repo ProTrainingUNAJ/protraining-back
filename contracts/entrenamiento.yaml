@@ -1,4 +1,4 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: ProTraining - Microservicio de Entrenamiento
   description: >
@@ -387,6 +387,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/me/today-routine/performed-sets:
+    post:
+      tags:
+        - Execution and Loads
+      summary: Registrar series ejecutadas de la rutina de hoy
+      description: >
+        Permite al atleta registrar lo levantado en su sesión de hoy (una entrada por ejercicio con su mejor serie).
+        Calcula el 1RM estimado con la fórmula de Epley (1 a 10 repeticiones) y redondeo hacia abajo a múltiplo de 2.5 kg.
+        Si la estimación supera el récord vigente, genera una propuesta de récord pendiente sin modificar el récord actual.
+        Si algún ejercicio no pertenece a la rutina de hoy, responde 400.
+      operationId: recordPerformedSets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerformedSetInput'
+      responses:
+        "200":
+          description: Series registradas correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPerformedSetsResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/today-routine:
     get:
@@ -1231,6 +1266,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+
+    PerformedSetInput:
+      type: object
+      required:
+        - exerciseId
+        - weight
+        - reps
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        weight:
+          type: number
+          format: double
+          example: 90.0
+        reps:
+          type: integer
+          example: 6
+
+    RecordPerformedSetsResponse:
+      type: object
+      required:
+        - recordedSetsCount
+        - proposalsGeneratedCount
+      properties:
+        recordedSetsCount:
+          type: integer
+          example: 1
+        proposalsGeneratedCount:
+          type: integer
+          example: 1
 
     LogExecutionRequest:
       type: object

@@ -12,6 +12,7 @@ using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
 using Application.UseCases.Routines.GetTodayRoutine;
+using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
@@ -80,6 +81,7 @@ builder.Services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionCheck
 builder.Services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
 builder.Services.AddScoped<GetExerciseSubstitutesQueryHandler>();
 builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
+builder.Services.AddScoped<RecordPerformedSetsCommandHandler>();
 builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
 builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
 
