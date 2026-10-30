@@ -36,8 +36,15 @@ public sealed class CreatePlanDraftCommandHandler(
         if (hasCategory == hasAthlete)
             throw new DomainException("Debés indicar una categoría o un atleta, pero no ambos a la vez.");
 
-        var weeks = request.Weeks is >= 1 and <= 8 ? request.Weeks : 4;
-        var daysPerWeek = request.DaysPerWeek is >= 1 and <= 6 ? request.DaysPerWeek : 3;
+        // KAN-563: Validación estricta de rangos semanas (1 a 8) y días por semana (1 a 6) retornando 400
+        if (request.Weeks is < 1 or > 8)
+            throw new DomainException("La cantidad de semanas debe estar entre 1 y 8.");
+
+        if (request.DaysPerWeek is < 1 or > 6)
+            throw new DomainException("La cantidad de días por semana debe estar entre 1 y 6.");
+
+        var weeks = request.Weeks;
+        var daysPerWeek = request.DaysPerWeek;
 
         var startDate = request.StartDate.HasValue && request.StartDate.Value != default
             ? request.StartDate.Value
@@ -102,9 +109,7 @@ public sealed class CreatePlanDraftCommandHandler(
                 }
                 catch (Exception ex)
                 {
-                    logger?.LogWarning(
-                        ex,
-                        "No se pudo consultar el catálogo de ejercicios para resolver nombres en el validador de partidos.");
+                    logger?.LogWarning(ex, "No se pudo consultar el catálogo para obtener los nombres de ejercicios en el validador de partidos.");
                 }
             }
 
@@ -116,36 +121,21 @@ public sealed class CreatePlanDraftCommandHandler(
 
             finalContent = validationResult.Content;
             corrections = validationResult.Corrections;
-
-            if (corrections.Count > 0)
-            {
-                logger?.LogInformation(
-                    "Validador algorítmico de partidos aplicó {Count} correcciones de carga pre-partido: {Corrections}",
-                    corrections.Count,
-                    string.Join("; ", corrections));
-            }
         }
 
-        var contentJson = PlanDraftMapper.SerializeContent(finalContent);
+        var serializedContent = PlanDraftMapper.SerializeContent(finalContent);
 
         var draft = PlanDraft.Create(
             categoryId: hasCategory ? request.CategoryId : null,
             athleteId: hasAthlete ? request.AthleteId : null,
             goal: trimmedGoal,
             startDate: startDate,
-            content: contentJson,
+            content: serializedContent,
             provider: provider
         );
 
         await planDraftRepository.AddAsync(draft, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        logger?.LogInformation(
-            "Borrador de planificación {DraftId} creado exitosamente con proveedor {Provider} para {RecipientType} {RecipientId}",
-            draft.Id,
-            provider,
-            hasAthlete ? "Atleta" : "Categoría",
-            hasAthlete ? request.AthleteId : request.CategoryId);
 
         return PlanDraftMapper.ToResponseDto(draft, finalContent, corrections);
     }

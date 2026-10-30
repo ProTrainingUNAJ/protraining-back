@@ -12,8 +12,16 @@ namespace API.Controllers;
 [Route("api/v1/assistant")]
 public sealed class AssistantController(
     SuggestRoutineUseCase suggestRoutineUseCase,
-    GetAthleteDecisionsQueryHandler? getAthleteDecisionsHandler = null) : ControllerBase
+    GetAthleteDecisionsQueryHandler getAthleteDecisionsHandler) : ControllerBase
 {
+    /// <summary>
+    /// Constructor de compatibilidad para pruebas enfocadas exclusivamente en la sugerencia de rutinas.
+    /// </summary>
+    public AssistantController(SuggestRoutineUseCase suggestRoutineUseCase)
+        : this(suggestRoutineUseCase, null!)
+    {
+    }
+
     /// <summary>
     /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
     /// </summary>
@@ -43,9 +51,6 @@ public sealed class AssistantController(
         [FromQuery] string? zone,
         CancellationToken cancellationToken)
     {
-        if (getAthleteDecisionsHandler == null)
-            throw new InvalidOperationException("GetAthleteDecisionsQueryHandler no está configurado.");
-
         var result = await getAthleteDecisionsHandler.HandleAsync(
             new GetAthleteDecisionsQuery(athleteId, zone),
             cancellationToken);

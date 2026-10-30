@@ -1,4 +1,5 @@
 using System.Net;
+using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
 
@@ -14,8 +15,11 @@ public sealed class StructureAthleteClient(
 {
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
-        if (athleteId == Guid.Empty || httpClient.BaseAddress is null)
+        if (athleteId == Guid.Empty)
             return false;
+
+        if (httpClient.BaseAddress is null)
+            throw new StructureServiceUnavailableException("La dirección base del microservicio de Estructura no está configurada.");
 
         try
         {
@@ -32,9 +36,15 @@ public sealed class StructureAthleteClient(
                 "Estructura respondió código HTTP {StatusCode} al verificar el atleta {AthleteId}.",
                 (int)response.StatusCode,
                 athleteId);
-            return false;
+
+            throw new StructureServiceUnavailableException(
+                $"El microservicio de Estructura no se encuentra disponible (código {(int)response.StatusCode}).");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (StructureServiceUnavailableException)
         {
             throw;
         }
@@ -44,8 +54,9 @@ public sealed class StructureAthleteClient(
                 "Error al comunicarse con Estructura para verificar el atleta {AthleteId}: {Message}",
                 athleteId,
                 ex.Message);
-            return false;
+
+            throw new StructureServiceUnavailableException(
+                "El microservicio de Estructura no se encuentra disponible.", ex);
         }
     }
 }
-
