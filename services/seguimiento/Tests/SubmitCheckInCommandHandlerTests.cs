@@ -256,4 +256,42 @@ public class SubmitCheckInCommandHandlerTests
         Assert.NotNull(guardado);
         Assert.Equal("rodilla", guardado!.PainZones);
     }
+
+    [Fact]
+    public async Task HandleAsync_WithOriginalDate_KeepsThatDateInsteadOfToday()
+    {
+        DateTime? fechaRecibida = null;
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, DateTime, CancellationToken>((_, fecha, _) => fechaRecibida = fecha)
+            .ReturnsAsync((CheckIn?)null);
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+        _unitOfWork
+            .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var originalDate = ArgentinaTime.Today.AddDays(-1);
+        await CreateHandler().HandleAsync(CommandValido() with { Date = originalDate });
+
+        Assert.NotNull(fechaRecibida);
+        Assert.Equal(originalDate, DateOnly.FromDateTime(fechaRecibida!.Value));
+        Assert.NotNull(guardado);
+        Assert.Equal(originalDate, DateOnly.FromDateTime(guardado!.Date));
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithFutureDate_ThrowsDomainExceptionWithoutSaving()
+    {
+        ConfigurarSinCheckInPrevio();
+
+        await Assert.ThrowsAsync<DomainException>(() => CreateHandler().HandleAsync(
+            CommandValido() with { Date = ArgentinaTime.Today.AddDays(1) }));
+
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

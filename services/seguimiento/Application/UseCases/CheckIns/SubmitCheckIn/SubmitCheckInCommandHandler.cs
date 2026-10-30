@@ -23,7 +23,14 @@ public sealed class SubmitCheckInCommandHandler(
     {
         Validate(command);
 
-        var date = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        // La fecha puede venir del front (sincronización de un check-in guardado sin conexión):
+        // se conserva el día en que se hizo, no el de la sincronización. Si no viene, es hoy (Argentina).
+        var today = ArgentinaTime.Today;
+        var checkInDate = command.Date ?? today;
+        if (checkInDate > today)
+            throw new DomainException("La fecha del check-in no puede ser futura.");
+
+        var date = checkInDate.ToDateTime(TimeOnly.MinValue);
         var checkIn = await repository.GetByAthleteAndDateAsync(command.AthleteId, date, cancellationToken);
 
         var created = checkIn is null;

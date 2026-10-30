@@ -556,6 +556,13 @@ components:
           description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
           example: false
 
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha original del check-in (dia en Argentina). La manda el front al sincronizar un check-in guardado sin conexion; si no viene, se usa la fecha del servidor.
+          example: "2026-10-26"
+
     CheckInResponse:
       type: object
       required:
