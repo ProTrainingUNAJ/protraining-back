@@ -104,6 +104,44 @@ public class UpdateInjuryStatusCommandHandlerTests
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // Retroceso prohibido: la máquina de estados es de un solo sentido, sin persistir nada.
+    [Fact]
+    public async Task HandleAsync_BackwardsFromInRecoveryToActive_ThrowsDomainExceptionWithoutSaving()
+    {
+        var injury = Activa();
+        injury.TransitionTo(InjuryStatus.InRecovery, "Inicio de readaptación.", PfId, DateTime.UtcNow);
+        Devolver(injury);
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(
+                new UpdateInjuryStatusCommand(InjuryId, InjuryStatus.Active, "Recae la lesión.")));
+
+        Assert.Equal(
+            "Transición de estado no permitida: de 'En recuperación' a 'Activa'.",
+            exception.Message);
+
+        // La lesión queda en recuperación y no se escribe nada.
+        Assert.Equal(InjuryStatus.InRecovery, injury.Status);
+        _injuries.Verify(repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Repetir el estado actual no es una transición: se rechaza sin persistir nada.
+    [Fact]
+    public async Task HandleAsync_ToSameStatus_ThrowsDomainExceptionWithoutSaving()
+    {
+        Devolver(Activa());
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(
+                new UpdateInjuryStatusCommand(InjuryId, InjuryStatus.Active, "Sin cambios.")));
+
+        Assert.Equal("La lesión ya está en el estado 'Activa'.", exception.Message);
+
+        _injuries.Verify(repo => repo.AddStatusChangeAsync(It.IsAny<AthleteInjuryStatusChange>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task HandleAsync_WhenInjuryDoesNotExist_ThrowsInjuryNotFound()
     {
