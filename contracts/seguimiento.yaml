@@ -222,6 +222,41 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  # KAN-445: corrección manual de asistencia por el PF (agregado en esta rama).
+  /api/v1/athletes/{athleteId}/attendance:
+    patch:
+      tags:
+        - Loads and Attendance
+      summary: Corregir asistencia manualmente
+      description: >
+        El preparador físico marca presente o ausente a un atleta cuando figura
+        "sin registro" (no cargó su entrenamiento del día).
+      operationId: setAttendance
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAttendanceRequest'
+      responses:
+        "204":
+          description: Asistencia corregida.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/categories/{categoryId}/attendance-today:
     get:
       tags:
@@ -715,6 +750,15 @@ components:
           $ref: '#/components/schemas/DailyLoadActivity'
         individualWork:
           $ref: '#/components/schemas/DailyLoadActivity'
+
+    SetAttendanceRequest:
+      type: object
+      required:
+        - present
+      properties:
+        present:
+          type: boolean
+          example: true
 
     CategoryAttendanceSummary:
       type: object
