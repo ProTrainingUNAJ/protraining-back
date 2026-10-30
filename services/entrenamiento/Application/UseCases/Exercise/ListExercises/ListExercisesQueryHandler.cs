@@ -24,6 +24,7 @@ namespace Application.UseCases.Exercise.ListExercises
                 request.Search,
                 request.Equipment,
                 request.MuscleGroup,
+                request.UsedByPf,
                 page,
                 pageSize,
                 cancellationToken);
