@@ -140,6 +140,7 @@ public sealed class PfDecisionsTests
     // DADO otro PF CUANDO pide las decisiones de ese atleta ENTONCES recibe 404.
     // =========================================================================
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_PfAsksForDecisionsOfAnotherPfAthlete_When_Querying_Then_ThrowsNotFoundException404()
     {
         // Arrange
@@ -436,6 +437,7 @@ public sealed class PfDecisionsTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AssistantController_When_GettingAthleteDecisionsOfAnotherPf_Then_ThrowsNotFoundException()
     {
         // Arrange
@@ -531,7 +533,57 @@ public sealed class PfDecisionsTests
     }
 
     [Fact]
-    public async Task Given_StructureAthleteClient_When_EmptyAthleteIdOrNullBaseAddress_Then_ReturnsFalse()
+    public async Task Given_StructureAthleteClient_When_EstructuraReturns500_Then_ThrowsStructureServiceUnavailableException()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains($"api/v1/athletes/{MyAthleteId}")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:8082/")
+        };
+
+        var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+        // Act & Assert: Debe arrojar StructureServiceUnavailableException (mapeada a HTTP 503)
+        var ex = await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.IsOwnAthleteAsync(MyAthleteId));
+
+        Assert.Contains("no se encuentra disponible", ex.Message);
+    }
+
+    [Fact]
+    public async Task Given_StructureAthleteClient_When_ConnectionFails_Then_ThrowsStructureServiceUnavailableException()
+    {
+        // Arrange: Simular falla de conexión o caída completa de red hacia Estructura
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:8082/")
+        };
+
+        var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+        // Act & Assert
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.IsOwnAthleteAsync(MyAthleteId));
+    }
+
+    [Fact]
+    public async Task Given_StructureAthleteClient_When_EmptyAthleteIdOrNullBaseAddress_Then_ReturnsFalseOrThrows()
     {
         var httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8082/") };
         var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
@@ -539,6 +591,7 @@ public sealed class PfDecisionsTests
         Assert.False(await client.IsOwnAthleteAsync(Guid.Empty));
 
         var clientNoBaseAddress = new StructureAthleteClient(new HttpClient(), Mock.Of<ILogger<StructureAthleteClient>>());
-        Assert.False(await clientNoBaseAddress.IsOwnAthleteAsync(MyAthleteId));
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            clientNoBaseAddress.IsOwnAthleteAsync(MyAthleteId));
     }
 }

@@ -6,7 +6,7 @@ using Application.DTOs.PlanDrafts;
 using Domain.Common;
 
 /// <summary>
-/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382 / KAN-407).
+/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382 / KAN-407 / KAN-563).
 /// Inyecta los ejercicios disponibles del catálogo oficial, reglas de privacidad y directivas JSON.
 /// </summary>
 public static class RoutinePromptBuilder
@@ -72,7 +72,7 @@ public static class RoutinePromptBuilder
     }
 
     /// <summary>
-    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383 / KAN-407).
+    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383 / KAN-407 / KAN-563).
     /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo y a respetar
     /// las directivas de periodización competitiva pre-partido (D-1 <= 60 %, D-2 <= 75 %, D sin pesas).
     /// </summary>
@@ -173,6 +173,137 @@ public static class RoutinePromptBuilder
             """);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563).
+    /// </summary>
+    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal))
+            return [];
+
+        var text = goal.Trim().ToLowerInvariant()
+            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+        var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Piernas / Tren Inferior
+        if (text.Contains("pierna") || text.Contains("cuadriceps") ||
+            text.Contains("isquio") || text.Contains("gluteo") ||
+            text.Contains("gemelo") || text.Contains("pantorrilla") ||
+            text.Contains("tren inferior") || text.Contains("lower body") ||
+            text.Contains("sentadilla") || text.Contains("peso muerto") ||
+            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada"))
+        {
+            groups.Add("Piernas");
+        }
+
+        // Pecho / Empuje
+        if (text.Contains("pecho") || text.Contains("pectoral") ||
+            text.Contains("empuje") || text.Contains("push") ||
+            text.Contains("press de banca") || text.Contains("press banca") ||
+            text.Contains("fondo"))
+        {
+            groups.Add("Pecho");
+        }
+
+        // Espalda / Tracción
+        if (text.Contains("espalda") || text.Contains("dorsal") ||
+            text.Contains("traccion") || text.Contains("pull") ||
+            text.Contains("remo") || text.Contains("dominada") ||
+            text.Contains("lumbar") || text.Contains("trapecio"))
+        {
+            groups.Add("Espalda");
+        }
+
+        // Hombros
+        if (text.Contains("hombro") || text.Contains("deltoides") || text.Contains("press militar"))
+        {
+            groups.Add("Hombros");
+        }
+
+        // Brazos
+        if (text.Contains("brazo") || text.Contains("biceps") || text.Contains("triceps"))
+        {
+            groups.Add("Brazos");
+        }
+
+        // Core / Abdomen
+        if (text.Contains("core") || text.Contains("abdominal") ||
+            text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
+        {
+            groups.Add("Core");
+        }
+
+        return groups.ToList();
+    }
+
+    /// <summary>
+    /// Filtra y prioriza los ejercicios del catálogo oficial según el objetivo deportivo solicitado (#158 · KAN-563).
+    /// Si el objetivo enfatiza grupos específicos (ej. piernas), se priorizan ejercicios de esos grupos.
+    /// Si el objetivo es general (ej. fuerza general, pretemporada), distribuye equitativamente básicos de cada grupo.
+    /// </summary>
+    public static IReadOnlyList<CatalogExerciseDto> FilterExercisesForGoal(
+        IReadOnlyList<CatalogExerciseDto> catalog,
+        string? goal,
+        int maxExercises = 25)
+    {
+        if (catalog == null || catalog.Count == 0)
+            return [];
+
+        if (maxExercises <= 0)
+            maxExercises = 25;
+
+        var extractedGroups = ExtractMuscleGroups(goal);
+
+        if (extractedGroups.Count > 0)
+        {
+            return FilterRelevantExercises(catalog, extractedGroups, maxExercises);
+        }
+
+        // Objetivo general: distribuir una mezcla balanceada de básicos de cada grupo
+        var targetGroups = new[] { "Piernas", "Pecho", "Espalda", "Hombros", "Core", "Brazos" };
+        var selected = new List<CatalogExerciseDto>();
+        var selectedIds = new HashSet<Guid>();
+
+        var perGroupLimit = Math.Max(2, maxExercises / targetGroups.Length);
+        foreach (var group in targetGroups)
+        {
+            var groupExercises = catalog
+                .Where(e => !selectedIds.Contains(e.Id) &&
+                            e.MuscleGroup != null &&
+                            e.MuscleGroup.Trim().Equals(group, StringComparison.OrdinalIgnoreCase))
+                .Take(perGroupLimit);
+
+            foreach (var ex in groupExercises)
+            {
+                if (selected.Count >= maxExercises)
+                    break;
+
+                selected.Add(ex);
+                selectedIds.Add(ex.Id);
+            }
+
+            if (selected.Count >= maxExercises)
+                break;
+        }
+
+        // Si todavía quedan cupos, completar con los restantes del catálogo
+        if (selected.Count < maxExercises)
+        {
+            foreach (var ex in catalog)
+            {
+                if (!selectedIds.Contains(ex.Id))
+                {
+                    selected.Add(ex);
+                    selectedIds.Add(ex.Id);
+                    if (selected.Count >= maxExercises)
+                        break;
+                }
+            }
+        }
+
+        return selected;
     }
 
     /// <summary>

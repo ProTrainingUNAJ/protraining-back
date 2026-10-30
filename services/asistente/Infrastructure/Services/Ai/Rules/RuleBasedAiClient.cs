@@ -69,21 +69,19 @@ public sealed class RuleBasedAiClient(
             catalog = await catalogService.GetAllAsync(cancellationToken);
         }
 
-        var availableExercises = catalog.Count > 0
-            ? catalog.ToList()
-            : [
-                new CatalogExerciseDto(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Sentadilla trasera con barra", "Piernas", "Barra"),
-                new CatalogExerciseDto(Guid.Parse("22222222-2222-2222-2222-222222222222"), "Press de banca plano", "Pecho", "Barra"),
-                new CatalogExerciseDto(Guid.Parse("33333333-3333-3333-3333-333333333333"), "Peso muerto convencional", "Espalda", "Barra")
-            ];
+        // KAN-563: Si el catálogo está vacío, no inventar IDs de respaldo y retornar null
+        if (catalog == null || catalog.Count == 0)
+        {
+            logger?.LogWarning("Catálogo de ejercicios vacío. No se puede generar borrador con reglas sin ejercicios reales.");
+            return null;
+        }
+
+        var (legs, push, pull) = CategorizeCatalog(catalog);
 
         var weeks = new List<PlanDraftWeekDto>();
-        var exerciseIndex = 0;
 
-        DayOfWeek[] defaultDays = [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday, DayOfWeek.Tuesday, DayOfWeek.Thursday, DayOfWeek.Saturday];
-        var selectedDays = defaultDays.Take(Math.Min(request.DaysPerWeek, defaultDays.Length))
-            .OrderBy(d => d == DayOfWeek.Sunday ? 7 : (int)d)
-            .ToList();
+        // KAN-563: Respetar días de entrenamiento solicitados (trainingDays) o usar días por defecto
+        var selectedDays = ResolveTrainingDays(request.TrainingDays, request.DaysPerWeek);
 
         var matchSet = matchDates != null && matchDates.Count > 0
             ? new HashSet<DateOnly>(matchDates)
@@ -129,11 +127,20 @@ public sealed class RuleBasedAiClient(
                     notes = $"Tapering pre-partido (D-2): Carga moderada al {targetPercentage:0.#}% para preservar frescura neuromuscular.";
                 }
 
+                // KAN-563: Armar cada sesión con ejercicios del grupo correspondiente (piernas, empuje, tracción)
+                var sessionIndexInWeek = sessions.Count;
+                var (sessionGroupName, targetGroupExercises) = (sessionIndexInWeek % 3) switch
+                {
+                    0 => ("Piernas", legs),
+                    1 => ("Empuje", push),
+                    _ => ("Tracción", pull)
+                };
+
                 var sessionExercises = new List<PlanDraftExerciseDto>();
                 for (var e = 1; e <= 2; e++)
                 {
-                    var catEx = availableExercises[exerciseIndex % availableExercises.Count];
-                    exerciseIndex++;
+                    var exerciseOffset = ((w - 1) * 2) + (e - 1);
+                    var catEx = targetGroupExercises[exerciseOffset % targetGroupExercises.Count];
 
                     sessionExercises.Add(new PlanDraftExerciseDto(
                         ExerciseId: catEx.Id,
@@ -146,7 +153,7 @@ public sealed class RuleBasedAiClient(
 
                 var sessionOrder = sessions.Count + 1;
                 sessions.Add(new PlanDraftSessionDto(
-                    Name: $"Sesión {sessionOrder} - Acondicionamiento y Fuerza",
+                    Name: $"Sesión {sessionOrder} - {sessionGroupName}",
                     DayOfWeek: dayOfWeek,
                     Order: sessionOrder,
                     CoachNotes: notes,
@@ -187,5 +194,129 @@ public sealed class RuleBasedAiClient(
             totalTokens: 0));
 
         return content;
+    }
+
+    /// <summary>
+    /// Resuelve y ordena los días de entrenamiento semanales a partir de la lista preferida o valores por defecto (#158 · KAN-563).
+    /// </summary>
+    public static List<DayOfWeek> ResolveTrainingDays(IReadOnlyList<string>? trainingDays, int daysPerWeek)
+    {
+        var result = new List<DayOfWeek>();
+        if (trainingDays is { Count: > 0 })
+        {
+            foreach (var rawDay in trainingDays)
+            {
+                if (TryParseDayOfWeek(rawDay, out var parsedDay) && !result.Contains(parsedDay))
+                {
+                    result.Add(parsedDay);
+                }
+            }
+        }
+
+        DayOfWeek[] defaultDays = [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday, DayOfWeek.Tuesday, DayOfWeek.Thursday, DayOfWeek.Saturday];
+
+        if (result.Count == 0)
+        {
+            result = defaultDays.Take(Math.Min(daysPerWeek, defaultDays.Length)).ToList();
+        }
+        else if (result.Count < daysPerWeek)
+        {
+            foreach (var def in defaultDays)
+            {
+                if (!result.Contains(def))
+                {
+                    result.Add(def);
+                    if (result.Count >= daysPerWeek)
+                        break;
+                }
+            }
+        }
+        else if (result.Count > daysPerWeek)
+        {
+            result = result.Take(daysPerWeek).ToList();
+        }
+
+        return result.OrderBy(d => d == DayOfWeek.Sunday ? 7 : (int)d).ToList();
+    }
+
+    /// <summary>
+    /// Intenta parsear un día de la semana a partir de nombres en español o inglés (#158 · KAN-563).
+    /// </summary>
+    public static bool TryParseDayOfWeek(string rawDay, out DayOfWeek dayOfWeek)
+    {
+        dayOfWeek = DayOfWeek.Monday;
+        if (string.IsNullOrWhiteSpace(rawDay))
+            return false;
+
+        var clean = rawDay.Trim().ToLowerInvariant()
+            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+
+        if (clean.StartsWith("lun") || clean.StartsWith("mon")) { dayOfWeek = DayOfWeek.Monday; return true; }
+        if (clean.StartsWith("mar") || clean.StartsWith("tue")) { dayOfWeek = DayOfWeek.Tuesday; return true; }
+        if (clean.StartsWith("mie") || clean.StartsWith("wed")) { dayOfWeek = DayOfWeek.Wednesday; return true; }
+        if (clean.StartsWith("jue") || clean.StartsWith("thu")) { dayOfWeek = DayOfWeek.Thursday; return true; }
+        if (clean.StartsWith("vie") || clean.StartsWith("fri")) { dayOfWeek = DayOfWeek.Friday; return true; }
+        if (clean.StartsWith("sab") || clean.StartsWith("sat")) { dayOfWeek = DayOfWeek.Saturday; return true; }
+        if (clean.StartsWith("dom") || clean.StartsWith("sun")) { dayOfWeek = DayOfWeek.Sunday; return true; }
+
+        if (Enum.TryParse<DayOfWeek>(rawDay, ignoreCase: true, out var parsed))
+        {
+            dayOfWeek = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Clasifica el catálogo en grupos musculares de Piernas, Empuje y Tracción para armar sesiones coherentes (#158 · KAN-563).
+    /// </summary>
+    public static (List<CatalogExerciseDto> Legs, List<CatalogExerciseDto> Push, List<CatalogExerciseDto> Pull)
+        CategorizeCatalog(IReadOnlyList<CatalogExerciseDto> catalog)
+    {
+        var legs = new List<CatalogExerciseDto>();
+        var push = new List<CatalogExerciseDto>();
+        var pull = new List<CatalogExerciseDto>();
+
+        foreach (var ex in catalog)
+        {
+            var mg = (ex.MuscleGroup ?? string.Empty).Trim().ToLowerInvariant()
+                .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+            var name = (ex.Name ?? string.Empty).Trim().ToLowerInvariant()
+                .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+
+            if (mg.Contains("pierna") || mg.Contains("cuadriceps") || mg.Contains("isquio") || mg.Contains("gluteo") ||
+                mg.Contains("gemelo") || mg.Contains("lower body") || mg.Contains("tren inferior") ||
+                name.Contains("sentadilla") || name.Contains("squat") || name.Contains("prensa") || name.Contains("zancada") || name.Contains("estocada") || name.Contains("lunge") || name.Contains("hip thrust"))
+            {
+                legs.Add(ex);
+            }
+            else if (mg.Contains("pecho") || mg.Contains("pectoral") || mg.Contains("hombro") || mg.Contains("deltoid") || mg.Contains("triceps") ||
+                     mg.Contains("push") || mg.Contains("empuje") ||
+                     name.Contains("press") || name.Contains("fondo") || name.Contains("dip") || name.Contains("flexion") || name.Contains("push up") || name.Contains("apertura"))
+            {
+                push.Add(ex);
+            }
+            else if (mg.Contains("espalda") || mg.Contains("dorsal") || mg.Contains("biceps") || mg.Contains("pull") || mg.Contains("traccion") ||
+                     name.Contains("remo") || name.Contains("row") || name.Contains("dominada") || name.Contains("pull-up") || name.Contains("pull up") || name.Contains("jalon") || name.Contains("peso muerto") || name.Contains("deadlift"))
+            {
+                pull.Add(ex);
+            }
+            else if (mg.Contains("tren inferior"))
+            {
+                legs.Add(ex);
+            }
+            else if (mg.Contains("tren superior"))
+            {
+                push.Add(ex);
+            }
+        }
+
+        // Si algún grupo no tiene ejercicios en el catálogo provisto, usar los ejercicios disponibles del catálogo para no quedar vacío
+        if (legs.Count == 0 && catalog.Count > 0) legs.AddRange(catalog);
+        if (push.Count == 0 && catalog.Count > 0) push.AddRange(catalog);
+        if (pull.Count == 0 && catalog.Count > 0) pull.AddRange(catalog);
+
+        return (legs, push, pull);
     }
 }

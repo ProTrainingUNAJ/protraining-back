@@ -192,13 +192,19 @@ public sealed class OllamaClient(
             catalog = await catalogService.GetAllAsync(cancellationToken);
         }
 
-        var availableExercises = catalog.Count > 0
-            ? catalog.Take(25).ToList()
-            : [
-                new CatalogExerciseDto(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Sentadilla trasera con barra", "Piernas", "Barra"),
-                new CatalogExerciseDto(Guid.Parse("22222222-2222-2222-2222-222222222222"), "Press de banca plano", "Pecho", "Barra"),
-                new CatalogExerciseDto(Guid.Parse("33333333-3333-3333-3333-333333333333"), "Peso muerto convencional", "Espalda", "Barra")
-            ];
+        // KAN-563: Si el catálogo está vacío, no inventar IDs de respaldo y pasar directo al siguiente proveedor
+        if (catalog == null || catalog.Count == 0)
+        {
+            logger?.LogWarning("Catálogo de ejercicios vacío. Omitiendo Ollama y pasando al siguiente proveedor.");
+            return null;
+        }
+
+        // KAN-563: Filtrar ejercicios según el objetivo (priorizando grupos musculares solicitados)
+        var availableExercises = RoutinePromptBuilder.FilterExercisesForGoal(catalog, request.Goal, maxExercises: 25);
+        if (availableExercises.Count == 0)
+        {
+            availableExercises = catalog.Take(25).ToList();
+        }
 
         var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises, matchDates);
 
