@@ -13,6 +13,8 @@ public sealed class CreatePlanDraftCommandHandler(
     IPlanDraftRepository planDraftRepository,
     IUnitOfWork unitOfWork,
     IStructureCalendarClient? calendarClient = null,
+    IMatchDayLoadValidator? matchDayLoadValidator = null,
+    IExerciseCatalogService? catalogService = null,
     ILogger<CreatePlanDraftCommandHandler>? logger = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
@@ -77,7 +79,54 @@ public sealed class CreatePlanDraftCommandHandler(
 
         var (contentDto, provider) = await aiService.GeneratePlanDraftAsync(normalizedRequest, matchDates, cancellationToken);
 
-        var contentJson = PlanDraftMapper.SerializeContent(contentDto);
+        var finalContent = contentDto;
+        IReadOnlyList<string> corrections = [];
+
+        // KAN-408: Validador algorítmico post-IA para corregir cargas pre-partido (D-1 <= 60%, D-2 <= 75%, D sin pesas)
+        if (matchDayLoadValidator != null && matchDates is { Count: > 0 })
+        {
+            IReadOnlyDictionary<Guid, string>? exerciseNames = null;
+            if (catalogService != null)
+            {
+                try
+                {
+                    var catalog = await catalogService.GetAllAsync(cancellationToken);
+                    if (catalog is { Count: > 0 })
+                    {
+                        exerciseNames = catalog.ToDictionary(e => e.Id, e => e.Name);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(
+                        ex,
+                        "No se pudo consultar el catálogo de ejercicios para resolver nombres en el validador de partidos.");
+                }
+            }
+
+            var validationResult = matchDayLoadValidator.ValidateAndAdjust(
+                contentDto,
+                startDate,
+                matchDates,
+                exerciseNames);
+
+            finalContent = validationResult.Content;
+            corrections = validationResult.Corrections;
+
+            if (corrections.Count > 0)
+            {
+                logger?.LogInformation(
+                    "Validador algorítmico de partidos aplicó {Count} correcciones de carga pre-partido: {Corrections}",
+                    corrections.Count,
+                    string.Join("; ", corrections));
+            }
+        }
+
+        var contentJson = PlanDraftMapper.SerializeContent(finalContent);
 
         var draft = PlanDraft.Create(
             categoryId: hasCategory ? request.CategoryId : null,
@@ -98,7 +147,7 @@ public sealed class CreatePlanDraftCommandHandler(
             hasAthlete ? "Atleta" : "Categoría",
             hasAthlete ? request.AthleteId : request.CategoryId);
 
-        return PlanDraftMapper.ToResponseDto(draft, contentDto);
+        return PlanDraftMapper.ToResponseDto(draft, finalContent, corrections);
     }
 
     public static DateOnly CalculateNextMondayInArgentina(DateTime? utcNow = null)
