@@ -42,7 +42,8 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStr
                 request.IsSick,
                 request.EffortRate,
                 request.PainZones,
-                request.HasActiveInjury),
+                request.HasActiveInjury,
+                request.Date),
             cancellationToken);
 
         return result.Created

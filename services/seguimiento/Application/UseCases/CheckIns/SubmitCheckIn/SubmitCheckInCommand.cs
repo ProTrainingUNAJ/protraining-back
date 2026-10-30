@@ -11,5 +11,5 @@ public sealed record SubmitCheckInCommand(
     bool IsSick,
     int? EffortRate,
     string? PainZones,
-    bool HasActiveInjury);
-    
+    bool HasActiveInjury,
+    DateOnly? Date = null);    

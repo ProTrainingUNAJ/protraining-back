@@ -31,4 +31,8 @@ public sealed record SubmitCheckInRequest
 
     // Lesión activa marcada por el atleta: el semáforo del día queda en Rojo (KAN-364).
     public bool HasActiveInjury { get; init; }
+
+    // Fecha original del check-in (día en Argentina). La manda el front al sincronizar
+    // un check-in guardado sin conexión (KAN-149). Si no viene, se usa la fecha del servidor.
+    public DateOnly? Date { get; init; }
 }
