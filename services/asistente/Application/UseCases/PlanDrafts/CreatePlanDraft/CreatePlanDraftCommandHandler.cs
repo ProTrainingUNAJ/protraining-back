@@ -12,6 +12,7 @@ public sealed class CreatePlanDraftCommandHandler(
     IAiService aiService,
     IPlanDraftRepository planDraftRepository,
     IUnitOfWork unitOfWork,
+    IStructureCalendarClient? calendarClient = null,
     ILogger<CreatePlanDraftCommandHandler>? logger = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
@@ -48,7 +49,33 @@ public sealed class CreatePlanDraftCommandHandler(
             StartDate = startDate
         };
 
-        var (contentDto, provider) = await aiService.GeneratePlanDraftAsync(normalizedRequest, cancellationToken);
+        IReadOnlyList<DateOnly>? matchDates = null;
+        if (hasCategory && calendarClient != null)
+        {
+            try
+            {
+                var endDate = startDate.AddDays((weeks * 7) - 1);
+                matchDates = await calendarClient.GetMatchDatesAsync(
+                    request.CategoryId!.Value,
+                    startDate,
+                    endDate,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(
+                    ex,
+                    "No se pudieron obtener las fechas de partidos para la categoría {CategoryId}. Se continuará la generación sin restricciones de calendario.",
+                    request.CategoryId);
+                matchDates = null;
+            }
+        }
+
+        var (contentDto, provider) = await aiService.GeneratePlanDraftAsync(normalizedRequest, matchDates, cancellationToken);
 
         var contentJson = PlanDraftMapper.SerializeContent(contentDto);
 
@@ -97,4 +124,3 @@ public sealed class CreatePlanDraftCommandHandler(
         return date.AddDays(daysUntilMonday);
     }
 }
-

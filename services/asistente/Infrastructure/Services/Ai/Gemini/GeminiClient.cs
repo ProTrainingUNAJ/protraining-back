@@ -154,6 +154,7 @@ public sealed class GeminiClient(
 
     public async Task<PlanDraftContentDto?> TryGeneratePlanDraftAsync(
         CreatePlanDraftRequestDto request,
+        IReadOnlyList<DateOnly>? matchDates = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -173,7 +174,7 @@ public sealed class GeminiClient(
                 new CatalogExerciseDto(Guid.Parse("33333333-3333-3333-3333-333333333333"), "Peso muerto convencional", "Espalda", "Barra")
             ];
 
-        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises);
+        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises, matchDates);
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {

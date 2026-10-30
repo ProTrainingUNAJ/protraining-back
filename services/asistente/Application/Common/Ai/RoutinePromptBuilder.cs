@@ -3,9 +3,10 @@ namespace Application.Common.Ai;
 using System.Text;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
+using Domain.Common;
 
 /// <summary>
-/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382).
+/// Constructor centralizado de prompts para el módulo de IA del Asistente (#087 · KAN-382 / KAN-407).
 /// Inyecta los ejercicios disponibles del catálogo oficial, reglas de privacidad y directivas JSON.
 /// </summary>
 public static class RoutinePromptBuilder
@@ -71,12 +72,14 @@ public static class RoutinePromptBuilder
     }
 
     /// <summary>
-    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383).
-    /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo.
+    /// Construye el prompt para la generación de borradores de planificación multisesión (KAN-381 / KAN-382 / KAN-383 / KAN-407).
+    /// Instruye explícitamente a la IA a usar únicamente los IDs provistos en el catálogo y a respetar
+    /// las directivas de periodización competitiva pre-partido (D-1 <= 60 %, D-2 <= 75 %, D sin pesas).
     /// </summary>
     public static string BuildPlanDraftPrompt(
         CreatePlanDraftRequestDto request,
-        IReadOnlyList<CatalogExerciseDto> availableExercises)
+        IReadOnlyList<CatalogExerciseDto> availableExercises,
+        IReadOnlyList<DateOnly>? matchDates = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are an expert strength and conditioning AI assistant for ProTraining coaches.");
@@ -93,6 +96,36 @@ public static class RoutinePromptBuilder
             sb.AppendLine($"Start date: {request.StartDate.Value:yyyy-MM-dd}");
         }
         sb.AppendLine();
+
+        // KAN-407: Periodización competitiva pre-partido
+        if (request.StartDate.HasValue && matchDates is { Count: > 0 })
+        {
+            var startDate = request.StartDate.Value;
+            var endDate = startDate.AddDays(request.Weeks * 7 - 1);
+            var relevantMatches = matchDates
+                .Where(m => m >= startDate && m <= endDate)
+                .OrderBy(m => m)
+                .ToList();
+
+            if (relevantMatches.Count > 0)
+            {
+                sb.AppendLine("COMPETITIVE MATCH SCHEDULE (CALENDAR):");
+                foreach (var match in relevantMatches)
+                {
+                    var daysDiff = match.DayNumber - startDate.DayNumber;
+                    var weekNumber = (daysDiff / 7) + 1;
+                    var dayName = match.DayOfWeek.ToString();
+                    sb.AppendLine($"- Week {weekNumber}, {dayName} ({match:yyyy-MM-dd}): Official Match");
+                }
+                sb.AppendLine();
+                sb.AppendLine("MANDATORY MATCHDAY PERIODIZATION AND TAPERING RULES:");
+                sb.AppendLine("1. MATCH DAY (Day D): Do NOT schedule any strength or gym sessions on the day of the match.");
+                sb.AppendLine($"2. DAY BEFORE MATCH (Day D-1): Target percentage MUST NOT exceed {MatchDayLoadRules.MaxPercentageOneDayBeforeMatch:0}% for any exercise (low neuromuscular load).");
+                sb.AppendLine($"3. TWO DAYS BEFORE MATCH (Day D-2): Target percentage MUST NOT exceed {MatchDayLoadRules.MaxPercentageTwoDaysBeforeMatch:0}% for any exercise (moderate load).");
+                sb.AppendLine("4. Rest of the days: Normal training intensities according to the goal.");
+                sb.AppendLine();
+            }
+        }
 
         sb.AppendLine("OFFICIAL CATALOG EXERCISES (USE ONLY THESE IDS):");
         foreach (var ex in availableExercises)
