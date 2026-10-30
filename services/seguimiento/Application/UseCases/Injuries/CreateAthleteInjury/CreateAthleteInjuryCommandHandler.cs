@@ -7,11 +7,13 @@ using Domain.Entities;
 
 namespace Application.UseCases.Injuries.CreateAthleteInjury;
 
-// Registra una lesión nueva: nace en Active con su fecha de retorno estimada (KAN-419).
-// Las reglas de negocio viven en AthleteInjury.Create (DomainException → 400 en español).
+// Registra una lesión nueva: nace en Active y deja su fila inicial null → Active en el
+// historial clínico, en un único SaveChanges. Las reglas de negocio viven en el dominio
+// (DomainException → 400 en español).
 public sealed class CreateAthleteInjuryCommandHandler(
     IAthleteInjuryRepository repository,
     IUnitOfWork unitOfWork,
+    ICurrentUser currentUser,
     IStructureClient structureClient)
 {
     public async Task<AthleteInjuryDto> HandleAsync(
@@ -29,7 +31,14 @@ public sealed class CreateAthleteInjuryCommandHandler(
             command.InjuryDate,
             command.EstimatedReturnDate);
 
+        // El autor del alta sale del token (claim pf_id).
+        var changedBy = currentUser.PfId
+            ?? throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token.");
+
         await repository.AddAsync(injury, cancellationToken);
+        await repository.AddStatusChangeAsync(
+            injury.InitialStatusChange(changedBy, DateTime.UtcNow),
+            cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return AthleteInjuryMappings.ToDto(injury);

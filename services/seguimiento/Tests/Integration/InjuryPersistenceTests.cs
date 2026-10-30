@@ -13,7 +13,8 @@ using Moq;
 namespace Seguimiento.Tests.Integration;
 
 // KAN-419: la lesión queda en la tabla con su PF, en Active y con sus fechas; el filtro por
-// pf_id lo aplica el AppDbContext (igual que el resto de Seguimiento) y no se escribe historial.
+// pf_id lo aplica el AppDbContext (igual que el resto de Seguimiento) y el alta escribe su
+// fila inicial null → Active en el historial clínico.
 public sealed class InjuryPersistenceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -87,8 +88,17 @@ public sealed class InjuryPersistenceTests : IDisposable
         Assert.Equal(_pfId, saved.PfId);
         Assert.Equal(dto.Id, saved.Id);
 
-        // KAN-419 solo crea la tabla del historial: el alta todavía no escribe filas.
-        Assert.Empty(await db.AthleteInjuryStatusChanges.IgnoreQueryFilters().ToListAsync());
+        // El alta deja exactamente la fila inicial null → Active con el PF del token.
+        var initialRow = await db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+            .Where(row => row.InjuryId == saved.Id)
+            .SingleAsync();
+
+        Assert.Null(initialRow.FromStatus);
+        Assert.Equal(InjuryStatus.Active, initialRow.ToStatus);
+        Assert.Equal(_pfId, initialRow.ChangedBy);
+        Assert.Equal(_pfId, initialRow.PfId);
+        Assert.NotEqual(default, initialRow.ChangedAt);
+        Assert.False(string.IsNullOrWhiteSpace(initialRow.Note));
     }
 
     [Fact]
@@ -102,6 +112,7 @@ public sealed class InjuryPersistenceTests : IDisposable
 
         using var db = CreateDbContext();
         Assert.Empty(await db.AthleteInjuries.IgnoreQueryFilters().ToListAsync());
+        Assert.Empty(await db.AthleteInjuryStatusChanges.IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]

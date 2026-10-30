@@ -6,8 +6,6 @@ namespace Domain.Entities;
 // Lesión de un atleta con su ciclo de vida (KAN-419). Siempre nace en Active, con una
 // fecha estimada de retorno obligatoria y posterior a la de la lesión. Los cambios de
 // estado posteriores (KAN-420) dejan su fila en AthleteInjuryStatusChange.
-// Zone es texto libre obligatorio con una de las 19 zonas del check-in (KAN-385),
-// por ejemplo "isquiotibiales".
 public class AthleteInjury : BaseEntity
 {
     public Guid AthleteId { get; set; }
@@ -18,8 +16,18 @@ public class AthleteInjury : BaseEntity
     public InjuryStatus Status { get; set; } = InjuryStatus.Active;
     public DateTime? ClearedAt { get; set; }
 
-    // Única puerta de entrada de una lesión nueva: aplica las reglas de negocio del dominio
-    // (DomainException → 400 con mensaje en español vía ExceptionMiddleware).
+    // Las 19 zonas del check-in (KAN-385): los mismos ids del mapa de dolor del atleta.
+    private static readonly IReadOnlySet<string> CheckInZones =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "pecho", "hombros", "biceps", "abdominales", "cuadriceps",
+            "espalda_alta", "espalda_media", "espalda_baja", "triceps", "gluteos",
+            "isquiotibiales", "gemelos", "trapecios", "dorsales", "oblicuos",
+            "antebrazos", "manos", "pies", "cuello_trapecios"
+        };
+
+    // Única puerta de entrada de una lesión nueva: sus reglas se rechazan como
+    // DomainException → 400 con mensaje en español (ExceptionMiddleware).
     public static AthleteInjury Create(
         Guid athleteId,
         string zone,
@@ -32,6 +40,10 @@ public class AthleteInjury : BaseEntity
 
         if (string.IsNullOrWhiteSpace(zone))
             throw new DomainException("La zona de la lesión es obligatoria.");
+
+        if (!CheckInZones.Contains(zone.Trim()))
+            throw new DomainException(
+                "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).");
 
         if (string.IsNullOrWhiteSpace(description))
             throw new DomainException("La descripción de la lesión es obligatoria.");
@@ -51,6 +63,23 @@ public class AthleteInjury : BaseEntity
             InjuryDate = injuryDate.Date,
             EstimatedReturnDate = estimatedReturnDate.Value.Date,
             Status = InjuryStatus.Active
+        };
+    }
+
+    // Fila inicial del historial que acompaña al alta (null → Active), con el autor del registro.
+    public AthleteInjuryStatusChange InitialStatusChange(Guid changedBy, DateTime changedAt)
+    {
+        if (changedBy == Guid.Empty)
+            throw new DomainException("El usuario que realiza el cambio es inválido.");
+
+        return new AthleteInjuryStatusChange
+        {
+            InjuryId = Id,
+            FromStatus = null,
+            ToStatus = InjuryStatus.Active,
+            Note = "Lesión registrada.",
+            ChangedAt = changedAt,
+            ChangedBy = changedBy
         };
     }
 
