@@ -107,7 +107,11 @@ public sealed class MatchDayLoadValidator : IMatchDayLoadValidator
                 });
             }
 
-            adjustedWeeks.Add(week with { Sessions = adjustedSessions });
+            var reorderedSessions = adjustedSessions
+                .Select((s, index) => s with { Order = index + 1 })
+                .ToList();
+
+            adjustedWeeks.Add(week with { Sessions = reorderedSessions });
         }
 
         var adjustedContent = content with { Weeks = adjustedWeeks };
