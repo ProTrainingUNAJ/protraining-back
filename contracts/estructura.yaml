@@ -748,6 +748,58 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{id}/invitation-token:
+    post:
+      tags:
+        - Categories
+      summary: Generar token de invitación por categoría
+      description: Genera un token único con expiración a 7 días para enrolar atletas en la categoría mediante enlace o código QR.
+      operationId: generateCategoryInvitationToken
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Token de invitación generado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryInvitation'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/invitations/{token}:
+    get:
+      tags:
+        - Categories
+      summary: Validar token de invitación
+      description: Endpoint público para validar un token de invitación asociado a una categoría antes del registro del atleta.
+      operationId: validateCategoryInvitationToken
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token válido. Retorna la información de la categoría para el enrolamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryInvitation'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "410":
+          $ref: '#/components/responses/Gone'
+
   /api/v1/categories/{id}/matches:
     get:
       tags:
@@ -1316,8 +1368,40 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    Gone:
+      description: El recurso solicitado ha expirado o ya no está disponible.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    CategoryInvitation:
+      type: object
+      required:
+        - token
+        - expiresAt
+        - categoryId
+        - categoryName
+      properties:
+        token:
+          type: string
+          example: "e3b0c44298fc1c149afbf4c8996fb924"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T15:00:00Z"
+        categoryId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        categoryName:
+          type: string
+          example: "Primera División"
+        invitationUrl:
+          type: string
+          nullable: true
+          example: "https://protraining.app/invite/e3b0c44298fc1c149afbf4c8996fb924"
     GuardianConsent:
       type: object
       description: Registro de consentimiento parental obligatorio para atletas menores.
