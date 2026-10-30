@@ -64,6 +64,16 @@ paths:
             type: boolean
             default: false
           description: Si es true, filtra únicamente los ejercicios utilizados por el PF en sus planificaciones o con récords (1RM) cargados.
+        - name: groupVariants
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >
+            Si es true, devuelve solo los ejercicios base, cada uno con sus variantes en `variants` (KAN-554).
+            Un ejercicio base aparece si él o alguna de sus variantes cumple los filtros. Si es false, la lista
+            es plana: base y variantes como ejercicios sueltos, cada variante con `parentExerciseId` y `variantLabel`.
         - name: page
           in: query
           required: false
@@ -964,6 +974,25 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+        parentExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Si el ejercicio es una variante, el id de su ejercicio base (KAN-554). Es null en los ejercicios base.
+          example: null
+        variantLabel:
+          type: string
+          nullable: true
+          description: Qué distingue a la variante de su ejercicio base. Es null en los ejercicios base.
+          example: "Agarre cerrado"
+        variants:
+          type: array
+          nullable: true
+          description: >
+            Variantes del ejercicio base. Solo viene con `groupVariants=true`; si no, es null.
+            Cada variante conserva su id: los récords (1RM) y las planificaciones apuntan a la variante exacta.
+          items:
+            $ref: '#/components/schemas/Exercise'
 
     PaginatedExerciseResponse:
       type: object

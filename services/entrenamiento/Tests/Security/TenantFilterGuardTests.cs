@@ -23,6 +23,7 @@ public sealed class TenantFilterGuardTests
     {
         ["ExerciseCatalogSeeder.cs"] = "Al arrancar, revisa si el catálogo compartido de ejercicios ya está cargado.",
         ["ExerciseRestrictionSeeder.cs"] = "Al arrancar, revisa si las restricciones compartidas ya están cargadas y consulta los ejercicios del catálogo.",
+        ["ExerciseVariantSeeder.cs"] = "Al arrancar, agrupa las variantes del catálogo compartido de ejercicios (KAN-554), sin PF logueado.",
         ["TrainingSessionRepository.cs"] = "Endpoint interno del worker de recordatorios (rol Servicio): consulta las asignaciones de un PF que llega por parámetro, sin PF logueado.",
     };
 
