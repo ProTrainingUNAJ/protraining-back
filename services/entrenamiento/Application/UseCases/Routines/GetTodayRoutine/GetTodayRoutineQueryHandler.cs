@@ -4,6 +4,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Services;
+using Domain.Entities;
 
 namespace Application.UseCases.Routines.GetTodayRoutine
 {
@@ -85,7 +86,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
                 var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
 
-                bool isBarbell = prescribed.Exercise.Equipment == "barra con pesas";
+                bool isBarbell = Equipment.IsBarbell(prescribed.Exercise?.Equipment);
 
                 double? barWeight = isBarbell ? 20 : null;
 

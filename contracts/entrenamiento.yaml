@@ -1187,6 +1187,18 @@ components:
           nullable: true
           description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg). Es null en series de referencia sin récord previo.
           example: 112.5
+        barWeight:
+          type: number
+          format: double
+          nullable: true
+          description: Peso de la barra en kg (por defecto 20 kg en ejercicios con barra). Es null en ejercicios sin barra.
+          example: 20.0
+        weightPerSide:
+          type: number
+          format: double
+          nullable: true
+          description: Peso a colocar por cada lado de la barra en kg. Es 0 si el peso total es menor o igual a la barra ("solo la barra") y null si el ejercicio no es con barra.
+          example: 46.25
         current1RmKg:
           type: number
           format: double
