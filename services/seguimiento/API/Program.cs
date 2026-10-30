@@ -12,6 +12,8 @@ using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.Attendance.GetCategoryAttendanceToday;
+using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Domain.Services;
 using Infrastructure;
@@ -79,6 +81,8 @@ builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+builder.Services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
+builder.Services.AddScoped<SetAttendanceCommandHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 // Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta

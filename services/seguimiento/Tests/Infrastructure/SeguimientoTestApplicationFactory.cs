@@ -11,6 +11,8 @@ using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.Attendance.GetCategoryAttendanceToday;
+using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Domain.Services;
 using Infrastructure.Data;
@@ -83,6 +85,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<ICheckInRepository, CheckInRepository>();
                 services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
                 services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
+                services.AddScoped<IAttendanceRepository, AttendanceRepository>();
                 services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
@@ -92,6 +95,8 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Semáforo del día (KAN-367): motor y caso de uso registrados como en Program.cs.
                 services.AddScoped<TrafficLightEngine>();
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+                services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
+                services.AddScoped<SetAttendanceCommandHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
