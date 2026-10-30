@@ -1,3 +1,5 @@
+using Application.UseCases.Categories.Invitations.GenerateCategoryInvitationToken;
+using Application.UseCases.Categories.Invitations.ValidateCategoryInvitationToken;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using API.Extensions;
@@ -104,6 +106,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
                 services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
                 services.AddScoped<ISeasonPhaseRepository, SeasonPhaseRepository>();
+                services.AddScoped<ICategoryInvitationRepository, CategoryInvitationRepository>();
                 services.AddScoped<ISeasonPhaseValidationService, SeasonPhaseValidationService>();
                 services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
                 services.AddSingleton<TimeProvider>(_timeProvider);
@@ -166,6 +169,8 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<CreateSeasonPhaseCommandHandler>();
                 services.AddScoped<UpdateSeasonPhaseCommandHandler>();
                 services.AddScoped<DeleteSeasonPhaseCommandHandler>();
+                services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
+                services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
