@@ -14,9 +14,18 @@ namespace Infrastructure.Repositories
             this.context = context;
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
             var exercises = context.Exercises.AsNoTracking();
+
+            if (usedByPf)
+            {
+                var planExerciseIds = context.PrescribedExercises.Select(pe => pe.ExerciseId);
+                var recordExerciseIds = context.AthleteRecords.Select(r => r.ExerciseId);
+                var usedExerciseIds = planExerciseIds.Union(recordExerciseIds);
+
+                exercises = exercises.Where(e => usedExerciseIds.Contains(e.Id));
+            }
             
             if (!string.IsNullOrWhiteSpace(equipment))
             {
