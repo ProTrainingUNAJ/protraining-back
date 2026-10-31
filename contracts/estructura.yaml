@@ -207,16 +207,16 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/athletes/{id}/medical-record:
-    get:
+  /api/v1/athletes/{id}/medical-record/access:
+    post:
       tags:
         - Athletes
-      summary: Consultar ficha médica de un atleta con justificación auditada
+      summary: Acceder a la ficha médica de un atleta con justificación auditada
       description: >
         Retorna los antecedentes médicos, cirugías, patologías y estado del apto físico del atleta.
-        Exige declarar un motivo explícito en el parámetro `justification`, que el consentimiento digital
+        Exige declarar un motivo explícito en el cuerpo (`justification`), que el consentimiento digital
         esté firmado (por el atleta o su tutor si es menor) y registra un evento inmutable de lectura en auditoría.
-      operationId: getAthleteMedicalRecord
+      operationId: accessAthleteMedicalRecord
       parameters:
         - name: id
           in: path
@@ -224,14 +224,12 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: justification
-          in: query
-          required: true
-          description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
-          schema:
-            type: string
-            maxLength: 500
-            example: "Revisión médica previa a planificación de fuerza"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessMedicalRecordRequest'
       responses:
         "200":
           description: Ficha médica obtenida y acceso registrado en auditoría.
@@ -246,6 +244,7 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/medical-record:
     put:
       tags:
         - Athletes
@@ -1624,6 +1623,18 @@ components:
           format: date-time
           nullable: true
           example: "2026-03-01T14:30:00Z"
+
+    AccessMedicalRecordRequest:
+      type: object
+      description: Solicitud para acceder a la historia clínica/ficha médica declarando el motivo en el cuerpo.
+      required:
+        - justification
+      properties:
+        justification:
+          type: string
+          maxLength: 500
+          description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
+          example: "Revisión médica previa a planificación de fuerza"
 
     UpdateMedicalRecordRequest:
       type: object
