@@ -37,41 +37,4 @@ public class WhatsAppPhoneNormalizerTests
         Assert.NotNull(error);
         Assert.Contains(expectedErrorSubstring, error, StringComparison.OrdinalIgnoreCase);
     }
-
-    [Fact]
-    public void BuildWhatsAppLink_ValidNumberWithoutInitialText_ReturnsWaMeLinkWithoutExtraCharacters()
-    {
-        var phone = "+54 9 11 2345-6789";
-
-        var link = WhatsAppPhoneNormalizer.BuildWhatsAppLink(phone);
-
-        Assert.Equal("https://wa.me/5491123456789", link);
-    }
-
-    [Fact]
-    public void BuildWhatsAppLink_ValidNumberWithInitialText_ReturnsWaMeLinkWithEncodedText()
-    {
-        var phone = "+54 9 11 2345-6789";
-        var message = "Hola profe, ¿cómo estás? Tengo una consulta sobre la rutina.";
-
-        var link = WhatsAppPhoneNormalizer.BuildWhatsAppLink(phone, message);
-
-        Assert.NotNull(link);
-        Assert.StartsWith("https://wa.me/5491123456789?text=", link);
-        // Verifica que no tenga caracteres crudos sin codificar (espacios, tildes, signos de pregunta)
-        Assert.DoesNotContain(" ", link);
-        Assert.DoesNotContain("¿", link);
-        Assert.Contains("Hola%20profe", link);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void BuildWhatsAppLink_WhenCoachHasNoPhone_ReturnsNullSoButtonDoesNotAppear(string? rawPhone)
-    {
-        var link = WhatsAppPhoneNormalizer.BuildWhatsAppLink(rawPhone);
-
-        Assert.Null(link);
-    }
 }

@@ -2,6 +2,9 @@ namespace Application.Interfaces.Services;
 
 public interface ICurrentUser
 {
-    // PF that owns the data of the current request ("pf_id" claim of the token). Null without a valid token.
+    // PF dueño de los datos del request actual (claim "pf_id" del token). Null sin un token válido.
     Guid? PfId { get; }
+
+    // Id de la cuenta en sí (claim "sub"). Para un atleta NO es el PfId: el PfId es el id de su PF.
+    Guid? UserId { get; }
 }

@@ -86,7 +86,7 @@ paths:
       tags:
         - Users
       summary: Actualizar teléfono de WhatsApp del usuario
-      description: Actualiza y normaliza el número de teléfono de WhatsApp del usuario autenticado. Responde 400 con mensaje en español si el formato es inválido.
+      description: Solo para el rol PreparadorFisico. Actualiza y normaliza el número de WhatsApp de la cuenta del token (claim `sub`). Responde 400 con mensaje en español si el formato es inválido y 403 si el token es de un atleta.
       operationId: updateWhatsAppPhone
       security:
         - BearerAuth: []
@@ -111,7 +111,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un preparador físico (por ejemplo, el de un atleta).
 
+  /api/v1/users/me/pf-contact:
+    get:
+      tags:
+        - Users
+      summary: Obtener el WhatsApp del preparador físico del atleta
+      description: Solo para el rol Atleta. Devuelve el número de WhatsApp de su preparador físico, tomado del claim `pf_id` del token, así que no se puede pedir el de otro PF. Responde 404 si el PF todavía no cargó su número.
+      operationId: getPfContact
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Número de WhatsApp del preparador físico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PfContact'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un atleta.
+        "404":
+          description: El preparador físico todavía no cargó su número de WhatsApp.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /api/health:
     get:
@@ -293,6 +325,16 @@ components:
         phoneNumber:
           type: string
           description: Número de teléfono normalizado en estándar E.164 (solo dígitos).
+          example: "5491123456789"
+          
+    PfContact:
+      type: object
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          description: Número de WhatsApp del preparador físico (solo dígitos, con código de país).
           example: "5491123456789"
 
     
