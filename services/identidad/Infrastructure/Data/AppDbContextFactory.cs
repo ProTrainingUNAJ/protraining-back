@@ -19,5 +19,6 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
     private sealed class NoUser : ICurrentUser
     {
         public Guid? PfId => null;
+        public Guid? UserId => null;
     }
 }

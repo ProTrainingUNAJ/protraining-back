@@ -12,6 +12,7 @@ using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.Auth.GetPfContact;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -51,6 +52,7 @@ builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
+builder.Services.AddScoped<GetPfContactUseCase>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
