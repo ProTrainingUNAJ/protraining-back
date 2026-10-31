@@ -50,5 +50,6 @@ public enum RecordSource
     Tested,
     Reported,
     Estimated,
-    NoData
+    NoData,
+    Epley
 }

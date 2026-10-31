@@ -12,6 +12,7 @@ public static class AthleteRecordMapper
         [RecordSource.Tested] = "TestedInSession",
         [RecordSource.Reported] = "Reported",
         [RecordSource.Estimated] = "EstimatedEpley",
+        [RecordSource.Epley] = "Epley",
     };
 
     public static RecordSource ParseOrigin(string? origin)
@@ -22,7 +23,7 @@ public static class AthleteRecordMapper
                 return source;
         }
 
-        throw new DomainException("El origen del récord debe ser TestedInSession, Reported o EstimatedEpley.");
+        throw new DomainException("El origen del récord debe ser TestedInSession, Reported, EstimatedEpley o Epley.");
     }
 
     public static AthleteRecordDto ToDto(Domain.Entities.AthleteRecord record, string exerciseName) => new(

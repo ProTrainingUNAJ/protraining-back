@@ -251,6 +251,100 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/record-proposals:
+    get:
+      tags:
+        - Records
+      summary: Listar propuestas de récord
+      description: >
+        Devuelve las propuestas de récord de Epley de los atletas del PF autenticado (filtro por pf_id),
+        con el atleta, el ejercicio, el récord vigente, el propuesto, la serie que lo originó y la fecha.
+      operationId: listRecordProposals
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Pending, Approved, Discarded]
+            default: Pending
+          description: Filtrar por estado de la propuesta. Por defecto Pending.
+      responses:
+        "200":
+          description: Lista de propuestas de récord obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordProposal'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/record-proposals/{id}/approve:
+    post:
+      tags:
+        - Records
+      summary: Aprobar propuesta de récord Epley
+      description: >
+        Desactiva el récord vigente del atleta y crea uno nuevo con el peso propuesto y origen Epley.
+        Si el récord vigente cambió desde que se creó la propuesta, o si la propuesta ya no está pendiente, responde 409.
+      operationId: approveRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "200":
+          description: Propuesta aprobada y récord actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/record-proposals/{id}/discard:
+    post:
+      tags:
+        - Records
+      summary: Descartar propuesta de récord Epley
+      description: >
+        Deja la propuesta en estado Discarded sin modificar el récord vigente.
+        Aprobar o descartar una propuesta que ya no está pendiente responde 409.
+      operationId: discardRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "204":
+          description: Propuesta descartada exitosamente.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
   /api/v1/routines:
     post:
       tags:
@@ -834,6 +928,12 @@ components:
       bearerFormat: JWT
 
   responses:
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     BadRequest:
       description: Solicitud con datos inválidos o reglas de negocio incumplidas.
       content:
@@ -1040,6 +1140,64 @@ components:
           description: Total de páginas disponibles según el tamaño de página.
           example: 6
 
+    RecordProposal:
+      type: object
+      description: Propuesta de actualización de récord 1RM basada en recálculo Epley.
+      required:
+        - id
+        - athleteId
+        - athleteName
+        - exerciseId
+        - exerciseName
+        - currentWeight
+        - proposedWeight
+        - performedWeight
+        - performedReps
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e6f491c7-7489-4b68-b765-a81e9f1a21e4"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          example: "Lucas Giménez"
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        exerciseName:
+          type: string
+          example: "Sentadilla Trasera"
+        currentWeight:
+          type: number
+          format: double
+          example: 100.0
+        proposedWeight:
+          type: number
+          format: double
+          example: 107.5
+        performedWeight:
+          type: number
+          format: double
+          example: 90.0
+        performedReps:
+          type: integer
+          example: 5
+        status:
+          type: string
+          enum: [Pending, Approved, Discarded]
+          example: "Pending"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-22T14:30:00Z"
+
     Record:
       type: object
       description: Objeto compartido de Récord 1RM con trazabilidad.
@@ -1074,7 +1232,7 @@ components:
           example: 140.0
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
         achievedAt:
           type: string
@@ -1103,7 +1261,7 @@ components:
           example: 142.5
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
 
     RoutineItemRequest:

@@ -14,6 +14,30 @@ public class RecordProposalRepository : IRecordProposalRepository
         _context = context;
     }
 
+    public async Task<RecordProposal?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.RecordProposals
+            .Include(p => p.Exercise)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+    }
+
+    public async Task<List<RecordProposal>> ListAsync(RecordProposalStatus? status, CancellationToken cancellationToken = default)
+    {
+        var query = _context.RecordProposals
+            .AsNoTracking()
+            .Include(p => p.Exercise)
+            .AsQueryable();
+
+        if (status.HasValue)
+        {
+            query = query.Where(p => p.Status == status.Value);
+        }
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<RecordProposal?> GetPendingAsync(Guid athleteId, Guid exerciseId, CancellationToken cancellationToken = default)
     {
         return await _context.RecordProposals
@@ -43,4 +67,3 @@ public class RecordProposalRepository : IRecordProposalRepository
         return Task.CompletedTask;
     }
 }
-

@@ -6,6 +6,9 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
+using Application.UseCases.RecordProposals.ApproveRecordProposal;
+using Application.UseCases.RecordProposals.DiscardRecordProposal;
+using Application.UseCases.RecordProposals.ListRecordProposals;
 using Application.UseCases.Exercise.CheckRestrictions;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.ListExercises;
@@ -84,6 +87,9 @@ builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
 builder.Services.AddScoped<RecordPerformedSetsCommandHandler>();
 builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
 builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
+builder.Services.AddScoped<ListRecordProposalsQueryHandler>();
+builder.Services.AddScoped<ApproveRecordProposalCommandHandler>();
+builder.Services.AddScoped<DiscardRecordProposalCommandHandler>();
 
 
 
