@@ -9,7 +9,8 @@ namespace Infrastructure.Data.Seeders;
 // Agrupa las variantes del catálogo en su ejercicio base (KAN-554), según
 // Data/exercise-variants.json. Busca los ejercicios por nombre exacto, así sirve en una base
 // que ya tiene el catálogo cargado (los ids no cambian). Corre en cada arranque y no repite
-// cambios: si el JSON se amplía, la próxima vez aplica solo lo nuevo.
+// cambios. El JSON es la única fuente: lo que se agrega se agrupa, lo que se mueve cambia de
+// familia y lo que se saca vuelve a ser un ejercicio suelto.
 public class ExerciseVariantSeeder
 {
     private const string FileName = "exercise-variants.json";
@@ -44,6 +45,8 @@ public class ExerciseVariantSeeder
             .ToHashSet();
 
         var changes = 0;
+        // Variantes que siguen en el JSON (las que no estén se desagrupan al final).
+        var keptVariantIds = new HashSet<Guid>();
 
         foreach (var family in families)
         {
@@ -82,11 +85,15 @@ public class ExerciseVariantSeeder
 
                     var label = variant.Label?.Trim() ?? string.Empty;
                     if (exercise.ParentExerciseId == baseExercise.Id && exercise.VariantLabel == label)
+                    {
+                        keptVariantIds.Add(exercise.Id);
                         continue;
+                    }
 
                     try
                     {
                         exercise.AssignAsVariantOf(baseExercise, label, parentsWithVariants.Contains(exercise.Id));
+                        keptVariantIds.Add(exercise.Id);
                         changes++;
                     }
                     catch (DomainException ex)
@@ -98,6 +105,13 @@ public class ExerciseVariantSeeder
             }
 
             parentsWithVariants.Add(baseExercise.Id);
+        }
+
+        // El JSON es la única fuente: lo que se sacó del archivo vuelve a ser un ejercicio suelto.
+        foreach (var exercise in catalog.Where(e => e.IsVariant && !keptVariantIds.Contains(e.Id)))
+        {
+            exercise.ClearVariant();
+            changes++;
         }
 
         if (changes > 0)

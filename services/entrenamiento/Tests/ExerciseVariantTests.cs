@@ -219,6 +219,66 @@ public class ExerciseVariantTests
     }
 
     [Fact]
+    public async Task Given_VariantRemovedFromFile_When_SeedingAgain_Then_ItBecomesAStandaloneExercise()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var lunge = Exercise.Create("Zancadas con mancuernas", "Piernas");
+        var crossover = Exercise.Create("Zancada inversa cruzada", "Piernas");
+        var barbell = Exercise.Create("Zancada con barra", "Piernas");
+
+        await using (var context = CreateInMemoryDbContext(dbName))
+        {
+            await context.Exercises.AddRangeAsync(lunge, crossover, barbell);
+            await context.SaveChangesAsync();
+        }
+
+        var before = WriteVariantsFile(new[]
+        {
+            new
+            {
+                @base = "Zancadas con mancuernas",
+                variants = new[]
+                {
+                    new { name = "Zancada inversa cruzada", label = "Inversa cruzada" },
+                    new { name = "Zancada con barra", label = "Con barra" }
+                }
+            }
+        });
+        var after = WriteVariantsFile(new[]
+        {
+            new
+            {
+                @base = "Zancadas con mancuernas",
+                variants = new[] { new { name = "Zancada con barra", label = "Con barra" } }
+            }
+        });
+
+        try
+        {
+            await using (var context = CreateInMemoryDbContext(dbName))
+            {
+                await ExerciseVariantSeeder.SeedAsync(context, before, new TestLogger());
+            }
+            await using (var context = CreateInMemoryDbContext(dbName))
+            {
+                await ExerciseVariantSeeder.SeedAsync(context, after, new TestLogger());
+            }
+
+            await using var query = CreateInMemoryDbContext(dbName);
+            var stored = await query.Exercises.IgnoreQueryFilters().ToDictionaryAsync(e => e.Id);
+
+            Assert.Null(stored[crossover.Id].ParentExerciseId);
+            Assert.Null(stored[crossover.Id].VariantLabel);
+            Assert.Equal(lunge.Id, stored[barbell.Id].ParentExerciseId);
+        }
+        finally
+        {
+            Directory.Delete(before, true);
+            Directory.Delete(after, true);
+        }
+    }
+
+    [Fact]
     public async Task Given_RealFiles_When_SeedingTwice_Then_AllVariantsGroupedAndSecondRunChangesNothing()
     {
         var dbName = Guid.NewGuid().ToString();
@@ -258,6 +318,11 @@ public class ExerciseVariantTests
             }
         }
 
+        // Ninguna familia repite una etiqueta (los nombres duplicados por la traducción se corrigieron).
+        foreach (var family in catalog.Where(e => e.IsVariant).GroupBy(e => e.ParentExerciseId))
+        {
+            Assert.Equal(family.Count(), family.Select(v => v.VariantLabel).Distinct().Count());
+        }
         // Un solo nivel: ninguna variante apunta a otra variante.
         Assert.All(catalog.Where(e => e.IsVariant), v => Assert.True(bases.ContainsKey(v.ParentExerciseId!.Value)));
         // Los tres ejercicios del script de la demo siguen siendo base.
@@ -266,6 +331,65 @@ public class ExerciseVariantTests
         Assert.Contains(bases.Values, e => e.Name == "Peso muerto rumano");
         // La segunda corrida no cambia nada ni deja avisos.
         Assert.DoesNotContain(secondRunLogger.Logs, l => l.Level >= LogLevel.Information);
+    }
+
+    // ── Nombres del catálogo ──
+
+    [Fact]
+    public void Given_ImageUrls_When_ReadingSourceId_Then_ReturnsTheFreeExerciseDbFolder()
+    {
+        var images = new List<string>
+        {
+            "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dumbbell_Floor_Press/0.jpg"
+        };
+
+        Assert.Equal("Dumbbell_Floor_Press", ExerciseNameSyncSeeder.SourceIdFromImages(images));
+        Assert.Null(ExerciseNameSyncSeeder.SourceIdFromImages(new List<string>()));
+    }
+
+    [Fact]
+    public async Task Given_TranslationFixedInJson_When_SyncingNames_Then_RenamesOnlyThatExerciseAndKeepsItsId()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        const string imagesRoot = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
+        var bench = Exercise.Create("Press de banca con mancuernas", "Pecho",
+            images: [imagesRoot + "Dumbbell_Bench_Press/0.jpg"]);
+        var floor = Exercise.Create("Press de banca con mancuernas", "Pecho",
+            images: [imagesRoot + "Dumbbell_Floor_Press/0.jpg"]);
+        var custom = Exercise.Create("Ejercicio sin fotos", "Core");
+
+        await using (var context = CreateInMemoryDbContext(dbName))
+        {
+            await context.Exercises.AddRangeAsync(bench, floor, custom);
+            await context.SaveChangesAsync();
+        }
+
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "exercises.json"), JsonSerializer.Serialize(new[]
+        {
+            new { id = "Dumbbell_Bench_Press", name = "Press de banca con mancuernas" },
+            new { id = "Dumbbell_Floor_Press", name = "Press de banca con mancuernas en el piso" },
+        }));
+
+        try
+        {
+            await using (var context = CreateInMemoryDbContext(dbName))
+            {
+                await ExerciseNameSyncSeeder.SeedAsync(context, dir, new TestLogger());
+            }
+
+            await using var query = CreateInMemoryDbContext(dbName);
+            var stored = await query.Exercises.IgnoreQueryFilters().ToDictionaryAsync(e => e.Id);
+
+            Assert.Equal("Press de banca con mancuernas en el piso", stored[floor.Id].Name);
+            Assert.Equal("Press de banca con mancuernas", stored[bench.Id].Name);
+            Assert.Equal("Ejercicio sin fotos", stored[custom.Id].Name);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
 
     // ── Listado ──
