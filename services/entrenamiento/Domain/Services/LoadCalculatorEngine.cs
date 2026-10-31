@@ -24,6 +24,7 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
             RecordSource.Tested => baseLoad,
             RecordSource.Reported => baseLoad,
             RecordSource.Estimated => baseLoad * EstimatedConservativeFactor,
+            RecordSource.Epley => baseLoad,
             _ => baseLoad
         };
 

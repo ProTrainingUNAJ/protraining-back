@@ -1,6 +1,7 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Injuries.CreateAthleteInjury;
+using Application.UseCases.Injuries.UpdateInjuryStatus;
 using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Data;
@@ -13,7 +14,8 @@ using Moq;
 namespace Seguimiento.Tests.Integration;
 
 // KAN-419: la lesión queda en la tabla con su PF, en Active y con sus fechas; el filtro por
-// pf_id lo aplica el AppDbContext (igual que el resto de Seguimiento) y no se escribe historial.
+// pf_id lo aplica el AppDbContext (igual que el resto de Seguimiento) y el alta escribe su
+// fila inicial null → Active en el historial clínico.
 public sealed class InjuryPersistenceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -39,6 +41,7 @@ public sealed class InjuryPersistenceTests : IDisposable
         services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<CreateAthleteInjuryCommandHandler>();
+        services.AddScoped<UpdateInjuryStatusCommandHandler>();
 
         // Estos tests prueban la persistencia: el atleta siempre es del PF (el 404 se prueba en los de endpoint).
         var structureClient = new Mock<IStructureClient>();
@@ -66,6 +69,9 @@ public sealed class InjuryPersistenceTests : IDisposable
     private CreateAthleteInjuryCommandHandler CreateHandler() =>
         _provider.CreateScope().ServiceProvider.GetRequiredService<CreateAthleteInjuryCommandHandler>();
 
+    private UpdateInjuryStatusCommandHandler CreateStatusHandler() =>
+        _provider.CreateScope().ServiceProvider.GetRequiredService<UpdateInjuryStatusCommandHandler>();
+
     private AppDbContext CreateDbContext() =>
         _provider.CreateScope().ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -87,8 +93,17 @@ public sealed class InjuryPersistenceTests : IDisposable
         Assert.Equal(_pfId, saved.PfId);
         Assert.Equal(dto.Id, saved.Id);
 
-        // KAN-419 solo crea la tabla del historial: el alta todavía no escribe filas.
-        Assert.Empty(await db.AthleteInjuryStatusChanges.IgnoreQueryFilters().ToListAsync());
+        // El alta deja exactamente la fila inicial null → Active con el PF del token.
+        var initialRow = await db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+            .Where(row => row.InjuryId == saved.Id)
+            .SingleAsync();
+
+        Assert.Null(initialRow.FromStatus);
+        Assert.Equal(InjuryStatus.Active, initialRow.ToStatus);
+        Assert.Equal(_pfId, initialRow.ChangedBy);
+        Assert.Equal(_pfId, initialRow.PfId);
+        Assert.NotEqual(default, initialRow.ChangedAt);
+        Assert.False(string.IsNullOrWhiteSpace(initialRow.Note));
     }
 
     [Fact]
@@ -102,6 +117,7 @@ public sealed class InjuryPersistenceTests : IDisposable
 
         using var db = CreateDbContext();
         Assert.Empty(await db.AthleteInjuries.IgnoreQueryFilters().ToListAsync());
+        Assert.Empty(await db.AthleteInjuryStatusChanges.IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
@@ -157,5 +173,86 @@ public sealed class InjuryPersistenceTests : IDisposable
             Assert.Single(inRecovery);
             Assert.Single(active);
         }
+    }
+
+    // KAN-422: salto directo de Activa a Alta médica (CA1). El servicio de cambio de estado
+    // lanza DomainException y la tabla queda exactamente igual: sigue en Active, sin
+    // cleared_at y sin ninguna fila de transición nueva en el historial clínico.
+    [Fact]
+    public async Task Given_ActiveInjury_When_SkippingRecoveryToMedicallyCleared_Then_ThrowsAndKeepsDatabaseIntact()
+    {
+        var injury = await CreateHandler().HandleAsync(Command(_athleteId));
+
+        await Assert.ThrowsAsync<DomainException>(
+            () => CreateStatusHandler().HandleAsync(
+                new UpdateInjuryStatusCommand(injury.Id, InjuryStatus.MedicallyCleared, "Alta directa sin readaptación.")));
+
+        using var db = CreateDbContext();
+        var saved = await db.AthleteInjuries.IgnoreQueryFilters()
+            .SingleAsync(row => row.Id == injury.Id);
+
+        Assert.Equal(InjuryStatus.Active, saved.Status);
+        Assert.Null(saved.ClearedAt);
+
+        var history = await db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+            .Where(row => row.InjuryId == injury.Id)
+            .ToListAsync();
+
+        Assert.Single(history);
+        Assert.Null(history[0].FromStatus);
+        Assert.Equal(InjuryStatus.Active, history[0].ToStatus);
+    }
+
+    // KAN-422: la máquina de estados no permite retroceder. Tras llegar válidamente a
+    // En recuperación, el intento de volver a Activa lanza DomainException y la BD no cambia.
+    [Fact]
+    public async Task Given_InRecoveryInjury_When_TransitioningBackToActive_Then_ThrowsAndKeepsDatabaseInRecovery()
+    {
+        var injury = await CreateHandler().HandleAsync(Command(_athleteId));
+        await CreateStatusHandler().HandleAsync(
+            new UpdateInjuryStatusCommand(injury.Id, InjuryStatus.InRecovery, "Inicio de readaptación."));
+
+        await Assert.ThrowsAsync<DomainException>(
+            () => CreateStatusHandler().HandleAsync(
+                new UpdateInjuryStatusCommand(injury.Id, InjuryStatus.Active, "Recae la lesión.")));
+
+        using var db = CreateDbContext();
+        var saved = await db.AthleteInjuries.IgnoreQueryFilters()
+            .SingleAsync(row => row.Id == injury.Id);
+
+        Assert.Equal(InjuryStatus.InRecovery, saved.Status);
+        Assert.Null(saved.ClearedAt);
+
+        // Solo las dos filas legítimas: el alta (null → Active) y la readaptación.
+        var history = await db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+            .Where(row => row.InjuryId == injury.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, history.Count);
+        Assert.DoesNotContain(history, row => row.FromStatus == InjuryStatus.InRecovery && row.ToStatus == InjuryStatus.Active);
+    }
+
+    // KAN-422: repetir el estado actual no es una transición: se rechaza sin tocar la BD.
+    [Fact]
+    public async Task Given_ActiveInjury_When_TransitioningToSameStatus_Then_ThrowsAndKeepsDatabaseIntact()
+    {
+        var injury = await CreateHandler().HandleAsync(Command(_athleteId));
+
+        await Assert.ThrowsAsync<DomainException>(
+            () => CreateStatusHandler().HandleAsync(
+                new UpdateInjuryStatusCommand(injury.Id, InjuryStatus.Active, "Sin cambios.")));
+
+        using var db = CreateDbContext();
+        var saved = await db.AthleteInjuries.IgnoreQueryFilters()
+            .SingleAsync(row => row.Id == injury.Id);
+
+        Assert.Equal(InjuryStatus.Active, saved.Status);
+        Assert.Null(saved.ClearedAt);
+
+        var history = await db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+            .Where(row => row.InjuryId == injury.Id)
+            .ToListAsync();
+
+        Assert.Single(history);
     }
 }

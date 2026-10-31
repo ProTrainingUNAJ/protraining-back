@@ -1,4 +1,4 @@
-namespace Asistente.Tests;
+﻿namespace Asistente.Tests;
 
 using Application.Common.Ai;
 using Application.DTOs.Ai;
@@ -244,6 +244,8 @@ public sealed class PlanDraftMatchPeriodizationPromptTests
         // Act & Assert (debe degradar graciosamente y no arrojar HttpRequestException)
         var result = await handler.HandleAsync(new CreatePlanDraftCommand(request), CancellationToken.None);
         Assert.NotNull(result);
+        Assert.NotNull(result.Warnings);
+        Assert.Contains(result.Warnings, w => w.Contains("calendario"));
         aiServiceMock.Verify(s => s.GeneratePlanDraftAsync(
             It.IsAny<CreatePlanDraftRequestDto>(),
             It.Is<IReadOnlyList<DateOnly>?>(m => m == null),

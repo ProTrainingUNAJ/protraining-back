@@ -11,7 +11,10 @@ using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.Attendance.GetCategoryAttendanceToday;
+using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
+using Application.UseCases.Categories.GetCategoryAverages;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
@@ -53,7 +56,10 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
     // Levanta el host con el mismo DI de infraestructura que el servicio y ejecuta
     // el arranque: crea el esquema (EnsureCreated en vez de migraciones, que son de
     // Npgsql) y siembra el catálogo, tal como hace ApplyMigrationsAsync en producción.
-    public static async Task<SeguimientoTestApplicationFactory> CreateAsync(Guid? pfId = null)
+    public static async Task<SeguimientoTestApplicationFactory> CreateAsync(
+        Guid? pfId = null,
+        IFitnessTestMeasurementService? customMeasurementService = null,
+        TimeProvider? customTimeProvider = null)
     {
         var sqliteConnection = new SqliteConnection("DataSource=:memory:");
         sqliteConnection.Open();
@@ -83,6 +89,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<ICheckInRepository, CheckInRepository>();
                 services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
                 services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
+                services.AddScoped<IAttendanceRepository, AttendanceRepository>();
                 services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
@@ -92,6 +99,22 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Semáforo del día (KAN-367): motor y caso de uso registrados como en Program.cs.
                 services.AddScoped<TrafficLightEngine>();
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+                services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
+                services.AddScoped<SetAttendanceCommandHandler>();
+
+                if (customTimeProvider != null)
+                {
+                    services.AddSingleton(customTimeProvider);
+                }
+                if (customMeasurementService != null)
+                {
+                    services.AddSingleton(customMeasurementService);
+                }
+                else
+                {
+                    services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
+                }
+                services.AddScoped<GetCategoryAveragesQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.

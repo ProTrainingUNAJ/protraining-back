@@ -1,4 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using Application.Common.Ai;
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Services;
@@ -66,7 +68,19 @@ public sealed class RuleBasedAiClient(
         IReadOnlyList<CatalogExerciseDto> catalog = [];
         if (catalogService != null)
         {
-            catalog = await catalogService.GetAllAsync(cancellationToken);
+            var goalExercises = await catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
+            if (goalExercises is { Count: > 0 })
+            {
+                catalog = goalExercises;
+            }
+            else
+            {
+                var fallbackCatalog = await catalogService.GetAllAsync(cancellationToken);
+                if (fallbackCatalog is { Count: > 0 })
+                {
+                    catalog = RoutinePromptBuilder.FilterExercisesForGoal(fallbackCatalog, request.Goal, maxExercises: 25);
+                }
+            }
         }
 
         // KAN-563: Si el catálogo está vacío, no inventar IDs de respaldo y retornar null
@@ -248,8 +262,7 @@ public sealed class RuleBasedAiClient(
         if (string.IsNullOrWhiteSpace(rawDay))
             return false;
 
-        var clean = rawDay.Trim().ToLowerInvariant()
-            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+        var clean = TextNormalizer.Normalize(rawDay);
 
         if (clean.StartsWith("lun") || clean.StartsWith("mon")) { dayOfWeek = DayOfWeek.Monday; return true; }
         if (clean.StartsWith("mar") || clean.StartsWith("tue")) { dayOfWeek = DayOfWeek.Tuesday; return true; }
@@ -280,10 +293,8 @@ public sealed class RuleBasedAiClient(
 
         foreach (var ex in catalog)
         {
-            var mg = (ex.MuscleGroup ?? string.Empty).Trim().ToLowerInvariant()
-                .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
-            var name = (ex.Name ?? string.Empty).Trim().ToLowerInvariant()
-                .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+            var mg = TextNormalizer.Normalize(ex.MuscleGroup);
+            var name = TextNormalizer.Normalize(ex.Name);
 
             if (mg.Contains("pierna") || mg.Contains("cuadriceps") || mg.Contains("isquio") || mg.Contains("gluteo") ||
                 mg.Contains("gemelo") || mg.Contains("lower body") || mg.Contains("tren inferior") ||

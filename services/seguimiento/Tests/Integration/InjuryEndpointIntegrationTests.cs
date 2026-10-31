@@ -10,7 +10,8 @@ namespace Seguimiento.Tests.Integration;
 
 // Certificación HTTP de KAN-419: POST crea la lesión en Active y GET lista las del atleta,
 // con el rol PreparadorFisico exigido por contrato (401 sin token, 403 con rol Atleta) y
-// con el dominio rechazando las fechas inválidas como 400 con mensaje en español.
+// con el dominio rechazando fechas inválidas o zonas fuera del check-in como 400 con
+// mensaje en español.
 public sealed class InjuryEndpointIntegrationTests
 {
     private readonly Guid _pfId = Guid.NewGuid();
@@ -59,10 +60,16 @@ public sealed class InjuryEndpointIntegrationTests
         Assert.Equal(InjuryStatus.Active, saved.Status);
         Assert.Equal(_pfId, saved.PfId);
 
-        // El alta no escribe filas en el historial: eso lo hace la máquina de estados (KAN-420).
-        var historyCount = await factory.ExecuteInDbContextAsync(db =>
-            db.AthleteInjuryStatusChanges.IgnoreQueryFilters().CountAsync());
-        Assert.Equal(0, historyCount);
+        // El alta escribe su fila inicial en el historial: null → Active con el PF del token.
+        var initialRow = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+                .Where(row => row.InjuryId == dto.Id)
+                .SingleAsync());
+
+        Assert.Null(initialRow.FromStatus);
+        Assert.Equal(InjuryStatus.Active, initialRow.ToStatus);
+        Assert.Equal(_pfId, initialRow.ChangedBy);
+        Assert.False(string.IsNullOrWhiteSpace(initialRow.Note));
     }
 
     [Fact]
@@ -111,6 +118,40 @@ public sealed class InjuryEndpointIntegrationTests
 
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         Assert.Equal("La fecha de retorno estimada es obligatoria.", problem!.Title);
+    }
+
+    [Fact]
+    public async Task Given_UnknownZone_When_PostInjury_Then_Returns400WithSpanishMessage()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
+
+        var response = await factory.CreateAuthenticatedClient(_pfId)
+            .PostAsJsonAsync(Endpoint(_athleteId), new CreateAthleteInjuryRequest
+            {
+                Zone = "femoral",
+                Description = "Dolor al estirar",
+                InjuryDate = InjuryDate,
+                EstimatedReturnDate = EstimatedReturnDate
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal(400, problem!.Status);
+        Assert.Equal(
+            "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).",
+            problem.Title);
+
+        // Nada se persiste: ni la lesión ni su fila inicial de historial.
+        var persisted = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuries.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(0, persisted);
+
+        var history = await factory.ExecuteInDbContextAsync(db =>
+            db.AthleteInjuryStatusChanges.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(0, history);
     }
 
     // ---------- Listado ----------

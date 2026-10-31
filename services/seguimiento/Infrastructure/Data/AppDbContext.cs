@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<AthleteInjury> AthleteInjuries { get; set; }
     public DbSet<AthleteInjuryStatusChange> AthleteInjuryStatusChanges { get; set; }
     public DbSet<DailyLoad> DailyLoads { get; set; }
+    public DbSet<Attendance> Attendances { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

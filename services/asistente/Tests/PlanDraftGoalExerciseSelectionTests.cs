@@ -1,4 +1,4 @@
-namespace Asistente.Tests;
+﻿namespace Asistente.Tests;
 
 using Application.Common.Ai;
 using Application.Common.PlanDrafts;
@@ -18,6 +18,7 @@ using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Moq.Protected;
 using Xunit;
 
 /// <summary>
@@ -100,6 +101,132 @@ public sealed class PlanDraftGoalExerciseSelectionTests
         Assert.Contains("Prensa de piernas 45°", prompt);
         Assert.DoesNotContain("Abdominales en colchoneta", prompt);
         Assert.DoesNotContain("Aperturas con mancuernas", prompt);
+    }
+
+    
+    [Fact]
+    public async Task Given_RealCatalogSimulationWithAlphabeticalAExercisesPrecedingSquat_When_QueryingForLegStrength_Then_SquatIsRetrievedViaBasicsSearchAndIncludedInPrompt()
+    {
+        // Arrange: CatÃ¡logo simulado imitando el real (876 ejercicios) donde los primeros 50 son con "A" y no incluyen sentadillas
+        var exercisesStartingWithA = Enumerable.Range(1, 50).Select(i => new
+        {
+            id = Guid.NewGuid(),
+            name = $"Aductores variante {i}",
+            muscleGroup = "Piernas",
+            equipment = "Polea"
+        }).ToList();
+
+        var squatId = Guid.NewGuid();
+        var deadliftId = Guid.NewGuid();
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.RequestUri != null &&
+                    req.RequestUri.Query.Contains("search=sentadilla")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    items = new[]
+                    {
+                        new { id = squatId, name = "Sentadilla trasera con barra", muscleGroup = "Piernas", equipment = "Barra" }
+                    },
+                    totalCount = 1
+                }))
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.RequestUri != null &&
+                    req.RequestUri.Query.Contains("search=peso%20muerto")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    items = new[]
+                    {
+                        new { id = deadliftId, name = "Peso muerto rumano", muscleGroup = "Piernas", equipment = "Barra" }
+                    },
+                    totalCount = 1
+                }))
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.RequestUri != null &&
+                    !req.RequestUri.Query.Contains("search=")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    items = exercisesStartingWithA,
+                    totalCount = 876
+                }))
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.RequestUri != null &&
+                    req.RequestUri.Query.Contains("search=") &&
+                    !req.RequestUri.Query.Contains("sentadilla") &&
+                    !req.RequestUri.Query.Contains("peso%20muerto")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    items = Array.Empty<object>(),
+                    totalCount = 0
+                }))
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:5000/")
+        };
+
+        var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(Guid.NewGuid());
+
+        var catalogService = new Infrastructure.Services.Catalog.ExerciseCatalogService(
+            httpClient,
+            memoryCache,
+            currentUserMock.Object,
+            Mock.Of<ILogger<Infrastructure.Services.Catalog.ExerciseCatalogService>>());
+
+        // Act: El preparador físico pide borrador para "fuerza de piernas"
+        var selectedExercises = await catalogService.GetExercisesForGoalAsync("fuerza de piernas", maxExercises: 25);
+
+        var request = new CreatePlanDraftRequestDto(
+            Goal: "fuerza de piernas",
+            AthleteId: Guid.NewGuid(),
+            Weeks: 4,
+            DaysPerWeek: 3
+        );
+        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, selectedExercises);
+
+        // Assert:
+        // 1. A pesar de que los primeros 50 ejercicios son con "A" sin sentadillas, la sentadilla fue buscada y obtenida por básicos
+        Assert.Contains(selectedExercises, e => e.Id == squatId && e.Name == "Sentadilla trasera con barra");
+        Assert.Contains(selectedExercises, e => e.Id == deadliftId && e.Name == "Peso muerto rumano");
+
+        // 2. El prompt inyectado a la IA contiene la sentadilla y el peso muerto
+        Assert.Contains("Sentadilla trasera con barra", prompt);
+        Assert.Contains("Peso muerto rumano", prompt);
     }
 
     #endregion

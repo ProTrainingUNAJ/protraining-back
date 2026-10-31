@@ -1,11 +1,13 @@
 namespace Infrastructure.Services.Catalog;
 
-using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Common.Ai;
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
+using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -21,6 +23,15 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     private const string CacheKeyPrefixId = "cat_ex_id_";
     private const string CacheKeyPrefixName = "cat_ex_name_";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private const string CatalogUnavailableMessage =
+        "No se pudo verificar el ejercicio en el catálogo de Entrenamiento. Probá de nuevo en unos minutos.";
+
+    private static readonly Dictionary<string, IReadOnlyList<string>> CompoundBasicsByGroup = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Piernas"] = ["sentadilla", "peso muerto", "zancada", "prensa", "hip thrust"],
+        ["Pecho"] = ["press de banca", "flexiones", "press militar", "fondos"],
+        ["Espalda"] = ["remo", "dominadas", "jalon"]
+    };
 
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
@@ -49,15 +60,49 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
+    public async Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
     {
         if (exerciseId == Guid.Empty)
         {
-            return Task.FromResult<CatalogExerciseDto?>(null);
+            return null;
         }
 
-        // Búsqueda en memoria local; se eliminó la llamada con ?ids= que no existe en el contrato oficial (KAN-530)
-        return Task.FromResult(GetCachedById(exerciseId));
+        var cached = GetCachedById(exerciseId);
+        if (cached != null)
+        {
+            return cached;
+        }
+
+        // KAN-414: si no está en memoria (pasaron más de 30 minutos, se reinició el servicio o el PF eligió
+        // un ejercicio que el Asistente nunca vio), se le pregunta a Entrenamiento por id (?ids=, KAN-414).
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync($"{ExercisesPath}?ids={exerciseId}&pageSize=1", cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo consultar el ejercicio {ExerciseId} en Entrenamiento.", exerciseId);
+            throw new TrainingServiceUnavailableException(CatalogUnavailableMessage, ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Entrenamiento respondió {Status} al consultar el ejercicio {ExerciseId}.",
+                    (int)response.StatusCode, exerciseId);
+                throw new TrainingServiceUnavailableException(CatalogUnavailableMessage);
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            // ParseExercisesFromJson deja lo que llega en memoria, así la próxima vez no hace falta preguntar.
+            return ParseExercisesFromJson(json).FirstOrDefault(e => e.Id == exerciseId);
+        }
     }
 
     public async Task<CatalogExerciseDto?> FindByNameAsync(string exerciseName, CancellationToken cancellationToken = default)
@@ -67,7 +112,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             return null;
         }
 
-        var normalized = NormalizeText(exerciseName);
+        var normalized = TextNormalizer.Normalize(exerciseName);
 
         // 1. Coincidencia en caché en memoria
         var cached = GetCachedByName(normalized);
@@ -101,9 +146,9 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
         // 3. Coincidencia exacta por nombre normalizado
         var exactMatch = candidates.FirstOrDefault(c =>
-            NormalizeText(c.Name) == normalized ||
-            NormalizeText(c.Name) == withoutParentheses ||
-            RemoveParentheses(NormalizeText(c.Name)) == withoutParentheses);
+            TextNormalizer.Normalize(c.Name) == normalized ||
+            TextNormalizer.Normalize(c.Name) == withoutParentheses ||
+            RemoveParentheses(TextNormalizer.Normalize(c.Name)) == withoutParentheses);
 
         if (exactMatch != null)
         {
@@ -127,7 +172,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
         foreach (var item in candidates)
         {
-            var itemNorm = RemoveParentheses(NormalizeText(item.Name));
+            var itemNorm = RemoveParentheses(TextNormalizer.Normalize(item.Name));
             var itemMeaningful = itemNorm
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Where(t => !StopWords.Contains(t) && t.Length > 2)
@@ -156,11 +201,34 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
     public async Task<IReadOnlyList<CatalogExerciseDto>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
     {
+        return await GetExercisesAsync(muscleGroup: null, search: searchTerm, pageSize: 50, cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await GetExercisesAsync(muscleGroup: null, search: null, pageSize: 50, cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CatalogExerciseDto>> GetExercisesAsync(
+        string? muscleGroup,
+        string? search,
+        int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
-            var url = string.IsNullOrWhiteSpace(searchTerm)
-                ? $"{ExercisesPath}?pageSize=50"
-                : $"{ExercisesPath}?search={Uri.EscapeDataString(searchTerm)}&pageSize=50";
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(muscleGroup))
+            {
+                query.Add($"muscleGroup={Uri.EscapeDataString(muscleGroup.Trim())}");
+            }
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query.Add($"search={Uri.EscapeDataString(search.Trim())}");
+            }
+            query.Add($"pageSize={pageSize}");
+
+            var url = $"{ExercisesPath}?{string.Join("&", query)}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -170,7 +238,9 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Entrenamiento respondió {Status} al buscar ejercicios por término '{Search}'.", (int)response.StatusCode, searchTerm);
+                _logger.LogWarning(
+                    "Entrenamiento respondió {Status} al consultar ejercicios con muscleGroup='{MuscleGroup}' y search='{Search}'.",
+                    (int)response.StatusCode, muscleGroup, search);
                 return [];
             }
 
@@ -183,14 +253,100 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error al consultar los ejercicios en el microservicio de Entrenamiento.");
+            _logger.LogWarning(ex, "Error al consultar ejercicios en Entrenamiento con muscleGroup='{MuscleGroup}' y search='{Search}'.", muscleGroup, search);
             return [];
         }
     }
 
-    public async Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CatalogExerciseDto>> GetExercisesForGoalAsync(
+        string? goal,
+        int maxExercises = 25,
+        CancellationToken cancellationToken = default)
     {
-        return await SearchAsync(string.Empty, cancellationToken);
+        if (maxExercises <= 0)
+        {
+            maxExercises = 25;
+        }
+
+        var collected = new List<CatalogExerciseDto>();
+        var seenIds = new HashSet<Guid>();
+
+        var targetGroups = RoutinePromptBuilder.ExtractMuscleGroups(goal);
+
+        if (targetGroups.Count > 0)
+        {
+            foreach (var group in targetGroups)
+            {
+                // 1. Buscar ejercicios compuestos básicos por ?search= para el grupo objetivo (#158 · KAN-563)
+                if (CompoundBasicsByGroup.TryGetValue(group, out var basics))
+                {
+                    foreach (var basicSearch in basics)
+                    {
+                        var items = await GetExercisesAsync(group, basicSearch, pageSize: 5, cancellationToken);
+                        foreach (var item in items)
+                        {
+                            if (seenIds.Add(item.Id))
+                            {
+                                collected.Add(item);
+                            }
+                        }
+                    }
+                }
+
+                // 2. Completar con ejercicios adicionales del grupo (?muscleGroup=)
+                var groupItems = await GetExercisesAsync(group, null, pageSize: maxExercises, cancellationToken);
+                foreach (var item in groupItems)
+                {
+                    if (seenIds.Add(item.Id))
+                    {
+                        collected.Add(item);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Objetivo general: traer básicos balanceados de Piernas, Empuje y Tracción
+            foreach (var (group, basics) in CompoundBasicsByGroup)
+            {
+                foreach (var basicSearch in basics)
+                {
+                    var items = await GetExercisesAsync(group, basicSearch, pageSize: 3, cancellationToken);
+                    foreach (var item in items)
+                    {
+                        if (seenIds.Add(item.Id))
+                        {
+                            collected.Add(item);
+                        }
+                    }
+                }
+
+                var groupItems = await GetExercisesAsync(group, null, pageSize: 10, cancellationToken);
+                foreach (var item in groupItems)
+                {
+                    if (seenIds.Add(item.Id))
+                    {
+                        collected.Add(item);
+                    }
+                }
+            }
+        }
+
+        // Si se recopilaron ejercicios de Entrenamiento, filtrar y priorizar hasta maxExercises
+        if (collected.Count > 0)
+        {
+            return RoutinePromptBuilder.FilterExercisesForGoal(collected, goal, maxExercises);
+        }
+
+        // Si la búsqueda especializada no trajo nada (ej. entorno de pruebas/mocks sin implementar GetExercisesAsync),
+        // fallback defensivo a GetAllAsync
+        var fallback = await GetAllAsync(cancellationToken);
+        if (fallback is { Count: > 0 })
+        {
+            return RoutinePromptBuilder.FilterExercisesForGoal(fallback, goal, maxExercises);
+        }
+
+        return [];
     }
 
     private IReadOnlyList<CatalogExerciseDto> ParseExercisesFromJson(string json)
@@ -255,7 +411,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         var entryOptions = new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl };
         _memoryCache.Set(BuildIdKey(dto.Id), dto, entryOptions);
 
-        var norm = NormalizeText(dto.Name);
+        var norm = TextNormalizer.Normalize(dto.Name);
         if (!string.IsNullOrEmpty(norm))
         {
             _memoryCache.Set(BuildNameKey(norm), dto, entryOptions);
@@ -276,29 +432,6 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     private CatalogExerciseDto? GetCachedByName(string normalizedName)
     {
         return _memoryCache.TryGetValue(BuildNameKey(normalizedName), out CatalogExerciseDto? cached) ? cached : null;
-    }
-
-    private static string NormalizeText(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-
-        var normalizedString = text.Normalize(NormalizationForm.FormD);
-        var stringBuilder = new StringBuilder(normalizedString.Length);
-
-        foreach (var c in normalizedString)
-        {
-            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
-            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
-            {
-                stringBuilder.Append(c);
-            }
-        }
-
-        return stringBuilder
-            .ToString()
-            .Normalize(NormalizationForm.FormC)
-            .Trim()
-            .ToLowerInvariant();
     }
 
     private static string RemoveParentheses(string text)

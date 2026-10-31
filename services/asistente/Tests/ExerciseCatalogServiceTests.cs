@@ -14,7 +14,7 @@ namespace Asistente.Tests;
 /// <summary>
 /// Pruebas unitarias y de integración para ExerciseCatalogService (KAN-530):
 /// 1. Verificación del funcionamiento real de la caché desde el contenedor de DI.
-/// 2. Eliminación de la llamada inexistente con ?ids= en FindByIdAsync.
+/// 2. FindByIdAsync: memoria primero y, si no está, Entrenamiento por id (?ids=, KAN-414).
 /// 3. Aislamiento estricto de claves de caché por preparador físico (ICurrentUser.PfId).
 /// </summary>
 public sealed class ExerciseCatalogServiceTests
@@ -147,39 +147,62 @@ public sealed class ExerciseCatalogServiceTests
     }
 
     /// <summary>
-    /// Criterio de aceptación 3 (KAN-530):
-    /// No queda ninguna llamada con ?ids=. FindByIdAsync devuelve null si no está en memoria
-    /// y devuelve el elemento si ya fue cargado por nombre, sin realizar peticiones HTTP no soportadas.
+    /// KAN-414 (reemplaza el criterio 3 de la KAN-530, de cuando ?ids= no estaba en el contrato):
+    /// si el ejercicio no está en memoria, se le pregunta una sola vez a Entrenamiento por id
+    /// y queda en memoria para la próxima.
     /// </summary>
     [Fact]
-    public async Task Given_FindByIdAsync_When_Not_In_Cache_Then_ReturnsNull_And_Makes_Zero_Http_Calls()
+    public async Task Given_FindByIdAsync_When_Not_In_Cache_Then_AsksEntrenamientoOnceByIdAndCachesIt()
     {
-        // Arrange
         var fakeHandler = new TrackingHttpMessageHandler(
             CreatePaginatedResponseJson(SentadillaId, "Sentadilla con barra", "Piernas", "Barra"));
+        var service = CreateService(fakeHandler);
 
+        var first = await service.FindByIdAsync(SentadillaId);
+        var second = await service.FindByIdAsync(SentadillaId);
+
+        Assert.NotNull(first);
+        Assert.Equal("Sentadilla con barra", first!.Name);
+        Assert.NotNull(second);
+        Assert.Equal(1, fakeHandler.CallCount);
+        Assert.Contains($"ids={SentadillaId}", fakeHandler.RequestedUrls.Single());
+    }
+
+    [Fact]
+    public async Task Given_FindByIdAsync_When_Entrenamiento_Does_Not_Have_It_Then_ReturnsNull()
+    {
+        var fakeHandler = new TrackingHttpMessageHandler(JsonSerializer.Serialize(new
+        {
+            items = Array.Empty<object>(), page = 1, pageSize = 100, totalCount = 0, totalPages = 1
+        }));
+        var service = CreateService(fakeHandler);
+
+        var result = await service.FindByIdAsync(Guid.NewGuid());
+
+        Assert.Null(result);
+        Assert.Equal(1, fakeHandler.CallCount);
+    }
+
+    [Fact]
+    public async Task Given_FindByIdAsync_When_Entrenamiento_Is_Down_Then_Throws503InsteadOfSayingItDoesNotExist()
+    {
+        var fakeHandler = new TrackingHttpMessageHandler("{}", HttpStatusCode.ServiceUnavailable);
+        var service = CreateService(fakeHandler);
+
+        await Assert.ThrowsAsync<Application.Exceptions.TrainingServiceUnavailableException>(
+            () => service.FindByIdAsync(Guid.NewGuid()));
+    }
+
+    private static ExerciseCatalogService CreateService(HttpMessageHandler handler)
+    {
         var currentUserMock = new Mock<ICurrentUser>();
         currentUserMock.Setup(c => c.PfId).Returns(Guid.NewGuid());
 
-        var cache = new MemoryCache(new MemoryCacheOptions());
-        var httpClient = new HttpClient(fakeHandler) { BaseAddress = new Uri("http://entrenamiento:8080/") };
-
-        var service = new ExerciseCatalogService(
-            httpClient,
-            cache,
+        return new ExerciseCatalogService(
+            new HttpClient(handler) { BaseAddress = new Uri("http://entrenamiento:8080/") },
+            new MemoryCache(new MemoryCacheOptions()),
             currentUserMock.Object,
             NullLogger<ExerciseCatalogService>.Instance);
-
-        var randomExerciseId = Guid.NewGuid();
-
-        // Act
-        var result = await service.FindByIdAsync(randomExerciseId);
-
-        // Assert
-        // Debe devolver null inmediatamente sin realizar ninguna petición HTTP a Entrenamiento
-        Assert.Null(result);
-        Assert.Equal(0, fakeHandler.CallCount);
-        Assert.DoesNotContain(fakeHandler.RequestedUrls, url => url.Contains("?ids="));
     }
 
     /// <summary>
@@ -227,7 +250,7 @@ public sealed class ExerciseCatalogServiceTests
     /// <summary>
     /// HttpMessageHandler de prueba para registrar la cantidad y URLs de las peticiones despachadas.
     /// </summary>
-    private sealed class TrackingHttpMessageHandler(string responseBody) : HttpMessageHandler
+    private sealed class TrackingHttpMessageHandler(string responseBody, HttpStatusCode statusCode = HttpStatusCode.OK) : HttpMessageHandler
     {
         private int _callCount;
         public int CallCount => _callCount;
@@ -238,7 +261,7 @@ public sealed class ExerciseCatalogServiceTests
             Interlocked.Increment(ref _callCount);
             RequestedUrls.Add(request.RequestUri?.ToString() ?? string.Empty);
 
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            var response = new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(responseBody, System.Text.Encoding.UTF8, "application/json")
             };

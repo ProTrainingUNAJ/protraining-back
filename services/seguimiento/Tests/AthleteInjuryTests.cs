@@ -93,4 +93,84 @@ public class AthleteInjuryTests
 
         Assert.Equal("El identificador del atleta es inválido.", exception.Message);
     }
+
+    // ---------- Zonas del check-in ----------
+
+    [Theory]
+    [InlineData("pecho")]
+    [InlineData("hombros")]
+    [InlineData("biceps")]
+    [InlineData("abdominales")]
+    [InlineData("cuadriceps")]
+    [InlineData("espalda_alta")]
+    [InlineData("espalda_media")]
+    [InlineData("espalda_baja")]
+    [InlineData("triceps")]
+    [InlineData("gluteos")]
+    [InlineData("isquiotibiales")]
+    [InlineData("gemelos")]
+    [InlineData("trapecios")]
+    [InlineData("dorsales")]
+    [InlineData("oblicuos")]
+    [InlineData("antebrazos")]
+    [InlineData("manos")]
+    [InlineData("pies")]
+    [InlineData("cuello_trapecios")]
+    public void Create_WithAnyCheckInZone_IsAccepted(string zone)
+    {
+        var injury = Crear(InjuryDate.AddDays(15), zone: zone);
+
+        Assert.Equal(zone, injury.Zone);
+    }
+
+    [Theory]
+    [InlineData("  cuadriceps  ")]
+    [InlineData("ISQUIOTIBIALES")]
+    public void Create_WithZoneVariants_IsNormalizedAndAccepted(string zone)
+    {
+        var injury = Crear(InjuryDate.AddDays(15), zone: zone);
+
+        Assert.Equal(zone.Trim().ToLowerInvariant(), injury.Zone.ToLowerInvariant());
+    }
+
+    [Fact]
+    public void Create_WithUnknownZone_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var exception = Assert.Throws<DomainException>(
+            () => Crear(InjuryDate.AddDays(15), zone: "femoral"));
+
+        Assert.Equal(
+            "La zona de la lesión no es válida: debe ser una de las 19 zonas del check-in (ej.: isquiotibiales).",
+            exception.Message);
+    }
+
+    // ---------- Fila inicial del historial ----------
+
+    [Fact]
+    public void InitialStatusChange_WithValidPf_ReturnsNullToActiveRowTiedToTheInjury()
+    {
+        var injury = Crear(InjuryDate.AddDays(15));
+        var changedAt = new DateTime(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
+        var pfId = Guid.NewGuid();
+
+        var row = injury.InitialStatusChange(pfId, changedAt);
+
+        Assert.Equal(injury.Id, row.InjuryId);
+        Assert.Null(row.FromStatus);
+        Assert.Equal(InjuryStatus.Active, row.ToStatus);
+        Assert.Equal(pfId, row.ChangedBy);
+        Assert.Equal(changedAt, row.ChangedAt);
+        Assert.False(string.IsNullOrWhiteSpace(row.Note));
+    }
+
+    [Fact]
+    public void InitialStatusChange_WithEmptyPf_ThrowsDomainExceptionWithSpanishMessage()
+    {
+        var injury = Crear(InjuryDate.AddDays(15));
+
+        var exception = Assert.Throws<DomainException>(
+            () => injury.InitialStatusChange(Guid.Empty, DateTime.UtcNow));
+
+        Assert.Equal("El usuario que realiza el cambio es inválido.", exception.Message);
+    }
 }

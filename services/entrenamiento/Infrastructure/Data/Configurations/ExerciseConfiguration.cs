@@ -24,7 +24,17 @@ namespace Infrastructure.Data.Configurations
             builder.Property(e => e.Images).HasColumnName("images");
             builder.Property(e => e.PrimaryMuscles).HasColumnName("primary_muscles");
             builder.Property(e => e.SecondaryMuscles).HasColumnName("secondary_muscles");
+            builder.Property(e => e.Origin).HasColumnName("origin").HasConversion<string>().HasMaxLength(20).HasDefaultValue(Origin.Catalog).IsRequired();
+            builder.Property(e => e.ParentExerciseId).HasColumnName("parent_exercise_id");
+            builder.Property(e => e.VariantLabel).HasColumnName("variant_label").HasMaxLength(100);
+            builder.Ignore(e => e.IsVariant);
 
+            // Variantes (KAN-554): FK a la base; no se puede borrar una base que tenga variantes.
+            builder.HasOne<Exercise>()
+                .WithMany()
+                .HasForeignKey(e => e.ParentExerciseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            builder.HasIndex(e => e.ParentExerciseId);
 
             builder.HasIndex(e => e.MuscleGroup);
             builder.HasIndex(e => e.Name).HasMethod("gin").HasOperators("gin_trgm_ops");

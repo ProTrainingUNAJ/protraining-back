@@ -59,6 +59,7 @@ public sealed class CreatePlanDraftCommandHandler(
         };
 
         IReadOnlyList<DateOnly>? matchDates = null;
+        var calendarReadFailed = false;
         if (hasCategory && calendarClient != null)
         {
             try
@@ -81,15 +82,18 @@ public sealed class CreatePlanDraftCommandHandler(
                     "No se pudieron obtener las fechas de partidos para la categoría {CategoryId}. Se continuará la generación sin restricciones de calendario.",
                     request.CategoryId);
                 matchDates = null;
+                calendarReadFailed = true;
             }
         }
 
         var (contentDto, provider) = await aiService.GeneratePlanDraftAsync(normalizedRequest, matchDates, cancellationToken);
+        logger?.LogInformation("Borrador de planificación creado exitosamente con proveedor '{Provider}'.", provider);
 
         var finalContent = contentDto;
         IReadOnlyList<string> corrections = [];
 
-        // KAN-408: Validador algorítmico post-IA para corregir cargas pre-partido (D-1 <= 60%, D-2 <= 75%, D sin pesas)
+        // KAN-408 / KAN-563: Validador algorítmico post-IA para corregir cargas pre-partido (D-1 <= 60%, D-2 <= 75%, D sin pesas)
+        // Se buscan los nombres exactos de los ejercicios presentes en el borrador mediante FindByIdAsync
         if (matchDayLoadValidator != null && matchDates is { Count: > 0 })
         {
             IReadOnlyDictionary<Guid, string>? exerciseNames = null;
@@ -97,10 +101,40 @@ public sealed class CreatePlanDraftCommandHandler(
             {
                 try
                 {
-                    var catalog = await catalogService.GetAllAsync(cancellationToken);
-                    if (catalog is { Count: > 0 })
+                    var distinctExerciseIds = (contentDto.Weeks ?? [])
+                        .SelectMany(w => w.Sessions ?? [])
+                        .SelectMany(s => s.Exercises ?? [])
+                        .Select(e => e.ExerciseId)
+                        .Where(id => id != Guid.Empty)
+                        .Distinct()
+                        .ToList();
+
+                    var dict = new Dictionary<Guid, string>();
+                    foreach (var id in distinctExerciseIds)
                     {
-                        exerciseNames = catalog.ToDictionary(e => e.Id, e => e.Name);
+                        var ex = await catalogService.FindByIdAsync(id, cancellationToken);
+                        if (ex != null)
+                        {
+                            dict[ex.Id] = ex.Name;
+                        }
+                    }
+
+                    // Fallback para mocks o catálogos que solo configuran GetAllAsync
+                    if (dict.Count < distinctExerciseIds.Count)
+                    {
+                        var all = await catalogService.GetAllAsync(cancellationToken);
+                        if (all is { Count: > 0 })
+                        {
+                            foreach (var ex in all)
+                            {
+                                dict.TryAdd(ex.Id, ex.Name);
+                            }
+                        }
+                    }
+
+                    if (dict.Count > 0)
+                    {
+                        exerciseNames = dict;
                     }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -121,6 +155,17 @@ public sealed class CreatePlanDraftCommandHandler(
 
             finalContent = validationResult.Content;
             corrections = validationResult.Corrections;
+            logger?.LogInformation("El validador de cargas pre-partido aplicó {Count} corrección(es).", corrections.Count);
+        }
+
+        var warnings = new List<string>();
+        if (calendarReadFailed)
+        {
+            warnings.Add("No se pudo leer el calendario de partidos. El borrador se generó sin restricciones de calendario pre-partido.");
+        }
+        if (corrections is { Count: > 0 })
+        {
+            warnings.AddRange(corrections);
         }
 
         var serializedContent = PlanDraftMapper.SerializeContent(finalContent);
@@ -137,7 +182,7 @@ public sealed class CreatePlanDraftCommandHandler(
         await planDraftRepository.AddAsync(draft, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return PlanDraftMapper.ToResponseDto(draft, finalContent, corrections);
+        return PlanDraftMapper.ToResponseDto(draft, finalContent, warnings);
     }
 
     public static DateOnly CalculateNextMondayInArgentina(DateTime? utcNow = null)

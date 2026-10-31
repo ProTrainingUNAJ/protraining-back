@@ -121,6 +121,18 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Catalog")
+                        .HasColumnName("origin");
+                        
+                    b.Property<Guid?>("ParentExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_exercise_id");
+
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
@@ -135,6 +147,11 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("secondary_muscles");
 
+                    b.Property<string>("VariantLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("variant_label");
+
                     b.Property<string>("VideoUrl")
                         .HasColumnType("text")
                         .HasColumnName("video_url");
@@ -147,6 +164,8 @@ namespace Infrastructure.Data.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("ParentExerciseId");
 
                     b.HasIndex("PfId");
 
@@ -572,6 +591,14 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Exercise", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", null)
+                        .WithMany()
+                        .HasForeignKey("ParentExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>

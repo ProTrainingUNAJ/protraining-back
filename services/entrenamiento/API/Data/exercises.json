@@ -1718,7 +1718,7 @@
     "id": "Barbell_Step_Ups"
   },
   {
-    "name": "Zancada con barra",
+    "name": "Zancada caminando con barra",
     "force": "push",
     "level": "beginner",
     "mechanic": "compound",
@@ -5890,7 +5890,7 @@
     "id": "Dumbbell_Clean"
   },
   {
-    "name": "Press de banca con mancuernas",
+    "name": "Press de banca con mancuernas en el piso",
     "force": "push",
     "level": "intermediate",
     "mechanic": "compound",

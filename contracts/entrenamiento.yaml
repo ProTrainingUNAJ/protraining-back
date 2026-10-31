@@ -64,6 +64,30 @@ paths:
             type: boolean
             default: false
           description: Si es true, filtra únicamente los ejercicios utilizados por el PF en sus planificaciones o con récords (1RM) cargados.
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+          description: >
+            Ejercicios puntuales por id (`?ids=a&ids=b`, hasta 100), por ejemplo para que el Asistente verifique
+            que los ejercicios de un borrador existen en el catálogo (KAN-414). Si viene, se ignoran los demás filtros.
+        - name: groupVariants
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >
+            Si es true, devuelve solo los ejercicios base, cada uno con sus variantes en `variants` (KAN-554).
+            Un ejercicio base aparece si él o alguna de sus variantes cumple los filtros. Si es false, la lista
+            es plana: base y variantes como ejercicios sueltos, cada variante con `parentExerciseId` y `variantLabel`.
         - name: page
           in: query
           required: false
@@ -92,6 +116,43 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Exercises
+      summary: Crear ejercicio personalizado o propuesto por la IA
+      description: Permite al preparador físico agregar un ejercicio a su catálogo privado. Requiere rol PreparadorFisico.
+      operationId: createExercise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        "201":
+          description: Ejercicio creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "409":
+          description: Ya existe un ejercicio con ese nombre para este preparador físico o en el catálogo global.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    description: Identificador del ejercicio existente.
+                    example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
 
   /api/v1/exercises/restrictions/check:
     post:
@@ -226,6 +287,100 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/record-proposals:
+    get:
+      tags:
+        - Records
+      summary: Listar propuestas de récord
+      description: >
+        Devuelve las propuestas de récord de Epley de los atletas del PF autenticado (filtro por pf_id),
+        con el atleta, el ejercicio, el récord vigente, el propuesto, la serie que lo originó y la fecha.
+      operationId: listRecordProposals
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Pending, Approved, Discarded]
+            default: Pending
+          description: Filtrar por estado de la propuesta. Por defecto Pending.
+      responses:
+        "200":
+          description: Lista de propuestas de récord obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordProposal'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/record-proposals/{id}/approve:
+    post:
+      tags:
+        - Records
+      summary: Aprobar propuesta de récord Epley
+      description: >
+        Desactiva el récord vigente del atleta y crea uno nuevo con el peso propuesto y origen Epley.
+        Si el récord vigente cambió desde que se creó la propuesta, o si la propuesta ya no está pendiente, responde 409.
+      operationId: approveRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "200":
+          description: Propuesta aprobada y récord actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/record-proposals/{id}/discard:
+    post:
+      tags:
+        - Records
+      summary: Descartar propuesta de récord Epley
+      description: >
+        Deja la propuesta en estado Discarded sin modificar el récord vigente.
+        Aprobar o descartar una propuesta que ya no está pendiente responde 409.
+      operationId: discardRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "204":
+          description: Propuesta descartada exitosamente.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/routines:
     post:
@@ -810,6 +965,12 @@ components:
       bearerFormat: JWT
 
   responses:
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     BadRequest:
       description: Solicitud con datos inválidos o reglas de negocio incumplidas.
       content:
@@ -964,6 +1125,66 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          description: Origen del ejercicio (Catálogo inicial, cargado por el PF o propuesto por la IA).
+          example: "Ai"
+        parentExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Si el ejercicio es una variante, el id de su ejercicio base (KAN-554). Es null en los ejercicios base.
+          example: null
+        variantLabel:
+          type: string
+          nullable: true
+          description: Qué distingue a la variante de su ejercicio base. Es null en los ejercicios base.
+          example: "Agarre cerrado"
+        variants:
+          type: array
+          nullable: true
+          description: >
+            Variantes del ejercicio base. Solo viene con `groupVariants=true`; si no, es null.
+            Cada variante conserva su id: los récords (1RM) y las planificaciones apuntan a la variante exacta.
+          items:
+            $ref: '#/components/schemas/Exercise'
+
+    CreateExerciseRequest:
+      type: object
+      required:
+        - name
+        - muscleGroup
+      properties:
+        name:
+          type: string
+          example: "Sentadilla búlgara con banda"
+        muscleGroup:
+          type: string
+          example: "Piernas"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Cuádriceps", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Isquiotibiales"]
+        equipment:
+          type: string
+          nullable: true
+          example: "Banda elástica"
+        instructions:
+          type: string
+          nullable: true
+          example: "Colocar el pie trasero en banco y banda bajo el pie delantero."
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          default: "Coach"
+          example: "Ai"
 
     PaginatedExerciseResponse:
       type: object
@@ -996,6 +1217,64 @@ components:
           type: integer
           description: Total de páginas disponibles según el tamaño de página.
           example: 6
+
+    RecordProposal:
+      type: object
+      description: Propuesta de actualización de récord 1RM basada en recálculo Epley.
+      required:
+        - id
+        - athleteId
+        - athleteName
+        - exerciseId
+        - exerciseName
+        - currentWeight
+        - proposedWeight
+        - performedWeight
+        - performedReps
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e6f491c7-7489-4b68-b765-a81e9f1a21e4"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          example: "Lucas Giménez"
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        exerciseName:
+          type: string
+          example: "Sentadilla Trasera"
+        currentWeight:
+          type: number
+          format: double
+          example: 100.0
+        proposedWeight:
+          type: number
+          format: double
+          example: 107.5
+        performedWeight:
+          type: number
+          format: double
+          example: 90.0
+        performedReps:
+          type: integer
+          example: 5
+        status:
+          type: string
+          enum: [Pending, Approved, Discarded]
+          example: "Pending"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-22T14:30:00Z"
 
     Record:
       type: object
@@ -1031,7 +1310,7 @@ components:
           example: 140.0
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
         achievedAt:
           type: string
@@ -1060,7 +1339,7 @@ components:
           example: 142.5
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
 
     RoutineItemRequest:

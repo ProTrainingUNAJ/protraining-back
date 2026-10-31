@@ -15,14 +15,6 @@ public sealed class AssistantController(
     GetAthleteDecisionsQueryHandler getAthleteDecisionsHandler) : ControllerBase
 {
     /// <summary>
-    /// Constructor de compatibilidad para pruebas enfocadas exclusivamente en la sugerencia de rutinas.
-    /// </summary>
-    public AssistantController(SuggestRoutineUseCase suggestRoutineUseCase)
-        : this(suggestRoutineUseCase, null!)
-    {
-    }
-
-    /// <summary>
     /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
     /// </summary>
     [HttpPost("suggest-routine")]

@@ -1,6 +1,7 @@
 using Application.DTOs.DailyLoad;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,9 @@ namespace API.Controllers.DailyLoads;
 [Route("api/v1/athletes/{athleteId:guid}/daily-load")]
 [Authorize]
 public sealed class DailyLoadsController(
-    RegisterDailyLoadCommandHandler handler, IStructureClient structureClient) : ControllerBase
+    RegisterDailyLoadCommandHandler handler,
+    GetAthleteWeekQueryHandler weekHandler,
+    IStructureClient structureClient) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<DailyLoadResponseDto>> Register(
@@ -40,8 +43,15 @@ public sealed class DailyLoadsController(
         return Ok(await handler.GetTodayAsync(athleteId, cancellationToken));
     }
 
-    // Aliases por si los tests llaman con otros nombres
-    public Task<ActionResult<DailyLoadResponseDto>> Submit(Guid a, RegisterDailyLoadRequest r, CancellationToken c) => Register(a, r, c);
-    public Task<ActionResult<DailyLoadResponseDto>> Post(Guid a, RegisterDailyLoadRequest r, CancellationToken c) => Register(a, r, c);
-    public Task<ActionResult<DailyLoadResponseDto>> GetToday(Guid a, CancellationToken c) => Get(a, c);
+    [HttpGet("week")]
+    public async Task<ActionResult<AthleteWeekDto>> GetWeek(
+        Guid athleteId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
+    {
+        var me = await structureClient.GetMeAsync(cancellationToken);
+        if (me is null) throw new NoAthleteLinkedException();
+        if (me.AthleteId != athleteId) throw new ForbiddenException();
+
+        return Ok(await weekHandler.HandleAsync(
+            new GetAthleteWeekQuery(athleteId, date), cancellationToken));
+    }
 }
