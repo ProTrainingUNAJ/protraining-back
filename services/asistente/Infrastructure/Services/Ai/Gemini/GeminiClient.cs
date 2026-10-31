@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -160,24 +160,29 @@ public sealed class GeminiClient(
         cancellationToken.ThrowIfCancellationRequested();
         var stopwatch = Stopwatch.StartNew();
 
-        IReadOnlyList<CatalogExerciseDto> catalog = [];
+        IReadOnlyList<CatalogExerciseDto> availableExercises = [];
         if (catalogService != null)
         {
-            catalog = await catalogService.GetAllAsync(cancellationToken);
+            var goalExercises = await catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
+            if (goalExercises is { Count: > 0 })
+            {
+                availableExercises = goalExercises;
+            }
+            else
+            {
+                var fallbackCatalog = await catalogService.GetAllAsync(cancellationToken);
+                if (fallbackCatalog is { Count: > 0 })
+                {
+                    availableExercises = RoutinePromptBuilder.FilterExercisesForGoal(fallbackCatalog, request.Goal, maxExercises: 25);
+                }
+            }
         }
 
-        // KAN-563: Si el catálogo está vacío, no inventar IDs de respaldo y pasar directo al siguiente proveedor
-        if (catalog == null || catalog.Count == 0)
+        // KAN-563: Si el catÃ¡logo estÃ¡ vacÃ­o, no inventar IDs de respaldo y pasar directo al siguiente proveedor
+        if (availableExercises == null || availableExercises.Count == 0)
         {
             logger?.LogWarning("Catálogo de ejercicios vacío. Omitiendo Gemini y pasando al siguiente proveedor.");
             return null;
-        }
-
-        // KAN-563: Filtrar ejercicios según el objetivo (priorizando grupos musculares solicitados)
-        var availableExercises = RoutinePromptBuilder.FilterExercisesForGoal(catalog, request.Goal, maxExercises: 25);
-        if (availableExercises.Count == 0)
-        {
-            availableExercises = catalog.Take(25).ToList();
         }
 
         var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises, matchDates);
