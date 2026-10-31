@@ -350,6 +350,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{categoryId}/averages:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar promedios de tests y wellness por categoría
+      description: >
+        Obtiene los promedios aritméticos agregados de tests de aptitud física y de métricas
+        semanales de bienestar (wellness) para los atletas de una categoría específica.
+        Garantía estricta de privacidad: no expone identificadores, nombres ni mediciones individuales.
+      operationId: getCategoryAverages
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: weekStart
+          in: query
+          required: false
+          description: Fecha de inicio de la semana de consulta (formato YYYY-MM-DD). Si no se especifica, se toma el lunes de la semana actual en hora de Argentina.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-26"
+      responses:
+        "200":
+          description: Promedios de la categoría obtenidos exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryAveragesResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/group-benchmark:
     get:
       tags:
@@ -1152,3 +1191,93 @@ components:
             type: array
             items:
               type: string
+    CategoryAveragesResponse:
+      type: object
+      required:
+        - categoryId
+        - categoryName
+        - athleteCount
+        - weekStart
+        - weekEnd
+        - fitnessTests
+        - wellnessMetrics
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        categoryName:
+          type: string
+          example: "Sub 20"
+        athleteCount:
+          type: integer
+          example: 18
+        weekStart:
+          type: string
+          format: date
+          example: "2026-10-26"
+        weekEnd:
+          type: string
+          format: date
+          example: "2026-11-01"
+        fitnessTests:
+          type: array
+          items:
+            $ref: '#/components/schemas/FitnessTestAverage'
+        wellnessMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/WellnessMetricAverage'
+
+    FitnessTestAverage:
+      type: object
+      required:
+        - testId
+        - testName
+        - motorSkill
+        - unit
+        - average
+        - testedAthleteCount
+      properties:
+        testId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorSkill:
+          type: string
+          example: "Power"
+        unit:
+          type: string
+          example: "cm"
+        average:
+          type: number
+          format: double
+          example: 38.4
+        testedAthleteCount:
+          type: integer
+          example: 15
+
+    WellnessMetricAverage:
+      type: object
+      required:
+        - metric
+        - average
+        - reportedAthleteCount
+        - totalCheckIns
+      properties:
+        metric:
+          type: string
+          example: "Sleep"
+        average:
+          type: number
+          format: double
+          example: 7.6
+        reportedAthleteCount:
+          type: integer
+          example: 14
+        totalCheckIns:
+          type: integer
+          example: 42
