@@ -1,4 +1,3 @@
-using System.Text.Json;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
@@ -6,6 +5,7 @@ using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
+using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.RecordProposals.ApproveRecordProposal;
 using Application.UseCases.RecordProposals.DiscardRecordProposal;
 using Application.UseCases.RecordProposals.ListRecordProposals;
@@ -31,6 +31,7 @@ using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -87,6 +88,7 @@ builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
 builder.Services.AddScoped<RecordPerformedSetsCommandHandler>();
 builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
 builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
+builder.Services.AddScoped<CreateExerciseCommandHandler>();
 builder.Services.AddScoped<ListRecordProposalsQueryHandler>();
 builder.Services.AddScoped<ApproveRecordProposalCommandHandler>();
 builder.Services.AddScoped<DiscardRecordProposalCommandHandler>();

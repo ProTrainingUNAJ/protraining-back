@@ -116,6 +116,43 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Exercises
+      summary: Crear ejercicio personalizado o propuesto por la IA
+      description: Permite al preparador físico agregar un ejercicio a su catálogo privado. Requiere rol PreparadorFisico.
+      operationId: createExercise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        "201":
+          description: Ejercicio creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "409":
+          description: Ya existe un ejercicio con ese nombre para este preparador físico o en el catálogo global.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    description: Identificador del ejercicio existente.
+                    example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
 
   /api/v1/exercises/restrictions/check:
     post:
@@ -1088,6 +1125,11 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          description: Origen del ejercicio (Catálogo inicial, cargado por el PF o propuesto por la IA).
+          example: "Ai"
         parentExerciseId:
           type: string
           format: uuid
@@ -1107,6 +1149,42 @@ components:
             Cada variante conserva su id: los récords (1RM) y las planificaciones apuntan a la variante exacta.
           items:
             $ref: '#/components/schemas/Exercise'
+
+    CreateExerciseRequest:
+      type: object
+      required:
+        - name
+        - muscleGroup
+      properties:
+        name:
+          type: string
+          example: "Sentadilla búlgara con banda"
+        muscleGroup:
+          type: string
+          example: "Piernas"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Cuádriceps", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Isquiotibiales"]
+        equipment:
+          type: string
+          nullable: true
+          example: "Banda elástica"
+        instructions:
+          type: string
+          nullable: true
+          example: "Colocar el pie trasero en banco y banda bajo el pie delantero."
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          default: "Coach"
+          example: "Ai"
 
     PaginatedExerciseResponse:
       type: object

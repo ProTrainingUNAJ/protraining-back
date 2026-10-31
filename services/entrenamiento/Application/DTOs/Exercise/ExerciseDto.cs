@@ -1,4 +1,6 @@
 
+using Domain.Entities;
+
 namespace Application.DTOs.Exercise
 {
     public class ExerciseDto
@@ -13,6 +15,7 @@ namespace Application.DTOs.Exercise
         public List<string> Images { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
+        public Origin Origin { get; set; }
 
         // Variantes (KAN-554). En una variante, el id de su ejercicio base y la etiqueta
         // ("Agarre cerrado"). Variants solo viene con groupVariants=true, en los ejercicios base.
