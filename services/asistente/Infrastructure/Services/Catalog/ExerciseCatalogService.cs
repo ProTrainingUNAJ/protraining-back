@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.DTOs.Ai;
+using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,8 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     private const string CacheKeyPrefixId = "cat_ex_id_";
     private const string CacheKeyPrefixName = "cat_ex_name_";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private const string CatalogUnavailableMessage =
+        "No se pudo verificar el ejercicio en el catálogo de Entrenamiento. Probá de nuevo en unos minutos.";
 
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
@@ -49,15 +52,49 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
+    public async Task<CatalogExerciseDto?> FindByIdAsync(Guid exerciseId, CancellationToken cancellationToken = default)
     {
         if (exerciseId == Guid.Empty)
         {
-            return Task.FromResult<CatalogExerciseDto?>(null);
+            return null;
         }
 
-        // Búsqueda en memoria local; se eliminó la llamada con ?ids= que no existe en el contrato oficial (KAN-530)
-        return Task.FromResult(GetCachedById(exerciseId));
+        var cached = GetCachedById(exerciseId);
+        if (cached != null)
+        {
+            return cached;
+        }
+
+        // KAN-414: si no está en memoria (pasaron más de 30 minutos, se reinició el servicio o el PF eligió
+        // un ejercicio que el Asistente nunca vio), se le pregunta a Entrenamiento por id (?ids=, KAN-414).
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync($"{ExercisesPath}?ids={exerciseId}&pageSize=1", cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo consultar el ejercicio {ExerciseId} en Entrenamiento.", exerciseId);
+            throw new TrainingServiceUnavailableException(CatalogUnavailableMessage, ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Entrenamiento respondió {Status} al consultar el ejercicio {ExerciseId}.",
+                    (int)response.StatusCode, exerciseId);
+                throw new TrainingServiceUnavailableException(CatalogUnavailableMessage);
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            // ParseExercisesFromJson deja lo que llega en memoria, así la próxima vez no hace falta preguntar.
+            return ParseExercisesFromJson(json).FirstOrDefault(e => e.Id == exerciseId);
+        }
     }
 
     public async Task<CatalogExerciseDto?> FindByNameAsync(string exerciseName, CancellationToken cancellationToken = default)
