@@ -1634,7 +1634,7 @@ components:
           type: string
           maxLength: 500
           description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
-          example: "Revisión médica previa a planificación de fuerza"
+          example: "…"
 
     UpdateMedicalRecordRequest:
       type: object
