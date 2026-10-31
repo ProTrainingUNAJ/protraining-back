@@ -8,21 +8,24 @@ using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.PreviewRecordsImport;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 using Application.UseCases.Exercise.AddExercise;
-using Application.UseCases.RecordProposals.ApproveRecordProposal;
-using Application.UseCases.RecordProposals.DiscardRecordProposal;
-using Application.UseCases.RecordProposals.ListRecordProposals;
 using Application.UseCases.Exercise.CheckRestrictions;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.ListExercises;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
+using Application.UseCases.RecordProposals.ApproveRecordProposal;
+using Application.UseCases.RecordProposals.DiscardRecordProposal;
+using Application.UseCases.RecordProposals.ListRecordProposals;
 using Application.UseCases.Routines.GetTodayRoutine;
 using Application.UseCases.Routines.RecordPerformedSets;
+using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.ListTemplates;
+using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
@@ -96,6 +99,9 @@ builder.Services.AddScoped<CreateExerciseCommandHandler>();
 builder.Services.AddScoped<ListRecordProposalsQueryHandler>();
 builder.Services.AddScoped<ApproveRecordProposalCommandHandler>();
 builder.Services.AddScoped<DiscardRecordProposalCommandHandler>();
+builder.Services.AddScoped<SavePlanAsTemplateCommandHandler>();
+builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
+builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
 
 
 

@@ -25,6 +25,10 @@ public class AssignPlanCommandHandler
         if (!exists)
             throw new NotFoundException($"No se encontró la planificación con ID '{command.TrainingPlanId}'.");
 
+        var plan = await _planRepository.GetByIdAsync(command.TrainingPlanId, cancellationToken);
+        if (plan?.IsTemplate == true)
+            throw new DomainException($"No puede asignarse el plan {command.TrainingPlanId} porque es una plantilla");
+
         var assignment = PlanAssignment.Create(
             command.TrainingPlanId,
             command.StartDate,

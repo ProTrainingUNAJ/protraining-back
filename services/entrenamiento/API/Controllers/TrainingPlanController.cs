@@ -1,9 +1,12 @@
 using Application.DTOs.TrainingPlans;
+using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.ListTemplates;
+using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +25,9 @@ public class TrainingPlanController : ControllerBase
     private readonly GetTrainingPlanQueryHandler _getPlanHandler;
     private readonly ListTrainingPlansQueryHandler _listPlansHandler;
     private readonly GetPlanScheduleQueryHandler _scheduleHandler;
+    private readonly SavePlanAsTemplateCommandHandler _savePlanAsTemplateHandler;
+    private readonly ListPlanTemplatesQueryHandler _listPlansTemplatesHandler;
+    private readonly ApplyPlanTemplateCommandHandler _applyPlanTemplateHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -29,7 +35,10 @@ public class TrainingPlanController : ControllerBase
         UpdateTrainingPlanCommandHandler updatePlanHandler,
         GetTrainingPlanQueryHandler getPlanHandler,
         ListTrainingPlansQueryHandler listPlansHandler,
-        GetPlanScheduleQueryHandler scheduleHandler)
+        GetPlanScheduleQueryHandler scheduleHandler,
+        SavePlanAsTemplateCommandHandler savePlanAsTemplateHandler,
+        ListPlanTemplatesQueryHandler listPlanTemplatesHandler,
+        ApplyPlanTemplateCommandHandler applyPlanTemplateHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -37,6 +46,9 @@ public class TrainingPlanController : ControllerBase
         _getPlanHandler = getPlanHandler;
         _listPlansHandler = listPlansHandler;
         _scheduleHandler = scheduleHandler;
+        _savePlanAsTemplateHandler = savePlanAsTemplateHandler;
+        _listPlansTemplatesHandler = listPlanTemplatesHandler;
+        _applyPlanTemplateHandler = applyPlanTemplateHandler;
     }
 
     [HttpPost]
@@ -93,5 +105,38 @@ public class TrainingPlanController : ControllerBase
 
         var assignmentId = await _assignPlanHandler.Handle(command, cancellationToken);
         return Created($"/api/v1/training-plans/assignments/{assignmentId}", new { assignmentId, message = "Plan asignado exitosamente." });
+    }
+
+    [HttpPost("{id:guid}/save-as-template")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<ActionResult<TrainingPlanDetailDto>> SaveAsTemplate(Guid id, [FromBody] SavePlanAsTemplateRequest request, CancellationToken cancellationToken = default)
+    {
+        var plan = await _savePlanAsTemplateHandler.Handle(new SavePlanAsTemplateCommand(id, request.Name), cancellationToken);
+
+        return Created($"/api/v1/training-plans/{plan.Id}", plan);
+    }
+
+    [HttpGet("templates")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<ActionResult<List<TrainingPlanSummaryDto>>> ListTemplates(CancellationToken cancellationToken = default)
+    {
+        var templates = await _listPlansTemplatesHandler.Handle( new ListPlanTemplatesQuery(), cancellationToken);
+
+        return Ok(templates);
+    }
+
+    [HttpPost("templates/{id:guid}/apply")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> ApplyTemplate(Guid id, [FromBody] ApplyPlanTemplateRequest request, CancellationToken cancellationToken = default)
+    {
+        var command = new ApplyPlanTemplateCommand(
+            id,
+            request.StartDate,
+            request.CategoryId,
+            request.AthleteId);
+
+        var assignmentId = await _applyPlanTemplateHandler.Handle(command, cancellationToken);
+
+        return Created($"/api/v1/training-plans/assignments/{assignmentId}", new { assignmentId, message = "Plantilla aplicada y asignada exitosamente." });
     }
 }
