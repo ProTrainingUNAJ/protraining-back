@@ -1,10 +1,6 @@
 using Domain.Common;
 using Domain.Exceptions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Text.Json.Serialization;
 
 namespace Domain.Entities
 {
@@ -19,6 +15,7 @@ namespace Domain.Entities
         public List<string> Images { get; private set; } = [];
         public List<string> PrimaryMuscles { get; private set; } = [];
         public List<string> SecondaryMuscles { get; private set; } = [];
+        public Origin Origin { get; private set; }
 
         // Variantes (KAN-554): una variante es un ejercicio "hijo" de su ejercicio base
         // (por ejemplo "Agarre cerrado" de "Press de banca con barra"). Conserva su id,
@@ -38,7 +35,9 @@ namespace Domain.Entities
             string? equipment = null,
             List<string>? images = null,
             List<string>? primaryMuscles = null,
-            List<string>? secondaryMuscles = null)
+            List<string>? secondaryMuscles = null,
+            Origin origin = Origin.Catalog
+            )
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("El nombre del ejercicio no puede estar vacío.");
@@ -55,7 +54,8 @@ namespace Domain.Entities
                 Equipment = equipment?.Trim(),
                 Images = images ?? [],
                 PrimaryMuscles = primaryMuscles ?? [],
-                SecondaryMuscles = secondaryMuscles ?? []
+                SecondaryMuscles = secondaryMuscles ?? [],
+                Origin = origin
             };
         }
 
@@ -95,5 +95,13 @@ namespace Domain.Entities
             ParentExerciseId = null;
             VariantLabel = null;
         }
+    }
+    
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum Origin
+    {
+        Catalog,
+        Coach,
+        Ai
     }
 }

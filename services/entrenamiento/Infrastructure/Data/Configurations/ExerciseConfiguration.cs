@@ -24,6 +24,7 @@ namespace Infrastructure.Data.Configurations
             builder.Property(e => e.Images).HasColumnName("images");
             builder.Property(e => e.PrimaryMuscles).HasColumnName("primary_muscles");
             builder.Property(e => e.SecondaryMuscles).HasColumnName("secondary_muscles");
+            builder.Property(e => e.Origin).HasColumnName("origin").HasConversion<string>().HasMaxLength(20).HasDefaultValue(Origin.Catalog).IsRequired();
             builder.Property(e => e.ParentExerciseId).HasColumnName("parent_exercise_id");
             builder.Property(e => e.VariantLabel).HasColumnName("variant_label").HasMaxLength(100);
             builder.Ignore(e => e.IsVariant);

@@ -70,7 +70,7 @@ public sealed class ExerciseRestrictionsEndpointPostgresTests
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 
-            var controller = new ExerciseController(listHandler, checkHandler, getSubstitutesHandler);
+            var controller = new ExerciseController(listHandler, checkHandler, getSubstitutesHandler, null);
 
             // Obtenemos los Ids guardados en PostgreSQL
             var pressMilitar = await queryContext.Exercises.FirstAsync(e => e.Name == "Press militar tras nuca");

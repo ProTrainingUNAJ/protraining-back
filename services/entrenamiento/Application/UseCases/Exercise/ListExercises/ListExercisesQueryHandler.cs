@@ -30,7 +30,7 @@ namespace Application.UseCases.Exercise.ListExercises
                 var found = await exerciseRepository.ListByIdsAsync(ids, cancellationToken);
                 exercisesDto = found.Select(ToDto).ToList();
                 return new PaginatedExerciseResponse(exercisesDto, 1, MaxPageSize, exercisesDto.Count, 1);
-            }
+            };
 
             if (request.GroupVariants)
             {
@@ -92,6 +92,7 @@ namespace Application.UseCases.Exercise.ListExercises
             SecondaryMuscles = e.SecondaryMuscles,
             ParentExerciseId = e.ParentExerciseId,
             VariantLabel = e.VariantLabel,
+            Origin = e.Origin
         };
     }
 }
