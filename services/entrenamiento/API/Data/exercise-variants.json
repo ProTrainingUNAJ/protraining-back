@@ -9,6 +9,7 @@
       { "name": "Press de banca con barra en banco declinado con agarre ancho", "label": "Declinado, agarre ancho" },
       { "name": "Press de banca - Levantamiento de pesas", "label": "Estilo powerlifting" },
       { "name": "Press de banca con mancuernas", "label": "Con mancuernas" },
+      { "name": "Press de banca con mancuernas en el piso", "label": "Con mancuernas en el piso" },
       { "name": "Press de banca con mancuernas y agarre neutro", "label": "Con mancuernas, agarre neutro" },
       { "name": "Press de banca con mancuernas en banco declinado", "label": "Con mancuernas, declinado" },
       { "name": "Press de banca inclinado con mancuernas y agarre de martillo", "label": "Inclinado con mancuernas, agarre martillo" },
@@ -16,7 +17,6 @@
       { "name": "Press de banca en máquina Smith", "label": "En máquina Smith" },
       { "name": "Press de banca inclinado en máquina Smith", "label": "Inclinado en máquina Smith" },
       { "name": "Press de banca con máquina", "label": "En máquina" },
-      { "name": "Press de banca con dos pesas rusas", "label": "Con dos pesas rusas" },
       { "name": "Press de banca con bandas", "label": "Con bandas" },
       { "name": "Press de banca con cadenas", "label": "Con cadenas" }
     ]
@@ -39,7 +39,10 @@
       { "name": "Sentadilla con mancuernas", "label": "Con mancuernas" },
       { "name": "Sentadilla con copa", "label": "Copa (goblet)" },
       { "name": "Sentadillas con bandas", "label": "Con bandas" },
-      { "name": "Sentadillas con cadenas", "label": "Con cadenas" }
+      { "name": "Sentadillas con cadenas", "label": "Con cadenas" },
+      { "name": "Sentadilla Hack", "label": "Hack en máquina" },
+      { "name": "Sentadillas Hack con postura estrecha", "label": "Hack en máquina, postura estrecha" },
+      { "name": "Sentadilla Hack con barra", "label": "Hack con barra" }
     ]
   },
   {
@@ -78,6 +81,7 @@
   {
     "base": "Dominadas",
     "variants": [
+      { "name": "dominadas", "label": "Agarre prono (pull-up)" },
       { "name": "Dominadas con peso", "label": "Con lastre" },
       { "name": "Dominadas asistidas con banda", "label": "Asistidas con banda" },
       { "name": "Dominadas con barra en V", "label": "Con barra en V" },
@@ -89,9 +93,9 @@
     "base": "Zancadas con mancuernas",
     "variants": [
       { "name": "Zancada con barra", "label": "Con barra" },
+      { "name": "Zancada caminando con barra", "label": "Caminando con barra" },
       { "name": "Zancada trasera con mancuernas", "label": "Trasera con mancuernas" },
-      { "name": "Zancada caminando con el peso corporal", "label": "Caminando, peso corporal" },
-      { "name": "Zancada inversa cruzada", "label": "Inversa cruzada" }
+      { "name": "Zancada caminando con el peso corporal", "label": "Caminando, peso corporal" }
     ]
   },
   {
@@ -99,7 +103,9 @@
     "variants": [
       { "name": "Prensa militar permanente", "label": "De pie" },
       { "name": "Prensa de hombro a máquina (militar)", "label": "En máquina" },
-      { "name": "Press militar con pesa rusa a dos brazos", "label": "Con pesas rusas" }
+      { "name": "Press militar con pesa rusa a dos brazos", "label": "Con pesas rusas" },
+      { "name": "Presión de empuje", "label": "Push press (con impulso de piernas)" },
+      { "name": "Press de banca con dos pesas rusas", "label": "Push press con dos pesas rusas" }
     ]
   },
   {

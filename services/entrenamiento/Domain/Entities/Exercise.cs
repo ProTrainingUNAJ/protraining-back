@@ -79,5 +79,21 @@ namespace Domain.Entities
             ParentExerciseId = baseExercise.Id;
             VariantLabel = variantLabel.Trim();
         }
+
+        // Corrige el nombre (por ejemplo, una traducción del catálogo que repetía el de otro ejercicio).
+        public void Rename(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new DomainException("El nombre del ejercicio no puede estar vacío.");
+
+            Name = name.Trim();
+        }
+
+        // Vuelve a ser un ejercicio suelto (por ejemplo, si se sacó de su familia).
+        public void ClearVariant()
+        {
+            ParentExerciseId = null;
+            VariantLabel = null;
+        }
     }
 }
