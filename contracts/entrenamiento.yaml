@@ -64,6 +64,20 @@ paths:
             type: boolean
             default: false
           description: Si es true, filtra únicamente los ejercicios utilizados por el PF en sus planificaciones o con récords (1RM) cargados.
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+          description: >
+            Ejercicios puntuales por id (`?ids=a&ids=b`, hasta 100), por ejemplo para que el Asistente verifique
+            que los ejercicios de un borrador existen en el catálogo (KAN-414). Si viene, se ignoran los demás filtros.
         - name: groupVariants
           in: query
           required: false

@@ -10,6 +10,9 @@ public interface IExerciseRepository
     // variantes cumple los filtros (por ejemplo, la búsqueda coincide con "Agarre cerrado").
     Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default);
 
+    // Ejercicios por id (KAN-414): el Asistente valida que los ejercicios de un borrador existan.
+    Task<List<Exercise>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+
     // Todas las variantes de los ejercicios base indicados.
     Task<List<Exercise>> GetVariantsAsync(IReadOnlyCollection<Guid> baseExerciseIds, CancellationToken cancellationToken = default);
 

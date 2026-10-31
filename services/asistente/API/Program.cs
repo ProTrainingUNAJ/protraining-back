@@ -136,3 +136,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
+
+// Visible para WebApplicationFactory<Program>: el test de punta a punta (KAN-414) levanta este mismo arranque.
+public partial class Program;
