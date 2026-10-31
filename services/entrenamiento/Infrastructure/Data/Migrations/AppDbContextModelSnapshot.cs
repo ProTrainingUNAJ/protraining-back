@@ -121,6 +121,14 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Catalog")
+                        .HasColumnName("origin");
+                        
                     b.Property<Guid?>("ParentExerciseId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_exercise_id");

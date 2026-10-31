@@ -2,6 +2,7 @@ using Application.Interfaces.Persistence;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace Infrastructure.Repositories
 {
@@ -12,6 +13,11 @@ namespace Infrastructure.Repositories
         public ExerciseRepository(AppDbContext context)
         {
             this.context = context;
+        }
+
+        public async Task AddExercise(Exercise exercise, CancellationToken cancellationToken = default)
+        {
+            await context.Exercises.AddAsync(exercise, cancellationToken);
         }
 
         public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
@@ -96,6 +102,15 @@ namespace Infrastructure.Repositories
             return await context.Exercises.AnyAsync(e => e.Id == id, cancellationToken);
         }
 
+        public async Task<Exercise?> FindByNameAsync(string name, CancellationToken cancellationToken = default)
+        {
+            var trimmed = name.Trim();
+            var exercises = await context.Exercises.ToListAsync(cancellationToken);
+            var exercise = exercises.FirstOrDefault(e => CultureInfo.InvariantCulture.CompareInfo.Compare(e.Name,trimmed,CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) == 0);
+
+            return exercise;
+        }
+        
         private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf)
         {
             if (usedByPf)
