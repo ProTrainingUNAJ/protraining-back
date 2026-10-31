@@ -222,6 +222,42 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{athleteId}/daily-load/week:
+    get:
+      tags:
+        - Loads and Attendance
+      summary: Obtener la semana del atleta con los días completados
+      description: >
+        Devuelve los 7 días de la semana (lunes a domingo) del atleta, marcando
+        cuáles tienen carga del día registrada.
+      operationId: getAthleteWeek
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Semana del atleta obtenida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteWeek'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   # KAN-445: corrección manual de asistencia por el PF (agregado en esta rama).
   /api/v1/athletes/{athleteId}/attendance:
     patch:
@@ -750,6 +786,50 @@ components:
           $ref: '#/components/schemas/DailyLoadActivity'
         individualWork:
           $ref: '#/components/schemas/DailyLoadActivity'
+
+    AthleteWeekDay:
+      type: object
+      required:
+        - date
+        - dayOfWeek
+        - completed
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-26"
+        dayOfWeek:
+          type: string
+          example: "Monday"
+        completed:
+          type: boolean
+          example: true
+
+    AthleteWeek:
+      type: object
+      required:
+        - weekStart
+        - weekEnd
+        - completedDays
+        - days
+      properties:
+        weekStart:
+          type: string
+          format: date
+          example: "2026-10-26"
+        weekEnd:
+          type: string
+          format: date
+          example: "2026-11-01"
+        completedDays:
+          type: array
+          items:
+            type: string
+            format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/AthleteWeekDay'
 
     SetAttendanceRequest:
       type: object
