@@ -23,6 +23,15 @@ namespace Application.UseCases.Exercise.ListExercises
             List<ExerciseDto> exercisesDto;
             int totalCount;
 
+            if (request.Ids is { Count: > 0 })
+            {
+                // KAN-414: el Asistente verifica que los ejercicios de un borrador existan en el catálogo.
+                var ids = request.Ids.Distinct().Take(MaxPageSize).ToList();
+                var found = await exerciseRepository.ListByIdsAsync(ids, cancellationToken);
+                exercisesDto = found.Select(ToDto).ToList();
+                return new PaginatedExerciseResponse(exercisesDto, 1, MaxPageSize, exercisesDto.Count, 1);
+            }
+
             if (request.GroupVariants)
             {
                 // KAN-554: los ejercicios base de la página, cada uno con todas sus variantes.

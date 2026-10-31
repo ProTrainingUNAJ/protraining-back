@@ -66,6 +66,18 @@ namespace Infrastructure.Repositories
             return (items, totalCount);
         }
 
+        public async Task<List<Exercise>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+        {
+            if (ids.Count == 0)
+                return [];
+
+            return await context.Exercises
+                .AsNoTracking()
+                .Where(e => ids.Contains(e.Id))
+                .OrderBy(e => e.Name)
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<List<Exercise>> GetVariantsAsync(IReadOnlyCollection<Guid> baseExerciseIds, CancellationToken cancellationToken = default)
         {
             if (baseExerciseIds.Count == 0)

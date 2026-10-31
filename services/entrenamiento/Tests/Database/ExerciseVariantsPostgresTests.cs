@@ -113,6 +113,24 @@ public sealed class ExerciseVariantsPostgresTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "RequiresDocker")]
+    public async Task Given_Ids_When_Listing_Then_ReturnsExactlyThoseExercisesIgnoringOtherFilters()
+    {
+        await using var context = new AppDbContext(_options, _currentUser.Object);
+
+        var result = await CreateHandler(context).Handle(new ListExercisesQuery
+        {
+            Ids = [_closeGrip.Id, _squat.Id, Guid.NewGuid()],
+            Search = "algo que no coincide",
+            GroupVariants = true,
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, i => i.Id == _closeGrip.Id && i.ParentExerciseId == _bench.Id);
+        Assert.Contains(result.Items, i => i.Id == _squat.Id);
+    }
+
+    [Fact]
+    [Trait("Category", "RequiresDocker")]
     public async Task Given_ABaseWithVariants_When_DeletingTheBaseRow_Then_DatabaseRejectsIt()
     {
         await using var context = new AppDbContext(_options, _currentUser.Object);
