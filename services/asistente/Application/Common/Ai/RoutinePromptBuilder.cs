@@ -1,6 +1,7 @@
 namespace Application.Common.Ai;
 
 using System.Text;
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Domain.Common;
@@ -183,8 +184,7 @@ public static class RoutinePromptBuilder
         if (string.IsNullOrWhiteSpace(goal))
             return [];
 
-        var text = goal.Trim().ToLowerInvariant()
-            .Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u");
+        var text = TextNormalizer.Normalize(goal);
         var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Piernas / Tren Inferior
@@ -193,7 +193,8 @@ public static class RoutinePromptBuilder
             text.Contains("gemelo") || text.Contains("pantorrilla") ||
             text.Contains("tren inferior") || text.Contains("lower body") ||
             text.Contains("sentadilla") || text.Contains("peso muerto") ||
-            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada"))
+            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada") ||
+            text.Contains("hip thrust"))
         {
             groups.Add("Piernas");
         }
@@ -211,7 +212,8 @@ public static class RoutinePromptBuilder
         if (text.Contains("espalda") || text.Contains("dorsal") ||
             text.Contains("traccion") || text.Contains("pull") ||
             text.Contains("remo") || text.Contains("dominada") ||
-            text.Contains("lumbar") || text.Contains("trapecio"))
+            text.Contains("lumbar") || text.Contains("trapecio") ||
+            text.Contains("jalon"))
         {
             groups.Add("Espalda");
         }
@@ -332,7 +334,7 @@ public static class RoutinePromptBuilder
 
         var normalizedEmphasis = muscleGroupEmphasis
             .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim().ToLowerInvariant())
+            .Select(TextNormalizer.Normalize)
             .ToHashSet();
 
         if (normalizedEmphasis.Count == 0)
@@ -345,8 +347,8 @@ public static class RoutinePromptBuilder
 
         foreach (var exercise in catalog)
         {
-            var group = exercise.MuscleGroup?.Trim().ToLowerInvariant();
-            var name = exercise.Name?.Trim().ToLowerInvariant();
+            var group = TextNormalizer.Normalize(exercise.MuscleGroup);
+            var name = TextNormalizer.Normalize(exercise.Name);
 
             var isMatch = normalizedEmphasis.Any(e =>
                 (!string.IsNullOrEmpty(group) && (group.Contains(e) || e.Contains(group))) ||

@@ -1,3 +1,5 @@
+﻿using Application.Interfaces.Persistence;
+using Application.UseCases.PfDecisions.GetAthleteDecisions;
 namespace Asistente.Tests;
 
 using System.Reflection;
@@ -43,7 +45,7 @@ public sealed class AssistantControllerTests
             ));
 
         var useCase = new SuggestRoutineUseCase(mockAiService.Object);
-        _controller = new AssistantController(useCase);
+        _controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
     }
 
     [Fact]
@@ -143,7 +145,7 @@ public sealed class AssistantControllerTests
         );
 
         var useCase = new SuggestRoutineUseCase(realAiService);
-        var controller = new AssistantController(useCase);
+        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
 
         var athlete1 = Guid.NewGuid();
         var athlete2 = Guid.NewGuid();
