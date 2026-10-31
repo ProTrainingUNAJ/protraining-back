@@ -957,6 +957,81 @@ paths:
                     type: string
                     example: "Healthy"
 
+  /api/v1/records/import/preview:
+    post:
+      tags:
+        - Records
+      summary: Vista previa de importación de récords desde CSV
+      operationId: previewRecordsImport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - athleteColumn
+                - exerciseColumn
+                - weightColumn
+              properties:
+                file:
+                  type: string
+                  format: binary
+                athleteColumn:
+                  type: string
+                exerciseColumn:
+                  type: string
+                weightColumn:
+                  type: string
+                dateColumn:
+                  type: string
+                sourceColumn:
+                  type: string
+      responses:
+        "200":
+          description: Vista previa generada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportRecordPreviewRow'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/records/import/confirm:
+    post:
+      tags:
+        - Records
+      summary: Confirmar importación de récords
+      operationId: confirmRecordsImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmImportRecordsRequest'
+      responses:
+        "200":
+          description: Récords importados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -998,6 +1073,82 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    ImportRecordPreviewRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+        athleteName:
+          type: string
+        exerciseName:
+          type: string
+        weightText:
+          type: string
+        dateText:
+          type: string
+          nullable: true
+        sourceText:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [Ok, AthleteNotFound, ExerciseNotFound, InvalidWeight]
+        message:
+          type: string
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          nullable: true
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordRow:
+      type: object
+      required:
+        - athleteId
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordsRequest:
+      type: object
+      required:
+        - rows
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfirmImportRecordRow'
+
     CheckExerciseRestrictionsRequest:
       type: object
       required:
