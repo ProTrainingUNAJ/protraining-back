@@ -7,6 +7,7 @@ public class TrainingPlan : BaseEntity
 {
     public string Name { get; private set; }
     public string? Objective { get; private set; }
+    public bool IsTemplate { get; private set; }
 
     public IReadOnlyCollection<TrainingWeek> Weeks => _weeks.AsReadOnly();
     private readonly List<TrainingWeek> _weeks = new();
@@ -14,18 +15,19 @@ public class TrainingPlan : BaseEntity
     public IReadOnlyCollection<PlanAssignment> Assignments => _assignments.AsReadOnly();
     private readonly List<PlanAssignment> _assignments = new();
 
-    private TrainingPlan(string name, string? objective)
+    private TrainingPlan(string name, string? objective, bool isTemplate)
     {
         Name = name;
         Objective = objective;
+        IsTemplate = isTemplate;
     }
 
-    public static TrainingPlan Create(string name, string? objective = null)
+    public static TrainingPlan Create(string name, string? objective = null, bool isTemplate = false)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre del plan no puede estar vacío.");
 
-        return new TrainingPlan(name, objective);
+        return new TrainingPlan(name, objective, isTemplate);
     }
 
     public void Update(string name, string? objective)
