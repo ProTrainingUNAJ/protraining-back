@@ -48,14 +48,28 @@ public class ConfirmRecordsImportCommandHandler
                     ? RecordSource.Reported
                     : AthleteRecordMapper.ParseOrigin(row.Origin);
 
+                var achievedAt = row.AchievedAt.HasValue
+                    ? DateTime.SpecifyKind(row.AchievedAt.Value, DateTimeKind.Utc)
+                    : DateTime.UtcNow;
+
                 var newRecord = Domain.Entities.AthleteRecord.Create(
                     row.AthleteId,
                     row.ExerciseId,
                     row.WeightOneRepMaxKg,
                     source,
-                    row.AchievedAt ?? DateTime.UtcNow);
+                    achievedAt);
 
                 var previousRecord = await _repository.GetActiveRecordAsync(row.AthleteId, row.ExerciseId, cancellationToken);
+
+                // Evita duplicar: si ya hay un récord vigente idéntico (mismo peso y fecha),
+                // se omite la fila en lugar de crear un duplicado.
+                if (previousRecord is not null
+                    && previousRecord.Weight == row.WeightOneRepMaxKg
+                    && previousRecord.Date == achievedAt)
+                {
+                    continue;
+                }
+
                 if (previousRecord is not null)
                 {
                     previousRecord.Deactivate();
