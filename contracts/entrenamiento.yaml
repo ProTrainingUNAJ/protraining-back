@@ -1636,6 +1636,18 @@ components:
           items:
             type: string
           example: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"]
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Grupos musculares principales involucrados en la ejecución.
+          example: ["Piernas", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Músculos secundarios o estabilizadores involucrados.
+          example: ["Isquiotibiales", "Zona Lumbar"]
         sets:
           type: integer
           example: 4
