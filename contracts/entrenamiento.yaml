@@ -51,6 +51,12 @@ paths:
           schema:
             type: string
           description: Filtrar por grupo muscular principal (ej. Piernas, Pecho, Espalda, Core).
+        - name: muscle
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtrar por músculo puntual en español (ej. Isquiotibiales, Cuádriceps, Glúteos, Pecho).
         - name: equipment
           in: query
           required: false

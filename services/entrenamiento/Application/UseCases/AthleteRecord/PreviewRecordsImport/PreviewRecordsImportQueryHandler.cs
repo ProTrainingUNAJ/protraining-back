@@ -93,7 +93,7 @@ public class PreviewRecordsImportQueryHandler
                 exercise = await _exerciseRepository.FindByNameAsync(exerciseName, cancellationToken);
                 if (exercise is null)
                 {
-                    var (items, _) = await _exerciseRepository.ListAsync(exerciseName, null, null, false, 1, 1, cancellationToken);
+                    var (items, _) = await _exerciseRepository.ListAsync(exerciseName, null, null, null, false, 1, 1, cancellationToken);
                     exercise = items.FirstOrDefault();
                 }
 
