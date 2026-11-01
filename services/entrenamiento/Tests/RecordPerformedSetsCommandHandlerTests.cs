@@ -137,6 +137,26 @@ public class RecordPerformedSetsCommandHandlerTests
     }
 
     [Fact]
+    public async Task NoProposal_WhenProposedEqualsActiveRecord()
+    {
+        var currentRecord = AthleteRecord.Create(_athleteId, _exerciseId, 107.5m, RecordSource.Tested, DateTime.UtcNow);
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(_athleteId, _exerciseId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(currentRecord);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto { ExerciseId = _exerciseId, Weight = 90m, Reps = 6 }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(0, result.ProposalsGeneratedCount);
+        _proposalRepoMock.Verify(r => r.AddAsync(It.IsAny<RecordProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task NoProposal_WhenNoActiveRecord()
     {
         _athleteRecordRepoMock
