@@ -24,6 +24,11 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             {
                 InvalidCredentialsException invalidCreds => (401, invalidCreds.Message, (string?)null),
                 InvalidRefreshTokenException invalidRefresh => (401, invalidRefresh.Message, (string?)null),
+                PfRoleForbiddenException pfForbidden => (403, "Acceso no permitido.", pfForbidden.Message),
+                AthleteAlreadyExistsException athleteExists => (409, athleteExists.Message, (string?)null),
+                InvitationExpiredException expired => (410, "Invitación expirada.", expired.Message),
+                InvitationNotFoundException notFound => (400, "Invitación inválida.", notFound.Message),
+                StructureUnavailableException unavailable => (503, "Servicio no disponible.", unavailable.Message),
                 DomainException domain => (400, domain.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
