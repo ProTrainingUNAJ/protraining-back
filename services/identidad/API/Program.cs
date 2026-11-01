@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Application.UseCases.Auth.GetPfContact;
+using Infrastructure.Services.Structure;
+using Application.UseCases.Auth.RegisterByInvitation;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -48,11 +50,21 @@ builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 // Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+
+// Cliente HTTP hacia Estructura para validar invitaciones (KAN-397)
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"] ?? "http://localhost:8082";
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
+{
+    client.BaseAddress = new Uri(structureBaseUrl);
+});
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();
+builder.Services.AddScoped<RegisterByInvitationUseCase>();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
