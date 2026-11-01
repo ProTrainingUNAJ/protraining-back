@@ -81,6 +81,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/auth/register-by-invitation:
+    post:
+      tags:
+        - Authentication
+      summary: Registro de atleta por invitación
+      description: Registra la cuenta de un nuevo atleta a partir de un token de invitación de categoría (KAN-397). Rechaza con 403 si el email ya existe con rol PreparadorFisico, responde 409 si ya existe como Atleta, y 410 o 400 si el token de invitación es inválido o venció.
+      operationId: registerByInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterByInvitationRequest'
+      responses:
+        "200":
+          description: Cuenta creada exitosamente. Devuelve el token JWT y los datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          description: No se permite el registro. El usuario ya existe con rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "409":
+          description: Ya existe una cuenta de atleta registrada con este correo electrónico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "410":
+          description: El enlace o código de invitación ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/users/me/phone:
     put:
       tags:
@@ -204,7 +246,34 @@ components:
           type: string
           description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
           example: "device-web-pwa-01"
-        
+    RegisterByInvitationRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - token
+      properties:
+        email:
+          type: string
+          format: email
+          example: "atleta.nuevo@protraining.com"
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+        fullName:
+          type: string
+          example: "Mateo Fernández"
+        token:
+          type: string
+          description: Token de invitación de la categoría (emitido por Estructura).
+          example: "e3b0c44298fc1c149afbf4c8996fb924"
+        deviceId:
+          type: string
+          nullable: true
+          description: Identificador del dispositivo cliente (opcional).
+          example: "device-web-pwa-01"        
 
     User:
       type: object
