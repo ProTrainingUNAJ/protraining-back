@@ -15,6 +15,7 @@ using Application.UseCases.Attendance.GetCategoryAttendanceToday;
 using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
+using Application.UseCases.Benchmark;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
@@ -115,6 +116,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                     services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
                 }
                 services.AddScoped<GetCategoryAveragesQueryHandler>();
+                services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.

@@ -17,6 +17,7 @@ using Application.UseCases.Attendance.GetCategoryAttendanceToday;
 using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
+using Application.UseCases.Benchmark;
 using Infrastructure.Services;
 using Domain.Services;
 using Infrastructure;
@@ -89,6 +90,7 @@ builder.Services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
 builder.Services.AddScoped<SetAttendanceCommandHandler>();
 builder.Services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
 builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
+builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 // Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
