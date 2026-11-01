@@ -1,4 +1,6 @@
+using Application.DTOs.AthleteRecords;
 using Application.DTOs.Routines;
+using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.Routines.GetTodayRoutine;
 using Application.UseCases.Routines.RecordPerformedSets;
 using Microsoft.AspNetCore.Authorization;
@@ -13,13 +15,16 @@ namespace API.Controllers
     {
         private readonly GetTodayRoutineQueryHandler queryHandler;
         private readonly RecordPerformedSetsCommandHandler recordPerformedSetsHandler;
+        private readonly CompleteOnboardingCommandHandler onboardingHandler;
 
         public MeController(
             GetTodayRoutineQueryHandler queryHandler,
-            RecordPerformedSetsCommandHandler recordPerformedSetsHandler)
+            RecordPerformedSetsCommandHandler recordPerformedSetsHandler,
+            CompleteOnboardingCommandHandler onboardingHandler)
         {
             this.queryHandler = queryHandler;
             this.recordPerformedSetsHandler = recordPerformedSetsHandler;
+            this.onboardingHandler = onboardingHandler;
         }
 
         [HttpGet("today-routine")]
@@ -40,6 +45,16 @@ namespace API.Controllers
             var result = await recordPerformedSetsHandler.Handle(new RecordPerformedSetsCommand(sets), cancellationToken);
 
             return Ok(result);
+        }
+
+        [HttpPost("onboarding")]
+        [Tags("Records")]
+        public async Task<ActionResult<List<AthleteRecordDto>>> CompleteOnboarding(
+            [FromBody] List<OnboardingRecordRequest> records,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await onboardingHandler.Handle(new CompleteOnboardingCommand(records), cancellationToken);
+            return Created("/api/v1/me/onboarding", result);
         }
     }
 }
