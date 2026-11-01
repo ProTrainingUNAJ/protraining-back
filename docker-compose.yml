@@ -86,6 +86,7 @@ services:
       <<: *api-env
       Database__Host: db-identidad
       Database__Name: identidad
+      Services__Estructura__BaseUrl: http://estructura:8080
     ports: ["8081:8080"]
     depends_on:
       db-identidad: { condition: service_healthy }
