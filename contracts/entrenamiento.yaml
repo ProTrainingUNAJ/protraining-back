@@ -294,6 +294,7 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+<<<<<<< HEAD
   /api/v1/records/reliability:
     get:
       tags:
@@ -328,6 +329,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecordReliabilitySummary'
+=======
+  /api/v1/me/onboarding:
+    post:
+      tags:
+        - Records
+      summary: Onboarding inicial de marcas físicas del atleta
+      description: Permite al atleta declarar sus antecedentes de fuerza durante la bienvenida. Cada marca se registra con origen estimado.
+      operationId: completeOnboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/OnboardingRecordRequest'
+      responses:
+        "201":
+          description: Marcas registradas exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+>>>>>>> origin/develop
         "401":
           $ref: '#/components/responses/Unauthorized'
         "404":
@@ -1516,6 +1545,7 @@ components:
           type: boolean
           example: true
 
+<<<<<<< HEAD
     RecordReliabilityAthlete:
       type: object
       required:
@@ -1569,6 +1599,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecordReliabilityGroup'
+=======
+    OnboardingRecordRequest:
+      type: object
+      required:
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 500
+>>>>>>> origin/develop
 
     SaveRecordRequest:
       type: object
