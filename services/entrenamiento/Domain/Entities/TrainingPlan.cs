@@ -56,4 +56,38 @@ public class TrainingPlan : BaseEntity
     {
         _weeks.Clear();
     }
+
+    public TrainingPlan CloneAs(string name, bool isTemplate)
+    {
+        var clone = Create(name, Objective, isTemplate);
+
+        foreach (var week in _weeks)
+        {
+            var newWeek = TrainingWeek.Create(week.WeekNumber, clone.Id);
+            foreach (var session in week.Sessions)
+            {
+                var newSession = TrainingSession.Create(
+                    newWeek.Id,
+                    session.Name,
+                    session.Order,
+                    session.DayOfWeek,
+                    session.CoachNotes);
+                foreach (var ex in session.PrescribedExercises)
+                {
+                    var newEx = PrescribedExercise.Create(
+                        ex.Order,
+                        ex.Sets,
+                        ex.Reps,
+                        ex.TargetPercentage,
+                        newSession.Id,
+                        ex.ExerciseId);
+                    newSession.AddPrescribedExercise(newEx);
+                }
+                newWeek.AddSession(newSession);
+            }
+            clone.AddWeek(newWeek);
+        }
+
+        return clone;
+    }
 }

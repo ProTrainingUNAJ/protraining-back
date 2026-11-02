@@ -494,91 +494,6 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/routine-templates:
-    get:
-      tags:
-        - Routines and Templates
-      summary: Listar plantillas de rutinas del preparador físico
-      description: Obtiene las planificaciones guardadas como plantillas maestras para reutilizar en otros grupos o temporadas.
-      operationId: listRoutineTemplates
-      responses:
-        "200":
-          description: Lista de plantillas recuperadas.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoutineTemplate'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
-
-    post:
-      tags:
-        - Routines and Templates
-      summary: Guardar una rutina como plantilla reutilizable
-      description: Permite guardar una estructura de entrenamiento como plantilla maestra.
-      operationId: createRoutineTemplate
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateRoutineTemplateRequest'
-      responses:
-        "201":
-          description: Plantilla creada exitosamente.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoutineTemplate'
-        "400":
-          $ref: '#/components/responses/BadRequest'
-
-  /api/v1/routine-templates/{templateId}/apply:
-    post:
-      tags:
-        - Routines and Templates
-      summary: Aplicar plantilla a una categoría o atleta
-      description: Clona y asigna la planificación de la plantilla a la categoría o deportista indicado.
-      operationId: applyRoutineTemplate
-      parameters:
-        - name: templateId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - dayOfWeek
-              properties:
-                categoryId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-                athleteId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  description: Opcional si se aplica a toda una categoría.
-                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                dayOfWeek:
-                  type: string
-                  enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
-                  example: "Monday"
-      responses:
-        "201":
-          description: Rutina asignada desde la plantilla con éxito.
-        "404":
-          $ref: '#/components/responses/NotFound'
-
   /api/v1/me/today-routine:
     get:
       tags:
@@ -908,6 +823,112 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         "403":
           $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/{id}/save-as-template:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Guardar una planificacion como plantilla
+      description: Copia profundamente una planificacion existente (con sus semanas y sesiones) y la guarda como plantilla. Requiere rol PreparadorFisico.
+      operationId: savePlanAsTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Plantilla Pretemporada"
+      responses:
+        "201":
+          description: Plantilla guardada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/templates:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar plantillas de planificacion
+      description: Obtiene las plantillas creadas por el preparador fisico autenticado. Requiere rol PreparadorFisico.
+      operationId: listPlanTemplates
+      responses:
+        "200":
+          description: Lista de plantillas recuperadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingPlanSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/training-plans/templates/{id}/apply:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Aplicar plantilla a una categoria o atleta
+      description: Clona profundamente la plantilla a una planificacion nueva y la asigna a la categoria o atleta indicado desde la fecha especificada. Requiere rol PreparadorFisico.
+      operationId: applyPlanTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                  example: "2026-11-02"
+                categoryId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                athleteId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: Plantilla aplicada y asignada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignPlanResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
         "404":
           $ref: '#/components/responses/NotFound'
 

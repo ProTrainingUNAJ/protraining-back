@@ -27,23 +27,7 @@ namespace Application.UseCases.TrainingPlans.SavePlanAsTemplate
             
             var template = await _trainingPlanRepository.GetWithDetailsByIdAsync(request.PlanId, cancellationToken);
 
-            var planTemplate = TrainingPlan.Create(request.Name, template.Objective, true);
-
-            foreach (var week in template.Weeks)
-            {
-                var newWeek = TrainingWeek.Create(week.WeekNumber, planTemplate.Id);
-                foreach (var session in week.Sessions)
-                {
-                    var newSession = TrainingSession.Create(newWeek.Id, session.Name, session.Order, session.DayOfWeek, session.CoachNotes);
-                    foreach (var ex in session.PrescribedExercises)
-                    {
-                        var newEx = PrescribedExercise.Create(ex.Order, ex.Sets, ex.Reps, ex.TargetPercentage, newSession.Id, ex.ExerciseId);
-                        newSession.AddPrescribedExercise(newEx);
-                    }
-                    newWeek.AddSession(newSession);
-                }
-                planTemplate.AddWeek(newWeek);
-            }
+            var planTemplate = template.CloneAs(request.Name, true);
 
             await _trainingPlanRepository.AddAsync(planTemplate, cancellationToken);
 
