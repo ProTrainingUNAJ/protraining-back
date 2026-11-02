@@ -294,7 +294,6 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-<<<<<<< HEAD
   /api/v1/records/reliability:
     get:
       tags:
@@ -329,7 +328,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecordReliabilitySummary'
-=======
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/me/onboarding:
     post:
       tags:
@@ -356,7 +359,6 @@ paths:
                   $ref: '#/components/schemas/Record'
         "400":
           $ref: '#/components/responses/BadRequest'
->>>>>>> origin/develop
         "401":
           $ref: '#/components/responses/Unauthorized'
         "404":
@@ -1545,7 +1547,6 @@ components:
           type: boolean
           example: true
 
-<<<<<<< HEAD
     RecordReliabilityAthlete:
       type: object
       required:
@@ -1599,7 +1600,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RecordReliabilityGroup'
-=======
+
     OnboardingRecordRequest:
       type: object
       required:
@@ -1614,7 +1615,6 @@ components:
           format: double
           minimum: 1
           maximum: 500
->>>>>>> origin/develop
 
     SaveRecordRequest:
       type: object
