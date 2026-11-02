@@ -201,7 +201,7 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
         }
     }
 
-    private sealed record CategoryAthleteItem(Guid AthleteId);
+    private sealed record CategoryAthleteItem(Guid Id);
 
     public async Task<IReadOnlyList<Guid>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default)
     {
@@ -226,7 +226,7 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
             {
                 case HttpStatusCode.OK:
                     var items = await response.Content.ReadFromJsonAsync<List<CategoryAthleteItem>>(cancellationToken);
-                    return items?.Select(i => i.AthleteId).ToList() ?? [];
+                    return items?.Select(i => i.Id).ToList() ?? [];
 
                 case HttpStatusCode.NotFound:
                     logger.LogWarning("La categoría {CategoryId} no fue encontrada en Estructura.", categoryId);

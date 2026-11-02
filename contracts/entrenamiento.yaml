@@ -294,6 +294,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/records/reliability:
+    get:
+      tags:
+        - Records
+      summary: Resumen de confiabilidad de los récords de una categoría
+      description: >
+        Devuelve, por grupo de confiabilidad, la cantidad, el porcentaje y la lista de
+        atletas de la categoría. Los grupos salen del origen del récord vigente más
+        confiable de cada atleta (Testeado, Reportado, Estimado, Sin dato). Un récord
+        con origen Epley cuenta como Testeado. Opcionalmente se puede filtrar por un
+        solo ejercicio con exerciseId.
+      operationId: getRecordsReliability
+      parameters:
+        - name: categoryId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la categoría.
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar la confiabilidad a un solo ejercicio.
+      responses:
+        "200":
+          description: Resumen de confiabilidad obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordReliabilitySummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/me/onboarding:
     post:
       tags:
@@ -1507,6 +1546,60 @@ components:
         isCurrent:
           type: boolean
           example: true
+
+    RecordReliabilityAthlete:
+      type: object
+      required:
+        - athleteId
+        - name
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    RecordReliabilityGroup:
+      type: object
+      required:
+        - group
+        - count
+        - percentage
+        - athletes
+      properties:
+        group:
+          type: string
+          enum: [Tested, Reported, Estimated, NoData]
+        count:
+          type: integer
+        percentage:
+          type: number
+          format: double
+        athletes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityAthlete'
+
+    RecordReliabilitySummary:
+      type: object
+      required:
+        - categoryId
+        - totalAthletes
+        - groups
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        totalAthletes:
+          type: integer
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityGroup'
 
     OnboardingRecordRequest:
       type: object
