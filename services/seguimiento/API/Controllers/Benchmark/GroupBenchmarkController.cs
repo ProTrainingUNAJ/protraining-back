@@ -13,7 +13,7 @@ public sealed class GroupBenchmarkController(
 {
     /// <summary>
     /// Retorna los números del atleta frente al promedio de su grupo (KAN-449).
-    /// Si intenta consultar un ID ajeno, responde 404 (KAN-450).
+    /// Si un atleta intenta consultar un ID ajeno, responde 403 Forbidden.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(GroupBenchmarkResponseDto), StatusCodes.Status200OK)]
@@ -33,4 +33,3 @@ public sealed class GroupBenchmarkController(
         return Ok(result);
     }
 }
-
