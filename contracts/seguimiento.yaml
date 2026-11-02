@@ -405,6 +405,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Métricas comparativas obtenidas.
@@ -412,6 +418,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GroupBenchmarkResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -1005,6 +1015,9 @@ components:
           type: string
           format: uuid
           example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        categoryName:
+          type: string
+          example: "Primera División"
         metrics:
           type: array
           items:
@@ -1012,7 +1025,6 @@ components:
             required:
               - dimension
               - athleteValue
-              - groupAverage
             properties:
               dimension:
                 type: string
@@ -1022,9 +1034,31 @@ components:
                 example: 140.0
               groupAverage:
                 type: number
+                nullable: true
                 example: 125.5
+              unit:
+                type: string
+                example: "kg"
+              difference:
+                type: number
+                nullable: true
+                example: 14.5
+              percentageDifference:
+                type: number
+                nullable: true
+                example: 11.5
+              direction:
+                type: string
+                example: "HigherIsBetter"
+              status:
+                type: string
+                example: "AboveAverage"
+              isWeakestPoint:
+                type: boolean
+                example: false
               trend:
                 type: string
+                nullable: true
                 example: "Superior al promedio (+11.5%)"
 
     CreateInjuryRequest:

@@ -45,7 +45,7 @@ public sealed class GroupBenchmarkEndpointTests
         var cats = athleteCategories ?? new[] { (_categoryId, "Primera División") };
         var memberships = categoryMemberships ?? new Dictionary<Guid, IReadOnlyList<Guid>>
         {
-            [_categoryId] = new[] { authenticatedAthleteId, Guid.NewGuid(), Guid.NewGuid() }
+            [_categoryId] = new[] { authenticatedAthleteId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() }
         };
 
         factory.Structure.Behavior = (request, _) =>
@@ -87,17 +87,21 @@ public sealed class GroupBenchmarkEndpointTests
     public async Task KAN449_01_Given_AuthenticatedAthlete_When_QueriesOwnBenchmark_Then_ReturnsOwnNumbersAndCategoryAverage()
     {
         var testService = new TestFitnessMeasurementService();
-        var peerId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
 
-        // Salto vertical: Atleta tiene 30 cm, Compañero tiene 40 cm -> Promedio de grupo = 35.0 cm
+        // Salto vertical: Atleta 30 cm; Compañeros: 34, 36, 40 cm -> Promedio categoría = (30+34+36+40)/4 = 35.0 cm
         testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 30.0, DateTime.UtcNow);
-        testService.Add(peerId, "Salto Vertical CMJ", "cm", 40.0, DateTime.UtcNow);
+        testService.Add(peer1, "Salto Vertical CMJ", "cm", 34.0, DateTime.UtcNow);
+        testService.Add(peer2, "Salto Vertical CMJ", "cm", 36.0, DateTime.UtcNow);
+        testService.Add(peer3, "Salto Vertical CMJ", "cm", 40.0, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, peerId }
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -124,7 +128,7 @@ public sealed class GroupBenchmarkEndpointTests
     }
 
     [Fact]
-    public async Task KAN449_02_Given_AuthenticatedAthlete_When_QueriesOtherAthlete_Then_Returns404NotFoundNever403()
+    public async Task KAN449_02_Given_AuthenticatedAthlete_When_QueriesOtherAthlete_Then_Returns403Forbidden()
     {
         var testService = new TestFitnessMeasurementService();
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
@@ -135,24 +139,28 @@ public sealed class GroupBenchmarkEndpointTests
         // El atleta _athleteId intenta consultar el perfil de _otherAthleteId
         var response = await client.GetAsync($"api/v1/athletes/{_otherAthleteId}/group-benchmark");
 
-        // Requisito mandatorio KAN-450: 404 Not Found, NUNCA 403
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        // Requisito mandatorio KAN-449: HTTP 403 Forbidden
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
     public async Task KAN449_03_Given_AuthenticatedAthlete_When_QueriesOwnBenchmark_Then_ResponseContainsZeroPeerDataOrIds()
     {
         var testService = new TestFitnessMeasurementService();
-        var peerId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
 
         testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 32.0, DateTime.UtcNow);
-        testService.Add(peerId, "Salto Vertical CMJ", "cm", 38.0, DateTime.UtcNow);
+        testService.Add(peer1, "Salto Vertical CMJ", "cm", 38.0, DateTime.UtcNow);
+        testService.Add(peer2, "Salto Vertical CMJ", "cm", 36.0, DateTime.UtcNow);
+        testService.Add(peer3, "Salto Vertical CMJ", "cm", 34.0, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, peerId }
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -162,7 +170,9 @@ public sealed class GroupBenchmarkEndpointTests
         var rawJson = await response.Content.ReadAsStringAsync();
 
         // Validación estricta de privacidad: ningún ID ajeno, nombre de compañero o valor crudo ajeno
-        Assert.DoesNotContain(peerId.ToString(), rawJson);
+        Assert.DoesNotContain(peer1.ToString(), rawJson);
+        Assert.DoesNotContain(peer2.ToString(), rawJson);
+        Assert.DoesNotContain(peer3.ToString(), rawJson);
         Assert.DoesNotContain("Compañero", rawJson);
         Assert.DoesNotContain("38.0", rawJson);
     }
@@ -197,15 +207,24 @@ public sealed class GroupBenchmarkEndpointTests
     public async Task KAN449_06_Given_AthleteInMultipleCategories_When_QueriesSpecificCategory_Then_ReturnsAveragesOfThatCategory()
     {
         var testService = new TestFitnessMeasurementService();
-        var resId1 = Guid.NewGuid();
-        var primId1 = Guid.NewGuid();
+        var res1 = Guid.NewGuid();
+        var res2 = Guid.NewGuid();
+        var res3 = Guid.NewGuid();
 
-        // En Reserva (_categoryId): promedio = 30 cm
+        var prim1 = Guid.NewGuid();
+        var prim2 = Guid.NewGuid();
+        var prim3 = Guid.NewGuid();
+
+        // En Reserva (_categoryId): Atleta 35 cm, Compañeros 25, 27, 33 cm -> Promedio = (35+25+27+33)/4 = 30.0 cm
         testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 35.0, DateTime.UtcNow);
-        testService.Add(resId1, "Salto Vertical CMJ", "cm", 25.0, DateTime.UtcNow);
+        testService.Add(res1, "Salto Vertical CMJ", "cm", 25.0, DateTime.UtcNow);
+        testService.Add(res2, "Salto Vertical CMJ", "cm", 27.0, DateTime.UtcNow);
+        testService.Add(res3, "Salto Vertical CMJ", "cm", 33.0, DateTime.UtcNow);
 
-        // En Primera (_secondCategoryId): promedio = 40 cm
-        testService.Add(primId1, "Salto Vertical CMJ", "cm", 45.0, DateTime.UtcNow);
+        // En Primera (_secondCategoryId): Atleta 35 cm, Compañeros 41, 41, 43 cm -> Promedio = (35+41+41+43)/4 = 40.0 cm
+        testService.Add(prim1, "Salto Vertical CMJ", "cm", 41.0, DateTime.UtcNow);
+        testService.Add(prim2, "Salto Vertical CMJ", "cm", 41.0, DateTime.UtcNow);
+        testService.Add(prim3, "Salto Vertical CMJ", "cm", 43.0, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
@@ -216,8 +235,8 @@ public sealed class GroupBenchmarkEndpointTests
             },
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, resId1 },
-                [_secondCategoryId] = new[] { _athleteId, primId1 }
+                [_categoryId] = new[] { _athleteId, res1, res2, res3 },
+                [_secondCategoryId] = new[] { _athleteId, prim1, prim2, prim3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -232,7 +251,7 @@ public sealed class GroupBenchmarkEndpointTests
         Assert.Equal("Primera División", data.CategoryName);
 
         var metric = Assert.Single(data.Metrics);
-        Assert.Equal(40.0, metric.GroupAverage); // (35 + 45) / 2 = 40.0
+        Assert.Equal(40.0, metric.GroupAverage);
         Assert.Equal(35.0, metric.AthleteValue);
         Assert.Equal(-5.0, metric.Difference);
         Assert.Equal("BelowAverage", metric.Status);
@@ -242,18 +261,22 @@ public sealed class GroupBenchmarkEndpointTests
     public async Task KAN449_07_Given_TimedSprintTest_When_LowerTimeIsBetter_Then_CorrectDirectionAndStatusAssigned()
     {
         var testService = new TestFitnessMeasurementService();
-        var peerId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
 
-        // Sprint 30m: Atleta tiene 4.0 s, Compañero tiene 4.6 s -> Promedio = 4.3 s
+        // Sprint 30m: Atleta 4.0 s, Compañeros 4.3, 4.4, 4.5 s -> Promedio categoría = (4.0+4.3+4.4+4.5)/4 = 4.3 s
         // Menor tiempo es mejor -> Atleta está más rápido (+7.0% ventaja)
         testService.Add(_athleteId, "Sprint 30m", "s", 4.0, DateTime.UtcNow);
-        testService.Add(peerId, "Sprint 30m", "s", 4.6, DateTime.UtcNow);
+        testService.Add(peer1, "Sprint 30m", "s", 4.3, DateTime.UtcNow);
+        testService.Add(peer2, "Sprint 30m", "s", 4.4, DateTime.UtcNow);
+        testService.Add(peer3, "Sprint 30m", "s", 4.5, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, peerId }
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -274,21 +297,27 @@ public sealed class GroupBenchmarkEndpointTests
     public async Task KAN449_08_Given_MultipleTestsWithDeficits_When_Evaluating_Then_WeakestPointHasMostNegativeRelativeDelta()
     {
         var testService = new TestFitnessMeasurementService();
-        var peerId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
 
-        // Salto CMJ: Atleta 30 cm vs Promedio 35 cm (-14.3% déficit)
+        // Salto CMJ: Atleta 30 cm vs Promedio 35 cm (-14.3% déficit) -> Compañeros: 34, 36, 40
         testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 30.0, DateTime.UtcNow);
-        testService.Add(peerId, "Salto Vertical CMJ", "cm", 40.0, DateTime.UtcNow);
+        testService.Add(peer1, "Salto Vertical CMJ", "cm", 34.0, DateTime.UtcNow);
+        testService.Add(peer2, "Salto Vertical CMJ", "cm", 36.0, DateTime.UtcNow);
+        testService.Add(peer3, "Salto Vertical CMJ", "cm", 40.0, DateTime.UtcNow);
 
-        // Fuerza Sentadilla: Atleta 90 kg vs Promedio 100 kg (-10.0% déficit)
+        // Fuerza Sentadilla: Atleta 90 kg vs Promedio 100 kg (-10.0% déficit) -> Compañeros: 100, 102, 108 -> (90+100+102+108)/4 = 100.0
         testService.Add(_athleteId, "1RM Sentadilla", "kg", 90.0, DateTime.UtcNow);
-        testService.Add(peerId, "1RM Sentadilla", "kg", 110.0, DateTime.UtcNow);
+        testService.Add(peer1, "1RM Sentadilla", "kg", 100.0, DateTime.UtcNow);
+        testService.Add(peer2, "1RM Sentadilla", "kg", 102.0, DateTime.UtcNow);
+        testService.Add(peer3, "1RM Sentadilla", "kg", 108.0, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, peerId }
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -327,17 +356,22 @@ public sealed class GroupBenchmarkEndpointTests
     public async Task KAN449_10_Given_ValuesWithinNeutralThreshold_When_Evaluated_Then_MarkedAsNeutral()
     {
         var testService = new TestFitnessMeasurementService();
-        var peerId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
 
         // 35.5 cm vs promedio 35.0 cm (+1.4% de diferencia, dentro de +-2%)
+        // Atleta: 35.5; Compañeros: 34.5, 35.0, 35.0 -> (35.5 + 34.5 + 35.0 + 35.0) / 4 = 35.0
         testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 35.5, DateTime.UtcNow);
-        testService.Add(peerId, "Salto Vertical CMJ", "cm", 34.5, DateTime.UtcNow);
+        testService.Add(peer1, "Salto Vertical CMJ", "cm", 34.5, DateTime.UtcNow);
+        testService.Add(peer2, "Salto Vertical CMJ", "cm", 35.0, DateTime.UtcNow);
+        testService.Add(peer3, "Salto Vertical CMJ", "cm", 35.0, DateTime.UtcNow);
 
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
         SetupFakeStructure(factory, _athleteId,
             categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
             {
-                [_categoryId] = new[] { _athleteId, peerId }
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
             });
 
         var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
@@ -351,5 +385,55 @@ public sealed class GroupBenchmarkEndpointTests
         Assert.Equal("Neutral", metric.Status);
         Assert.False(metric.IsWeakestPoint);
     }
-}
 
+    [Fact]
+    public async Task KAN449_11_Given_LessThanThreePeersWithData_When_QueriesOwnBenchmark_Then_ReturnsInsufficientGroupDataAndNullAverage()
+    {
+        var testService = new TestFitnessMeasurementService();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+
+        // Solo 2 compañeros tienen mediciones (umbral k-anonimato requiere >= 3 compañeros)
+        testService.Add(_athleteId, "Salto Vertical CMJ", "cm", 30.0, DateTime.UtcNow);
+        testService.Add(peer1, "Salto Vertical CMJ", "cm", 35.0, DateTime.UtcNow);
+        testService.Add(peer2, "Salto Vertical CMJ", "cm", 40.0, DateTime.UtcNow);
+
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(customMeasurementService: testService);
+        SetupFakeStructure(factory, _athleteId,
+            categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
+            {
+                [_categoryId] = new[] { _athleteId, peer1, peer2 }
+            });
+
+        var client = factory.CreateAuthenticatedClient(_athleteId, "Atleta");
+        var response = await client.GetAsync($"api/v1/athletes/{_athleteId}/group-benchmark");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = await response.Content.ReadFromJsonAsync<GroupBenchmarkResponseDto>();
+        Assert.NotNull(data);
+
+        var metric = Assert.Single(data.Metrics);
+        // Debe conservar el valor del propio atleta
+        Assert.Equal(30.0, metric.AthleteValue);
+        // Promedio, diferencia, porcentaje y tendencia deben ser NULL para proteger privacidad
+        Assert.Null(metric.GroupAverage);
+        Assert.Null(metric.Difference);
+        Assert.Null(metric.PercentageDifference);
+        Assert.Null(metric.Trend);
+        Assert.Equal("InsufficientGroupData", metric.Status);
+        Assert.False(metric.IsWeakestPoint);
+    }
+
+    [Fact]
+    public async Task KAN449_12_Given_PFUser_When_CallsGroupBenchmark_Then_Returns403Forbidden()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync();
+        SetupFakeStructure(factory, _athleteId);
+
+        // Cliente autenticado con rol PreparadorFisico (endpoint exclusivo de Atleta)
+        var client = factory.CreateAuthenticatedClient(_athleteId, "PreparadorFisico");
+        var response = await client.GetAsync($"api/v1/athletes/{_athleteId}/group-benchmark");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+}
