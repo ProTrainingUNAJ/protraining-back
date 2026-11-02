@@ -614,4 +614,28 @@ public class ListExercisesTests : IAsyncLifetime
             Assert.Equal(0, totalCount);
         }
     }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConMusculoCuadricepsConTildeEnA_EncuentraSentadillaConCuadricepsEnBase()
+    {
+        // El front manda "cuádriceps" (tilde en la 'a'), pero la base tiene "cuadríceps" (tilde en la 'i')
+        var sentadilla = Exercise.Create("Sentadilla trasera", "Piernas", primaryMuscles: ["cuadríceps"]);
+        var rdl = Exercise.Create("Peso muerto rumano", "Piernas", primaryMuscles: ["isquiotibiales"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(sentadilla, rdl);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "cuádriceps", false, 1, 20);
+
+            Assert.Equal(1, totalCount);
+            Assert.Single(items);
+            Assert.Equal("Sentadilla trasera", items[0].Name);
+        }
+    }
 }

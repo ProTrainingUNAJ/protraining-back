@@ -478,7 +478,7 @@
     "id": "Alternating_Kettlebell_Row"
   },
   {
-    "name": "Fila de Renegados Alternante",
+    "name": "Remo renegade alternado",
     "force": "pull",
     "level": "expert",
     "mechanic": "compound",
@@ -6722,7 +6722,7 @@
     "id": "Elevated_Back_Lunge"
   },
   {
-    "name": "Filas de cables elevadas",
+    "name": "Remo elevado en polea",
     "force": "pull",
     "level": "intermediate",
     "mechanic": "compound",
@@ -9212,7 +9212,7 @@
     "id": "Internal_Rotation_with_Band"
   },
   {
-    "name": "Fila invertida",
+    "name": "Remo invertido",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -9238,7 +9238,7 @@
     "id": "Inverted_Row"
   },
   {
-    "name": "Fila invertida con tirantes",
+    "name": "Remo invertido con correas",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -10868,7 +10868,7 @@
     "id": "Leverage_Decline_Chest_Press"
   },
   {
-    "name": "Aproveche la fila alta",
+    "name": "Remo alto con palanca",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -10918,7 +10918,7 @@
     "id": "Leverage_Incline_Chest_Press"
   },
   {
-    "name": "Aproveche la fila ISO",
+    "name": "Remo con palanca ISO",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -11790,7 +11790,7 @@
     "id": "Lying_Supine_Dumbbell_Curl"
   },
   {
-    "name": "Fila en T tumbado",
+    "name": "Remo en barra T apoyado",
     "force": "pull",
     "level": "intermediate",
     "mechanic": "compound",
@@ -17038,7 +17038,7 @@
     "id": "See-Saw_Press_Alternating_Side_Press"
   },
   {
-    "name": "Fila de escopetas",
+    "name": "Remo escopeta en polea",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -17999,7 +17999,7 @@
     "id": "Sled_Reverse_Flye"
   },
   {
-    "name": "Fila de trineos",
+    "name": "Remo con trineo",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -20664,7 +20664,7 @@
     "id": "Straight-Arm_Pulldown"
   },
   {
-    "name": "Banco de barra recta, filas medias",
+    "name": "Remo medio en banco con barra recta",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -21020,7 +21020,7 @@
     "id": "Suspended_Reverse_Crunch"
   },
   {
-    "name": "Fila suspendida",
+    "name": "Remo en suspensión",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -21793,7 +21793,7 @@
     "id": "Upright_Cable_Row"
   },
   {
-    "name": "Fila vertical - Con bandas",
+    "name": "Remo vertical con bandas",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
