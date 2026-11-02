@@ -19,4 +19,7 @@ public interface IExerciseRepository
 
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Exercise?> FindByNameAsync(string name, CancellationToken cancellationToken = default);
+
+    // Catálogo completo en una sola consulta (KAN-389: el preview no debe consultar por fila).
+    Task<List<Exercise>> ListAllAsync(CancellationToken cancellationToken = default);
 }

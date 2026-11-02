@@ -110,6 +110,14 @@ namespace Infrastructure.Repositories
 
             return exercise;
         }
+
+        public async Task<List<Exercise>> ListAllAsync(CancellationToken cancellationToken = default)
+        {
+            return await context.Exercises
+                .AsNoTracking()
+                .OrderBy(e => e.Name)
+                .ToListAsync(cancellationToken);
+        }
         
         private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf)
         {

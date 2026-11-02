@@ -55,6 +55,21 @@ public class PreviewRecordsImportQueryHandler
                 athleteMap[key] = athlete;
         }
 
+        // El catálogo se carga una sola vez: buscar por fila en la base sería N+1 consultas.
+        var exercises = await _exerciseRepository.ListAllAsync(cancellationToken);
+        var exactExerciseMap = new Dictionary<string, Domain.Entities.Exercise>(StringComparer.Ordinal);
+        var normalizedExercises = new List<(string Name, Domain.Entities.Exercise Exercise)>(exercises.Count);
+        foreach (var exercise in exercises)
+        {
+            var key = Normalize(exercise.Name);
+            if (key.Length == 0)
+                continue;
+
+            if (!exactExerciseMap.ContainsKey(key))
+                exactExerciseMap[key] = exercise;
+            normalizedExercises.Add((key, exercise));
+        }
+
         var result = new List<ImportRecordPreviewRowDto>(dataRows.Count);
         var rowNumber = 1;
         foreach (var dataRow in dataRows)
@@ -67,6 +82,7 @@ public class PreviewRecordsImportQueryHandler
 
             Guid? athleteId = null;
             Guid? exerciseId = null;
+            string? matchedExerciseName = null;
             decimal? weight = null;
             DateTime? achievedAt = null;
             string? origin = null;
@@ -86,25 +102,29 @@ public class PreviewRecordsImportQueryHandler
                 message = $"No se encontró el atleta '{athleteName}'.";
             }
 
-            // Ejercicio
-            Domain.Entities.Exercise? exercise = null;
+            // Ejercicio: primero una coincidencia exacta en memoria; si no hay,
+            // se propone la mejor coincidencia por contención para que el PF la confirme.
             if (status == ImportRecordRowStatus.Ok)
             {
-                exercise = await _exerciseRepository.FindByNameAsync(exerciseName, cancellationToken);
-                if (exercise is null)
+                var exerciseKey = Normalize(exerciseName);
+                if (exerciseKey.Length > 0 && exactExerciseMap.TryGetValue(exerciseKey, out var exactExercise))
                 {
-                    var (items, _) = await _exerciseRepository.ListAsync(exerciseName, null, null, null, false, 1, 1, cancellationToken);
-                    exercise = items.FirstOrDefault();
-                }
-
-                if (exercise is null)
-                {
-                    status = ImportRecordRowStatus.ExerciseNotFound;
-                    message = $"No se encontró el ejercicio '{exerciseName}'.";
+                    exerciseId = exactExercise.Id;
                 }
                 else
                 {
-                    exerciseId = exercise.Id;
+                    var approximate = FindApproximateExercise(exerciseKey, normalizedExercises);
+                    if (approximate is not null)
+                    {
+                        status = ImportRecordRowStatus.ExerciseApproximate;
+                        matchedExerciseName = approximate.Name;
+                        message = $"¿Es «{approximate.Name}»?";
+                    }
+                    else
+                    {
+                        status = ImportRecordRowStatus.ExerciseNotFound;
+                        message = $"No se encontró el ejercicio '{exerciseName}'.";
+                    }
                 }
             }
 
@@ -167,6 +187,7 @@ public class PreviewRecordsImportQueryHandler
                 message,
                 athleteId,
                 exerciseId,
+                matchedExerciseName,
                 weight,
                 achievedAt,
                 origin));
@@ -175,6 +196,23 @@ public class PreviewRecordsImportQueryHandler
         }
 
         return result;
+    }
+
+    private static Domain.Entities.Exercise? FindApproximateExercise(
+        string key,
+        List<(string Name, Domain.Entities.Exercise Exercise)> exercises)
+    {
+        // Nombres demasiado cortos generarían coincidencias absurdas.
+        if (key.Length < 3)
+            return null;
+
+        return exercises
+            .Where(candidate => candidate.Name.Contains(key, StringComparison.Ordinal)
+                || key.Contains(candidate.Name, StringComparison.Ordinal))
+            .OrderBy(candidate => Math.Abs(candidate.Name.Length - key.Length))
+            .ThenBy(candidate => candidate.Exercise.Name)
+            .Select(candidate => candidate.Exercise)
+            .FirstOrDefault();
     }
 
     private static char DetectDelimiter(string text)

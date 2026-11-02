@@ -1168,7 +1168,7 @@ components:
           nullable: true
         status:
           type: string
-          enum: [Ok, AthleteNotFound, ExerciseNotFound, InvalidWeight]
+          enum: [Ok, AthleteNotFound, ExerciseNotFound, ExerciseApproximate, InvalidWeight]
         message:
           type: string
         athleteId:
@@ -1179,6 +1179,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        matchedExerciseName:
+          type: string
+          nullable: true
+          description: Nombre del ejercicio del catálogo que coincide parcialmente. Solo se informa cuando status es ExerciseApproximate.
         weightOneRepMaxKg:
           type: number
           format: double

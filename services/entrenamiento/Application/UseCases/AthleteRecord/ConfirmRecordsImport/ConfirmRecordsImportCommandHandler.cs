@@ -32,12 +32,16 @@ public class ConfirmRecordsImportCommandHandler
 
         var created = new List<AthleteRecordDto>();
 
+        // Una sola consulta a Estructura: validar pertenencia por id en memoria
+        // evita un GetAthleteByIdAsync por fila.
+        var athletes = await _structureClient.ListAthletesAsync(cancellationToken);
+        var athleteIds = athletes.Select(athlete => athlete.Id).ToHashSet();
+
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             foreach (var row in rows)
             {
-                var athlete = await _structureClient.GetAthleteByIdAsync(row.AthleteId, cancellationToken);
-                if (athlete is null)
+                if (!athleteIds.Contains(row.AthleteId))
                     throw new NotFoundException($"No se encontró el atleta con ID '{row.AthleteId}'.");
 
                 var exists = await _repository.GetExerciseNameAsync(row.ExerciseId, cancellationToken);
