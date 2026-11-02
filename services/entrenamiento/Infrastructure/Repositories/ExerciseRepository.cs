@@ -3,6 +3,7 @@ using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Text;
 
 namespace Infrastructure.Repositories
 {
@@ -142,21 +143,18 @@ namespace Infrastructure.Repositories
 
             if (!string.IsNullOrWhiteSpace(muscle))
             {
-                var target = muscle.Trim().ToLower();
+                // Normaliza la entrada (quita tildes, mayúsculas y espacios)
+                var normalized = Normalize(muscle);
 
-                if (target == "dorsales" || target == "dorsal")
-                {
-                    exercises = exercises.Where(e => e.PrimaryMuscles.Contains("dorsales") || e.PrimaryMuscles.Contains("lats")
-                                                  || e.SecondaryMuscles.Contains("dorsales") || e.SecondaryMuscles.Contains("lats"))
-                                         .OrderByDescending(e => e.PrimaryMuscles.Contains("dorsales") || e.PrimaryMuscles.Contains("lats"))
-                                         .ThenBy(e => e.Name);
-                }
-                else
-                {
-                    exercises = exercises.Where(e => e.PrimaryMuscles.Contains(target) || e.SecondaryMuscles.Contains(target))
-                                         .OrderByDescending(e => e.PrimaryMuscles.Contains(target))
-                                         .ThenBy(e => e.Name);
-                }
+                // Obtiene las variantes correspondientes de la tabla
+                var targets = MuscleEquivalences.TryGetValue(normalized, out var equivs)
+                    ? equivs
+                    : [normalized, muscle.Trim().ToLower()];
+
+                exercises = exercises.Where(e => targets.Any(t => e.PrimaryMuscles.Contains(t))
+                                              || targets.Any(t => e.SecondaryMuscles.Contains(t)))
+                                     .OrderByDescending(e => targets.Any(t => e.PrimaryMuscles.Contains(t)))
+                                     .ThenBy(e => e.Name);
             }
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -173,6 +171,32 @@ namespace Infrastructure.Repositories
             var pagSize = pageSize < 1 ? 20 : (pageSize > 100 ? 100 : pageSize);
 
             return exercises.Skip((pag - 1) * pagSize).Take(pagSize);
+        }
+
+        private static readonly Dictionary<string, string[]> MuscleEquivalences = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dorsales"] = ["dorsales", "dorsal", "lats"],
+            ["dorsal"] = ["dorsales", "dorsal", "lats"],
+            ["lats"] = ["dorsales", "dorsal", "lats"],
+            ["cuadriceps"] = ["cuadríceps", "cuádriceps", "cuadriceps"],
+            ["gluteos"] = ["glúteos", "gluteos"],
+            ["biceps"] = ["bíceps", "biceps"],
+            ["triceps"] = ["tríceps", "triceps"],
+        };
+
+        private static string Normalize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var formD = value.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
+            foreach (var ch in formD)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            return sb.ToString().ToLowerInvariant().Trim();
         }
     }
 }
