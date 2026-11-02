@@ -1182,7 +1182,7 @@ components:
         matchedExerciseName:
           type: string
           nullable: true
-          description: Nombre del ejercicio del catálogo que coincide parcialmente. Solo se informa cuando status es ExerciseApproximate.
+          description: Nombre del ejercicio del catálogo con el que se resolvió la fila. En ExerciseApproximate es la coincidencia parcial sugerida.
         weightOneRepMaxKg:
           type: number
           format: double

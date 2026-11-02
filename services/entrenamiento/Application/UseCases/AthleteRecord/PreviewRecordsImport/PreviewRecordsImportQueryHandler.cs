@@ -110,6 +110,7 @@ public class PreviewRecordsImportQueryHandler
                 if (exerciseKey.Length > 0 && exactExerciseMap.TryGetValue(exerciseKey, out var exactExercise))
                 {
                     exerciseId = exactExercise.Id;
+                    matchedExerciseName = exactExercise.Name;
                 }
                 else
                 {

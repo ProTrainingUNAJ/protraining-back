@@ -85,6 +85,9 @@ public class RecordsImportTests
         Assert.Equal(10, result.Count);
         Assert.Equal(8, result.Count(row => row.Status == ImportRecordRowStatus.Ok));
         Assert.Equal(2, result.Count(row => row.Status == ImportRecordRowStatus.AthleteNotFound));
+        Assert.All(
+            result.Where(row => row.Status == ImportRecordRowStatus.Ok),
+            row => Assert.Equal("Sentadilla trasera con barra", row.MatchedExerciseName));
         Assert.Empty(await context.AthleteRecords.ToListAsync());
 
         // El catálogo se resuelve en una sola consulta, sin buscar por cada fila.
@@ -161,12 +164,14 @@ public class RecordsImportTests
             "Curl de bíceps",
             "Extensión de tríceps");
 
-        var previous = AthleteRecord.Create(
-            _athleteId, exercises[0].Id, 50m, RecordSource.Reported, DateTime.UtcNow.AddDays(-10));
+        var previousRecords = exercises
+            .Select((exercise, i) => AthleteRecord.Create(
+                _athleteId, exercise.Id, 50m + i, RecordSource.Reported, DateTime.UtcNow.AddDays(-10)))
+            .ToList();
 
         await using (var seedContext = CreateContext())
         {
-            await seedContext.AthleteRecords.AddAsync(previous);
+            await seedContext.AthleteRecords.AddRangeAsync(previousRecords);
             await seedContext.SaveChangesAsync();
         }
 
@@ -190,12 +195,23 @@ public class RecordsImportTests
         await using var verifyContext = CreateContext();
         var records = await verifyContext.AthleteRecords.ToListAsync();
 
-        Assert.Equal(9, records.Count);
+        Assert.Equal(16, records.Count);
         Assert.Equal(8, records.Count(record => record.IsActive));
+        Assert.Equal(8, records.Count(record => !record.IsActive));
 
-        var deactivated = Assert.Single(records, record => !record.IsActive);
-        Assert.Equal(50m, deactivated.Weight);
-        Assert.Equal(exercises[0].Id, deactivated.ExerciseId);
+        var activeByExercise = records
+            .Where(record => record.IsActive)
+            .ToDictionary(record => record.ExerciseId);
+        var inactiveByExercise = records
+            .Where(record => !record.IsActive)
+            .ToDictionary(record => record.ExerciseId);
+
+        for (var i = 0; i < exercises.Count; i++)
+        {
+            var exerciseId = exercises[i].Id;
+            Assert.Equal(100m + i, activeByExercise[exerciseId].Weight);
+            Assert.Equal(50m + i, inactiveByExercise[exerciseId].Weight);
+        }
 
         // Queda exactamente un vigente por ejercicio.
         Assert.Equal(8, records.Where(record => record.IsActive).Select(record => record.ExerciseId).Distinct().Count());
