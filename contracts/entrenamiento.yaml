@@ -338,7 +338,11 @@ paths:
       tags:
         - Records
       summary: Onboarding inicial de marcas físicas del atleta
-      description: Permite al atleta declarar sus antecedentes de fuerza durante la bienvenida. Cada marca se registra con origen estimado.
+      description: >
+        Permite al atleta declarar sus antecedentes de fuerza durante la bienvenida.
+        Solo se registran con origen estimado las marcas de ejercicios que no tienen un récord vigente;
+        las marcas existentes (por ejemplo, las registradas por el PF) no se modifican ni se desactivan.
+        La respuesta puede ser un arreglo vacío si todos los ejercicios declarados ya tenían récord vigente.
       operationId: completeOnboarding
       requestBody:
         required: true
@@ -350,7 +354,9 @@ paths:
                 $ref: '#/components/schemas/OnboardingRecordRequest'
       responses:
         "201":
-          description: Marcas registradas exitosamente.
+          description: >
+            Marcas nuevas registradas como estimadas. Puede devolver un arreglo vacío si todos los
+            ejercicios declarados ya tenían un récord vigente.
           content:
             application/json:
               schema:
