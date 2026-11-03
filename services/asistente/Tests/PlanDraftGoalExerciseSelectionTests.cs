@@ -1,4 +1,4 @@
-﻿namespace Asistente.Tests;
+namespace Asistente.Tests;
 
 using Application.Common.Ai;
 using Application.Common.PlanDrafts;
@@ -490,5 +490,59 @@ public sealed class PlanDraftGoalExerciseSelectionTests
     }
 
     #endregion
-}
+    [Fact]
+    public async Task Given_Goal_With_Specific_Exercises_When_GetExercisesForGoal_Then_Searches_Exact_Refined_Terms_And_Target_Groups()
+    {
+        var requestedUrls = new List<string>();
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                if (req.RequestUri != null)
+                {
+                    requestedUrls.Add(req.RequestUri.ToString());
+                }
+            })
+            .ReturnsAsync(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    items = new[]
+                    {
+                        new { id = Guid.NewGuid(), name = "Sentadilla con barra", muscleGroup = "Piernas", equipment = "Barra" }
+                    },
+                    totalCount = 1
+                }))
+            });
 
+        var httpClient = new HttpClient(handlerMock.Object) { BaseAddress = new Uri("http://localhost:5000/") };
+        var memoryCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(Guid.NewGuid());
+
+        var catalogService = new Infrastructure.Services.Catalog.ExerciseCatalogService(
+            httpClient,
+            memoryCache,
+            currentUserMock.Object,
+            Mock.Of<ILogger<Infrastructure.Services.Catalog.ExerciseCatalogService>>());
+
+        // Act: Llamar con Piernas
+        await catalogService.GetExercisesForGoalAsync("piernas y sentadillas", maxExercises: 20);
+
+        // Assert:
+        // 1. Sentadilla con barra en vez de sentadilla genÃ©rica
+        Assert.Contains(requestedUrls, u => u.Contains("sentadilla con barra"));
+        // 2. Prensa de piernas en vez de prensa genÃ©rica
+        Assert.Contains(requestedUrls, u => u.Contains("prensa de piernas"));
+        // 3. Empuje de cadera en vez de hip thrust
+        Assert.Contains(requestedUrls, u => u.Contains("empuje de cadera"));
+        // 4. Peso muerto con barra se busca en Espalda (no Piernas) debido a la clasificaciÃ³n de anatomÃ­a
+        Assert.Contains(requestedUrls, u => u.Contains("peso muerto con barra") && u.Contains("muscleGroup=Espalda"));
+        // 5. Todos envÃ­an groupVariants=true
+        Assert.All(requestedUrls, u => Assert.Contains("groupVariants=true", u));
+    }
+}

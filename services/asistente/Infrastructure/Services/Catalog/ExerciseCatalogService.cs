@@ -22,15 +22,42 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
     public const string ExercisesPath = "api/v1/exercises";
     private const string CacheKeyPrefixId = "cat_ex_id_";
     private const string CacheKeyPrefixName = "cat_ex_name_";
+    private const string CacheKeyPrefixQuery = "cat_ex_query_";
+    private const string CacheKeyPrefixGoal = "cat_goal_";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
     private const string CatalogUnavailableMessage =
         "No se pudo verificar el ejercicio en el catálogo de Entrenamiento. Probá de nuevo en unos minutos.";
 
-    private static readonly Dictionary<string, IReadOnlyList<string>> CompoundBasicsByGroup = new(StringComparer.OrdinalIgnoreCase)
+    private readonly record struct BasicCompoundQuery(string MuscleGroup, string SearchTerm);
+
+    private static readonly Dictionary<string, IReadOnlyList<BasicCompoundQuery>> CompoundBasicsByGroup = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Piernas"] = ["sentadilla", "peso muerto", "zancada", "prensa", "hip thrust"],
-        ["Pecho"] = ["press de banca", "flexiones", "press militar", "fondos"],
-        ["Espalda"] = ["remo", "dominadas", "jalon"]
+        ["Piernas"] =
+        [
+            new("Piernas", "sentadilla con barra"),
+            new("Piernas", "prensa de piernas"),
+            new("Piernas", "zancada"),
+            new("Piernas", "empuje de cadera"),
+            new("Espalda", "peso muerto con barra") // En el catálogo oficial, Peso muerto con barra está clasificado bajo Espalda (espalda baja)
+        ],
+        ["Pecho"] =
+        [
+            new("Pecho", "press de banca"),
+            new("Pecho", "flexiones"),
+            new("Pecho", "fondos")
+        ],
+        ["Hombros"] =
+        [
+            new("Hombros", "press militar"),
+            new("Hombros", "elevaciones laterales")
+        ],
+        ["Espalda"] =
+        [
+            new("Espalda", "peso muerto con barra"),
+            new("Espalda", "remo con barra"),
+            new("Espalda", "dominadas"),
+            new("Espalda", "jalon")
+        ]
     };
 
     private readonly HttpClient _httpClient;
@@ -201,30 +228,44 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
 
     public async Task<IReadOnlyList<CatalogExerciseDto>> SearchAsync(string searchTerm, CancellationToken cancellationToken = default)
     {
-        return await GetExercisesAsync(muscleGroup: null, search: searchTerm, pageSize: 50, cancellationToken: cancellationToken);
+        return await GetExercisesAsync(muscleGroup: null, search: searchTerm, pageSize: 50, groupVariants: true, cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await GetExercisesAsync(muscleGroup: null, search: null, pageSize: 50, cancellationToken: cancellationToken);
+        return await GetExercisesAsync(muscleGroup: null, search: null, pageSize: 50, groupVariants: true, cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<CatalogExerciseDto>> GetExercisesAsync(
         string? muscleGroup,
         string? search,
         int pageSize = 50,
+        bool groupVariants = true,
         CancellationToken cancellationToken = default)
     {
+        var normGroup = muscleGroup?.Trim();
+        var normSearch = search?.Trim();
+        var queryCacheKey = $"{CacheKeyPrefixQuery}{GetPfIdKey()}_{normGroup ?? "all"}_{normSearch ?? "all"}_{pageSize}_{groupVariants}";
+
+        if (_memoryCache.TryGetValue(queryCacheKey, out IReadOnlyList<CatalogExerciseDto>? cachedList) && cachedList != null)
+        {
+            return cachedList;
+        }
+
         try
         {
             var query = new List<string>();
-            if (!string.IsNullOrWhiteSpace(muscleGroup))
+            if (!string.IsNullOrWhiteSpace(normGroup))
             {
-                query.Add($"muscleGroup={Uri.EscapeDataString(muscleGroup.Trim())}");
+                query.Add($"muscleGroup={Uri.EscapeDataString(normGroup)}");
             }
-            if (!string.IsNullOrWhiteSpace(search))
+            if (!string.IsNullOrWhiteSpace(normSearch))
             {
-                query.Add($"search={Uri.EscapeDataString(search.Trim())}");
+                query.Add($"search={Uri.EscapeDataString(normSearch)}");
+            }
+            if (groupVariants)
+            {
+                query.Add("groupVariants=true");
             }
             query.Add($"pageSize={pageSize}");
 
@@ -233,6 +274,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
+                _memoryCache.Set(queryCacheKey, Array.Empty<CatalogExerciseDto>(), new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl });
                 return [];
             }
 
@@ -245,7 +287,9 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            return ParseExercisesFromJson(json);
+            var parsed = ParseExercisesFromJson(json);
+            _memoryCache.Set(queryCacheKey, parsed, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl });
+            return parsed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -268,6 +312,14 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
             maxExercises = 25;
         }
 
+        var normalizedGoal = TextNormalizer.Normalize(goal ?? string.Empty);
+        var goalCacheKey = $"{CacheKeyPrefixGoal}{GetPfIdKey()}_{normalizedGoal}_{maxExercises}";
+
+        if (_memoryCache.TryGetValue(goalCacheKey, out IReadOnlyList<CatalogExerciseDto>? cachedGoal) && cachedGoal != null)
+        {
+            return cachedGoal;
+        }
+
         var collected = new List<CatalogExerciseDto>();
         var seenIds = new HashSet<Guid>();
 
@@ -280,9 +332,9 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
                 // 1. Buscar ejercicios compuestos básicos por ?search= para el grupo objetivo (#158 · KAN-563)
                 if (CompoundBasicsByGroup.TryGetValue(group, out var basics))
                 {
-                    foreach (var basicSearch in basics)
+                    foreach (var basicQuery in basics)
                     {
-                        var items = await GetExercisesAsync(group, basicSearch, pageSize: 5, cancellationToken);
+                        var items = await GetExercisesAsync(basicQuery.MuscleGroup, basicQuery.SearchTerm, pageSize: 5, groupVariants: true, cancellationToken: cancellationToken);
                         foreach (var item in items)
                         {
                             if (seenIds.Add(item.Id))
@@ -294,7 +346,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
                 }
 
                 // 2. Completar con ejercicios adicionales del grupo (?muscleGroup=)
-                var groupItems = await GetExercisesAsync(group, null, pageSize: maxExercises, cancellationToken);
+                var groupItems = await GetExercisesAsync(group, null, pageSize: maxExercises, groupVariants: true, cancellationToken: cancellationToken);
                 foreach (var item in groupItems)
                 {
                     if (seenIds.Add(item.Id))
@@ -306,12 +358,12 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         }
         else
         {
-            // Objetivo general: traer básicos balanceados de Piernas, Empuje y Tracción
+            // Objetivo general: traer básicos balanceados de Piernas, Empuje, Tracción y Hombros
             foreach (var (group, basics) in CompoundBasicsByGroup)
             {
-                foreach (var basicSearch in basics)
+                foreach (var basicQuery in basics)
                 {
-                    var items = await GetExercisesAsync(group, basicSearch, pageSize: 3, cancellationToken);
+                    var items = await GetExercisesAsync(basicQuery.MuscleGroup, basicQuery.SearchTerm, pageSize: 3, groupVariants: true, cancellationToken: cancellationToken);
                     foreach (var item in items)
                     {
                         if (seenIds.Add(item.Id))
@@ -321,7 +373,7 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
                     }
                 }
 
-                var groupItems = await GetExercisesAsync(group, null, pageSize: 10, cancellationToken);
+                var groupItems = await GetExercisesAsync(group, null, pageSize: 10, groupVariants: true, cancellationToken: cancellationToken);
                 foreach (var item in groupItems)
                 {
                     if (seenIds.Add(item.Id))
@@ -333,20 +385,18 @@ public sealed class ExerciseCatalogService : IExerciseCatalogService
         }
 
         // Si se recopilaron ejercicios de Entrenamiento, filtrar y priorizar hasta maxExercises
+        IReadOnlyList<CatalogExerciseDto> result;
         if (collected.Count > 0)
         {
-            return RoutinePromptBuilder.FilterExercisesForGoal(collected, goal, maxExercises);
+            result = RoutinePromptBuilder.FilterExercisesForGoal(collected, goal, maxExercises);
         }
-
-        // Si la búsqueda especializada no trajo nada (ej. entorno de pruebas/mocks sin implementar GetExercisesAsync),
-        // fallback defensivo a GetAllAsync
-        var fallback = await GetAllAsync(cancellationToken);
-        if (fallback is { Count: > 0 })
+        else
         {
-            return RoutinePromptBuilder.FilterExercisesForGoal(fallback, goal, maxExercises);
+            result = [];
         }
 
-        return [];
+        _memoryCache.Set(goalCacheKey, result, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl });
+        return result;
     }
 
     private IReadOnlyList<CatalogExerciseDto> ParseExercisesFromJson(string json)

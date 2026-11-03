@@ -269,4 +269,46 @@ public sealed class ExerciseCatalogServiceTests
             return Task.FromResult(response);
         }
     }
+    /// <summary>
+    /// KAN-563: Comprueba que GetExercisesAsync incluye groupVariants=true en la query a Entrenamiento.
+    /// </summary>
+    [Fact]
+    public async Task Given_GetExercisesAsync_When_Called_Then_Passes_GroupVariants_True()
+    {
+        var fakeHandler = new TrackingHttpMessageHandler(
+            CreatePaginatedResponseJson(SentadillaId, "Sentadilla con barra", "Piernas", "Barra"));
+        var service = CreateService(fakeHandler);
+
+        var result = await service.GetExercisesAsync("Piernas", "sentadilla con barra", pageSize: 5, groupVariants: true);
+
+        Assert.NotEmpty(result);
+        Assert.Equal(1, fakeHandler.CallCount);
+        var requestedUrl = fakeHandler.RequestedUrls.Single();
+        Assert.Contains("groupVariants=true", requestedUrl);
+        Assert.Contains("muscleGroup=Piernas", requestedUrl);
+        Assert.Contains("sentadilla con barra", requestedUrl);
+    }
+
+    /// <summary>
+    /// KAN-563: Comprueba que GetExercisesForGoalAsync cachea la lista por objetivo para evitar llamadas repetidas
+    /// entre mÃºltiples proveedores de IA en la cadena resiliente.
+    /// </summary>
+    [Fact]
+    public async Task Given_GetExercisesForGoalAsync_When_Called_Twice_Then_Returns_Cached_Result_Without_Repeating_Http_Calls()
+    {
+        var fakeHandler = new TrackingHttpMessageHandler(
+            CreatePaginatedResponseJson(SentadillaId, "Sentadilla con barra", "Piernas", "Barra"));
+        var service = CreateService(fakeHandler);
+
+        // Primera llamada: realiza las consultas HTTP a Entrenamiento
+        var first = await service.GetExercisesForGoalAsync("hipertrofia de piernas", maxExercises: 10);
+        var callsAfterFirst = fakeHandler.CallCount;
+        Assert.NotEmpty(first);
+        Assert.True(callsAfterFirst > 0);
+
+        // Segunda llamada idÃ©ntica: debe resolverse 100% en memoria
+        var second = await service.GetExercisesForGoalAsync("hipertrofia de piernas", maxExercises: 10);
+        Assert.Equal(callsAfterFirst, fakeHandler.CallCount);
+        Assert.Equal(first.Count, second.Count);
+    }
 }

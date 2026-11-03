@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Ai;
@@ -189,22 +189,10 @@ public sealed class OllamaClient(
         IReadOnlyList<CatalogExerciseDto> availableExercises = [];
         if (catalogService != null)
         {
-            var goalExercises = await catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
-            if (goalExercises is { Count: > 0 })
-            {
-                availableExercises = goalExercises;
-            }
-            else
-            {
-                var fallbackCatalog = await catalogService.GetAllAsync(cancellationToken);
-                if (fallbackCatalog is { Count: > 0 })
-                {
-                    availableExercises = RoutinePromptBuilder.FilterExercisesForGoal(fallbackCatalog, request.Goal, maxExercises: 25);
-                }
-            }
+            availableExercises = await catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
         }
 
-        // KAN-563: Si el catÃ¡logo estÃ¡ vacÃ­o, no inventar IDs de respaldo y pasar directo al siguiente proveedor
+        // KAN-563: Si el catálogo está vacío, no inventar IDs de respaldo y pasar directo al siguiente proveedor
         if (availableExercises == null || availableExercises.Count == 0)
         {
             logger?.LogWarning("Catálogo de ejercicios vacío. Omitiendo Ollama y pasando al siguiente proveedor.");
