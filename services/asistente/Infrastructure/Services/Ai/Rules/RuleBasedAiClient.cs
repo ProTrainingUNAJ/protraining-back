@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Application.Common.Ai;
 using Application.Common.Helpers;
 using Application.DTOs.Ai;

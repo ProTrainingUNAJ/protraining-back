@@ -118,20 +118,6 @@ public sealed class CreatePlanDraftCommandHandler(
                             dict[ex.Id] = ex.Name;
                         }
                     }
-
-                    // Fallback para mocks o catálogos que solo configuran GetAllAsync
-                    if (dict.Count < distinctExerciseIds.Count)
-                    {
-                        var all = await catalogService.GetAllAsync(cancellationToken);
-                        if (all is { Count: > 0 })
-                        {
-                            foreach (var ex in all)
-                            {
-                                dict.TryAdd(ex.Id, ex.Name);
-                            }
-                        }
-                    }
-
                     if (dict.Count > 0)
                     {
                         exerciseNames = dict;

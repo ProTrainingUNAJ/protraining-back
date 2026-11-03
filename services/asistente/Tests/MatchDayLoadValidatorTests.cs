@@ -379,8 +379,8 @@ public sealed class MatchDayLoadValidatorTests
 
         var catalogMock = new Mock<IExerciseCatalogService>();
         catalogMock
-            .Setup(c => c.GetAllAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new CatalogExerciseDto(_squatId, "Sentadilla Trasera", "Piernas", "Barra")]);
+            .Setup(c => c.FindByIdAsync(_squatId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CatalogExerciseDto(_squatId, "Sentadilla Trasera", "Piernas", "Barra"));
 
         var handler = new CreatePlanDraftCommandHandler(
             aiServiceMock.Object,

@@ -194,7 +194,7 @@ public static class RoutinePromptBuilder
             text.Contains("tren inferior") || text.Contains("lower body") ||
             text.Contains("sentadilla") || text.Contains("peso muerto") ||
             text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada") ||
-            text.Contains("hip thrust"))
+            text.Contains("hip thrust") || text.Contains("empuje de cadera"))
         {
             groups.Add("Piernas");
         }

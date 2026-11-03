@@ -1,4 +1,4 @@
-﻿namespace Asistente.Tests;
+namespace Asistente.Tests;
 
 using Application.Common.Ai;
 using Application.DTOs.Ai;
