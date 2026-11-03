@@ -128,7 +128,7 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Catalog")
                         .HasColumnName("origin");
-                        
+
                     b.Property<Guid?>("ParentExerciseId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_exercise_id");
@@ -470,6 +470,12 @@ namespace Infrastructure.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsTemplate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_template");
 
                     b.Property<string>("Name")
                         .IsRequired()

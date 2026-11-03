@@ -43,12 +43,10 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athlete);
 
-        var url = invalidJustification is null
-            ? $"/api/v1/athletes/{athlete.Id}/medical-record"
-            : $"/api/v1/athletes/{athlete.Id}/medical-record?justification={Uri.EscapeDataString(invalidJustification)}";
-
-        // act
-        var response = await _clientPfA.GetAsync(url);
+        // act: enviar POST con motivo inválido en el body
+        var response = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record/access",
+            new AccessMedicalRecordRequest(invalidJustification));
 
         // assert: recibe HTTP 400 Bad Request indicando que la justificación es obligatoria
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -98,10 +96,11 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal("Reconstrucción LCA rodilla izquierda (2022)", updatedRecord.Surgeries);
         Assert.True(updatedRecord.HasPhysicalFitnessCertificate);
 
-        // act 2: consultar ficha médica con motivo válido (Read)
+        // act 2: consultar ficha médica mediante POST con motivo en el body (Read / Access)
         var justification = "Revisión médica previa al bloque de fuerza máxima";
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{athlete.Id}/medical-record?justification={Uri.EscapeDataString(justification)}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record/access",
+            new AccessMedicalRecordRequest(justification));
 
         // assert: recibe HTTP 200 OK con los datos médicos
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
@@ -191,8 +190,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         }
 
         // act: intentar leer ficha médica con justificación válida pero sin consentimiento válido
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{minor.Id}/medical-record?justification={Uri.EscapeDataString("Consulta rutinaria")}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{minor.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Consulta rutinaria"));
 
         // assert: bloqueado con 400 Bad Request y sin registro de auditoría
         Assert.Equal(HttpStatusCode.BadRequest, getResponse.StatusCode);
@@ -226,8 +226,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         }
 
         // act: intentar leer y editar la ficha médica con motivo válido pero sin consentimiento firmado del adulto
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{adult.Id}/medical-record?justification={Uri.EscapeDataString("Consulta rutinaria")}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{adult.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Consulta rutinaria"));
 
         var putResponse = await _clientPfA.PutAsJsonAsync(
             $"/api/v1/athletes/{adult.Id}/medical-record",
@@ -267,8 +268,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.NotNull(athleteB);
 
         // act: PF-A intenta leer y modificar la ficha médica del atleta de PF-B
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{athleteB.Id}/medical-record?justification={Uri.EscapeDataString("Motivo válido")}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Motivo válido"));
         var putResponse = await _clientPfA.PutAsJsonAsync(
             $"/api/v1/athletes/{athleteB.Id}/medical-record",
             new UpdateMedicalRecordRequest("Motivo válido", "Historial", null, null, true));
@@ -307,8 +309,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         // assert: 404 y la ficha de PF-B sigue igual
         Assert.Equal(HttpStatusCode.NotFound, pfAPut.StatusCode);
 
-        var pfBGet = await _clientPfB.GetAsync(
-            $"/api/v1/athletes/{athleteB.Id}/medical-record?justification={Uri.EscapeDataString("Control")}");
+        var pfBGet = await _clientPfB.PostAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Control"));
         Assert.Equal(HttpStatusCode.OK, pfBGet.StatusCode);
         var record = await pfBGet.Content.ReadFromJsonAsync<MedicalRecordDto>();
         Assert.NotNull(record);
@@ -324,6 +327,28 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
             .ToListAsync();
         Assert.NotEmpty(auditLogPfIds);
         Assert.All(auditLogPfIds, pfId => Assert.Equal(_pfBId, pfId));
+    }
+
+    [Fact]
+    public async Task Given_LegacyGetEndpoint_When_Invoked_Then_Returns404Or405IndicatingGetIsRemoved()
+    {
+        // arrange: crear un atleta con consentimiento firmado
+        var createResponse = await _clientPfA.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("Javier", "Zanetti", "javier.z@club.com", "+5491100001111", IsMinor: false));
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+
+        // act: intentar acceder mediante el viejo endpoint GET
+        var legacyGetResponse = await _clientPfA.GetAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record?justification=Consulta");
+
+        // assert: el contrato GET fue completamente eliminado (MethodNotAllowed o NotFound)
+        Assert.True(
+            legacyGetResponse.StatusCode == HttpStatusCode.MethodNotAllowed ||
+            legacyGetResponse.StatusCode == HttpStatusCode.NotFound,
+            $"Se esperaba 404 o 405 para el endpoint GET legacy, pero respondió {legacyGetResponse.StatusCode}");
     }
 
     [Fact]

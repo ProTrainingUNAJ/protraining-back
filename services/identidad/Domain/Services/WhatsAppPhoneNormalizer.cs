@@ -37,24 +37,4 @@ public static class WhatsAppPhoneNormalizer
 
         return (true, digitsOnly, null);
     }
-
-    /// <summary>
-    /// Genera el enlace directo a WhatsApp (https://wa.me/<numero>).
-    /// Si incluye texto inicial, se codifica correctamente.
-    /// </summary>
-    public static string? BuildWhatsAppLink(string? rawPhone, string? initialText = null)
-    {
-        var (isValid, normalized, _) = ValidateAndNormalize(rawPhone);
-        if (!isValid || string.IsNullOrEmpty(normalized))
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(initialText))
-        {
-            return $"https://wa.me/{normalized}";
-        }
-
-        return $"https://wa.me/{normalized}?text={Uri.EscapeDataString(initialText)}";
-    }
 }

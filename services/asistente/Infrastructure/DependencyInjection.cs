@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IRoutineDraftRepository, Infrastructure.Data.Repositories.RoutineDraftRepository>();
         services.AddScoped<IPlanDraftRepository, Infrastructure.Data.Repositories.PlanDraftRepository>();
         services.AddScoped<IPfDecisionRepository, Infrastructure.Data.Repositories.PfDecisionRepository>();
+        services.AddScoped<IPreventiveAlertRepository, Infrastructure.Data.Repositories.PreventiveAlertRepository>();
         services.AddScoped<IMatchDayLoadValidator, Application.Common.PlanDrafts.MatchDayLoadValidator>();
 
         services.AddMemoryCache();
@@ -76,3 +77,4 @@ public static class DependencyInjection
             await context.Database.MigrateAsync();
     }
 }
+

@@ -3,6 +3,7 @@ using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Text;
 
 namespace Infrastructure.Repositories
 {
@@ -20,9 +21,9 @@ namespace Infrastructure.Repositories
             await context.Exercises.AddAsync(exercise, cancellationToken);
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var exercises = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, usedByPf);
+            var exercises = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, usedByPf);
 
             var totalCount = await exercises.CountAsync(cancellationToken);
 
@@ -40,9 +41,9 @@ namespace Infrastructure.Repositories
             return (items, totalCount);
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var matches = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, usedByPf);
+            var matches = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, usedByPf);
 
             // Un base entra si coincide él o alguna de sus variantes.
             var bases = context.Exercises.AsNoTracking()
@@ -110,8 +111,16 @@ namespace Infrastructure.Repositories
 
             return exercise;
         }
+
+        public async Task<List<Exercise>> ListAllAsync(CancellationToken cancellationToken = default)
+        {
+            return await context.Exercises
+                .AsNoTracking()
+                .OrderBy(e => e.Name)
+                .ToListAsync(cancellationToken);
+        }
         
-        private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, bool usedByPf)
+        private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf)
         {
             if (usedByPf)
             {
@@ -132,6 +141,22 @@ namespace Infrastructure.Repositories
                 exercises = exercises.Where(e => e.MuscleGroup.ToLower() == muscleGroup.ToLower());
             }
 
+            if (!string.IsNullOrWhiteSpace(muscle))
+            {
+                // Normaliza la entrada (quita tildes, mayúsculas y espacios)
+                var normalized = Normalize(muscle);
+
+                // Obtiene las variantes correspondientes de la tabla
+                var targets = MuscleEquivalences.TryGetValue(normalized, out var equivs)
+                    ? equivs
+                    : [normalized, muscle.Trim().ToLower()];
+
+                exercises = exercises.Where(e => targets.Any(t => e.PrimaryMuscles.Contains(t))
+                                              || targets.Any(t => e.SecondaryMuscles.Contains(t)))
+                                     .OrderByDescending(e => targets.Any(t => e.PrimaryMuscles.Contains(t)))
+                                     .ThenBy(e => e.Name);
+            }
+
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 exercises = exercises.Where(e => EF.Functions.TrigramsAreWordSimilar(searchTerm, e.Name));
@@ -146,6 +171,32 @@ namespace Infrastructure.Repositories
             var pagSize = pageSize < 1 ? 20 : (pageSize > 100 ? 100 : pageSize);
 
             return exercises.Skip((pag - 1) * pagSize).Take(pagSize);
+        }
+
+        private static readonly Dictionary<string, string[]> MuscleEquivalences = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dorsales"] = ["dorsales", "dorsal", "lats"],
+            ["dorsal"] = ["dorsales", "dorsal", "lats"],
+            ["lats"] = ["dorsales", "dorsal", "lats"],
+            ["cuadriceps"] = ["cuadríceps", "cuádriceps", "cuadriceps"],
+            ["gluteos"] = ["glúteos", "gluteos"],
+            ["biceps"] = ["bíceps", "biceps"],
+            ["triceps"] = ["tríceps", "triceps"],
+        };
+
+        private static string Normalize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var formD = value.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
+            foreach (var ch in formD)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            return sb.ToString().ToLowerInvariant().Trim();
         }
     }
 }

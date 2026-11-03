@@ -299,6 +299,80 @@ public sealed class SeasonPhaseOverlapTests : IAsyncDisposable
         Assert.Null(exception);
     }
 
+    [Fact]
+    public async Task Given_ExistingPhase_When_NewPhaseTouchesExactBoundaryDate_Then_ThrowsDomainException()
+    {
+        // arrange: fase existente del 01-01 al 31-03
+        var pfId = Guid.NewGuid();
+        await using var dbContext = CreateDbContextForPf(pfId);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var org = Organization.Create("Club Atlético");
+        dbContext.Organizations.Add(org);
+        await dbContext.SaveChangesAsync();
+
+        var category = Category.Create(org.Id, "Primera División");
+        dbContext.Categories.Add(category);
+        await dbContext.SaveChangesAsync();
+
+        var existingPhase = SeasonPhase.Create(
+            category.Id,
+            "Pretemporada",
+            SeasonPhaseType.Preseason,
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 3, 31));
+        dbContext.SeasonPhases.Add(existingPhase);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateValidationService(dbContext);
+
+        // act & assert: nuevo intento que inicia el mismo día que termina la anterior (31-03)
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ValidatePhaseDatesAsync(
+                category.Id,
+                new DateOnly(2026, 3, 31),
+                new DateOnly(2026, 5, 15)));
+
+        Assert.Equal("Las fechas de la fase se superponen con otra fase de la misma categoría.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Given_ExistingPhase_When_NewPhaseEnclosesExistingPhaseCompletely_Then_ThrowsDomainException()
+    {
+        // arrange: fase existente contenida (01-02 al 28-02)
+        var pfId = Guid.NewGuid();
+        await using var dbContext = CreateDbContextForPf(pfId);
+        await dbContext.Database.EnsureCreatedAsync();
+
+        var org = Organization.Create("Club Atlético");
+        dbContext.Organizations.Add(org);
+        await dbContext.SaveChangesAsync();
+
+        var category = Category.Create(org.Id, "Juveniles");
+        dbContext.Categories.Add(category);
+        await dbContext.SaveChangesAsync();
+
+        var existingPhase = SeasonPhase.Create(
+            category.Id,
+            "Fase Corta Febrero",
+            SeasonPhaseType.Preseason,
+            new DateOnly(2026, 2, 1),
+            new DateOnly(2026, 2, 28));
+        dbContext.SeasonPhases.Add(existingPhase);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateValidationService(dbContext);
+
+        // act & assert: nueva fase del 01-01 al 31-03 que engloba por completo a la existente
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            service.ValidatePhaseDatesAsync(
+                category.Id,
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 3, 31)));
+
+        Assert.Equal("Las fechas de la fase se superponen con otra fase de la misma categoría.", ex.Message);
+    }
+
     private static SeasonPhaseValidationService CreateValidationService(AppDbContext context)
     {
         var categoryRepo = new CategoryRepository(context);

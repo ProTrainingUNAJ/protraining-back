@@ -19,6 +19,11 @@ public class TrainingPlanConfiguration : IEntityTypeConfiguration<TrainingPlan>
             .HasColumnName("objective")
             .HasMaxLength(500);
 
+        builder.Property(tp => tp.IsTemplate)
+            .HasColumnName("is_template")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasMany(tp => tp.Weeks)
             .WithOne(tw => tw.TrainingPlan)
             .HasForeignKey(tw => tw.TrainingPlanId)

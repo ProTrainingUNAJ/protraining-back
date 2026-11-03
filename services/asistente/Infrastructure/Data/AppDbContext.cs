@@ -14,6 +14,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<RoutineDraft> RoutineDrafts => Set<RoutineDraft>();
     public DbSet<PlanDraft> PlanDrafts => Set<PlanDraft>();
     public DbSet<PfDecision> PfDecisions => Set<PfDecision>();
+    public DbSet<PreventiveAlert> PreventiveAlerts => Set<PreventiveAlert>();
 
     // EF reads it again on every query, so it is always the PF of the current request.
     // Without a token it is Guid.Empty and the filters return nothing.
@@ -93,3 +94,4 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         }
     }
 }
+

@@ -92,13 +92,13 @@ public sealed class AthletesController(
             new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
             cancellationToken));
 
-    [HttpGet("{id:guid}/medical-record")]
-    public async Task<ActionResult<MedicalRecordDto>> GetMedicalRecord(
+    [HttpPost("{id:guid}/medical-record/access")]
+    public async Task<ActionResult<MedicalRecordDto>> AccessMedicalRecord(
         Guid id,
-        [FromQuery] string? justification,
+        AccessMedicalRecordRequest request,
         CancellationToken cancellationToken) =>
         Ok(await readMedicalRecordHandler.HandleAsync(
-            new ReadMedicalRecordCommand(id, justification),
+            new ReadMedicalRecordCommand(id, request.Justification),
             cancellationToken));
 
     [HttpPut("{id:guid}/medical-record")]

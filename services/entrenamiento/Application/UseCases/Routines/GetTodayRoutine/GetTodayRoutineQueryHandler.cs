@@ -103,6 +103,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     MuscleGroup = exercise?.MuscleGroup ?? string.Empty,
                     VideoUrl = exercise?.VideoUrl,
                     Images = exercise?.Images.ToList() ?? [],
+                    PrimaryMuscles = exercise?.PrimaryMuscles.ToList() ?? [],
+                    SecondaryMuscles = exercise?.SecondaryMuscles.ToList() ?? [],
                     Sets = prescribed.Sets,
                     Reps = prescribed.Reps,
                     Percentage = (double)percentage,

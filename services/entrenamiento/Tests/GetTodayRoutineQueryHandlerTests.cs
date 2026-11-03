@@ -294,4 +294,49 @@ public class GetTodayRoutineQueryHandlerTests
         var item = Assert.Single(result.Exercises);
         Assert.Equal(images, item.Images);
     }
+
+    [Fact]
+    public async Task Given_EjercicioConMusculos_When_ConsultaRutina_Then_DevuelvePrimaryYSecondaryMuscles()
+    {
+        // KAN-557: La rutina del día proyecta los músculos principales y secundarios para la silueta anatómica
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 31);
+        var primary = new List<string> { "quadriceps" };
+        var secondary = new List<string> { "glutes", "hamstrings" };
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", primaryMuscles: primary, secondaryMuscles: secondary);
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 75m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(primary, item.PrimaryMuscles);
+        Assert.Equal(secondary, item.SecondaryMuscles);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioSinMusculos_When_ConsultaRutina_Then_DevuelveListasVaciasSinErrores()
+    {
+        // KAN-557: Si el ejercicio no tiene músculos especificados, devuelve listas vacías y no falla
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 31);
+        var exercise = Exercise.Create("Movilidad General", "Core");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 50m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.NotNull(item.PrimaryMuscles);
+        Assert.Empty(item.PrimaryMuscles);
+        Assert.NotNull(item.SecondaryMuscles);
+        Assert.Empty(item.SecondaryMuscles);
+    }
 }
+

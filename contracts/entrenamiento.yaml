@@ -51,6 +51,12 @@ paths:
           schema:
             type: string
           description: Filtrar por grupo muscular principal (ej. Piernas, Pecho, Espalda, Core).
+        - name: muscle
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtrar por músculo puntual en español (ej. Isquiotibiales, Cuádriceps, Glúteos, Pecho).
         - name: equipment
           in: query
           required: false
@@ -288,6 +294,76 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/records/reliability:
+    get:
+      tags:
+        - Records
+      summary: Resumen de confiabilidad de los récords de una categoría
+      description: >
+        Devuelve, por grupo de confiabilidad, la cantidad, el porcentaje y la lista de
+        atletas de la categoría. Los grupos salen del origen del récord vigente más
+        confiable de cada atleta (Testeado, Reportado, Estimado, Sin dato). Un récord
+        con origen Epley cuenta como Testeado. Opcionalmente se puede filtrar por un
+        solo ejercicio con exerciseId.
+      operationId: getRecordsReliability
+      parameters:
+        - name: categoryId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la categoría.
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar la confiabilidad a un solo ejercicio.
+      responses:
+        "200":
+          description: Resumen de confiabilidad obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordReliabilitySummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/onboarding:
+    post:
+      tags:
+        - Records
+      summary: Onboarding inicial de marcas físicas del atleta
+      description: Permite al atleta declarar sus antecedentes de fuerza durante la bienvenida. Cada marca se registra con origen estimado.
+      operationId: completeOnboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/OnboardingRecordRequest'
+      responses:
+        "201":
+          description: Marcas registradas exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/record-proposals:
     get:
       tags:
@@ -417,91 +493,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/routine-templates:
-    get:
-      tags:
-        - Routines and Templates
-      summary: Listar plantillas de rutinas del preparador físico
-      description: Obtiene las planificaciones guardadas como plantillas maestras para reutilizar en otros grupos o temporadas.
-      operationId: listRoutineTemplates
-      responses:
-        "200":
-          description: Lista de plantillas recuperadas.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoutineTemplate'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
-
-    post:
-      tags:
-        - Routines and Templates
-      summary: Guardar una rutina como plantilla reutilizable
-      description: Permite guardar una estructura de entrenamiento como plantilla maestra.
-      operationId: createRoutineTemplate
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateRoutineTemplateRequest'
-      responses:
-        "201":
-          description: Plantilla creada exitosamente.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoutineTemplate'
-        "400":
-          $ref: '#/components/responses/BadRequest'
-
-  /api/v1/routine-templates/{templateId}/apply:
-    post:
-      tags:
-        - Routines and Templates
-      summary: Aplicar plantilla a una categoría o atleta
-      description: Clona y asigna la planificación de la plantilla a la categoría o deportista indicado.
-      operationId: applyRoutineTemplate
-      parameters:
-        - name: templateId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - dayOfWeek
-              properties:
-                categoryId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-                athleteId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  description: Opcional si se aplica a toda una categoría.
-                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                dayOfWeek:
-                  type: string
-                  enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
-                  example: "Monday"
-      responses:
-        "201":
-          description: Rutina asignada desde la plantilla con éxito.
-        "404":
-          $ref: '#/components/responses/NotFound'
 
   /api/v1/me/today-routine:
     get:
@@ -835,6 +826,112 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans/{id}/save-as-template:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Guardar una planificacion como plantilla
+      description: Copia profundamente una planificacion existente (con sus semanas y sesiones) y la guarda como plantilla. Requiere rol PreparadorFisico.
+      operationId: savePlanAsTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Plantilla Pretemporada"
+      responses:
+        "201":
+          description: Plantilla guardada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/templates:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar plantillas de planificacion
+      description: Obtiene las plantillas creadas por el preparador fisico autenticado. Requiere rol PreparadorFisico.
+      operationId: listPlanTemplates
+      responses:
+        "200":
+          description: Lista de plantillas recuperadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingPlanSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/training-plans/templates/{id}/apply:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Aplicar plantilla a una categoria o atleta
+      description: Clona profundamente la plantilla a una planificacion nueva y la asigna a la categoria o atleta indicado desde la fecha especificada. Requiere rol PreparadorFisico.
+      operationId: applyPlanTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                  example: "2026-11-02"
+                categoryId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                athleteId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: Plantilla aplicada y asignada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignPlanResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/training-sessions/{id}:
     get:
       tags:
@@ -957,6 +1054,81 @@ paths:
                     type: string
                     example: "Healthy"
 
+  /api/v1/records/import/preview:
+    post:
+      tags:
+        - Records
+      summary: Vista previa de importación de récords desde CSV
+      operationId: previewRecordsImport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - athleteColumn
+                - exerciseColumn
+                - weightColumn
+              properties:
+                file:
+                  type: string
+                  format: binary
+                athleteColumn:
+                  type: string
+                exerciseColumn:
+                  type: string
+                weightColumn:
+                  type: string
+                dateColumn:
+                  type: string
+                sourceColumn:
+                  type: string
+      responses:
+        "200":
+          description: Vista previa generada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportRecordPreviewRow'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/records/import/confirm:
+    post:
+      tags:
+        - Records
+      summary: Confirmar importación de récords
+      operationId: confirmRecordsImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmImportRecordsRequest'
+      responses:
+        "200":
+          description: Récords importados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -998,6 +1170,86 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    ImportRecordPreviewRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+        athleteName:
+          type: string
+        exerciseName:
+          type: string
+        weightText:
+          type: string
+        dateText:
+          type: string
+          nullable: true
+        sourceText:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [Ok, AthleteNotFound, ExerciseNotFound, ExerciseApproximate, InvalidWeight]
+        message:
+          type: string
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        matchedExerciseName:
+          type: string
+          nullable: true
+          description: Nombre del ejercicio del catálogo con el que se resolvió la fila. En ExerciseApproximate es la coincidencia parcial sugerida.
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          nullable: true
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordRow:
+      type: object
+      required:
+        - athleteId
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordsRequest:
+      type: object
+      required:
+        - rows
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfirmImportRecordRow'
+
     CheckExerciseRestrictionsRequest:
       type: object
       required:
@@ -1320,6 +1572,75 @@ components:
           type: boolean
           example: true
 
+    RecordReliabilityAthlete:
+      type: object
+      required:
+        - athleteId
+        - name
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    RecordReliabilityGroup:
+      type: object
+      required:
+        - group
+        - count
+        - percentage
+        - athletes
+      properties:
+        group:
+          type: string
+          enum: [Tested, Reported, Estimated, NoData]
+        count:
+          type: integer
+        percentage:
+          type: number
+          format: double
+        athletes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityAthlete'
+
+    RecordReliabilitySummary:
+      type: object
+      required:
+        - categoryId
+        - totalAthletes
+        - groups
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        totalAthletes:
+          type: integer
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityGroup'
+
+    OnboardingRecordRequest:
+      type: object
+      required:
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 500
+
     SaveRecordRequest:
       type: object
       required:
@@ -1485,6 +1806,18 @@ components:
           items:
             type: string
           example: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"]
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Grupos musculares principales involucrados en la ejecución.
+          example: ["Piernas", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Músculos secundarios o estabilizadores involucrados.
+          example: ["Isquiotibiales", "Zona Lumbar"]
         sets:
           type: integer
           example: 4

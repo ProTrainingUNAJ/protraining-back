@@ -81,12 +81,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/auth/register-by-invitation:
+    post:
+      tags:
+        - Authentication
+      summary: Registro de atleta por invitación
+      description: Registra la cuenta de un nuevo atleta a partir de un token de invitación de categoría (KAN-397). Rechaza con 403 si el email ya existe con rol PreparadorFisico, responde 409 si ya existe como Atleta, y 410 o 400 si el token de invitación es inválido o venció.
+      operationId: registerByInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterByInvitationRequest'
+      responses:
+        "200":
+          description: Cuenta creada exitosamente. Devuelve el token JWT y los datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          description: No se permite el registro. El usuario ya existe con rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "409":
+          description: Ya existe una cuenta de atleta registrada con este correo electrónico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "410":
+          description: El enlace o código de invitación ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/users/me/phone:
     put:
       tags:
         - Users
       summary: Actualizar teléfono de WhatsApp del usuario
-      description: Actualiza y normaliza el número de teléfono de WhatsApp del usuario autenticado. Responde 400 con mensaje en español si el formato es inválido.
+      description: Solo para el rol PreparadorFisico. Actualiza y normaliza el número de WhatsApp de la cuenta del token (claim `sub`). Responde 400 con mensaje en español si el formato es inválido y 403 si el token es de un atleta.
       operationId: updateWhatsAppPhone
       security:
         - BearerAuth: []
@@ -111,7 +153,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un preparador físico (por ejemplo, el de un atleta).
 
+  /api/v1/users/me/pf-contact:
+    get:
+      tags:
+        - Users
+      summary: Obtener el WhatsApp del preparador físico del atleta
+      description: Solo para el rol Atleta. Devuelve el número de WhatsApp de su preparador físico, tomado del claim `pf_id` del token, así que no se puede pedir el de otro PF. Responde 404 si el PF todavía no cargó su número.
+      operationId: getPfContact
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Número de WhatsApp del preparador físico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PfContact'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un atleta.
+        "404":
+          description: El preparador físico todavía no cargó su número de WhatsApp.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /api/health:
     get:
@@ -172,7 +246,34 @@ components:
           type: string
           description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
           example: "device-web-pwa-01"
-        
+    RegisterByInvitationRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - token
+      properties:
+        email:
+          type: string
+          format: email
+          example: "atleta.nuevo@protraining.com"
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+        fullName:
+          type: string
+          example: "Mateo Fernández"
+        token:
+          type: string
+          description: Token de invitación de la categoría (emitido por Estructura).
+          example: "e3b0c44298fc1c149afbf4c8996fb924"
+        deviceId:
+          type: string
+          nullable: true
+          description: Identificador del dispositivo cliente (opcional).
+          example: "device-web-pwa-01"        
 
     User:
       type: object
@@ -293,6 +394,16 @@ components:
         phoneNumber:
           type: string
           description: Número de teléfono normalizado en estándar E.164 (solo dígitos).
+          example: "5491123456789"
+          
+    PfContact:
+      type: object
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          description: Número de WhatsApp del preparador físico (solo dígitos, con código de país).
           example: "5491123456789"
 
     

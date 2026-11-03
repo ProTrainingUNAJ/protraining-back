@@ -12,6 +12,10 @@ using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
+using Application.UseCases.Alerts.GetAlerts;
+using Application.UseCases.Alerts.GetAlertById;
+using Application.UseCases.Alerts.ReviewAlert;
+using Application.UseCases.Alerts.CreatePreventiveAlert;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
@@ -107,6 +111,10 @@ builder.Services.AddScoped<ApprovePlanDraftCommandHandler>();
 builder.Services.AddScoped<DiscardPlanDraftCommandHandler>();
 builder.Services.AddScoped<GetAthleteDecisionsQueryHandler>();
 builder.Services.AddScoped<RecordDayAdjustmentDecisionCommandHandler>();
+builder.Services.AddScoped<GetAlertsQueryHandler>();
+builder.Services.AddScoped<GetAlertByIdQueryHandler>();
+builder.Services.AddScoped<ReviewAlertCommandHandler>();
+builder.Services.AddScoped<CreatePreventiveAlertCommandHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
@@ -139,3 +147,4 @@ app.Run();
 
 // Visible para WebApplicationFactory<Program>: el test de punta a punta (KAN-414) levanta este mismo arranque.
 public partial class Program;
+

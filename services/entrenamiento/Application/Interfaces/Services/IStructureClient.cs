@@ -16,4 +16,7 @@ public interface IStructureClient
 
     // Obtiene los IDs de los atletas de una categoría consultando a Estructura
     Task<IReadOnlyList<Guid>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
+    // Lista los atletas del PF autenticado (KAN-389).
+    Task<IReadOnlyList<StructureAthleteDto>> ListAthletesAsync(CancellationToken cancellationToken = default);
 }
