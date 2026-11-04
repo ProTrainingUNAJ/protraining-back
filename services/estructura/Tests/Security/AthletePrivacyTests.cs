@@ -15,7 +15,8 @@ public sealed class AthletePrivacyTests
     private static readonly HashSet<string> AllowedForAthletes =
     [
         "CategoryEventsController.List",
-        "CategorySeasonPhasesController.List"
+        "CategorySeasonPhasesController.List",
+        "InvitationsController.Accept"
     ];
 
     [Fact]

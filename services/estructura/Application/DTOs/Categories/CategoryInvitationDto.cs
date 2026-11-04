@@ -5,5 +5,6 @@ public sealed record CategoryInvitationDto(
     DateTime ExpiresAt,
     Guid CategoryId,
     string CategoryName,
+    Guid PfId,
     string? InvitationUrl = null
 );

@@ -26,9 +26,10 @@ public sealed class ValidateCategoryInvitationTokenQueryHandler(
             throw new InvitationExpiredException(); // Criterio 2: HTTP 410 Gone
 
         return new CategoryInvitationDto(
-            details.Invitation.Token,
-            details.Invitation.ExpiresAt,
-            details.Invitation.CategoryId,
-            details.CategoryName);
+        details.Invitation.Token,
+        details.Invitation.ExpiresAt,
+        details.Invitation.CategoryId,
+        details.CategoryName,
+        details.Invitation.PfId);
     }
 }

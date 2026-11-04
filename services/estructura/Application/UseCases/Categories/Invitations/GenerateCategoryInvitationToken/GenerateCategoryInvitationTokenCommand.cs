@@ -29,9 +29,10 @@ public sealed class GenerateCategoryInvitationTokenCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CategoryInvitationDto(
-            invitation.Token,
-            invitation.ExpiresAt,
-            category.Id,
-            category.Name);
+        invitation.Token,
+        invitation.ExpiresAt,
+        category.Id,
+        category.Name,
+        invitation.PfId);
     }
 }
