@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
@@ -6,13 +8,21 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Services.Structure;
 
 /// <summary>
-/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431).
-/// El aislamiento multi-tenant por PfId se propaga con el token del PF a través de ForwardAuthorizationHandler.
+/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431 / KAN-472).
+/// El aislamiento multi-tenant por PfId se propaga con el token del PF o token de Servicio a través de ForwardAuthorizationHandler.
 /// </summary>
 public sealed class StructureAthleteClient(
     HttpClient httpClient,
     ILogger<StructureAthleteClient> logger) : IStructureAthleteClient
 {
+    private sealed record StructureAthleteApiResponse(
+        [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("fullName")] string? FullName,
+        [property: JsonPropertyName("firstName")] string? FirstName,
+        [property: JsonPropertyName("lastName")] string? LastName,
+        [property: JsonPropertyName("active")] bool Active,
+        [property: JsonPropertyName("categoryId")] Guid? CategoryId);
+
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
         if (athleteId == Guid.Empty)
@@ -57,6 +67,59 @@ public sealed class StructureAthleteClient(
 
             throw new StructureServiceUnavailableException(
                 "El microservicio de Estructura no se encuentra disponible.", ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<StructureAthleteSummaryDto>> GetAthletesAsync(CancellationToken cancellationToken = default)
+    {
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogWarning("La dirección base de Estructura no está configurada.");
+            return [];
+        }
+
+        try
+        {
+            const string url = "api/v1/athletes";
+            using var response = await httpClient.GetAsync(url, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Estructura respondió {StatusCode} al listar atletas.", (int)response.StatusCode);
+                return [];
+            }
+
+            var apiAthletes = await response.Content.ReadFromJsonAsync<List<StructureAthleteApiResponse>>(cancellationToken: cancellationToken);
+            if (apiAthletes is null || apiAthletes.Count == 0)
+            {
+                return [];
+            }
+
+            return apiAthletes
+                .Where(a => a.Active)
+                .Select(a =>
+                {
+                    var name = !string.IsNullOrWhiteSpace(a.FullName)
+                        ? a.FullName.Trim()
+                        : $"{a.FirstName} {a.LastName}".Trim();
+
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        name = "Atleta " + a.Id.ToString()[..8];
+                    }
+
+                    return new StructureAthleteSummaryDto(a.Id, name, a.CategoryId, a.Active);
+                })
+                .ToList();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error al comunicarse con Estructura para obtener atletas.");
+            return [];
         }
     }
 }

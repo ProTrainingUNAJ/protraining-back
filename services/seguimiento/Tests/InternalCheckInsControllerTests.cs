@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using API.Controllers;
 using Application.DTOs.CheckIns;
 using Application.Interfaces.Persistence;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -77,5 +78,66 @@ public class InternalCheckInsControllerTests
         var okPfA = Assert.IsType<OkObjectResult>(resultPfA.Result);
         var responsePfA = Assert.IsType<CheckInsDoneResponse>(okPfA.Value);
         Assert.Contains(athleteOfPfA, responsePfA.AthleteIds);
+    }
+
+    [Fact]
+    public async Task GetCheckInsHistory_ListaAtletasVacia_DevuelveOkVacioSinConsultarDb()
+    {
+        var request = new CheckInsHistoryRequest([], new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7));
+        var result = await _controller.GetCheckInsHistory(request, CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsAssignableFrom<IReadOnlyList<InternalCheckInHistoryDto>>(okResult.Value);
+        Assert.Empty(items);
+
+        _checkInRepositoryMock.Verify(
+            r => r.GetHistoryByAthletesAndDateRangeAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCheckInsHistory_AtletasValidos_MapeaCamposCorrectamente()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateTime(2026, 11, 4, 10, 0, 0, DateTimeKind.Utc);
+        var checkIn = new CheckIn
+        {
+            AthleteId = athleteId,
+            Date = date,
+            SleepHours = 5.5,
+            SleepQuality = 2,
+            MuscleSoreness = 4,
+            FatigueLevel = 4,
+            MoodRate = 3,
+            StressLevel = 4,
+            EffortRate = 9,
+            IsSick = false,
+            PainZones = "Rodilla derecha",
+            HasActiveInjury = true
+        };
+
+        _checkInRepositoryMock
+            .Setup(r => r.GetHistoryByAthletesAndDateRangeAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(athleteId)),
+                It.IsAny<DateTime>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([checkIn]);
+
+        var request = new CheckInsHistoryRequest([athleteId], new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7));
+        var result = await _controller.GetCheckInsHistory(request, CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var items = Assert.IsAssignableFrom<IReadOnlyList<InternalCheckInHistoryDto>>(okResult.Value);
+        Assert.Single(items);
+
+        var first = items[0];
+        Assert.Equal(athleteId, first.AthleteId);
+        Assert.Equal(new DateOnly(2026, 11, 4), first.Date);
+        Assert.Equal(5.5, first.SleepHours);
+        Assert.Equal(9, first.EffortRate);
+        Assert.Equal(4, first.FatigueLevel);
+        Assert.True(first.HasActiveInjury);
+        Assert.Equal("Rodilla derecha", first.PainZones);
     }
 }
