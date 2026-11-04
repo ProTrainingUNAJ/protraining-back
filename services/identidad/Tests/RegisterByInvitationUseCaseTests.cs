@@ -61,8 +61,9 @@ public class RegisterByInvitationUseCaseTests
             DeviceId: "device-web-01"
         );
 
+        var expectedPfId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        var invitationDto = new CategoryInvitationDto("token-valido-123", DateTime.UtcNow.AddDays(5), categoryId, "Sub-20");
+        var invitationDto = new CategoryInvitationDto("token-valido-123", DateTime.UtcNow.AddDays(5), categoryId, "Sub-20", expectedPfId);
 
         _mockStructureClient.Setup(s => s.ValidateInvitationTokenAsync(request.Token, It.IsAny<CancellationToken>()))
             .ReturnsAsync(invitationDto);
@@ -91,7 +92,7 @@ public class RegisterByInvitationUseCaseTests
         Assert.Equal("fake.jwt.token", result.AccessToken);
         Assert.Equal("Atleta", result.User.Role);
         Assert.Equal(request.FullName, result.User.FullName);
-        _mockUserManager.Verify(m => m.CreateAsync(It.Is<User>(u => u.Email == request.Email.ToLowerInvariant()), request.Password), Times.Once);
+        _mockUserManager.Verify(m => m.CreateAsync(It.Is<User>(u => u.Email == request.Email.ToLowerInvariant() && u.PfId == expectedPfId), request.Password), Times.Once);
         _mockUserManager.Verify(m => m.AddToRoleAsync(It.IsAny<User>(), "Atleta"), Times.Once);
         _mockRefreshTokenRepository.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -115,7 +116,7 @@ public class RegisterByInvitationUseCaseTests
         };
 
         _mockStructureClient.Setup(s => s.ValidateInvitationTokenAsync(request.Token, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CategoryInvitationDto(request.Token, DateTime.UtcNow.AddDays(5), Guid.NewGuid(), "Sub-20"));
+            .ReturnsAsync(new CategoryInvitationDto(request.Token, DateTime.UtcNow.AddDays(5), Guid.NewGuid(), "Sub-20", Guid.NewGuid()));
 
         _mockUserManager.Setup(m => m.FindByEmailAsync(request.Email.ToLowerInvariant()))
             .ReturnsAsync(existingPf);
@@ -147,7 +148,7 @@ public class RegisterByInvitationUseCaseTests
         };
 
         _mockStructureClient.Setup(s => s.ValidateInvitationTokenAsync(request.Token, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CategoryInvitationDto(request.Token, DateTime.UtcNow.AddDays(5), Guid.NewGuid(), "Sub-20"));
+            .ReturnsAsync(new CategoryInvitationDto(request.Token, DateTime.UtcNow.AddDays(5), Guid.NewGuid(), "Sub-20", Guid.NewGuid()));
 
         _mockUserManager.Setup(m => m.FindByEmailAsync(request.Email.ToLowerInvariant()))
             .ReturnsAsync(existingAthlete);
@@ -198,5 +199,33 @@ public class RegisterByInvitationUseCaseTests
         // Act & Assert (Criterio KAN-397: 400 Bad Request)
         await Assert.ThrowsAsync<InvitationNotFoundException>(() => _useCase.ExecuteAsync(request));
         _mockUserManager.Verify(m => m.CreateAsync(It.IsAny<User>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_RoleAssignmentFails_When_Register_Then_DeletesCreatedUser_AndThrowsDomainException()
+    {
+        // Arrange
+        var request = new RegisterByInvitationRequestDto(
+            Email: "nuevo@protraining.com",
+            Password: "PasswordSegura123!",
+            FullName: "Atleta Test",
+            Token: "token-valido"
+        );
+
+        _mockStructureClient.Setup(s => s.ValidateInvitationTokenAsync(request.Token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDto(request.Token, DateTime.UtcNow.AddDays(5), Guid.NewGuid(), "Sub-20", Guid.NewGuid()));
+
+        _mockUserManager.Setup(m => m.FindByEmailAsync(request.Email.ToLowerInvariant()))
+            .ReturnsAsync((User?)null);
+
+        _mockUserManager.Setup(m => m.CreateAsync(It.IsAny<User>(), request.Password))
+            .ReturnsAsync(IdentityResult.Success);
+
+        _mockUserManager.Setup(m => m.AddToRoleAsync(It.IsAny<User>(), "Atleta"))
+            .ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Error al asignar rol" }));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<DomainException>(() => _useCase.ExecuteAsync(request));
+        _mockUserManager.Verify(m => m.DeleteAsync(It.IsAny<User>()), Times.Once);
     }
 }

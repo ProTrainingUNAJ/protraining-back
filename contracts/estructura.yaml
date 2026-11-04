@@ -859,6 +859,45 @@ paths:
         "410":
           $ref: '#/components/responses/Gone'
 
+  /api/v1/invitations/{token}/accept:
+    post:
+      tags:
+        - Categories
+      summary: Aceptar invitación y dar de alta atleta en la categoría
+      description: Endpoint protegido para que el atleta recién registrado dé de alta su ficha de atleta vinculada a su cuenta y sea enrolado en la categoría deportiva de la invitación.
+      operationId: acceptCategoryInvitation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptCategoryInvitationRequest'
+      responses:
+        "200":
+          description: Invitación aceptada con éxito y atleta vinculado a la categoría.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "410":
+          $ref: '#/components/responses/Gone'
+
   /api/v1/categories/{id}/matches:
     get:
       tags:
@@ -1433,6 +1472,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso no autorizado o permisos insuficientes para la operación solicitada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
     CategoryInvitation:
@@ -1442,6 +1487,7 @@ components:
         - expiresAt
         - categoryId
         - categoryName
+        - pfId
       properties:
         token:
           type: string
@@ -1457,10 +1503,39 @@ components:
         categoryName:
           type: string
           example: "Primera División"
+        pfId:
+          type: string
+          format: uuid
+          example: "8fe42b78-0c67-4d7a-8f4b-76fca82d61b5"
         invitationUrl:
           type: string
           nullable: true
           example: "https://protraining.app/invite/e3b0c44298fc1c149afbf4c8996fb924"
+    AcceptCategoryInvitationRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - phone
+      properties:
+        firstName:
+          type: string
+          example: "Mateo"
+        lastName:
+          type: string
+          example: "Fernández"
+        email:
+          type: string
+          format: email
+          example: "mateo@ejemplo.com"
+        phone:
+          type: string
+          example: "+5491112345678"
+        emergencyContact:
+          type: string
+          nullable: true
+          example: "+5491187654321"
     GuardianConsent:
       type: object
       description: Registro de consentimiento parental obligatorio para atletas menores.

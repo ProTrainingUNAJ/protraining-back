@@ -4,5 +4,6 @@ public sealed record CategoryInvitationDto(
     string Token,
     DateTime ExpiresAt,
     Guid CategoryId,
-    string CategoryName
+    string CategoryName,
+    Guid PfId
 );

@@ -55,6 +55,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
 
 namespace Estructura.Tests.Infrastructure;
 
@@ -173,6 +174,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<DeleteSeasonPhaseCommandHandler>();
                 services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
                 services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
+                services.AddScoped<AcceptCategoryInvitationCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
