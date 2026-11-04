@@ -57,8 +57,9 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         Assert.Equal("Sub-20 Competitiva", returnedInvitation.CategoryName);
         Assert.Equal(cat.Id, returnedInvitation.CategoryId);
 
-        // Seguridad: NO debe exponer el pf_id en crudo ni listas de atletas ni datos médicos
-        Assert.DoesNotContain(_pfId.ToString(), rawContent, StringComparison.OrdinalIgnoreCase);
+        // expone el pfId de la invitación para vincular al atleta con su PF
+        Assert.Equal(_pfId, returnedInvitation.PfId);
+        // Seguridad: NUNCA debe exponer listas de atletas ni datos médicos
         Assert.DoesNotContain("athletes", rawContent, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("medicalRecord", rawContent, StringComparison.OrdinalIgnoreCase);
     }
