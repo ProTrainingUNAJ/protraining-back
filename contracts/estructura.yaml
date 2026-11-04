@@ -1472,6 +1472,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso no autorizado o permisos insuficientes para la operación solicitada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
     CategoryInvitation:
