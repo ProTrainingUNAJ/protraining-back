@@ -14,21 +14,27 @@ using Xunit;
 namespace Asistente.Tests;
 
 /// <summary>
-/// Pruebas automatizadas para el worker nocturno y el caso de uso de análisis de sobrecarga (KAN-472 · #177).
+/// Pruebas automatizadas para el worker nocturno y el caso de uso de análisis de sobrecarga y fixture (KAN-472 · #177 / KAN-473 · #178).
 /// </summary>
 public sealed class DailyOverloadAnalysisWorkerTests
 {
     private readonly Mock<IStructureAthleteClient> _structureMock = new();
     private readonly Mock<ISeguimientoClient> _seguimientoMock = new();
+    private readonly Mock<IStructureCalendarClient> _calendarMock = new();
     private readonly Mock<IPreventiveAlertRepository> _alertRepoMock = new();
     private readonly Mock<IUnitOfWork> _unitOfWorkMock = new();
     private readonly ProcessDailyOverloadAnalysisCommandHandler _handler;
 
     public DailyOverloadAnalysisWorkerTests()
     {
+        _calendarMock
+            .Setup(c => c.GetMatchDatesAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         _handler = new ProcessDailyOverloadAnalysisCommandHandler(
             _structureMock.Object,
             _seguimientoMock.Object,
+            _calendarMock.Object,
             _alertRepoMock.Object,
             _unitOfWorkMock.Object,
             NullLogger<ProcessDailyOverloadAnalysisCommandHandler>.Instance);
@@ -87,6 +93,78 @@ public sealed class DailyOverloadAnalysisWorkerTests
         Assert.Equal(AlertStatus.Pending, savedAlert.Status);
         Assert.Equal(SuggestedAdjustmentType.LoadReduction, savedAlert.SuggestedAdjustmentType);
         Assert.Equal(25, savedAlert.SuggestedAdjustmentPercentage);
+
+        _alertRepoMock.Verify(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessDailyOverloadAnalysis_AtletaConEsfuerzoAltoYPartidoEnDosDias_QuedaMarcadoParaAviso()
+    {
+        // KAN-473 · Criterio de Aceptación Oficial:
+        // DADO un atleta con esfuerzo alto y partido en dos días CUANDO corre el análisis ENTONCES queda marcado para aviso.
+        var athleteId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var athlete = new StructureAthleteSummaryDto(athleteId, "Nicolás González", categoryId);
+        var targetDate = new DateOnly(2026, 11, 4);
+        var matchDateD2 = targetDate.AddDays(2); // 2026-11-06 (en 2 días)
+
+        _structureMock
+            .Setup(s => s.GetAthletesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([athlete]);
+
+        // Atleta con esfuerzo alto reciente (RPE 8) pero sueño normal (8 hs) para aislar la regla de partido
+        var checkIns = new List<AthleteCheckInHistoryItemDto>
+        {
+            new(Guid.NewGuid(), athleteId, targetDate, 8.0, 4, 1, 1, 4, 1, 8, false, null, false)
+        };
+
+        _seguimientoMock
+            .Setup(s => s.GetAthleteCheckInsHistoryAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(checkIns);
+
+        // Calendario confirma partido en D-2 para la categoría
+        _calendarMock
+            .Setup(c => c.GetMatchDatesAsync(
+                categoryId,
+                targetDate,
+                matchDateD2,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([matchDateD2]);
+
+        _alertRepoMock
+            .Setup(r => r.ListAsync(true, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        PreventiveAlert? savedAlert = null;
+        _alertRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()))
+            .Callback<PreventiveAlert, CancellationToken>((a, _) => savedAlert = a)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var command = new ProcessDailyOverloadAnalysisCommand(targetDate);
+        var result = await _handler.HandleAsync(command, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ProcessedAthletes);
+        Assert.Equal(1, result.GeneratedAlerts);
+        Assert.Equal(0, result.SkippedAlerts);
+
+        Assert.NotNull(savedAlert);
+        Assert.Equal(athleteId, savedAlert.AthleteId);
+        Assert.Equal("Nicolás González", savedAlert.AthleteName);
+        Assert.Equal(AlertSeverity.High, savedAlert.Severity);
+        Assert.Equal(AlertType.AcuteOverload, savedAlert.Type);
+        Assert.Equal(AlertStatus.Pending, savedAlert.Status);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, savedAlert.SuggestedAdjustmentType);
+        Assert.Equal(30, savedAlert.SuggestedAdjustmentPercentage);
+        Assert.Contains("Alerta pre-partido (D-2)", savedAlert.Reason);
+        Assert.Contains("RPE 8", savedAlert.Reason);
 
         _alertRepoMock.Verify(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
