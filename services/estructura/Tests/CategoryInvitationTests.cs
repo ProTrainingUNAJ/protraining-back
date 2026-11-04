@@ -1,4 +1,4 @@
-﻿using API.Middleware;
+using API.Middleware;
 using Application.DTOs.Categories;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
@@ -25,7 +25,7 @@ public sealed class CategoryInvitationTests
     {
         // Criterio 1: DADO un PF autenticado CUANDO solicita un token de invitación para la categoria "Primera División"
         // ENTONCES recibe un token unico con fecha de expiración a 7 días
-        var now = new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero);
+        var now = DateTimeOffset.UtcNow;
         var timeProvider = new TestTimeProvider(now);
 
         var organizationId = Guid.NewGuid();
@@ -112,7 +112,7 @@ public sealed class CategoryInvitationTests
     [Fact]
     public async Task Given_ValidToken_When_Validate_Then_ReturnsCategoryInvitationDtoWithCategoryName()
     {
-        var now = new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero);
+        var now = DateTimeOffset.UtcNow;
         var timeProvider = new TestTimeProvider(now);
 
         var categoryId = Guid.NewGuid();

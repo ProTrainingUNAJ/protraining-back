@@ -103,7 +103,8 @@ public sealed class Athlete : BaseEntity
             guardianEmail,
             guardianPhone,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations);
+            allowsHabitsRecommendations,
+            PfId);
     }
 
     public void RegisterAdultConsent(
@@ -119,7 +120,8 @@ public sealed class Athlete : BaseEntity
         DigitalConsent = DigitalConsent.RegisterForAdult(
             Id,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations);
+            allowsHabitsRecommendations,
+            PfId);
     }
 
     public void UpdateHabitsPermission(bool allowsHabitsRecommendations)

@@ -101,6 +101,8 @@ builder.Services.AddScoped<UpdateMedicalRecordCommandHandler>();
 builder.Services.AddScoped<ListMedicalRecordAuditLogsQueryHandler>();
 builder.Services.AddScoped<GetMeQueryHandler>();
 builder.Services.AddScoped<ListMyCategoriesQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
 builder.Services.AddScoped<ListOrganizationsQueryHandler>();
 builder.Services.AddScoped<GetOrganizationQueryHandler>();
 builder.Services.AddScoped<CreateOrganizationCommandHandler>();
