@@ -477,6 +477,66 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/me/consent:
+    get:
+      tags:
+        - Me
+      summary: Consultar estado del consentimiento del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Retorna el estado del consentimiento digital informado (si ya fue firmado,
+        si el atleta es menor de edad y fecha de registro).
+      operationId: getMyConsent
+      responses:
+        "200":
+          description: Estado del consentimiento del atleta logueado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteConsentStatus'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Me
+      summary: Registrar consentimiento digital para atleta adulto
+      description: >-
+        Solo para el rol Atleta mayor de edad. Registra la firma digital inmutable del consentimiento informado
+        para preparación física y opcionalmente recomendaciones de hábitos. Si el atleta es menor de edad, devuelve 400.
+      operationId: registerMyConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterAdultConsentRequest'
+      responses:
+        "200":
+          description: Consentimiento digital registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteConsentStatus'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/organizations:
     get:
       tags:
@@ -1802,6 +1862,66 @@ components:
           description: Categorías a las que pertenece. Vacía si el atleta está dado de baja.
           items:
             $ref: '#/components/schemas/MeCategory'
+        hasSignedConsent:
+          type: boolean
+          description: Indica si el atleta cuenta con consentimiento digital firmado.
+          example: true
+        isMinor:
+          type: boolean
+          description: Indica si el atleta es menor de edad.
+          example: false
+
+    AthleteConsentStatus:
+      type: object
+      description: Estado del consentimiento digital del atleta.
+      required:
+        - hasSignedConsent
+        - isMinor
+        - allowsPhysicalTraining
+        - allowsHabitsRecommendations
+      properties:
+        hasSignedConsent:
+          type: boolean
+          description: Indica si el consentimiento ya fue firmado (por el atleta si es mayor, o por el tutor si es menor).
+          example: true
+        isMinor:
+          type: boolean
+          description: Indica si el atleta es menor de edad.
+          example: false
+        consentDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha y hora en la que se registró la firma digital.
+          example: "2026-11-01T15:30:00Z"
+        allowsPhysicalTraining:
+          type: boolean
+          description: Autorización para preparación física.
+          example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          description: Autorización para recomendaciones de hábitos saludables y descanso.
+          example: false
+        guardianName:
+          type: string
+          nullable: true
+          description: Nombre del tutor legal en caso de atleta menor de edad.
+          example: null
+
+    RegisterAdultConsentRequest:
+      type: object
+      description: Solicitud de firma digital del consentimiento para atleta adulto.
+      properties:
+        allowsPhysicalTraining:
+          type: boolean
+          default: true
+          description: Autorización de preparación física (obligatoria en true para completar el consentimiento).
+          example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          default: false
+          description: Autorización opcional para recepción de recomendaciones de hábitos saludables y descanso.
+          example: false
 
     MeCategory:
       type: object

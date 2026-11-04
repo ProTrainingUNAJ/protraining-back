@@ -146,6 +146,8 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ListMedicalRecordAuditLogsQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetMe.GetMeQueryHandler>();
                 services.AddScoped<ListMyCategoriesQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
                 services.AddScoped<ListOrganizationsQueryHandler>();
                 services.AddScoped<GetOrganizationQueryHandler>();
                 services.AddScoped<CreateOrganizationCommandHandler>();
