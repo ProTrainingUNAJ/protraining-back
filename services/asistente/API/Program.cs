@@ -71,15 +71,19 @@ builder.Services.AddHttpClient<IExerciseCatalogService, Infrastructure.Services.
 {
     var uriString = trainingUri.ToString().TrimEnd('/') + "/";
     client.BaseAddress = new Uri(uriString);
-    client.Timeout = TimeSpan.FromSeconds(5);
-}).AddHttpMessageHandler<ForwardAuthorizationHandler>();
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
 
 builder.Services.AddHttpClient<ITrainingPlanServiceClient, Infrastructure.Services.Training.TrainingPlanServiceClient>(client =>
 {
     var uriString = trainingUri.ToString().TrimEnd('/') + "/";
     client.BaseAddress = new Uri(uriString);
-    client.Timeout = TimeSpan.FromSeconds(5);
-}).AddHttpMessageHandler<ForwardAuthorizationHandler>();
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
 
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
@@ -91,19 +95,19 @@ builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services
 {
     var uriString = structureUri.ToString().TrimEnd('/') + "/";
     client.BaseAddress = new Uri(uriString);
-    client.Timeout = TimeSpan.FromSeconds(5);
+    // Timeout manejado por Polly (KAN-433)
 })
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
-.AddStandardResilienceHandler();
+.AddProTrainingResilience();
 
 builder.Services.AddHttpClient<IStructureAthleteClient, Infrastructure.Services.Structure.StructureAthleteClient>(client =>
 {
     var uriString = structureUri.ToString().TrimEnd('/') + "/";
     client.BaseAddress = new Uri(uriString);
-    client.Timeout = TimeSpan.FromSeconds(5);
+    // Timeout manejado por Polly (KAN-433)
 })
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
-.AddStandardResilienceHandler();
+.AddProTrainingResilience();
 
 var seguimientoBaseUrl = builder.Configuration["Services:Seguimiento:BaseUrl"];
 if (!Uri.TryCreate(seguimientoBaseUrl, UriKind.Absolute, out var seguimientoUri))
@@ -115,10 +119,10 @@ builder.Services.AddHttpClient<ISeguimientoClient, Infrastructure.Services.Segui
 {
     var uriString = seguimientoUri.ToString().TrimEnd('/') + "/";
     client.BaseAddress = new Uri(uriString);
-    client.Timeout = TimeSpan.FromSeconds(5);
+    // Timeout manejado por Polly (KAN-433)
 })
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
-.AddStandardResilienceHandler();
+.AddProTrainingResilience();
 
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();

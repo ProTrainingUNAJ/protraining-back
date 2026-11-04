@@ -67,7 +67,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
 // opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
 // reintento y caída siempre al motivo local del TrafficLightEngine (plan B), nunca propagando el error al cliente.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 
 // Motor puro del semáforo (KAN-363) y caso de uso del check-in diario (KAN-364/Demo 1):

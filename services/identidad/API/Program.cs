@@ -49,7 +49,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 // Retries, timeouts and circuit breaker for every registered HttpClient.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 
 // Cliente HTTP hacia Estructura para validar invitaciones (KAN-397)
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"] ?? "http://localhost:8082";
