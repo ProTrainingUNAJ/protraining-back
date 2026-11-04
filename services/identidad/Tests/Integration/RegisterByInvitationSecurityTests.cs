@@ -66,6 +66,55 @@ public sealed class RegisterByInvitationSecurityTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Given_ValidInvitation_When_Register_Then_UserInDbHasInvitationPfId_AndJwtContainsPfIdClaim_AndInjectedPfIdInBodyIsIgnored()
+    {
+        // Criterio 2 KAN-399: Verificar que el usuario quede con el PfId de la invitación,
+        // que el JWT salga con pf_id = ese PF y que cualquier pfId inyectado en el body sea ignorado.
+        var token = "token-valido-pfid";
+        var expectedPfId = Guid.NewGuid();
+        var maliciousInjectedPfId = Guid.NewGuid();
+
+        _factory.Structure.RespondWithInvitation(
+            token: token,
+            categoryId: Guid.NewGuid(),
+            categoryName: "Primera División",
+            expiresAt: DateTime.UtcNow.AddDays(5),
+            pfId: expectedPfId);
+
+        // Payload con inyección maliciosa de un pfId ajeno
+        var rawPayloadWithInjectedPf = $$"""
+        {
+            "email": "atleta.vinculacion@protraining.com",
+            "password": "PasswordSegura123!",
+            "fullName": "Atleta Vinculado",
+            "token": "{{token}}",
+            "pfId": "{{maliciousInjectedPfId}}"
+        }
+        """;
+
+        var content = new StringContent(rawPayloadWithInjectedPf, Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await _client.PostAsync("/api/v1/auth/register-by-invitation", content);
+
+        // Assert HTTP
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
+        Assert.NotNull(result);
+
+        // Assert JWT: El claim pf_id debe ser exactamente el de la invitación (no el inyectado)
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(result.AccessToken);
+        var pfClaim = jwt.Claims.FirstOrDefault(c => c.Type == "pf_id");
+        Assert.NotNull(pfClaim);
+        Assert.Equal(expectedPfId.ToString(), pfClaim.Value);
+
+        // Assert BD: El usuario persistido en SQLite tiene el PfId de la invitación legítima
+        var userInDb = await _factory.FindUserByEmailAsync("atleta.vinculacion@protraining.com");
+        Assert.NotNull(userInDb);
+        Assert.Equal(expectedPfId, userInDb.PfId);
+    }
+
+    [Fact]
     public async Task Given_InvalidOrTamperedToken_When_Register_Then_ReturnsError_AndNoUserIsCreatedInDatabase()
     {
         // Arrange: Estructura responde 404 (token inexistente)
