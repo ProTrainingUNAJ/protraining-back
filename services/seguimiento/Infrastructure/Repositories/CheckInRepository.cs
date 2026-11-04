@@ -71,4 +71,22 @@ public sealed class CheckInRepository(AppDbContext context) : ICheckInRepository
                 .Distinct()
                 .ToListAsync(cancellationToken);
         });
+
+    public async Task<IReadOnlyList<CheckIn>> GetHistoryByAthletesAndDateRangeAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        DateTime startDate,
+        DateTime endDate,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            if (athleteIds.Count == 0)
+                return [];
+
+            return await context.CheckIns
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(c => athleteIds.Contains(c.AthleteId) && c.Date >= startDate && c.Date <= endDate)
+                .OrderBy(c => c.Date)
+                .ToListAsync(cancellationToken);
+        });
 }

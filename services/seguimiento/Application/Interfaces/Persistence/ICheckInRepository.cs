@@ -17,5 +17,9 @@ public interface ICheckInRepository
 
     // Consulta en lote que atletas de la lista ya hicieron check-in hoy para un PF (para el worker con rol Servicio)
     Task<IReadOnlyList<Guid>> GetCompletedCheckInAthleteIdsAsync(DateOnly date, Guid pfId, IReadOnlyList<Guid> athleteIds, CancellationToken cancellationToken = default);
+
+    // Consulta interna sin filtro de sesión para workers nocturnos de análisis de fatiga y sobrecarga (#177 · KAN-472)
+    Task<IReadOnlyList<CheckIn>> GetHistoryByAthletesAndDateRangeAsync(IReadOnlyCollection<Guid> athleteIds, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
+
     Task AddAsync(CheckIn checkIn, CancellationToken cancellationToken = default);
 }

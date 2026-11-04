@@ -77,4 +77,3 @@ public static class DependencyInjection
             await context.Database.MigrateAsync();
     }
 }
-
