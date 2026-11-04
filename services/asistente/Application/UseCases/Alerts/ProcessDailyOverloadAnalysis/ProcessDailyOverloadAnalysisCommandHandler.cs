@@ -8,12 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace Application.UseCases.Alerts.ProcessDailyOverloadAnalysis;
 
 /// <summary>
-/// Caso de uso que orquesta el análisis nocturno de los últimos 7 días de check-ins de atletas (#177 · KAN-472).
-/// Identifica patrones de alarma (RPE alto sostenido, déficit de sueño, fatiga crítica) y emite avisos preventivos.
+/// Caso de uso que orquesta el análisis nocturno de check-ins de atletas cruzado con el fixture (#177 · KAN-472 / #178 · KAN-473).
+/// Identifica patrones de alarma (RPE alto sostenido, déficit de sueño, fatiga crítica y proximidad de partido en D-2) y emite avisos preventivos.
 /// </summary>
 public sealed class ProcessDailyOverloadAnalysisCommandHandler(
     IStructureAthleteClient structureAthleteClient,
     ISeguimientoClient seguimientoClient,
+    IStructureCalendarClient structureCalendarClient,
     IPreventiveAlertRepository alertRepository,
     IUnitOfWork unitOfWork,
     ILogger<ProcessDailyOverloadAnalysisCommandHandler> logger)
@@ -25,11 +26,13 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
         var targetDate = command.TargetDate ?? ArgentinaTime.Today;
         var fromDate = targetDate.AddDays(-6);
         var toDate = targetDate;
+        var matchInTwoDaysTarget = targetDate.AddDays(2);
 
         logger.LogInformation(
-            "Iniciando análisis diario de sobrecarga para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd}.",
+            "Iniciando análisis diario de sobrecarga y calendario para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd} (D-2: {D2Date:yyyy-MM-dd}).",
             fromDate,
-            toDate);
+            toDate,
+            matchInTwoDaysTarget);
 
         // 1. Obtener los atletas activos desde Estructura
         var athletes = await structureAthleteClient.GetAthletesAsync(cancellationToken);
@@ -54,7 +57,25 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
             return new ProcessDailyOverloadAnalysisResult(athletes.Count, 0, 0);
         }
 
-        // 3. Obtener alertas pendientes para no duplicar avisos no revisados del mismo tipo
+        // 3. Consultar calendario de partidos próximos en Estructura para correlación D-2 (#178 · KAN-473)
+        var categoryIds = athletes
+            .Where(a => a.CategoryId.HasValue && a.CategoryId.Value != Guid.Empty)
+            .Select(a => a.CategoryId!.Value)
+            .Distinct()
+            .ToList();
+
+        var matchDatesByCategory = new Dictionary<Guid, IReadOnlyList<DateOnly>>();
+        foreach (var categoryId in categoryIds)
+        {
+            var matchDates = await structureCalendarClient.GetMatchDatesAsync(
+                categoryId,
+                targetDate,
+                matchInTwoDaysTarget,
+                cancellationToken);
+            matchDatesByCategory[categoryId] = matchDates;
+        }
+
+        // 4. Obtener alertas pendientes para no duplicar avisos no revisados del mismo tipo
         var pendingAlerts = await alertRepository.ListAsync(
             onlyUnreviewed: true,
             severity: null,
@@ -88,7 +109,20 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
                 c.HasActiveInjury
             )).ToList();
 
-            var patternResult = OverloadPatternDetector.Detect(athleteId, records);
+            // Verificar si la categoría del atleta tiene partido en D-2 (dentro de 2 días)
+            bool hasMatchInTwoDays = false;
+            if (athlete.CategoryId.HasValue &&
+                matchDatesByCategory.TryGetValue(athlete.CategoryId.Value, out var categoryMatches))
+            {
+                hasMatchInTwoDays = categoryMatches.Contains(matchInTwoDaysTarget);
+            }
+
+            var patternResult = OverloadPatternDetector.Detect(
+                athleteId,
+                records,
+                hasMatchInTwoDays: hasMatchInTwoDays,
+                matchDate: hasMatchInTwoDays ? matchInTwoDaysTarget : null);
+
             if (!patternResult.HasPattern)
             {
                 continue;
@@ -148,4 +182,3 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
         return new ProcessDailyOverloadAnalysisResult(athletes.Count, generatedAlerts, skippedAlerts);
     }
 }
-
