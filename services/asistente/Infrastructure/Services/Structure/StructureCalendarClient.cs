@@ -1,13 +1,16 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Application.Interfaces.Services;
+using Application.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services.Structure;
 
 /// <summary>
-/// Cliente HTTP resiliente para consultar los partidos de una categoría en Estructura (KAN-406 / KAN-408 / KAN-410).
-/// Si Estructura no está disponible o no hay eventos configurados, devuelve vacío sin interrumpir el flujo.
+/// Cliente HTTP resiliente para consultar los partidos de una categoría en Estructura (KAN-406 / KAN-408 / KAN-473).
+/// Utiliza el endpoint interno con rol 'Servicio' (#178 · KAN-473).
+/// No silencia errores de autenticación o autorización (401/403).
 /// </summary>
 public sealed class StructureCalendarClient(
     HttpClient httpClient,
@@ -29,8 +32,18 @@ public sealed class StructureCalendarClient(
 
         try
         {
-            var url = $"api/v1/categories/{categoryId}/events?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
+            var url = $"api/v1/internal/categories/{categoryId}/events?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
             using var response = await httpClient.GetAsync(url, cancellationToken);
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                logger.LogError(
+                    "Acceso denegado ({StatusCode}) al consultar el calendario interno en Estructura para la categoría {CategoryId}. Requiere rol 'Servicio' (#178 · KAN-473).",
+                    (int)response.StatusCode,
+                    categoryId);
+                throw new StructureServiceUnavailableException(
+                    $"Acceso denegado ({response.StatusCode}) en el endpoint interno de eventos de Estructura.");
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -52,6 +65,10 @@ public sealed class StructureCalendarClient(
                 .ToList();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (StructureServiceUnavailableException)
         {
             throw;
         }

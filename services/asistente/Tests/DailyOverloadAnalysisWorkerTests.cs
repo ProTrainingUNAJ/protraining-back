@@ -303,7 +303,7 @@ public sealed class DailyOverloadAnalysisWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate, matchDate, It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), matchDate, It.IsAny<CancellationToken>()))
             .ReturnsAsync([matchDate]);
 
         _alertRepoMock
@@ -326,6 +326,65 @@ public sealed class DailyOverloadAnalysisWorkerTests
         Assert.NotNull(savedAlert);
         Assert.Equal(AlertType.AcuteOverload, savedAlert.Type);
         Assert.Equal(AlertSeverity.High, savedAlert.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, savedAlert.SuggestedAdjustmentType);
+        Assert.Equal(30, savedAlert.SuggestedAdjustmentPercentage);
+    }
+
+    [Fact]
+    public async Task ProcessDailyOverloadAnalysis_ConPartidoEnD1_GeneraAlertaAcuteOverloadPrePartidoD1()
+    {
+        // Arrange: Atleta con esfuerzo alto reciente (RPE 9) y categoría con partido mañana en D-1 (#178 · KAN-473)
+        var athleteId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var targetDate = new DateOnly(2026, 11, 4);
+        var matchDate = targetDate.AddDays(1); // Partido en D-1 (mañana)
+
+        var athlete = new StructureAthleteSummaryDto(athleteId, "Tomás Pérez", categoryId, true, pfId);
+
+        _structureMock
+            .Setup(s => s.GetAthletesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([athlete]);
+
+        var checkIns = new List<AthleteCheckInHistoryItemDto>
+        {
+            new(Guid.NewGuid(), athleteId, targetDate, 8.0, 4, 1, 1, 4, 1, 9, false, null, false) // RPE 9
+        };
+
+        _seguimientoMock
+            .Setup(s => s.GetAthleteCheckInsHistoryAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(checkIns);
+
+        _calendarMock
+            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([matchDate]);
+
+        _alertRepoMock
+            .Setup(r => r.ListAsync(true, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        PreventiveAlert? savedAlert = null;
+        _alertRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()))
+            .Callback<PreventiveAlert, CancellationToken>((a, _) => savedAlert = a)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var command = new ProcessDailyOverloadAnalysisCommand(targetDate);
+        var result = await _handler.HandleAsync(command, CancellationToken.None);
+
+        // Assert: Ventana D-1 cumplida
+        Assert.Equal(1, result.ProcessedAthletes);
+        Assert.Equal(1, result.GeneratedAlerts);
+        Assert.NotNull(savedAlert);
+        Assert.Equal(AlertType.AcuteOverload, savedAlert.Type);
+        Assert.Equal(AlertSeverity.High, savedAlert.Severity);
+        Assert.Contains("Alerta pre-partido (D-1)", savedAlert.Reason);
+        Assert.Contains("para mañana", savedAlert.Reason);
         Assert.Equal(SuggestedAdjustmentType.LoadReduction, savedAlert.SuggestedAdjustmentType);
         Assert.Equal(30, savedAlert.SuggestedAdjustmentPercentage);
     }
