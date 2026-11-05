@@ -28,6 +28,14 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         _clientPfB = _factory.CreateAuthenticatedClient(_pfBId, role: "PreparadorFisico");
     }
 
+    private async Task SignAdultConsentAsync(Guid athleteId, Guid pfId)
+    {
+        using var db = _factory.CreateDbContext(pfId);
+        var athlete = await db.Athletes.FindAsync(athleteId);
+        athlete!.RegisterAdultConsent();
+        await db.SaveChangesAsync();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -42,6 +50,7 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athlete);
+        await SignAdultConsentAsync(athlete.Id, _pfAId);
 
         // act: enviar POST con motivo inválido en el body
         var response = await _clientPfA.PostAsJsonAsync(
@@ -73,6 +82,7 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athlete);
+        await SignAdultConsentAsync(athlete.Id, _pfAId);
 
         // act 1: cargar ficha médica con motivo válido (Create)
         var putRequest = new UpdateMedicalRecordRequest(
@@ -295,6 +305,7 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
             new CreateAthleteRequest("Gabriel", "Batistuta", "gabriel@club.com", "+5491155556666", IsMinor: false));
         var athleteB = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athleteB);
+        await SignAdultConsentAsync(athleteB.Id, _pfBId);
 
         var pfBPut = await _clientPfB.PutAsJsonAsync(
             $"/api/v1/athletes/{athleteB.Id}/medical-record",

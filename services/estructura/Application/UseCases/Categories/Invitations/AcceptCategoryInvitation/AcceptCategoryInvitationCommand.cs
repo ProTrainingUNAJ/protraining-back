@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Athletes;
+using Application.DTOs.Athletes;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -54,7 +54,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                 command.LastName,
                 command.Email,
                 command.Phone,
-                signsInitialConsent: true,
+                signsInitialConsent: false,
                 command.EmergencyContact);
 
             athlete.LinkAccount(accountId);

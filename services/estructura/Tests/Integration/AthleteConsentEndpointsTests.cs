@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Application.DTOs.Athletes;
+using Application.DTOs.Categories;
 using Domain.Entities;
 using Estructura.Tests.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
@@ -180,6 +181,79 @@ public sealed class AthleteConsentEndpointsTests : IAsyncDisposable
             "/api/v1/me/consent",
             new RegisterAdultConsentRequest());
         Assert.Equal(HttpStatusCode.Forbidden, postResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_AthleteAcceptedInvitation_When_ChecksConsentAndSigns_Then_ConsentIsPersistedAndHasSignedConsentIsTrue()
+    {
+        // 1. Arrange: Crear organización y categoría en base de datos
+        var organization = Organization.Create("Club Atlético Test", "Descripción");
+        var category = Category.Create(organization.Id, "Sub-20");
+        var token = "token-real-" + Guid.NewGuid().ToString("N")[..12];
+        var invitation = CategoryInvitation.Create(category.Id, DateTime.UtcNow.AddDays(7), token);
+
+        using (var dbContext = _factory.CreateDbContext(_pfId))
+        {
+            dbContext.Organizations.Add(organization);
+            dbContext.Categories.Add(category);
+            dbContext.CategoryInvitations.Add(invitation);
+            await dbContext.SaveChangesAsync();
+        }
+
+        // 2. Atleta autenticado con su accountId y el mismo pfId de la invitación
+        var athleteAccountId = Guid.NewGuid();
+        var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
+
+        // 3. Act 1: Aceptar la invitación
+        var acceptResponse = await clientAthlete.PostAsJsonAsync(
+            $"/api/v1/invitations/{token}/accept",
+            new AcceptCategoryInvitationRequest(
+                FirstName: "Franco",
+                LastName: "Armani",
+                Email: "franco.armani@test.com",
+                Phone: "+5491122334455"));
+
+        Assert.Equal(HttpStatusCode.OK, acceptResponse.StatusCode);
+
+        // 4. Act 2: Consultar estado de consentimiento inicial (debe ser false)
+        var consentCheck = await clientAthlete.GetAsync("/api/v1/me/consent");
+        Assert.Equal(HttpStatusCode.OK, consentCheck.StatusCode);
+        var initialStatus = await consentCheck.Content.ReadFromJsonAsync<ConsentStatusDto>();
+        Assert.NotNull(initialStatus);
+        Assert.False(initialStatus.HasSignedConsent, "El atleta creado por invitación debe iniciar sin consentimiento firmado.");
+        Assert.False(initialStatus.IsMinor);
+
+        var meCheck = await clientAthlete.GetAsync("/api/v1/me");
+        Assert.Equal(HttpStatusCode.OK, meCheck.StatusCode);
+        var meDto = await meCheck.Content.ReadFromJsonAsync<MeDto>();
+        Assert.NotNull(meDto);
+        Assert.False(meDto.HasSignedConsent);
+
+        // 5. Act 3: El atleta firma el consentimiento con POST /api/v1/me/consent
+        var signResponse = await clientAthlete.PostAsJsonAsync(
+            "/api/v1/me/consent",
+            new RegisterAdultConsentRequest(AllowsHabitsRecommendations: true, AllowsPhysicalTraining: true));
+
+        Assert.Equal(HttpStatusCode.OK, signResponse.StatusCode);
+        var signedStatus = await signResponse.Content.ReadFromJsonAsync<ConsentStatusDto>();
+        Assert.NotNull(signedStatus);
+        Assert.True(signedStatus.HasSignedConsent);
+        Assert.True(signedStatus.AllowsHabitsRecommendations);
+        Assert.True(signedStatus.AllowsPhysicalTraining);
+
+        // 6. Assert: Verificar en base de datos
+        using (var verifyDb = _factory.CreateDbContext(_pfId))
+        {
+            var athlete = await verifyDb.Athletes
+                .Include(a => a.DigitalConsent)
+                .FirstOrDefaultAsync(a => a.AccountId == athleteAccountId);
+
+            Assert.NotNull(athlete);
+            Assert.True(athlete.HasSignedConsent);
+            Assert.NotNull(athlete.DigitalConsent);
+            Assert.True(athlete.DigitalConsent.IsSigned);
+            Assert.True(athlete.DigitalConsent.AllowsHabitsRecommendations);
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -39,7 +39,7 @@ public sealed class CreateAthleteCommandHandler(IAthleteRepository repository, I
                 command.LastName,
                 command.Email,
                 command.Phone,
-                signsInitialConsent: true,
+                signsInitialConsent: false,
                 command.EmergencyContact);
 
         await repository.AddAsync(athlete, cancellationToken);
