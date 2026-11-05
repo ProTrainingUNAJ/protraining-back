@@ -89,4 +89,41 @@ public sealed class CheckInRepository(AppDbContext context) : ICheckInRepository
                 .OrderBy(c => c.Date)
                 .ToListAsync(cancellationToken);
         });
+
+    public async Task<IReadOnlyList<CheckIn>> GetByAthleteAndDateRangeAsync(
+        Guid athleteId,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        int? limit = null,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            var query = context.CheckIns
+                .AsNoTracking()
+                .Where(c => c.AthleteId == athleteId);
+
+            if (startDate.HasValue)
+                query = query.Where(c => c.Date >= startDate.Value);
+
+            if (endDate.HasValue)
+                query = query.Where(c => c.Date <= endDate.Value);
+
+            // Si hay un límite y no se especificó un rango fijo de fechas, tomamos los N más recientes y los ordenamos cronológicamente.
+            if (limit.HasValue && limit.Value > 0 && !startDate.HasValue && !endDate.HasValue)
+            {
+                var recent = await query
+                    .OrderByDescending(c => c.Date)
+                    .Take(limit.Value)
+                    .ToListAsync(cancellationToken);
+
+                return recent.OrderBy(c => c.Date).ToList();
+            }
+
+            query = query.OrderBy(c => c.Date);
+
+            if (limit.HasValue && limit.Value > 0)
+                query = query.Take(limit.Value);
+
+            return await query.ToListAsync(cancellationToken);
+        });
 }

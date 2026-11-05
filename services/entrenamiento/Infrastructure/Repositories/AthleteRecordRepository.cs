@@ -22,13 +22,52 @@ public class AthleteRecordRepository : IAthleteRecordRepository
                                    && r.IsActive, cancellationToken);
     }
 
-    public async Task<List<AthleteRecord>> ListAsync(Guid athleteId, bool currentOnly, CancellationToken cancellationToken = default)
+    public Task<List<AthleteRecord>> ListAsync(Guid athleteId, bool currentOnly, CancellationToken cancellationToken = default) =>
+        ListAsync(athleteId, currentOnly, exerciseId: null, from: null, to: null, cancellationToken);
+
+    public async Task<List<AthleteRecord>> ListAsync(
+        Guid athleteId,
+        bool currentOnly,
+        Guid? exerciseId,
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken cancellationToken = default)
     {
-        return await _context.AthleteRecords
+        var query = _context.AthleteRecords
             .AsNoTracking()
             .Include(r => r.Exercise)
-            .Where(r => r.AthleteId == athleteId && r.Source != RecordSource.NoData)
-            .Where(r => !currentOnly || r.IsActive)
+            .Where(r => r.AthleteId == athleteId && r.Source != RecordSource.NoData);
+
+        if (currentOnly)
+        {
+            query = query.Where(r => r.IsActive);
+        }
+
+        if (exerciseId.HasValue)
+        {
+            query = query.Where(r => r.ExerciseId == exerciseId.Value);
+        }
+
+        if (from.HasValue)
+        {
+            var fromDateTime = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            query = query.Where(r => r.Date >= fromDateTime);
+        }
+
+        if (to.HasValue)
+        {
+            var toDateTime = to.Value.ToDateTime(new TimeOnly(23, 59, 59, 999), DateTimeKind.Utc);
+            query = query.Where(r => r.Date <= toDateTime);
+        }
+
+        if (exerciseId.HasValue)
+        {
+            return await query
+                .OrderBy(r => r.Date)
+                .ToListAsync(cancellationToken);
+        }
+
+        return await query
             .OrderBy(r => r.Exercise!.Name)
             .ThenByDescending(r => r.Date)
             .ToListAsync(cancellationToken);

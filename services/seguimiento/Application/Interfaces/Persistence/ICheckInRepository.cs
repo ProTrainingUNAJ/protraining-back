@@ -21,5 +21,8 @@ public interface ICheckInRepository
     // Consulta interna sin filtro de sesión para workers nocturnos de análisis de fatiga y sobrecarga (#177 · KAN-472)
     Task<IReadOnlyList<CheckIn>> GetHistoryByAthletesAndDateRangeAsync(IReadOnlyCollection<Guid> athleteIds, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
 
+    // Historial de check-ins de un atleta con rango de fechas o límite (evolución KAN-434).
+    Task<IReadOnlyList<CheckIn>> GetByAthleteAndDateRangeAsync(Guid athleteId, DateTime? startDate = null, DateTime? endDate = null, int? limit = null, CancellationToken cancellationToken = default);
+
     Task AddAsync(CheckIn checkIn, CancellationToken cancellationToken = default);
 }
