@@ -88,13 +88,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
             switch (entry.State)
             {
                 case EntityState.Added:
-                    var targetPfId = currentUser.PfId;
-                    if (!targetPfId.HasValue && entry.Property(entity => entity.PfId).CurrentValue is Guid existingPfId && existingPfId != Guid.Empty)
-                    {
-                        targetPfId = existingPfId;
-                    }
-
-                    entry.Property(entity => entity.PfId).CurrentValue = targetPfId
+                    entry.Property(entity => entity.PfId).CurrentValue = currentUser.PfId
                         ?? throw new UnauthorizedAccessException("No se puede guardar sin un PF en el token.");
                     entry.Property(entity => entity.CreatedAt).CurrentValue = now;
                     break;

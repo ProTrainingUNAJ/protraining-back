@@ -103,13 +103,12 @@ public sealed class Athlete : BaseEntity
             guardianEmail,
             guardianPhone,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations,
-            PfId);
+            allowsHabitsRecommendations);
     }
 
     public void RegisterAdultConsent(
         bool allowsPhysicalTraining = true,
-        bool allowsHabitsRecommendations = true)
+        bool allowsHabitsRecommendations = false)
     {
         if (IsMinor)
             throw new DomainException("Los atletas menores de edad deben ser autorizados por un tutor legal.");
@@ -120,8 +119,7 @@ public sealed class Athlete : BaseEntity
         DigitalConsent = DigitalConsent.RegisterForAdult(
             Id,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations,
-            PfId);
+            allowsHabitsRecommendations);
     }
 
     public void UpdateHabitsPermission(bool allowsHabitsRecommendations)

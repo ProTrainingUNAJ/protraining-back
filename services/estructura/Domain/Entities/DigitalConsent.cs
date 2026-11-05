@@ -23,8 +23,7 @@ public sealed class DigitalConsent : BaseEntity
         string? guardianEmail,
         string? guardianPhone,
         bool allowsPhysicalTraining,
-        bool allowsHabitsRecommendations,
-        Guid pfId = default)
+        bool allowsHabitsRecommendations)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -44,7 +43,7 @@ public sealed class DigitalConsent : BaseEntity
         if (!allowsPhysicalTraining)
             throw new DomainException("El tutor legal debe autorizar obligatoriamente la preparación física.");
 
-        var consent = new DigitalConsent
+        return new DigitalConsent
         {
             AthleteId = athleteId,
             IsSigned = true,
@@ -56,21 +55,12 @@ public sealed class DigitalConsent : BaseEntity
             AllowsPhysicalTraining = true,
             AllowsHabitsRecommendations = allowsHabitsRecommendations
         };
-
-        if (pfId != Guid.Empty)
-        {
-            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!
-                .SetValue(consent, pfId);
-        }
-
-        return consent;
     }
 
     public static DigitalConsent RegisterForAdult(
         Guid athleteId,
         bool allowsPhysicalTraining = true,
-        bool allowsHabitsRecommendations = true,
-        Guid pfId = default)
+        bool allowsHabitsRecommendations = false)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -78,7 +68,7 @@ public sealed class DigitalConsent : BaseEntity
         if (!allowsPhysicalTraining)
             throw new DomainException("El consentimiento debe autorizar la preparación física.");
 
-        var consent = new DigitalConsent
+        return new DigitalConsent
         {
             AthleteId = athleteId,
             IsSigned = true,
@@ -87,14 +77,6 @@ public sealed class DigitalConsent : BaseEntity
             AllowsPhysicalTraining = true,
             AllowsHabitsRecommendations = allowsHabitsRecommendations
         };
-
-        if (pfId != Guid.Empty)
-        {
-            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!
-                .SetValue(consent, pfId);
-        }
-
-        return consent;
     }
 
     public void UpdateHabitsPermission(bool allowsHabitsRecommendations)
