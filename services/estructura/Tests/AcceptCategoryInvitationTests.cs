@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Categories;
+using Application.DTOs.Categories;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -22,7 +22,7 @@ public sealed class AcceptCategoryInvitationTests
     private readonly Mock<IAthleteRepository> _athleteRepoMock = new();
     private readonly Mock<IAthleteCategoryRepository> _athleteCategoryRepoMock = new();
     private readonly Mock<IUnitOfWork> _unitOfWorkMock = new();
-    private readonly DateTimeOffset _fixedNow = new(2026, 11, 4, 12, 0, 0, TimeSpan.Zero);
+    private readonly DateTimeOffset _fixedNow = DateTimeOffset.UtcNow;
 
     private AcceptCategoryInvitationCommandHandler CreateHandler(TimeProvider? timeProvider = null) =>
         new(
