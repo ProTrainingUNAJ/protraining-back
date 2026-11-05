@@ -3,6 +3,7 @@ namespace Asistente.Tests;
 using System.Net;
 using System.Text;
 using API.Services;
+using Application.Exceptions;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -11,8 +12,8 @@ using Moq;
 using Xunit;
 
 /// <summary>
-/// Pruebas unitarias para el cliente HTTP resiliente de eventos de calendario de Estructura (#111 · KAN-406).
-/// Valida el consumo de partidos, filtrado por fechas, reenvío de Authorization y degradación graciosa sin excepciones.
+/// Pruebas unitarias para el cliente HTTP resiliente de eventos de calendario de Estructura (#111 · KAN-406 · #178 · KAN-473).
+/// Valida el consumo de partidos vía endpoint interno, reenvío de Authorization y lanzamiento de excepciones ante 401/403.
 /// </summary>
 public sealed class StructureCalendarClientTests
 {
@@ -54,7 +55,7 @@ public sealed class StructureCalendarClientTests
 
         var json = $$"""
             [
-                { "date": "{{matchDate:yyyy-MM-dd}}", "type": "Match" }
+                { "date": "{{matchDate:yyyy-MM-dd}}", "type": "Official" }
             ]
             """;
 
@@ -72,8 +73,34 @@ public sealed class StructureCalendarClientTests
 
         Assert.NotNull(handler.LastRequest);
         Assert.Equal(HttpMethod.Get, handler.LastRequest.Method);
-        var expectedUri = $"http://estructura:8080/api/v1/categories/{categoryId}/events?from=2026-11-02&to=2026-11-08";
+        var expectedUri = $"http://estructura:8080/api/v1/internal/categories/{categoryId}/events?from=2026-11-02&to=2026-11-08";
         Assert.Equal(expectedUri, handler.LastRequest.RequestUri?.ToString());
+    }
+
+    [Fact]
+    public async Task Given_StructureReturns403Forbidden_When_GetMatchDates_Then_ThrowsStructureServiceUnavailableException()
+    {
+        // Arrange: Estructura responde 403 Forbidden
+        var categoryId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
+        var client = CreateClient(handler);
+
+        // Act & Assert (No debe silenciar errores de autorización #178 · KAN-473)
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8)));
+    }
+
+    [Fact]
+    public async Task Given_StructureReturns401Unauthorized_When_GetMatchDates_Then_ThrowsStructureServiceUnavailableException()
+    {
+        // Arrange: Estructura responde 401 Unauthorized
+        var categoryId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        var client = CreateClient(handler);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8)));
     }
 
     [Fact]
@@ -86,10 +113,10 @@ public sealed class StructureCalendarClientTests
 
         var json = """
             [
-                { "date": "2026-11-14", "type": "Match" },
-                { "date": "2026-11-07", "type": "Match" },
-                { "date": "2026-11-14", "type": "Match" },
-                { "date": "2026-11-21", "type": "Match" }
+                { "date": "2026-11-14", "type": "Official" },
+                { "date": "2026-11-07", "type": "Official" },
+                { "date": "2026-11-14", "type": "Official" },
+                { "date": "2026-11-21", "type": "Official" }
             ]
             """;
 
@@ -114,7 +141,7 @@ public sealed class StructureCalendarClientTests
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var client = CreateClient(handler);
 
-        // Act: No debe arrojar excepción (criterio de aceptación #111)
+        // Act: No debe arrojar excepción para errores 500 transitorios
         var result = await client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8));
 
         // Assert
@@ -210,4 +237,3 @@ public sealed class StructureCalendarClientTests
         Assert.Equal("token-del-preparador-fisico", innerHandler.LastRequest.Headers.Authorization.Parameter);
     }
 }
-

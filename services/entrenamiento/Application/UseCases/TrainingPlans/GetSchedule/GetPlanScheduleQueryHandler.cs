@@ -30,8 +30,13 @@ public class GetPlanScheduleQueryHandler
                 item.Assignment.CategoryId,
                 item.Assignment.AthleteId,
                 item.Session.PrescribedExercises.Count,
-                item.Session.CoachNotes))
-            .OrderBy(item => item.PlanName)
+                item.Session.CoachNotes,
+                item.Session.StartTime,
+                item.Assignment.EndDate))
+            // Primero las que tienen hora, en orden; después las de todo el día
+            .OrderBy(item => item.StartTime is null)
+            .ThenBy(item => item.StartTime)
+            .ThenBy(item => item.PlanName)
             .ThenBy(item => item.SessionName)
             .ToList();
     }

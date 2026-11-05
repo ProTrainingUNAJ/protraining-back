@@ -5,9 +5,12 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
+using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
+using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
 using Application.UseCases.FieldTests.GetFieldTestSession;
@@ -70,17 +73,20 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
 // opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
 // reintento y caída siempre al motivo local del TrafficLightEngine (plan B), nunca propagando el error al cliente.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 
 // Motor puro del semáforo (KAN-363) y caso de uso del check-in diario (KAN-364/Demo 1):
 // todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
 builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
+builder.Services.AddScoped<ListAthleteCheckInsQueryHandler>();
+builder.Services.AddScoped<GetTodayCheckInQueryHandler>();
 builder.Services.AddScoped<RegisterDailyLoadCommandHandler>();
 builder.Services.AddScoped<GetAthleteWeekQueryHandler>();
-// Catálogo de tests físicos por capacidad motora (KAN-333).
+// Catálogo de tests físicos por capacidad motora (KAN-333) e historial de tests del atleta (KAN-434).
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
+builder.Services.AddScoped<ListAthleteFitnessTestsQueryHandler>();
 // Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
 builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
 builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();

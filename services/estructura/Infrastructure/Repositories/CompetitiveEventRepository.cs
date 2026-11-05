@@ -31,6 +31,21 @@ public sealed class CompetitiveEventRepository(AppDbContext context) : ICompetit
                 .ThenBy(e => e.Id)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<CompetitiveEvent>> GetMatchesByCategoryAndDateRangeInternalAsync(
+        Guid categoryId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.CompetitiveEvents
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(e => e.CategoryId == categoryId && e.DeletedAt == null && e.Date >= from && e.Date <= to)
+                .OrderBy(e => e.Date)
+                .ThenBy(e => e.StartTime)
+                .ThenBy(e => e.Id)
+                .ToListAsync(cancellationToken));
+
     public async Task<CompetitiveEvent?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.CompetitiveEvents

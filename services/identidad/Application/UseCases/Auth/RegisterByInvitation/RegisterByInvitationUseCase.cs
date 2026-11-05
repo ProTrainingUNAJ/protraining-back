@@ -56,12 +56,13 @@ public class RegisterByInvitationUseCase(
             throw new AthleteAlreadyExistsException();
         }
 
-        // 3. Crear el nuevo usuario con rol Atleta
+        // 3. Crear el nuevo usuario con rol Atleta y vinculado a su PF
         var user = new User
         {
             UserName = cleanEmail,
             Email = cleanEmail,
             FullName = request.FullName.Trim(),
+            PfId = invitation.PfId,
             EmailConfirmed = true,
             IsActive = true
         };
@@ -76,6 +77,8 @@ public class RegisterByInvitationUseCase(
         var roleResult = await userManager.AddToRoleAsync(user, "Atleta");
         if (!roleResult.Succeeded)
         {
+            // Si falla la asignación de rol, eliminamos el usuario para no dejarlo huérfano en la BD
+            await userManager.DeleteAsync(user);
             var errors = string.Join("; ", roleResult.Errors.Select(e => e.Description));
             throw new DomainException($"No se pudo asignar el rol Atleta: {errors}");
         }

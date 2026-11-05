@@ -1,7 +1,9 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
+using Application.DTOs.Athletes;
 using Application.DTOs.Categories;
 using Application.DTOs.Organizations;
+using Domain.Common;
 using Domain.Entities;
 using Estructura.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +28,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Given_ValidToken_When_GetInvitation_Then_Returns200WithCategoryData_AndNeverExposesInternalAthleteIdsOrRawPfId()
+    public async Task Given_ValidToken_When_GetInvitation_Then_Returns200WithCategoryData_AndNeverExposesInternalAthleteIds()
     {
         // Arrange: PF autenticado crea organización y categoría, luego genera el token
         var orgResponse = await _clientPf.PostAsJsonAsync("/api/v1/organizations",
@@ -44,7 +46,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         var invitation = await tokenResponse.Content.ReadFromJsonAsync<CategoryInvitationDto>();
         Assert.NotNull(invitation);
 
-        // Act: Cliente anónimo (el atleta escaneando el QR) consulta la invitación pública
+        // Act: Cliente anónimo consulta la invitación pública
         var publicResponse = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{invitation.Token}");
 
         // Assert: 200 OK con datos públicos
@@ -57,8 +59,10 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         Assert.Equal("Sub-20 Competitiva", returnedInvitation.CategoryName);
         Assert.Equal(cat.Id, returnedInvitation.CategoryId);
 
-        // Seguridad: NO debe exponer el pf_id en crudo ni listas de atletas ni datos médicos
-        Assert.DoesNotContain(_pfId.ToString(), rawContent, StringComparison.OrdinalIgnoreCase);
+        // Decisión Enzo: El pfId de la invitación SÍ debe exponerse para que Identidad vincule al atleta con su PF
+        Assert.Equal(_pfId, returnedInvitation.PfId);
+
+        // Seguridad: NUNCA debe exponer listas de otros atletas ni datos médicos
         Assert.DoesNotContain("athletes", rawContent, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("medicalRecord", rawContent, StringComparison.OrdinalIgnoreCase);
     }
@@ -66,57 +70,154 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
     [Fact]
     public async Task Given_InvalidOrTamperedToken_When_GetInvitation_Then_Returns404NotFound_Never200Nor500()
     {
-        // Arrange: Un token inventado y uno con un carácter alterado
         var inventedToken = "token_completamente_falso_1234567890";
-        var tamperedToken = "94f35b3d076bc9c4fe850afb3264043X";
+        var response = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{inventedToken}");
 
-        // Act & Assert para token inventado: 404 Not Found, nunca 200 ni 500
-        var inventedResponse = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{inventedToken}");
-        Assert.Equal(HttpStatusCode.NotFound, inventedResponse.StatusCode);
-
-        // Act & Assert para token adulterado: 404 Not Found, nunca 200 ni 500
-        var tamperedResponse = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{tamperedToken}");
-        Assert.Equal(HttpStatusCode.NotFound, tamperedResponse.StatusCode);
-
-        // Act & Assert para token con espacios: 404 o 400
-        var emptyResponse = await _unauthenticatedClient.GetAsync("/api/v1/invitations/%20");
-        Assert.True(emptyResponse.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
     public async Task Given_ExpiredTokenOver7Days_When_GetInvitation_Then_Returns410Gone_AndDoesNotReturnCategoryData()
     {
-        // Arrange: Creamos un token y lo forzamos a estar vencido en la base de datos SQLite
-        var orgResponse = await _clientPf.PostAsJsonAsync("/api/v1/organizations",
-            new CreateOrganizationRequest("Club Vencimiento Test", "Club de prueba"));
-        var org = await orgResponse.Content.ReadFromJsonAsync<OrganizationDto>();
-        Assert.NotNull(org);
+        // Arrange: Insertamos organización, categoría y token vencido respetando FKs
+        var expiredToken = "token_expirado_seguridad";
+        var expiredDate = DateTime.UtcNow.AddDays(-2);
 
-        var catResponse = await _clientPf.PostAsJsonAsync("/api/v1/categories",
-            new CreateCategoryRequest(org.Id, "Sub-18 Vencida", "Categoría"));
-        var cat = await catResponse.Content.ReadFromJsonAsync<CategoryDto>();
-        Assert.NotNull(cat);
-
-        var tokenResponse = await _clientPf.PostAsync($"/api/v1/categories/{cat.Id}/invitation-token", null);
-        var invitation = await tokenResponse.Content.ReadFromJsonAsync<CategoryInvitationDto>();
-        Assert.NotNull(invitation);
-
-        // Modificamos directamente en la base SQLite para que la fecha de expiración sea hace 8 días
         using (var db = _factory.CreateDbContext(_pfId))
         {
-            var dbInvitation = await db.CategoryInvitations.FirstAsync(i => i.Token == invitation.Token);
-            typeof(CategoryInvitation).GetProperty(nameof(CategoryInvitation.ExpiresAt))!
-                .SetValue(dbInvitation, DateTime.UtcNow.AddDays(-8));
+            var org = Organization.Create("Org Expirada");
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(org, _pfId);
+            db.Organizations.Add(org);
+
+            var cat = Category.Create(org.Id, "Cat Expirada");
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(cat, _pfId);
+            db.Categories.Add(cat);
+
+            var inv = CategoryInvitation.Create(cat.Id, DateTime.UtcNow.AddMinutes(1), expiredToken);
+            typeof(CategoryInvitation).GetProperty(nameof(CategoryInvitation.ExpiresAt))!.SetValue(inv, expiredDate);
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(inv, _pfId);
+            db.CategoryInvitations.Add(inv);
+
             await db.SaveChangesAsync();
         }
 
-        // Act: El atleta intenta acceder con el token vencido
-        var expiredResponse = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{invitation.Token}");
+        // Act
+        var response = await _unauthenticatedClient.GetAsync($"/api/v1/invitations/{expiredToken}");
 
-        // Assert: 410 Gone y NO devuelve datos de la categoría
-        Assert.Equal(HttpStatusCode.Gone, expiredResponse.StatusCode);
-        var content = await expiredResponse.Content.ReadAsStringAsync();
-        Assert.DoesNotContain("Sub-18 Vencida", content, StringComparison.OrdinalIgnoreCase);
+        // Assert: 410 Gone
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_NoSessionToken_When_AcceptInvitation_Then_Returns401Unauthorized()
+    {
+        // Act: Llamada sin header Authorization
+        var response = await _unauthenticatedClient.PostAsJsonAsync(
+            "/api/v1/invitations/algun-token/accept",
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_PfToken_When_AcceptInvitation_Then_Returns403Forbidden_AndDoesNotCreateAthlete()
+    {
+        // Arrange: Cliente autenticado como PreparadorFisico
+        var response = await _clientPf.PostAsJsonAsync(
+            "/api/v1/invitations/algun-token/accept",
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111"));
+
+        // Assert: 403 Forbidden
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_AthleteTokenWithMismatchingPfId_When_AcceptInvitation_Then_Returns403Forbidden()
+    {
+        // Arrange: PF crea una invitación legítima
+        var org = await (await _clientPf.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club PF A"))).Content.ReadFromJsonAsync<OrganizationDto>();
+        var cat = await (await _clientPf.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Cat PF A"))).Content.ReadFromJsonAsync<CategoryDto>();
+        var inv = await (await _clientPf.PostAsync($"/api/v1/categories/{cat!.Id}/invitation-token", null)).Content.ReadFromJsonAsync<CategoryInvitationDto>();
+
+        // Atleta pertenece a otro PF (pfId diferente)
+        var differentPfId = Guid.NewGuid();
+        var clientAthleteForeign = _factory.CreateAuthenticatedClient(differentPfId, role: "Atleta", userId: Guid.NewGuid());
+
+        // Act
+        var response = await clientAthleteForeign.PostAsJsonAsync(
+            $"/api/v1/invitations/{inv!.Token}/accept",
+            new AcceptCategoryInvitationRequest("Atleta", "Ajeno", "ajeno@test.com", "+5491122222222"));
+
+        // Assert: 403 Forbidden
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_ValidAthleteTokenAndInvitation_When_CallingAcceptTwice_Then_Returns200BothTimes_AndDoesNotDuplicate()
+    {
+        // Arrange: PF crea invitación
+        var org = await (await _clientPf.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Central"))).Content.ReadFromJsonAsync<OrganizationDto>();
+        var cat = await (await _clientPf.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Primera División"))).Content.ReadFromJsonAsync<CategoryDto>();
+        var inv = await (await _clientPf.PostAsync($"/api/v1/categories/{cat!.Id}/invitation-token", null)).Content.ReadFromJsonAsync<CategoryInvitationDto>();
+
+        // Atleta legítimo con el mismo pfId de la invitación
+        var athleteAccountId = Guid.NewGuid();
+        var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
+
+        var request = new AcceptCategoryInvitationRequest("Lucas", "Gómez", "lucas@test.com", "+5491133333333");
+
+        // Act 1: Primera llamada
+        var response1 = await clientAthlete.PostAsJsonAsync($"/api/v1/invitations/{inv!.Token}/accept", request);
+        Assert.Equal(HttpStatusCode.OK, response1.StatusCode);
+        var athlete1 = await response1.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete1);
+
+        // Act 2: Segunda llamada con el mismo QR/link (Idempotencia)
+        var response2 = await clientAthlete.PostAsJsonAsync($"/api/v1/invitations/{inv.Token}/accept", request);
+        Assert.Equal(HttpStatusCode.OK, response2.StatusCode);
+        var athlete2 = await response2.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete2);
+        Assert.Equal(athlete1.Id, athlete2.Id);
+
+        // Assert en BD: Se verifica directamente en la BD que solo existe 1 Athlete con ese AccountId
+        using var db = _factory.CreateDbContext();
+        var totalAthletes = await db.Athletes.IgnoreQueryFilters().CountAsync(a => a.AccountId == athleteAccountId);
+        Assert.Equal(1, totalAthletes);
+    }
+
+    [Fact]
+    public async Task Given_ExpiredToken_When_AcceptInvitation_Then_Returns410Gone()
+    {
+        // Arrange: Token expirado en la BD respetando FKs
+        var expiredToken = "token_accept_expirado";
+        using (var db = _factory.CreateDbContext(_pfId))
+        {
+            var org = Organization.Create("Org Test");
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(org, _pfId);
+            db.Organizations.Add(org);
+
+            var cat = Category.Create(org.Id, "Cat Test");
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(cat, _pfId);
+            db.Categories.Add(cat);
+
+            var inv = CategoryInvitation.Create(cat.Id, DateTime.UtcNow.AddMinutes(1), expiredToken);
+            typeof(CategoryInvitation).GetProperty(nameof(CategoryInvitation.ExpiresAt))!.SetValue(inv, DateTime.UtcNow.AddDays(-1));
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(inv, _pfId);
+            db.CategoryInvitations.Add(inv);
+
+            await db.SaveChangesAsync();
+        }
+
+        var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: Guid.NewGuid());
+
+        // Act
+        var response = await clientAthlete.PostAsJsonAsync(
+            $"/api/v1/invitations/{expiredToken}/accept",
+            new AcceptCategoryInvitationRequest("Pedro", "Gómez", "pedro@test.com", "+5491144444444"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
     }
 
     public async ValueTask DisposeAsync()

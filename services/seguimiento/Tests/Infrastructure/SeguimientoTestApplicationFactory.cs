@@ -96,6 +96,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<IAttendanceRepository, AttendanceRepository>();
                 services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
                 services.AddScoped<IFieldTestRepository, FieldTestRepository>();
+                services.AddScoped<IFieldTestResultRepository, FieldTestResultRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
                 services.AddHttpContextAccessor();
@@ -122,6 +123,9 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetCategoryAveragesQueryHandler>();
                 services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.ListAthleteCheckIns.ListAthleteCheckInsQueryHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
+                services.AddScoped<Application.UseCases.FitnessTests.ListAthleteFitnessTests.ListAthleteFitnessTestsQueryHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();

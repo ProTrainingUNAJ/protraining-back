@@ -19,7 +19,7 @@ public sealed record AthleteCheckInRecord(
     bool HasActiveInjury);
 
 /// <summary>
-/// Resultado del análisis de patrones de sobrecarga sobre una ventana de check-ins (#177 · KAN-472).
+/// Resultado del análisis de patrones de sobrecarga sobre una ventana de check-ins (#177 · KAN-472 / #178 · KAN-473).
 /// </summary>
 public sealed record OverloadPatternResult(
     bool HasPattern,
@@ -41,12 +41,17 @@ public sealed record OverloadPatternResult(
 }
 
 /// <summary>
-/// Detector de patrones de sobrecarga, fatiga acumulada y riesgo de lesión en el dominio (#177 · KAN-472).
-/// Evalúa el historial de check-ins del atleta (típicamente los últimos 7 días) mediante reglas determinísticas.
+/// Detector de patrones de sobrecarga, fatiga acumulada, riesgo de lesión y correlación precompetitiva (D-2) en el dominio (#177 · KAN-472 / #178 · KAN-473).
+/// Evalúa el historial de check-ins del atleta (típicamente los últimos 7 días) cruzado con el fixture de partidos mediante reglas determinísticas.
 /// </summary>
 public static class OverloadPatternDetector
 {
-    public static OverloadPatternResult Detect(Guid athleteId, IReadOnlyList<AthleteCheckInRecord> records)
+    public static OverloadPatternResult Detect(
+        Guid athleteId,
+        IReadOnlyList<AthleteCheckInRecord> records,
+        bool hasMatchInTwoDays = false,
+        DateOnly? matchDate = null,
+        int? daysUntilMatch = null)
     {
         if (athleteId == Guid.Empty || records.Count == 0)
         {
@@ -74,7 +79,26 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 50);
         }
 
-        // 2. Patrón de Alarma A: Esfuerzo alto combinado con déficit severo de sueño (RPE >= 8 + Sueño < 6h o Calidad <= 2)
+        // 2. Patrón Pre-Partido (D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días
+        // 2. Patrón Pre-Partido (D-1 / D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días o menos
+        if (hasMatchInTwoDays || (daysUntilMatch.HasValue && daysUntilMatch.Value is 1 or 2))
+        {
+            var recentHighEffort = ordered.LastOrDefault(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8);
+            if (recentHighEffort is not null)
+            {
+                var matchDateSuffix = matchDate.HasValue ? $" ({matchDate.Value:dd/MM})" : string.Empty;
+                return new OverloadPatternResult(
+                    HasPattern: true,
+                    Severity: AlertSeverity.High,
+                    Type: AlertType.AcuteOverload,
+                    Reason: $"Alerta pre-partido ({(daysUntilMatch == 1 ? "D-1" : "D-2")}): el atleta reportó esfuerzo alto reciente (RPE {recentHighEffort.EffortRate}) y tiene partido oficial programado {(daysUntilMatch == 1 ? "para mañana" : "en 2 días")}{matchDateSuffix}. Riesgo de sobrecarga precompetitiva.",
+                    Suggestion: "Ajustar la sesión a activación neuromuscular suave y descarga previa al partido. Reducir volumen general un 30%.",
+                    SuggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
+                    SuggestedAdjustmentPercentage: 30);
+            }
+        }
+
+        // 3. Patrón de Alarma A: Esfuerzo alto combinado con déficit severo de sueño (RPE >= 8 + Sueño < 6h o Calidad <= 2)
         var highEffortLowSleepRecords = ordered
             .Where(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8 && (r.SleepHours < 6.0 || r.SleepQuality <= 2))
             .ToList();
@@ -92,7 +116,7 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 25);
         }
 
-        // 3. Patrón de Alarma B: RPE alto sostenido (3 o más sesiones con RPE >= 8 en la semana)
+        // 4. Patrón de Alarma B: RPE alto sostenido (3 o más sesiones con RPE >= 8 en la semana)
         var highRpeCount = ordered.Count(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8);
         if (highRpeCount >= 3)
         {
@@ -106,7 +130,7 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 20);
         }
 
-        // 4. Patrón de Fatiga Severa Acumulada: Promedio de fatiga >= 4.0 o 3+ días con fatiga >= 4 o dolor muscular >= 4
+        // 5. Patrón de Fatiga Severa Acumulada: Promedio de fatiga >= 4.0 o 3+ días con fatiga >= 4 o dolor muscular >= 4
         var highFatigueDays = ordered.Count(r => r.FatigueLevel >= 4 || r.MuscleSoreness >= 4);
         var avgFatigue = ordered.Average(r => r.FatigueLevel);
         if (avgFatigue >= 4.0 || highFatigueDays >= 3)
@@ -124,4 +148,3 @@ public static class OverloadPatternDetector
         return OverloadPatternResult.None;
     }
 }
-

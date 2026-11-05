@@ -1,4 +1,5 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Interfaces.Persistence;
+using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.PfDecisions.GetAthleteDecisions;
 namespace Asistente.Tests;
 
@@ -45,7 +46,7 @@ public sealed class AssistantControllerTests
             ));
 
         var useCase = new SuggestRoutineUseCase(mockAiService.Object);
-        _controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
+        _controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
     }
 
     [Fact]
@@ -145,7 +146,7 @@ public sealed class AssistantControllerTests
         );
 
         var useCase = new SuggestRoutineUseCase(realAiService);
-        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
+        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         var athlete1 = Guid.NewGuid();
         var athlete2 = Guid.NewGuid();

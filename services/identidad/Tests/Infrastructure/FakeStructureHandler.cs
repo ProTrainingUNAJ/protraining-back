@@ -11,14 +11,16 @@ public sealed class FakeStructureHandler : HttpMessageHandler
 
     public HttpRequestMessage? LastRequest { get; private set; }
 
-    public void RespondWithInvitation(string token, Guid categoryId, string categoryName, DateTime expiresAt)
+    public void RespondWithInvitation(string token, Guid categoryId, string categoryName, DateTime expiresAt, Guid? pfId = null)
     {
+        var effectivePfId = pfId ?? Guid.NewGuid();
         var json = JsonSerializer.Serialize(new
         {
             token,
             categoryId,
             categoryName,
-            expiresAt
+            expiresAt,
+            pfId = effectivePfId
         });
         Behavior = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {

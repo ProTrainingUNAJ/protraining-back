@@ -333,6 +333,43 @@ paths:
         "409":
           $ref: '#/components/responses/Conflict'
 
+  /api/v1/assistant/athletes/{athleteId}/day-conflicts:
+    get:
+      tags:
+        - Daily Adjustment
+      summary: Detectar dolor del check-in en zonas que trabaja la rutina de hoy
+      description: >
+        Cruza el dolor reportado hoy en el check-in del atleta (Seguimiento) con los ejercicios de
+        la rutina que le toca hoy (Entrenamiento) y consulta la matriz de restricciones anatómicas
+        para devolver los ejercicios en conflicto junto con sus sustitutos seguros. Si el atleta
+        todavía no completó el check-in de hoy, responde 200 con hasConflicts en false y el aviso
+        "Todavía no hizo el check-in". Si el atleta no existe o pertenece a otro PF, responde 404.
+        Si Seguimiento o Entrenamiento no están disponibles, responde 503 sin inventar conflictos.
+      operationId: getAthleteDayConflicts
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      responses:
+        "200":
+          description: Cruce de dolor del check-in con la rutina de hoy evaluado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayConflictsResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/assistant/athletes/{athleteId}/decisions:
     get:
       tags:
@@ -460,6 +497,12 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     Unauthorized:
       description: No autenticado o credenciales inválidas.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso denegado para el rol actual.
       content:
         application/json:
           schema:
@@ -999,6 +1042,76 @@ components:
           type: string
           format: date-time
           example: "2026-10-30T02:40:00Z"
+
+    DayConflictsResponse:
+      type: object
+      required:
+        - hasConflicts
+        - conflicts
+      properties:
+        hasConflicts:
+          type: boolean
+          example: true
+        painZones:
+          type: string
+          nullable: true
+          example: "cuadriceps:2"
+        message:
+          type: string
+          nullable: true
+          description: Aviso informativo cuando todavía no hizo el check-in ("Todavía no hizo el check-in") o no tiene dolor/conflictos.
+          example: null
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictItem'
+
+    DayConflictItem:
+      type: object
+      required:
+        - exerciseId
+        - name
+        - zone
+        - painLevel
+        - reason
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        name:
+          type: string
+          example: "Saltos al cajón"
+        zone:
+          type: string
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        reason:
+          type: string
+          example: "Impacto y absorción excéntrica sobre cuádriceps con molestia reportada."
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictSubstitute'
+
+    DayConflictSubstitute:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        name:
+          type: string
+          example: "Puente de glúteos con barra"
 
     ProblemDetails:
       type: object

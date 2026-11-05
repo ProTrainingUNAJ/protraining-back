@@ -5,7 +5,7 @@ using Xunit;
 namespace Asistente.Tests;
 
 /// <summary>
-/// Pruebas unitarias de dominio para el detector de patrones de sobrecarga y riesgo (#177 · KAN-472).
+/// Pruebas unitarias de dominio para el detector de patrones de sobrecarga, riesgo y correlación de fixture (#177 · KAN-472 / #178 · KAN-473).
 /// </summary>
 public sealed class OverloadPatternDetectorTests
 {
@@ -49,6 +49,80 @@ public sealed class OverloadPatternDetectorTests
         Assert.Equal(50, result.SuggestedAdjustmentPercentage);
         Assert.Contains("lesión activa", result.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Tendón rotuliano derecho", result.Reason);
+    }
+
+    [Fact]
+    public void Given_HighEffortAndMatchInTwoDays_When_Detect_Then_ReturnsPreMatchAlertHighSeverity()
+    {
+        // KAN-473 · Criterio de Aceptación:
+        // DADO un atleta con esfuerzo alto y partido en dos días CUANDO corre el análisis ENTONCES queda marcado para aviso.
+        var matchDate = new DateOnly(2026, 11, 6);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 5, false, null, false),
+            new(new DateOnly(2026, 11, 4), 7.5, 4, 2, 2, 4, 2, 8, false, null, false) // RPE 8 reciente (D-2 del partido)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: true,
+            matchDate: matchDate);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(30, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("Alerta pre-partido (D-2)", result.Reason);
+        Assert.Contains("06/11", result.Reason);
+        Assert.Contains("RPE 8", result.Reason);
+    }
+
+    [Fact]
+    public void Given_HighEffortAndMatchTomorrow_When_Detect_Then_ReturnsPreMatchAlertHighSeverityD1()
+    {
+        // KAN-473 · Enzo revisión: ventana D-1 / D-2 (partido mañana)
+        var matchDate = new DateOnly(2026, 11, 5);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 5, false, null, false),
+            new(new DateOnly(2026, 11, 4), 7.5, 4, 2, 2, 4, 2, 9, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: true,
+            matchDate: matchDate,
+            daysUntilMatch: 1);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(30, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("Alerta pre-partido (D-1)", result.Reason);
+        Assert.Contains("para mañana", result.Reason);
+        Assert.Contains("05/11", result.Reason);
+        Assert.Contains("RPE 9", result.Reason);
+    }
+
+    [Fact]
+    public void Given_HighEffortWithoutMatchInTwoDaysAndNormalSleep_When_Detect_Then_ReturnsNoPattern()
+    {
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 1, 1, 4, 1, 5, false, null, false),
+            new(new DateOnly(2026, 11, 4), 8.0, 4, 2, 2, 4, 2, 8, false, null, false) // RPE 8 pero con buen sueño y sin partido
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: false);
+
+        Assert.False(result.HasPattern);
     }
 
     [Fact]
@@ -126,4 +200,3 @@ public sealed class OverloadPatternDetectorTests
         Assert.False(result.HasPattern);
     }
 }
-

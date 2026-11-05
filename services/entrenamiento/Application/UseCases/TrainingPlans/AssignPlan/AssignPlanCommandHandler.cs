@@ -1,6 +1,8 @@
+using Application.DTOs.TrainingPlans;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 
@@ -19,7 +21,7 @@ public class AssignPlanCommandHandler
         _structureClient = structureClient;
     }
 
-    public async Task<Guid> Handle(AssignPlanCommand command, CancellationToken cancellationToken = default)
+    public async Task<PlanAssignmentDto> Handle(AssignPlanCommand command, CancellationToken cancellationToken = default)
     {
         var exists = await _planRepository.ExistsAsync(command.TrainingPlanId, cancellationToken);
         if (!exists)
@@ -48,6 +50,14 @@ public class AssignPlanCommandHandler
         await _planRepository.AddAssignmentAsync(assignment, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return assignment.Id;
+        // Fin y estado calculados con las semanas del plan, sin guardarlos (KAN-558)
+        var endDate = PlanAssignment.CalculateEndDate(assignment.StartDate, plan?.WeekCount ?? 0);
+
+        return new PlanAssignmentDto(
+            assignment.Id,
+            assignment.TrainingPlanId,
+            assignment.StartDate,
+            endDate,
+            PlanAssignment.CalculateStatus(endDate, ArgentinaTime.Today));
     }
 }

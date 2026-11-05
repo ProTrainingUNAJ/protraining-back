@@ -32,6 +32,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
                 TrainingServiceUnavailableException trainingUnavailable => (503, trainingUnavailable.Message, (string?)null),
                 AiServiceUnavailableException aiUnavailable => (503, aiUnavailable.Message, (string?)null),
                 StructureServiceUnavailableException structureUnavailable => (503, structureUnavailable.Message, (string?)null),
+                SeguimientoServiceUnavailableException seguimientoUnavailable => (503, seguimientoUnavailable.Message, (string?)null),
                 BadHttpRequestException badRequest => (badRequest.StatusCode, "Solicitud no válida.",
                     "Comprueba el JSON, los tipos de los campos y Content-Type: application/json."),
                 UnauthorizedAccessException => (401, "No autenticado.",

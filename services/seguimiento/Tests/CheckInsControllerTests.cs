@@ -1,13 +1,17 @@
+using System.Security.Claims;
 using API.Controllers.CheckIns;
 using Application.DTOs.CheckIns;
 using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
+using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -21,8 +25,28 @@ public class CheckInsControllerTests
     private readonly Mock<IStructureClient> _estructura = new();
     private readonly TrafficLightEngine _engine = new();
 
-    private CheckInsController CreateController() =>
-        new(new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine), _estructura.Object);
+    private CheckInsController CreateController(string? role = null)
+    {
+        var controller = new CheckInsController(
+            new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine),
+            new ListAthleteCheckInsQueryHandler(_checkIns.Object),
+            new GetTodayCheckInQueryHandler(_checkIns.Object),
+            _estructura.Object);
+
+        var claims = new List<Claim>();
+        if (!string.IsNullOrEmpty(role))
+            claims.Add(new Claim(ClaimTypes.Role, role));
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"))
+            }
+        };
+
+        return controller;
+    }
 
     private static SubmitCheckInRequest RequestValida() => new()
     {
@@ -136,5 +160,113 @@ public class CheckInsControllerTests
 
         Assert.NotNull(guardado);
         Assert.Equal(originalDate, DateOnly.FromDateTime(guardado!.Date));
+    }
+
+    [Fact]
+    public async Task List_AtletaSinVincular_LanzaNoAthleteLinkedException()
+    {
+        var athleteId = Guid.NewGuid();
+        _estructura
+            .Setup(s => s.GetMeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteMeDto?)null);
+
+        await Assert.ThrowsAsync<NoAthleteLinkedException>(() =>
+            CreateController().List(athleteId, cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task List_AtletaOtroId_LanzaAthleteNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        ResponderMe(Guid.NewGuid());
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
+            CreateController().List(athleteId, cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task List_AtletaPropio_DevuelveOk()
+    {
+        var athleteId = Guid.NewGuid();
+        ResponderMe(athleteId);
+        _checkIns
+            .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, null, null, 14, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CheckIn>());
+
+        var result = await CreateController().List(athleteId, cancellationToken: CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(200, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_PfAtletaPropio_DevuelveOk()
+    {
+        var athleteId = Guid.NewGuid();
+        _estructura
+            .Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _checkIns
+            .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, null, null, 14, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CheckIn>());
+
+        var result = await CreateController("PreparadorFisico").List(athleteId, cancellationToken: CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(200, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_PfAtletaAjeno_LanzaAthleteNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        _estructura
+            .Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
+            CreateController("PreparadorFisico").List(athleteId, cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithCheckInToday_When_GetToday_Then_Returns200WithPainZones()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CheckIn
+            {
+                AthleteId = athleteId,
+                Date = today,
+                TrafficLight = TrafficLight.Yellow,
+                SleepHours = 7.5,
+                SleepQuality = 4,
+                MuscleSoreness = 3,
+                FatigueLevel = 2,
+                MoodRate = 4,
+                StressLevel = 2,
+                PainZones = "cuadriceps:2"
+            });
+
+        var result = await CreateController().GetToday(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<CheckInDto>(ok.Value);
+        Assert.Equal(athleteId, dto.AthleteId);
+        Assert.Equal("cuadriceps:2", dto.PainZones);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithoutCheckInToday_When_GetToday_Then_ThrowsCheckInNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CheckIn?)null);
+
+        await Assert.ThrowsAsync<CheckInNotFoundException>(() =>
+            CreateController().GetToday(athleteId, CancellationToken.None));
     }
 }
