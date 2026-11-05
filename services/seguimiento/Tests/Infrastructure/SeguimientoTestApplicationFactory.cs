@@ -11,6 +11,9 @@ using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.UpdateFieldTestResult;
 using Application.UseCases.Attendance.GetCategoryAttendanceToday;
 using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
@@ -92,6 +95,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
                 services.AddScoped<IAttendanceRepository, AttendanceRepository>();
                 services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
+                services.AddScoped<IFieldTestRepository, FieldTestRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
                 services.AddHttpContextAccessor();
@@ -125,6 +129,11 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
                 // Máquina de estados de las lesiones (KAN-420): mismo registro que en Program.cs.
                 services.AddScoped<UpdateInjuryStatusCommandHandler>();
+
+                // Carga rápida de resultados de campo (KAN-425): mismo registro que en Program.cs.
+                services.AddScoped<CreateFieldTestResultCommandHandler>();
+                services.AddScoped<GetFieldTestSessionQueryHandler>();
+                services.AddScoped<UpdateFieldTestResultCommandHandler>();
 
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();
