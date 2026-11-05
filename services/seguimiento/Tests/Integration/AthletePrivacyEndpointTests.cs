@@ -65,4 +65,27 @@ public sealed class AthletePrivacyEndpointTests
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Null(factory.Structure.LastRequest);
     }
+
+    [Fact]
+    public async Task Given_CheckInToday_When_PfRequestsTodayCheckIn_Then_Returns200WithPainZonesAnd404WhenMissing()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondWith(HttpStatusCode.OK, $$"""{"athleteId":"{{_myAthleteId}}","fullName":"Ana Pérez","categories":[]}""");
+
+        var submitRequest = RequestValida() with { PainZones = "cuadriceps:2" };
+        var submitResponse = await factory.CreateAuthenticatedClient(_pfId, role: "Atleta")
+            .PostAsJsonAsync($"api/v1/athletes/{_myAthleteId}/check-in", submitRequest);
+        Assert.Equal(HttpStatusCode.Created, submitResponse.StatusCode);
+
+        var pfResponse = await factory.CreateAuthenticatedClient(_pfId, role: "PreparadorFisico")
+            .GetAsync($"api/v1/athletes/{_myAthleteId}/check-in/today");
+        Assert.Equal(HttpStatusCode.OK, pfResponse.StatusCode);
+        var dto = await pfResponse.Content.ReadFromJsonAsync<CheckInDto>();
+        Assert.NotNull(dto);
+        Assert.Equal("cuadriceps:2", dto!.PainZones);
+
+        var missingResponse = await factory.CreateAuthenticatedClient(_pfId, role: "PreparadorFisico")
+            .GetAsync($"api/v1/athletes/{_teammateId}/check-in/today");
+        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
+    }
 }
