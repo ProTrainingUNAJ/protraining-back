@@ -1,6 +1,7 @@
 using Application.DTOs.CheckIns;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ namespace API.Controllers.CheckIns;
 public sealed class CheckInsController(
     SubmitCheckInCommandHandler handler,
     ListAthleteCheckInsQueryHandler listHandler,
+    GetTodayCheckInQueryHandler getTodayHandler,
     IStructureClient structureClient) : ControllerBase
 {
     [HttpGet("~/api/v1/athletes/{athleteId:guid}/check-ins")]
@@ -47,6 +49,20 @@ public sealed class CheckInsController(
             new ListAthleteCheckInsQuery(athleteId, from, to, limit),
             cancellationToken);
 
+        return Ok(result);
+    }
+
+    [HttpGet("today")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(CheckInDto), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    public async Task<ActionResult<CheckInDto>> GetToday(
+        Guid athleteId,
+        CancellationToken cancellationToken)
+    {
+        var result = await getTodayHandler.HandleAsync(new GetTodayCheckInQuery(athleteId), cancellationToken);
         return Ok(result);
     }
 

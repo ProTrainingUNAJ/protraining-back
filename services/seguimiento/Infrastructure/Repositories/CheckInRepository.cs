@@ -14,6 +14,14 @@ public sealed class CheckInRepository(AppDbContext context) : ICheckInRepository
                     checkIn => checkIn.AthleteId == athleteId && checkIn.Date == date,
                     cancellationToken));
 
+    public async Task<CheckIn?> GetNoTrackingByAthleteAndDateAsync(Guid athleteId, DateTime date, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.CheckIns
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    checkIn => checkIn.AthleteId == athleteId && checkIn.Date == date,
+                    cancellationToken));
+
     public async Task<IReadOnlyList<CheckIn>> GetByAthletesAndDateAsync(IReadOnlyCollection<Guid> athleteIds, DateTime date, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.CheckIns

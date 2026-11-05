@@ -6,6 +6,9 @@ public interface ICheckInRepository
 {
     Task<CheckIn?> GetByAthleteAndDateAsync(Guid athleteId, DateTime date, CancellationToken cancellationToken = default);
 
+    // Consulta de solo lectura (AsNoTracking) del check-in de un atleta en una fecha (KAN-451).
+    Task<CheckIn?> GetNoTrackingByAthleteAndDateAsync(Guid athleteId, DateTime date, CancellationToken cancellationToken = default);
+
     // Check-ins de varios atletas en una misma fecha, en una sola consulta (semáforo por categoría).
     Task<IReadOnlyList<CheckIn>> GetByAthletesAndDateAsync(IReadOnlyCollection<Guid> athleteIds, DateTime date, CancellationToken cancellationToken = default);
 

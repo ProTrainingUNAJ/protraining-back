@@ -5,6 +5,7 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
@@ -29,6 +30,7 @@ public class CheckInsControllerTests
         var controller = new CheckInsController(
             new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine),
             new ListAthleteCheckInsQueryHandler(_checkIns.Object),
+            new GetTodayCheckInQueryHandler(_checkIns.Object),
             _estructura.Object);
 
         var claims = new List<Claim>();
@@ -224,5 +226,47 @@ public class CheckInsControllerTests
 
         await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
             CreateController("PreparadorFisico").List(athleteId, cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithCheckInToday_When_GetToday_Then_Returns200WithPainZones()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CheckIn
+            {
+                AthleteId = athleteId,
+                Date = today,
+                TrafficLight = TrafficLight.Yellow,
+                SleepHours = 7.5,
+                SleepQuality = 4,
+                MuscleSoreness = 3,
+                FatigueLevel = 2,
+                MoodRate = 4,
+                StressLevel = 2,
+                PainZones = "cuadriceps:2"
+            });
+
+        var result = await CreateController().GetToday(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<CheckInDto>(ok.Value);
+        Assert.Equal(athleteId, dto.AthleteId);
+        Assert.Equal("cuadriceps:2", dto.PainZones);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithoutCheckInToday_When_GetToday_Then_ThrowsCheckInNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CheckIn?)null);
+
+        await Assert.ThrowsAsync<CheckInNotFoundException>(() =>
+            CreateController().GetToday(athleteId, CancellationToken.None));
     }
 }

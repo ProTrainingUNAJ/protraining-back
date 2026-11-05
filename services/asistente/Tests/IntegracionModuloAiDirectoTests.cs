@@ -1,4 +1,5 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Interfaces.Persistence;
+using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.PfDecisions.GetAthleteDecisions;
 namespace Asistente.Tests;
 
@@ -43,7 +44,7 @@ public sealed class IntegracionModuloAiDirectoTests
             ));
 
         var useCase = new SuggestRoutineUseCase(mockAiService.Object);
-        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
+        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         var request = new RoutineSuggestionRequestDto(
             AthleteId: TestAthleteId,
@@ -232,7 +233,7 @@ public sealed class IntegracionModuloAiDirectoTests
         );
 
         var useCase = new SuggestRoutineUseCase(resilientAiService);
-        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()));
+        var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
         var request = new RoutineSuggestionRequestDto(TestAthleteId, "Fuerza Máxima");
 
         // Act: Llamada real de extremo a extremo a través del socket HTTP

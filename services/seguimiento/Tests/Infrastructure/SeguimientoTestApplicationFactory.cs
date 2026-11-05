@@ -118,6 +118,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetCategoryAveragesQueryHandler>();
                 services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();
