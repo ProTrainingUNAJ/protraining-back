@@ -663,6 +663,60 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{athleteId}/evolution:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar evolución temporal unificada de un atleta
+      description: >
+        Consolida en una vista temporal unificada día a día la progresión histórica de
+        fuerza (1RM), capacidades atléticas (salto/velocidad) y fatiga/wellness a lo
+        largo de las semanas (por defecto, los últimos 3 meses).
+      operationId: getAthleteEvolution
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: months
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 3
+          description: Cantidad de meses hacia atrás para la consulta histórica (por defecto 3 meses).
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-08-01"
+          description: Fecha inicial personalizada del rango (inclusive). Tiene prioridad sobre months.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final personalizada del rango (inclusive). Por defecto es hoy en hora de Argentina.
+      responses:
+        "200":
+          description: Curvas de evolución obtenidas con éxito y listas para graficar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteEvolutionResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/field-test-sessions/{sessionId}:
     get:
       tags:
@@ -1289,6 +1343,171 @@ components:
                 type: string
                 nullable: true
                 example: "Superior al promedio (+11.5%)"
+
+    AthleteEvolutionResponse:
+      type: object
+      description: Vista consolidada de curvas de evolución temporal del atleta para graficar.
+      required:
+        - athleteId
+        - from
+        - to
+        - strength
+        - fitnessTests
+        - wellness
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        from:
+          type: string
+          format: date
+          example: "2026-08-01"
+        to:
+          type: string
+          format: date
+          example: "2026-11-01"
+        strength:
+          type: array
+          description: Series de progresión de fuerza (1RM) agrupadas por ejercicio.
+          items:
+            $ref: '#/components/schemas/StrengthEvolutionSeries'
+        fitnessTests:
+          type: array
+          description: Series de capacidades atléticas (salto, velocidad, etc.) agrupadas por test físico.
+          items:
+            $ref: '#/components/schemas/FitnessTestEvolutionSeries'
+        wellness:
+          $ref: '#/components/schemas/WellnessEvolution'
+
+    StrengthEvolutionSeries:
+      type: object
+      required:
+        - exerciseId
+        - exerciseName
+        - unit
+        - points
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        exerciseName:
+          type: string
+          example: "Sentadilla Trasera"
+        unit:
+          type: string
+          example: "kg"
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+
+    FitnessTestEvolutionSeries:
+      type: object
+      required:
+        - catalogTestId
+        - testName
+        - motorCapacity
+        - unit
+        - points
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          type: string
+          example: "Power"
+        unit:
+          type: string
+          example: "cm"
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+
+    EvolutionDataPoint:
+      type: object
+      required:
+        - date
+        - value
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-15"
+        value:
+          type: number
+          format: double
+          example: 45.5
+        label:
+          type: string
+          nullable: true
+          example: "45.5 cm"
+
+    WellnessEvolution:
+      type: object
+      required:
+        - fatiguePoints
+        - dailyPoints
+      properties:
+        fatiguePoints:
+          type: array
+          description: Curva de progresión de niveles de fatiga día a día.
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+        dailyPoints:
+          type: array
+          description: Detalle completo de variables de wellness registradas día a día.
+          items:
+            $ref: '#/components/schemas/DailyWellnessPoint'
+
+    DailyWellnessPoint:
+      type: object
+      required:
+        - date
+        - fatigueLevel
+        - sleepHours
+        - sleepQuality
+        - muscleSoreness
+        - moodRate
+        - stressLevel
+        - trafficLight
+        - hasActiveInjury
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-15"
+        fatigueLevel:
+          type: integer
+          example: 3
+        sleepHours:
+          type: number
+          format: double
+          example: 7.5
+        sleepQuality:
+          type: integer
+          example: 4
+        muscleSoreness:
+          type: integer
+          example: 2
+        moodRate:
+          type: integer
+          example: 4
+        stressLevel:
+          type: integer
+          example: 2
+        trafficLight:
+          type: string
+          example: "Green"
+        hasActiveInjury:
+          type: boolean
+          example: false
 
     CreateInjuryRequest:
       type: object

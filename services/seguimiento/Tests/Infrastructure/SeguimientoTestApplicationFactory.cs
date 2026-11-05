@@ -19,12 +19,14 @@ using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
+using Application.UseCases.Evolution.GetAthleteEvolution;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Infrastructure.Services.Structure;
+using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -49,12 +51,16 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
     // Estructura falsa: cada test define qué le pasa al llamado del semáforo.
     public FakeStructureHandler Structure { get; }
 
+    // Entrenamiento falso: control del llamado de récords 1RM (#140 / KAN-435).
+    public FakeTrainingHandler Training { get; }
+
     private SeguimientoTestApplicationFactory(
-        SqliteConnection sqliteConnection, TestServer server, FakeStructureHandler structure)
+        SqliteConnection sqliteConnection, TestServer server, FakeStructureHandler structure, FakeTrainingHandler training)
     {
         _sqliteConnection = sqliteConnection;
         _server = server;
         Structure = structure;
+        Training = training;
     }
 
     // Levanta el host con el mismo DI de infraestructura que el servicio y ejecuta
@@ -79,6 +85,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
             .Build();
 
         var structureHandler = new FakeStructureHandler();
+        var trainingHandler = new FakeTrainingHandler();
 
         var builder = new WebHostBuilder()
             .UseEnvironment("Development")
@@ -141,6 +148,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();
+                services.AddScoped<GetAthleteEvolutionQueryHandler>();
 
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.
@@ -148,6 +156,12 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddHttpClient<IStructureClient, StructureClient>(client =>
                         client.BaseAddress = new Uri("http://estructura.test/"))
                     .ConfigurePrimaryHttpMessageHandler(() => structureHandler)
+                    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
+                // Entrenamiento por HTTP (#140 / KAN-435): consulta de récords 1RM para evolución.
+                services.AddHttpClient<ITrainingClient, TrainingClient>(client =>
+                        client.BaseAddress = new Uri("http://entrenamiento.test/"))
+                    .ConfigurePrimaryHttpMessageHandler(() => trainingHandler)
                     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 
                 // Autenticación y controllers reales: el endpoint exige rol PreparadorFisico.
@@ -185,7 +199,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
             await CatalogTestSeeder.SeedAsync(context, logger);
         }
 
-        return new SeguimientoTestApplicationFactory(sqliteConnection, server, structureHandler);
+        return new SeguimientoTestApplicationFactory(sqliteConnection, server, structureHandler, trainingHandler);
     }
 
     // Cliente HTTP sin token: sirve para probar los 401/403 del endpoint.

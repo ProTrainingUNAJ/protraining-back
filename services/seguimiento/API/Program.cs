@@ -24,10 +24,12 @@ using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
+using Application.UseCases.Evolution.GetAthleteEvolution;
 using Infrastructure.Services;
 using Domain.Services;
 using Infrastructure;
 using Infrastructure.Services.Structure;
+using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -104,6 +106,7 @@ builder.Services.AddScoped<SetAttendanceCommandHandler>();
 builder.Services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
 builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
 builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
+builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 // Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
@@ -114,6 +117,14 @@ if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
+// Entrenamiento por HTTP, con el token del usuario (#140 / KAN-435): consulta de récords 1RM para evolución.
+var trainingBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"] ?? "http://localhost:8083";
+if (Uri.TryCreate(trainingBaseUrl, UriKind.Absolute, out var trainingUri))
+{
+    builder.Services.AddHttpClient<ITrainingClient, TrainingClient>(client => client.BaseAddress = trainingUri)
+        .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+}
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
