@@ -1,7 +1,18 @@
+using System;
+
 namespace Application.Interfaces.Services;
 
 public interface ICurrentUser
 {
     // PF that owns the data of the current request ("pf_id" claim of the token). Null without a valid token.
     Guid? PfId { get; }
+
+    // Permite establecer un contexto ambiental de PF para background workers / tareas sin HttpContext (#177 · KAN-472).
+    IDisposable UsePfContext(Guid pfId) => EmptyDisposable.Instance;
+}
+
+public sealed class EmptyDisposable : IDisposable
+{
+    public static readonly EmptyDisposable Instance = new();
+    public void Dispose() { }
 }

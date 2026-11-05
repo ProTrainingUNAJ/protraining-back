@@ -17,6 +17,7 @@ public sealed class StructureAthleteClient(
 {
     private sealed record StructureAthleteApiResponse(
         [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("pfId")] Guid PfId,
         [property: JsonPropertyName("fullName")] string? FullName,
         [property: JsonPropertyName("firstName")] string? FirstName,
         [property: JsonPropertyName("lastName")] string? LastName,
@@ -74,19 +75,23 @@ public sealed class StructureAthleteClient(
     {
         if (httpClient.BaseAddress is null)
         {
-            logger.LogWarning("La dirección base de Estructura no está configurada.");
-            return [];
+            logger.LogError("La dirección base de Estructura no está configurada.");
+            throw new StructureServiceUnavailableException("La dirección base del microservicio de Estructura no está configurada.");
         }
 
         try
         {
-            const string url = "api/v1/athletes";
+            const string url = "api/v1/internal/athletes";
             using var response = await httpClient.GetAsync(url, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Estructura respondió {StatusCode} al listar atletas.", (int)response.StatusCode);
-                return [];
+                logger.LogError(
+                    "Estructura respondió código HTTP {StatusCode} al obtener atletas para el worker nocturno.",
+                    (int)response.StatusCode);
+
+                throw new StructureServiceUnavailableException(
+                    $"El microservicio de Estructura no se encuentra disponible (código {(int)response.StatusCode}).");
             }
 
             var apiAthletes = await response.Content.ReadFromJsonAsync<List<StructureAthleteApiResponse>>(cancellationToken: cancellationToken);
@@ -108,7 +113,7 @@ public sealed class StructureAthleteClient(
                         name = "Atleta " + a.Id.ToString()[..8];
                     }
 
-                    return new StructureAthleteSummaryDto(a.Id, name, a.CategoryId, a.Active);
+                    return new StructureAthleteSummaryDto(a.Id, name, a.CategoryId, a.Active, a.PfId);
                 })
                 .ToList();
         }
@@ -116,10 +121,14 @@ public sealed class StructureAthleteClient(
         {
             throw;
         }
+        catch (StructureServiceUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Error al comunicarse con Estructura para obtener atletas.");
-            return [];
+            logger.LogError(ex, "Error al comunicarse con Estructura para obtener atletas.");
+            throw new StructureServiceUnavailableException("El microservicio de Estructura no se encuentra disponible.", ex);
         }
     }
 }
