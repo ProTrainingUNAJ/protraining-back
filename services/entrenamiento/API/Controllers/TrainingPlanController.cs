@@ -4,10 +4,12 @@ using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
+using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
 using Application.UseCases.TrainingPlans.ListTemplates;
 using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -28,6 +30,7 @@ public class TrainingPlanController : ControllerBase
     private readonly SavePlanAsTemplateCommandHandler _savePlanAsTemplateHandler;
     private readonly ListPlanTemplatesQueryHandler _listPlansTemplatesHandler;
     private readonly ApplyPlanTemplateCommandHandler _applyPlanTemplateHandler;
+    private readonly ListPlanAssignmentsQueryHandler _listAssignmentsHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -38,7 +41,8 @@ public class TrainingPlanController : ControllerBase
         GetPlanScheduleQueryHandler scheduleHandler,
         SavePlanAsTemplateCommandHandler savePlanAsTemplateHandler,
         ListPlanTemplatesQueryHandler listPlanTemplatesHandler,
-        ApplyPlanTemplateCommandHandler applyPlanTemplateHandler)
+        ApplyPlanTemplateCommandHandler applyPlanTemplateHandler,
+        ListPlanAssignmentsQueryHandler listAssignmentsHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -49,6 +53,7 @@ public class TrainingPlanController : ControllerBase
         _savePlanAsTemplateHandler = savePlanAsTemplateHandler;
         _listPlansTemplatesHandler = listPlanTemplatesHandler;
         _applyPlanTemplateHandler = applyPlanTemplateHandler;
+        _listAssignmentsHandler = listAssignmentsHandler;
     }
 
     [HttpPost]
@@ -92,6 +97,17 @@ public class TrainingPlanController : ControllerBase
         return Ok(sessions);
     }
 
+    // Mis asignaciones con su fin y su estado; ?status=Active o ?status=Finished para filtrar (KAN-558)
+    [HttpGet("assignments")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<ActionResult<List<PlanAssignmentSummaryDto>>> ListAssignments(
+        [FromQuery] PlanAssignmentStatus? status,
+        CancellationToken cancellationToken = default)
+    {
+        var assignments = await _listAssignmentsHandler.Handle(new ListPlanAssignmentsQuery(status), cancellationToken);
+        return Ok(assignments);
+    }
+
     [HttpPost("assignments")]
     [Authorize(Roles = "PreparadorFisico")]
     public async Task<IActionResult> AssignPlan([FromBody] AssignPlanRequest request, CancellationToken cancellationToken = default)
@@ -103,8 +119,10 @@ public class TrainingPlanController : ControllerBase
             request.AthleteId
         );
 
-        var assignmentId = await _assignPlanHandler.Handle(command, cancellationToken);
-        return Created($"/api/v1/training-plans/assignments/{assignmentId}", new { assignmentId, message = "Plan asignado exitosamente." });
+        var assignment = await _assignPlanHandler.Handle(command, cancellationToken);
+        return Created(
+            $"/api/v1/training-plans/assignments/{assignment.AssignmentId}",
+            AssignmentResponse(assignment, "Plan asignado exitosamente."));
     }
 
     [HttpPost("{id:guid}/save-as-template")]
@@ -135,8 +153,20 @@ public class TrainingPlanController : ControllerBase
             request.CategoryId,
             request.AthleteId);
 
-        var assignmentId = await _applyPlanTemplateHandler.Handle(command, cancellationToken);
+        var assignment = await _applyPlanTemplateHandler.Handle(command, cancellationToken);
 
-        return Created($"/api/v1/training-plans/assignments/{assignmentId}", new { assignmentId, message = "Plantilla aplicada y asignada exitosamente." });
+        return Created(
+            $"/api/v1/training-plans/assignments/{assignment.AssignmentId}",
+            AssignmentResponse(assignment, "Plantilla aplicada y asignada exitosamente."));
     }
+
+    // Respuesta de una asignación: se mantienen assignmentId y message, y se suman el fin y el estado (KAN-558).
+    private static object AssignmentResponse(PlanAssignmentDto assignment, string message) => new
+    {
+        assignmentId = assignment.AssignmentId,
+        startDate = assignment.StartDate,
+        endDate = assignment.EndDate,
+        status = assignment.Status.ToString(),
+        message
+    };
 }
