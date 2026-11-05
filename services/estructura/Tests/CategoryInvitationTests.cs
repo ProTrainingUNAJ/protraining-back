@@ -112,7 +112,8 @@ public sealed class CategoryInvitationTests
     [Fact]
     public async Task Given_ValidToken_When_Validate_Then_ReturnsCategoryInvitationDtoWithCategoryName()
     {
-        var now = DateTimeOffset.UtcNow;
+        // Se usa una fecha fija futura para asegurar que CategoryInvitation.Create (que valida contra DateTime.UtcNow) no lance DomainException
+        var now = new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
 
         var categoryId = Guid.NewGuid();
