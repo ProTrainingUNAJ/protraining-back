@@ -798,6 +798,33 @@ paths:
           $ref: '#/components/responses/Forbidden'
 
   /api/v1/training-plans/assignments:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar mis asignaciones con su fin y su estado
+      description: Devuelve las asignaciones del PF del token, primero las activas y después las terminadas. La fecha de fin se calcula (inicio + semanas del plan × 7 − 1) y el estado se compara con la fecha de hoy en Argentina. Requiere rol PreparadorFisico.
+      operationId: listPlanAssignments
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filtra por estado. Sin filtro devuelve todas.
+          schema:
+            type: string
+            enum: [Active, Finished]
+      responses:
+        "200":
+          description: Asignaciones del PF.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAssignmentSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - Routines and Templates
@@ -1886,6 +1913,11 @@ components:
           nullable: true
           description: Indicaciones o notas del preparador físico asociadas a la sesión.
           example: "Controlar técnica en descenso y mantener pausa de 1 segundo."
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
@@ -2031,16 +2063,74 @@ components:
           nullable: true
           example: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f"
 
+    PlanAssignmentSummary:
+      type: object
+      description: Asignación del PF a una categoría o a un atleta, con su fin calculado y su estado.
+      required:
+        - assignmentId
+        - trainingPlanId
+        - planName
+        - startDate
+        - endDate
+        - status
+      properties:
+        assignmentId:
+          type: string
+          format: uuid
+        trainingPlanId:
+          type: string
+          format: uuid
+        planName:
+          type: string
+          example: "Fuerza base"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        startDate:
+          type: string
+          format: date
+          example: "2026-12-01"
+        endDate:
+          type: string
+          format: date
+          example: "2026-12-28"
+        status:
+          type: string
+          enum: [Active, Finished]
+          example: "Active"
+
     AssignPlanResponse:
       type: object
       required:
         - assignmentId
+        - startDate
+        - endDate
+        - status
         - message
       properties:
         assignmentId:
           type: string
           format: uuid
           example: "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a"
+        startDate:
+          type: string
+          format: date
+          example: "2026-12-01"
+        endDate:
+          type: string
+          format: date
+          description: Último día de la asignación, calculado como inicio + semanas del plan × 7 − 1. No se guarda.
+          example: "2026-12-28"
+        status:
+          type: string
+          enum: [Active, Finished]
+          description: Active hasta el último día inclusive; Finished desde el día siguiente (fecha de Argentina).
+          example: "Active"
         message:
           type: string
           example: "Plan asignado exitosamente."
@@ -2145,6 +2235,11 @@ components:
           type: string
           nullable: true
           example: "Controlar técnica en descenso"
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
@@ -2249,6 +2344,11 @@ components:
           type: string
           nullable: true
           example: "Controlar técnica en descenso"
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
@@ -2341,6 +2441,17 @@ components:
           type: string
           nullable: true
           example: "Controlar la técnica en el descenso."
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
+        assignmentEndDate:
+          type: string
+          format: date
+          nullable: true
+          description: Último día de la asignación (inicio + semanas del plan × 7 − 1).
+          example: "2026-12-28"
 
     TrainingPlanSummary:
       type: object

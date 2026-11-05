@@ -1,4 +1,5 @@
-﻿using Application.Exceptions;
+﻿using Application.DTOs.TrainingPlans;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Domain.Entities;
@@ -21,7 +22,7 @@ namespace Application.UseCases.TrainingPlans.ApplyTemplate
             _assignPlanHandler = assignPlanHandler;
         }
 
-        public async Task<Guid> Handle(ApplyPlanTemplateCommand request, CancellationToken cancellationToken = default)
+        public async Task<PlanAssignmentDto> Handle(ApplyPlanTemplateCommand request, CancellationToken cancellationToken = default)
         {
             var template = await _trainingPlanRepository.GetWithDetailsByIdAsync(request.TemplateId, cancellationToken);
             if (template is null || !template.IsTemplate)
@@ -31,7 +32,7 @@ namespace Application.UseCases.TrainingPlans.ApplyTemplate
 
             var newPlan = template.CloneAs(template.Name, false);
 
-            Guid assignmentId = Guid.Empty;
+            PlanAssignmentDto? assignment = null;
 
             await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
@@ -42,10 +43,10 @@ namespace Application.UseCases.TrainingPlans.ApplyTemplate
                     request.StartDate,
                     request.CategoryId,
                     request.AthleteId);
-                assignmentId = await _assignPlanHandler.Handle(assignCommand, cancellationToken);
+                assignment = await _assignPlanHandler.Handle(assignCommand, cancellationToken);
             }, cancellationToken);
 
-            return assignmentId;
+            return assignment!;
         }
     }
 }

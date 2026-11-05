@@ -134,7 +134,7 @@ public class UpdateTrainingPlanCommandHandler
                         }
                         else
                         {
-                            existingSession.Update(sessionReq.Name, sessionReq.Order, sessionReq.DayOfWeek, sessionReq.CoachNotes);
+                            existingSession.Update(sessionReq.Name, sessionReq.Order, sessionReq.DayOfWeek, sessionReq.CoachNotes, sessionReq.StartTime);
                             SyncExercises(existingSession, sessionReq.Exercises);
                         }
                     }
@@ -156,7 +156,8 @@ public class UpdateTrainingPlanCommandHandler
             sessionReq.Name,
             sessionReq.Order,
             sessionReq.DayOfWeek,
-            sessionReq.CoachNotes
+            sessionReq.CoachNotes,
+            sessionReq.StartTime
         );
 
         if (sessionReq.Exercises != null)

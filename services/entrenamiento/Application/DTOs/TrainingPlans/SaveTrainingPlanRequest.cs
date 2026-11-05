@@ -15,7 +15,8 @@ public record TrainingSessionRequest(
     DayOfWeek DayOfWeek,
     string? CoachNotes = null,
     List<PrescribedExerciseRequest>? Exercises = null,
-    Guid? Id = null
+    Guid? Id = null,
+    TimeOnly? StartTime = null
 );
 
 public record TrainingWeekRequest(

@@ -38,7 +38,8 @@ public static class TrainingPlanMapper
                                 e.Sets,
                                 e.Reps,
                                 e.TargetPercentage
-                            )).ToList()
+                            )).ToList(),
+                        s.StartTime
                     )).ToList()
             )).ToList();
 
