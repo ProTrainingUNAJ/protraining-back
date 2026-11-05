@@ -1518,6 +1518,7 @@ components:
         - lastName
         - email
         - phone
+        - birthDate
       properties:
         firstName:
           type: string
@@ -1532,6 +1533,39 @@ components:
         phone:
           type: string
           example: "+5491112345678"
+        birthDate:
+          type: string
+          format: date
+          example: "2008-05-15"
+          description: Fecha de nacimiento del atleta (determina minoría de edad < 18 años).
+        guardianName:
+          type: string
+          nullable: true
+          example: "Roberto Fernández"
+          description: Obligatorio si el atleta es menor de 18 años.
+        guardianEmail:
+          type: string
+          format: email
+          nullable: true
+          example: "roberto@ejemplo.com"
+          description: Obligatorio si el atleta es menor y no proporciona teléfono.
+        guardianPhone:
+          type: string
+          nullable: true
+          example: "+5491144441234"
+          description: Obligatorio si el atleta es menor y no proporciona email.
+        allowsPhysicalTraining:
+          type: boolean
+          nullable: true
+          default: true
+          example: true
+          description: Autorización de preparación física por el tutor (obligatoria si es menor).
+        allowsHabitsRecommendations:
+          type: boolean
+          nullable: true
+          default: false
+          example: false
+          description: Autorización secundaria de recomendaciones de hábitos por el tutor.
         emergencyContact:
           type: string
           nullable: true

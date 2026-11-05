@@ -114,7 +114,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act: Llamada sin header Authorization
         var response = await _unauthenticatedClient.PostAsJsonAsync(
             "/api/v1/invitations/algun-token/accept",
-            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111"));
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -126,7 +126,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Arrange: Cliente autenticado como PreparadorFisico
         var response = await _clientPf.PostAsJsonAsync(
             "/api/v1/invitations/algun-token/accept",
-            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111"));
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert: 403 Forbidden
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -147,7 +147,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act
         var response = await clientAthleteForeign.PostAsJsonAsync(
             $"/api/v1/invitations/{inv!.Token}/accept",
-            new AcceptCategoryInvitationRequest("Atleta", "Ajeno", "ajeno@test.com", "+5491122222222"));
+            new AcceptCategoryInvitationRequest("Atleta", "Ajeno", "ajeno@test.com", "+5491122222222", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert: 403 Forbidden
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -165,7 +165,9 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         var athleteAccountId = Guid.NewGuid();
         var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
 
-        var request = new AcceptCategoryInvitationRequest("Lucas", "Gómez", "lucas@test.com", "+5491133333333");
+        var request = new AcceptCategoryInvitationRequest(
+            "Lucas", "Gómez", "lucas@test.com", "+5491133333333",
+            DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act 1: Primera llamada
         var response1 = await clientAthlete.PostAsJsonAsync($"/api/v1/invitations/{inv!.Token}/accept", request);
@@ -214,10 +216,87 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act
         var response = await clientAthlete.PostAsJsonAsync(
             $"/api/v1/invitations/{expiredToken}/accept",
-            new AcceptCategoryInvitationRequest("Pedro", "Gómez", "pedro@test.com", "+5491144444444"));
+            new AcceptCategoryInvitationRequest("Pedro", "Gómez", "pedro@test.com", "+5491144444444", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert
         Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+    }
+
+    // --- Tests de Integración KAN-401 (Consentimiento de Menores) ---
+
+    [Fact]
+    public async Task Given_Minor16YearsOldWithoutGuardian_When_AcceptInvitation_Then_Returns400BadRequest_AndDoesNotCreateAthlete()
+    {
+        // Arrange: PF crea invitación
+        var org = await (await _clientPf.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Menores"))).Content.ReadFromJsonAsync<OrganizationDto>();
+        var cat = await (await _clientPf.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Sub-16"))).Content.ReadFromJsonAsync<CategoryDto>();
+        var inv = await (await _clientPf.PostAsync($"/api/v1/categories/{cat!.Id}/invitation-token", null)).Content.ReadFromJsonAsync<CategoryInvitationDto>();
+
+        var athleteAccountId = Guid.NewGuid();
+        var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
+
+        // Menor de 16 años sin datos de tutor
+        var request = new AcceptCategoryInvitationRequest(
+            FirstName: "Joaquín",
+            LastName: "Menor",
+            Email: "joaquin.menor@test.com",
+            Phone: "+5491100001111",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)), // 16 años
+            GuardianName: null);
+
+        // Act
+        var response = await clientAthlete.PostAsJsonAsync($"/api/v1/invitations/{inv!.Token}/accept", request);
+
+        // Assert: 400 Bad Request
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        // Assert en BD: No se crea el atleta
+        using var db = _factory.CreateDbContext();
+        var athleteExists = await db.Athletes.IgnoreQueryFilters().AnyAsync(a => a.AccountId == athleteAccountId);
+        Assert.False(athleteExists);
+    }
+
+    [Fact]
+    public async Task Given_Minor16YearsOldWithCompleteGuardianData_When_AcceptInvitation_Then_Returns200OK_AndCreatesMinorAthlete()
+    {
+        // Arrange: PF crea invitación
+        var org = await (await _clientPf.PostAsJsonAsync("/api/v1/organizations", new CreateOrganizationRequest("Club Menores Valido"))).Content.ReadFromJsonAsync<OrganizationDto>();
+        var cat = await (await _clientPf.PostAsJsonAsync("/api/v1/categories", new CreateCategoryRequest(org!.Id, "Sub-16 Valida"))).Content.ReadFromJsonAsync<CategoryDto>();
+        var inv = await (await _clientPf.PostAsync($"/api/v1/categories/{cat!.Id}/invitation-token", null)).Content.ReadFromJsonAsync<CategoryInvitationDto>();
+
+        var athleteAccountId = Guid.NewGuid();
+        var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
+
+        // Menor de 16 años con tutor completo
+        var request = new AcceptCategoryInvitationRequest(
+            FirstName: "Joaquín",
+            LastName: "Aprobado",
+            Email: "joaquin.aprobado@test.com",
+            Phone: "+5491100002222",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)),
+            GuardianName: "Esteban Aprobado",
+            GuardianEmail: "esteban.tutor@test.com",
+            GuardianPhone: "+5491100003333",
+            AllowsPhysicalTraining: true,
+            AllowsHabitsRecommendations: true);
+
+        // Act
+        var response = await clientAthlete.PostAsJsonAsync($"/api/v1/invitations/{inv!.Token}/accept", request);
+
+        // Assert: 200 OK
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var athlete = await response.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+        Assert.True(athlete.IsMinor);
+
+        // Assert en BD: El atleta se persiste como IsMinor = true
+        using var db = _factory.CreateDbContext();
+        var athleteInDb = await db.Athletes.IgnoreQueryFilters().Include(a => a.DigitalConsent).FirstOrDefaultAsync(a => a.AccountId == athleteAccountId);
+        Assert.NotNull(athleteInDb);
+        Assert.True(athleteInDb.IsMinor);
+        Assert.NotNull(athleteInDb.DigitalConsent);
+        Assert.True(athleteInDb.DigitalConsent.IsMinor);
+        Assert.Equal("Esteban Aprobado", athleteInDb.DigitalConsent.GuardianName);
     }
 
     public async ValueTask DisposeAsync()
