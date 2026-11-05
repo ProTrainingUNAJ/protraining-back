@@ -124,6 +124,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 HasActiveInjuries = false,
                 RoutineAdapted = false,
                 CoachNotes = routine.CoachNotes,
+                StartTime = routine.StartTime,
                 Exercises = exercisesDto
             };
 

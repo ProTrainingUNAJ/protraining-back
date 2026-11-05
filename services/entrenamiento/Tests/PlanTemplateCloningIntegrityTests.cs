@@ -88,7 +88,7 @@ namespace Entrenamiento.Tests
                     new DateOnly(2026, 11, 2),
                     _categoryId,
                     null);
-                assignmentId = await handler.Handle(command);
+                assignmentId = (await handler.Handle(command)).AssignmentId;
             }
             // 3. ACT: Editar el ejercicio prescrito en el nuevo plan clonado
             await using (var editContext = CreateContext())
@@ -182,7 +182,7 @@ namespace Entrenamiento.Tests
                     new DateOnly(2026, 11, 2),
                     _categoryId,
                     null);
-                assignmentId = await handler.Handle(command);
+                assignmentId = (await handler.Handle(command)).AssignmentId;
             }
             // Assert
             await using (var assertContext = CreateContext())
@@ -262,7 +262,7 @@ namespace Entrenamiento.Tests
             {
                 var (handler, _) = CreateHandler(actContext);
                 var command = new ApplyPlanTemplateCommand(templateId, new DateOnly(2026, 11, 2), _categoryId, null);
-                assignmentId = await handler.Handle(command);
+                assignmentId = (await handler.Handle(command)).AssignmentId;
             }
             // Modificamos las notas del coach solo en el plan clonado
             await using (var editContext = CreateContext())

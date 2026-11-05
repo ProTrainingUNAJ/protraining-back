@@ -16,7 +16,8 @@ public record TrainingPlanSessionDto(
     int Order,
     DayOfWeek DayOfWeek,
     string? CoachNotes,
-    List<PrescribedExerciseDto> Exercises
+    List<PrescribedExerciseDto> Exercises,
+    TimeOnly? StartTime = null
 );
 
 public record TrainingPlanWeekDto(

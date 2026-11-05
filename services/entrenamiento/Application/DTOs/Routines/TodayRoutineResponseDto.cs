@@ -9,6 +9,8 @@ namespace Application.DTOs.Routines
         public bool HasActiveInjuries { get; set; }
         public bool RoutineAdapted { get; set; }
         public string? CoachNotes { get; set; }
+        // Hora de la sesión (hora Argentina), si el PF la cargó (KAN-558)
+        public TimeOnly? StartTime { get; set; }
         public List<TodayRoutineExerciseDto> Exercises { get; set; } = [];
     }
 }
