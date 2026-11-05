@@ -3,8 +3,8 @@ using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.CheckRestrictions;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.ListExercises;
+using Application.UseCases.Exercise.UpdateVideoUrl;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers
@@ -18,17 +18,20 @@ namespace API.Controllers
         private readonly CheckExerciseRestrictionsQueryHandler _checkRestrictionsQueryHandler;
         private readonly GetExerciseSubstitutesQueryHandler _getSubstitutesQueryHandler;
         private readonly CreateExerciseCommandHandler _createExerciseCommandHandler;
+        private readonly UpdateExerciseVideoCommandHandler _updateExerciseVideoCommandHandler;
 
         public ExerciseController(
             ListExercisesQueryHandler listExercisesQueryHandler,
             CheckExerciseRestrictionsQueryHandler checkRestrictionsQueryHandler,
             GetExerciseSubstitutesQueryHandler getSubstitutesQueryHandler,
-            CreateExerciseCommandHandler createExerciseCommandHandler)
+            CreateExerciseCommandHandler createExerciseCommandHandler,
+            UpdateExerciseVideoCommandHandler updateExerciseVideoCommandHandler = null!)
         {
             _listExercisesQueryHandler = listExercisesQueryHandler;
             _checkRestrictionsQueryHandler = checkRestrictionsQueryHandler;
             _getSubstitutesQueryHandler = getSubstitutesQueryHandler;
             _createExerciseCommandHandler = createExerciseCommandHandler;
+            _updateExerciseVideoCommandHandler = updateExerciseVideoCommandHandler;
         }
 
         [HttpGet]
@@ -73,6 +76,15 @@ namespace API.Controllers
         {
             var result = await _createExerciseCommandHandler.Handle(request, cancellationToken);
             return StatusCode(StatusCodes.Status201Created, result);
+        }
+
+        [HttpPut("{id:guid}/video")]
+        [Authorize(Roles = "PreparadorFisico")]
+        public async Task<IActionResult> UpdateVideoUrl([FromRoute] Guid id, [FromBody] UpdateExerciseVideoCommand request, CancellationToken cancellationToken)
+        {
+            request.ExerciseId = id;
+            var result = await _updateExerciseVideoCommandHandler.Handle(request, cancellationToken);
+            return Ok(result);
         }
     }
 }

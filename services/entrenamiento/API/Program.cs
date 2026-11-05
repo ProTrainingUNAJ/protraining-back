@@ -3,16 +3,17 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.AthleteRecord.ConfirmRecordsImport;
 using Application.UseCases.AthleteRecord.GetRecordsReliability;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Application.UseCases.AthleteRecord.PreviewRecordsImport;
-using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.CheckRestrictions;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.ListExercises;
+using Application.UseCases.Exercise.UpdateVideoUrl;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
 using Application.UseCases.RecordProposals.ApproveRecordProposal;
@@ -108,6 +109,7 @@ builder.Services.AddScoped<DiscardRecordProposalCommandHandler>();
 builder.Services.AddScoped<SavePlanAsTemplateCommandHandler>();
 builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
 builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
+builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
 
 
 

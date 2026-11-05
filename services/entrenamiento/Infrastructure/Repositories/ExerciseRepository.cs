@@ -119,7 +119,13 @@ namespace Infrastructure.Repositories
                 .OrderBy(e => e.Name)
                 .ToListAsync(cancellationToken);
         }
-        
+
+        public async Task<Exercise?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await context.Exercises.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        }
+
+
         private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf)
         {
             if (usedByPf)

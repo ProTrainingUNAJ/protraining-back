@@ -22,4 +22,5 @@ public interface IExerciseRepository
 
     // Catálogo completo en una sola consulta (KAN-389: el preview no debe consultar por fila).
     Task<List<Exercise>> ListAllAsync(CancellationToken cancellationToken = default);
+    Task<Exercise?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

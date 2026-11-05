@@ -95,6 +95,12 @@ namespace Domain.Entities
             ParentExerciseId = null;
             VariantLabel = null;
         }
+
+        // Actualiza el link del video
+        public void UpdateVideoUrl(string? videoUrl)
+        {
+            VideoUrl = string.IsNullOrWhiteSpace(videoUrl) ? null : videoUrl.Trim();
+        }
     }
     
     [JsonConverter(typeof(JsonStringEnumConverter))]
