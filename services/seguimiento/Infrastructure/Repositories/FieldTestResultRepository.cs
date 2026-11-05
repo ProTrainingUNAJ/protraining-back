@@ -29,6 +29,8 @@ public sealed class FieldTestResultRepository(AppDbContext context) : IFieldTest
                 query = query.Where(r => r.RecordedAt <= to.Value);
 
             var joined = await query
+                .OrderBy(r => r.RecordedAt)
+                .ThenBy(r => r.Attempt)
                 .Join(
                     context.CatalogTests.AsNoTracking(),
                     r => r.CatalogTestId,
@@ -43,8 +45,6 @@ public sealed class FieldTestResultRepository(AppDbContext context) : IFieldTest
                         t.MeasurementUnit,
                         r.Attempt,
                         r.RecordedAt))
-                .OrderBy(dto => dto.RecordedAt)
-                .ThenBy(dto => dto.Attempt)
                 .ToListAsync(cancellationToken);
 
             return joined;
