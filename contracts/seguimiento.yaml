@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.5.0
+  version: 1.6.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -663,6 +663,126 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/field-test-sessions/{sessionId}:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Sesión de test de campo con sus resultados
+      description: >
+        Devuelve la sesión de test de campo con sus tests del catálogo (en orden de
+        evaluación) y los resultados cargados por atleta. Responde 404 si la sesión no
+        existe o es de otro PF.
+      operationId: getFieldTestSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Sesión obtenida con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSession'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions/{sessionId}/results:
+    post:
+      tags:
+        - Fitness Tests
+      summary: Carga rápida de un resultado de campo
+      description: >
+        Registra el valor de un atleta para un test de la sesión. Responde 404 si la
+        sesión no existe o es de otro PF, o si el atleta no existe o es de otro PF (en
+        ese caso no se persiste nada). Responde 409 si el mismo (sesión, prueba, atleta
+        e intento) ya fue cargado.
+      operationId: createFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFieldTestResultRequest'
+      responses:
+        "201":
+          description: Resultado registrado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/field-test-sessions/{sessionId}/results/{resultId}:
+    put:
+      tags:
+        - Fitness Tests
+      summary: Corregir un resultado de campo
+      description: >
+        Actualiza el valor y el intento de un resultado ya cargado. Responde 404 si la
+        sesión o el resultado no existen o son de otro PF. Responde 409 si la corrección
+        choca con un resultado ya cargado (misma prueba, atleta e intento).
+      operationId: updateFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFieldTestResultRequest'
+      responses:
+        "200":
+          description: Resultado actualizado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
   /api/health:
     get:
       tags:
@@ -710,6 +830,12 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     Forbidden:
       description: "Acceso denegado: el token no corresponde al atleta de la ruta o rol no autorizado."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
       content:
         application/json:
           schema:
@@ -1465,3 +1591,143 @@ components:
         totalCheckIns:
           type: integer
           example: 42
+
+    FieldTestSession:
+      type: object
+      description: Sesión de test de campo (KAN-425) con sus tests y resultados.
+      required:
+        - id
+        - categoryId
+        - date
+        - name
+        - status
+        - tests
+        - results
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        status:
+          type: string
+          enum:
+            - Planned
+            - InProgress
+            - Closed
+          example: "InProgress"
+        tests:
+          type: array
+          description: Tests del catálogo de la sesión, en orden de evaluación.
+          items:
+            $ref: '#/components/schemas/FieldTestSessionTest'
+        results:
+          type: array
+          description: Resultados cargados por los atletas.
+          items:
+            $ref: '#/components/schemas/FieldTestResult'
+
+    FieldTestSessionTest:
+      type: object
+      description: Test del catálogo incluido en la sesión, con su orden de evaluación.
+      required:
+        - catalogTestId
+        - order
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+
+    FieldTestResult:
+      type: object
+      description: Resultado de un atleta en un test de la sesión, con su intento.
+      required:
+        - id
+        - catalogTestId
+        - athleteId
+        - value
+        - attempt
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a6a6f8a4-0a6c-4f5f-9a5a-1b2c3d4e5f60"
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
+        value:
+          type: number
+          format: double
+          example: 42.5
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-11-04T15:30:00Z"
+
+    CreateFieldTestResultRequest:
+      type: object
+      description: Carga rápida de un resultado de campo (KAN-425).
+      required:
+        - catalogTestId
+        - athleteId
+        - value
+        - attempt
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
+        value:
+          type: number
+          format: double
+          example: 42.5
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateFieldTestResultRequest:
+      type: object
+      description: Corrección de un resultado de campo ya cargado (KAN-425).
+      required:
+        - value
+        - attempt
+      properties:
+        value:
+          type: number
+          format: double
+          example: 41.8
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1

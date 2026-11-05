@@ -12,6 +12,9 @@ using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
+using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.UpdateFieldTestResult;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
@@ -89,6 +92,10 @@ builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
 builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();
 // Máquina de estados estricta de las lesiones (KAN-420): Active → InRecovery → MedicallyCleared.
 builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();
+// Carga rápida de resultados de campo (KAN-425): POST/GET/PUT de la sesión de test.
+builder.Services.AddScoped<CreateFieldTestResultCommandHandler>();
+builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
+builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();

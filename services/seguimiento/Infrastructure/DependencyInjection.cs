@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
+        services.AddScoped<IFieldTestRepository, FieldTestRepository>();
         services.AddScoped<IFieldTestResultRepository, FieldTestResultRepository>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
