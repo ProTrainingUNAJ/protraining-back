@@ -5,6 +5,7 @@ using Application.Interfaces.Services;
 using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Moq;
 using Xunit;
 
@@ -65,7 +66,8 @@ public sealed class AcceptCategoryInvitationTests
             FirstName: "Lautaro",
             LastName: "Martínez",
             Email: "lautaro@protraining.com",
-            Phone: "+5491112345678");
+            Phone: "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act
         var result = await handler.HandleAsync(command);
@@ -74,7 +76,7 @@ public sealed class AcceptCategoryInvitationTests
         Assert.NotNull(result);
         Assert.Equal("Lautaro", result.FirstName);
         Assert.Equal("Martínez", result.LastName);
-        _athleteRepoMock.Verify(r => r.AddAsync(It.Is<Athlete>(a => a.AccountId == athleteAccountId && a.Email == command.Email), It.IsAny<CancellationToken>()), Times.Once);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.Is<Athlete>(a => a.AccountId == athleteAccountId && a.Email == command.Email && !a.IsMinor), It.IsAny<CancellationToken>()), Times.Once);
         _athleteCategoryRepoMock.Verify(r => r.AddAsync(It.Is<AthleteCategory>(ac => ac.CategoryId == categoryId), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -110,7 +112,9 @@ public sealed class AcceptCategoryInvitationTests
             .ReturnsAsync(existingAssignment);
 
         var handler = CreateHandler();
-        var command = new AcceptCategoryInvitationCommand(token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678");
+        var command = new AcceptCategoryInvitationCommand(
+            token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act
         var result = await handler.HandleAsync(command);
@@ -145,7 +149,9 @@ public sealed class AcceptCategoryInvitationTests
             .ReturnsAsync(details);
 
         var handler = CreateHandler();
-        var command = new AcceptCategoryInvitationCommand(token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678");
+        var command = new AcceptCategoryInvitationCommand(
+            token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act & Assert
         await Assert.ThrowsAsync<InvitationExpiredException>(() => handler.HandleAsync(command));
@@ -163,7 +169,9 @@ public sealed class AcceptCategoryInvitationTests
             .ReturnsAsync((CategoryInvitationDetails?)null);
 
         var handler = CreateHandler();
-        var command = new AcceptCategoryInvitationCommand("inexistente", "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678");
+        var command = new AcceptCategoryInvitationCommand(
+            "inexistente", "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act & Assert
         await Assert.ThrowsAsync<InvitationNotFoundException>(() => handler.HandleAsync(command));
@@ -191,7 +199,9 @@ public sealed class AcceptCategoryInvitationTests
             .ReturnsAsync(details);
 
         var handler = CreateHandler();
-        var command = new AcceptCategoryInvitationCommand(token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678");
+        var command = new AcceptCategoryInvitationCommand(
+            token, "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act & Assert (Criterio: rechazo si el pf_id del token no coincide con el de la invitación -> 403 Forbidden)
         await Assert.ThrowsAsync<ForbiddenException>(() => handler.HandleAsync(command));
@@ -205,9 +215,203 @@ public sealed class AcceptCategoryInvitationTests
         _currentUserMock.Setup(u => u.UserId).Returns((Guid?)null);
 
         var handler = CreateHandler();
-        var command = new AcceptCategoryInvitationCommand("token", "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678");
+        var command = new AcceptCategoryInvitationCommand(
+            "token", "Lautaro", "Martínez", "lautaro@protraining.com", "+5491112345678",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act & Assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => handler.HandleAsync(command));
+    }
+
+    // --- Tests KAN-401 (Consentimiento de Menores) ---
+
+    [Fact]
+    public async Task Given_AdultAthlete20YearsOld_When_AcceptInvitation_Then_CreatesAdultWithoutRequiringGuardian()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-adulto";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-20"));
+
+        _athleteRepoMock.Setup(r => r.GetByAccountIdAsync(athleteAccountId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Athlete?)null);
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Julián",
+            LastName: "Álvarez",
+            Email: "julian@protraining.com",
+            Phone: "+5491122223333",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)), // 20 años
+            GuardianName: null,
+            GuardianEmail: null,
+            GuardianPhone: null);
+
+        // Act
+        var result = await handler.HandleAsync(command);
+
+        // Assert: Creado como mayor (inicia sin consentimiento firmado hasta firmarlo en /me/consent, KAN-326)
+        Assert.NotNull(result);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.Is<Athlete>(a => !a.IsMinor && !a.HasSignedConsent), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_MinorAthlete16YearsOld_When_MissingGuardianName_Then_ThrowsDomainException_AndDoesNotCreateAthlete()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-menor-sin-nombre";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-16"));
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Mateo",
+            LastName: "Messi",
+            Email: "mateo@protraining.com",
+            Phone: "+5491133334444",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)), // 16 años
+            GuardianName: null, // Falta tutor
+            GuardianEmail: "padre@protraining.com",
+            GuardianPhone: "+5491155556666",
+            AllowsPhysicalTraining: true);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.HandleAsync(command));
+        Assert.Contains("nombre del tutor es obligatorio", ex.Message);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.IsAny<Athlete>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MinorAthlete16YearsOld_When_MissingBothEmailAndPhoneOfGuardian_Then_ThrowsDomainException()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-menor-sin-contacto";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-16"));
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Mateo",
+            LastName: "Messi",
+            Email: "mateo@protraining.com",
+            Phone: "+5491133334444",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)),
+            GuardianName: "Jorge Messi",
+            GuardianEmail: null,
+            GuardianPhone: null, // Ni email ni teléfono
+            AllowsPhysicalTraining: true);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.HandleAsync(command));
+        Assert.Contains("medio de contacto del tutor", ex.Message);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.IsAny<Athlete>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MinorAthlete16YearsOld_When_DoesNotAllowPhysicalTraining_Then_ThrowsDomainException()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-menor-sin-permiso";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-16"));
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Mateo",
+            LastName: "Messi",
+            Email: "mateo@protraining.com",
+            Phone: "+5491133334444",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)),
+            GuardianName: "Jorge Messi",
+            GuardianPhone: "+5491155556666",
+            AllowsPhysicalTraining: false); // Rechaza preparación física
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.HandleAsync(command));
+        Assert.Contains("autorizar obligatoriamente la preparación física", ex.Message);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.IsAny<Athlete>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MinorAthlete16YearsOld_When_ValidGuardianDataProvided_Then_CreatesMinorAthleteWithConsent()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-menor-valido";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-16"));
+
+        _athleteRepoMock.Setup(r => r.GetByAccountIdAsync(athleteAccountId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Athlete?)null);
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Mateo",
+            LastName: "Messi",
+            Email: "mateo@protraining.com",
+            Phone: "+5491133334444",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)), // 16 años
+            GuardianName: "Jorge Messi",
+            GuardianEmail: "jorge@protraining.com",
+            GuardianPhone: "+5491155556666",
+            AllowsPhysicalTraining: true,
+            AllowsHabitsRecommendations: true);
+
+        // Act
+        var result = await handler.HandleAsync(command);
+
+        // Assert: Se crea como menor de edad con consentimiento digital de tutor
+        Assert.NotNull(result);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.Is<Athlete>(a => a.IsMinor && a.HasSignedConsent), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

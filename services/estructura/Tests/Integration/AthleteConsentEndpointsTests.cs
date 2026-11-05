@@ -211,7 +211,8 @@ public sealed class AthleteConsentEndpointsTests : IAsyncDisposable
                 FirstName: "Franco",
                 LastName: "Armani",
                 Email: "franco.armani@test.com",
-                Phone: "+5491122334455"));
+                Phone: "+5491122334455",
+                BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         Assert.Equal(HttpStatusCode.OK, acceptResponse.StatusCode);
 
