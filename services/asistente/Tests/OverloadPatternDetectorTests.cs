@@ -80,6 +80,35 @@ public sealed class OverloadPatternDetectorTests
     }
 
     [Fact]
+    public void Given_HighEffortAndMatchTomorrow_When_Detect_Then_ReturnsPreMatchAlertHighSeverityD1()
+    {
+        // KAN-473 · Enzo revisión: ventana D-1 / D-2 (partido mañana)
+        var matchDate = new DateOnly(2026, 11, 5);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 5, false, null, false),
+            new(new DateOnly(2026, 11, 4), 7.5, 4, 2, 2, 4, 2, 9, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: true,
+            matchDate: matchDate,
+            daysUntilMatch: 1);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(30, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("Alerta pre-partido (D-1)", result.Reason);
+        Assert.Contains("para mañana", result.Reason);
+        Assert.Contains("05/11", result.Reason);
+        Assert.Contains("RPE 9", result.Reason);
+    }
+
+    [Fact]
     public void Given_HighEffortWithoutMatchInTwoDaysAndNormalSleep_When_Detect_Then_ReturnsNoPattern()
     {
         var records = new List<AthleteCheckInRecord>

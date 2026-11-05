@@ -50,7 +50,8 @@ public static class OverloadPatternDetector
         Guid athleteId,
         IReadOnlyList<AthleteCheckInRecord> records,
         bool hasMatchInTwoDays = false,
-        DateOnly? matchDate = null)
+        DateOnly? matchDate = null,
+        int? daysUntilMatch = null)
     {
         if (athleteId == Guid.Empty || records.Count == 0)
         {
@@ -79,7 +80,8 @@ public static class OverloadPatternDetector
         }
 
         // 2. Patrón Pre-Partido (D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días
-        if (hasMatchInTwoDays)
+        // 2. Patrón Pre-Partido (D-1 / D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días o menos
+        if (hasMatchInTwoDays || (daysUntilMatch.HasValue && daysUntilMatch.Value is 1 or 2))
         {
             var recentHighEffort = ordered.LastOrDefault(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8);
             if (recentHighEffort is not null)
@@ -89,7 +91,7 @@ public static class OverloadPatternDetector
                     HasPattern: true,
                     Severity: AlertSeverity.High,
                     Type: AlertType.AcuteOverload,
-                    Reason: $"Alerta pre-partido (D-2): el atleta reportó esfuerzo alto reciente (RPE {recentHighEffort.EffortRate}) y tiene partido oficial programado en 2 días{matchDateSuffix}. Riesgo de sobrecarga precompetitiva.",
+                    Reason: $"Alerta pre-partido ({(daysUntilMatch == 1 ? "D-1" : "D-2")}): el atleta reportó esfuerzo alto reciente (RPE {recentHighEffort.EffortRate}) y tiene partido oficial programado {(daysUntilMatch == 1 ? "para mañana" : "en 2 días")}{matchDateSuffix}. Riesgo de sobrecarga precompetitiva.",
                     Suggestion: "Ajustar la sesión a activación neuromuscular suave y descarga previa al partido. Reducir volumen general un 30%.",
                     SuggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
                     SuggestedAdjustmentPercentage: 30);

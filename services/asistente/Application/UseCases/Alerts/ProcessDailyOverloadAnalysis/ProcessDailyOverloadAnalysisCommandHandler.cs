@@ -28,13 +28,15 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
         var targetDate = command.TargetDate ?? ArgentinaTime.Today;
         var fromDate = targetDate.AddDays(-6);
         var toDate = targetDate;
-        var matchInTwoDaysTarget = targetDate.AddDays(2);
+        var d1Target = targetDate.AddDays(1);
+        var d2Target = targetDate.AddDays(2);
 
         logger.LogInformation(
-            "Iniciando análisis diario de sobrecarga y calendario para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd} (D-2: {D2Date:yyyy-MM-dd}).",
+            "Iniciando análisis diario de sobrecarga y calendario para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd} (D-1: {D1Date:yyyy-MM-dd}, D-2: {D2Date:yyyy-MM-dd}).",
             fromDate,
             toDate,
-            matchInTwoDaysTarget);
+            d1Target,
+            d2Target);
 
         // 1. Obtener los atletas activos desde Estructura (incluye su PfId)
         var athletes = await structureAthleteClient.GetAthletesAsync(cancellationToken);
@@ -71,8 +73,8 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
         {
             var matchDates = await structureCalendarClient.GetMatchDatesAsync(
                 categoryId,
-                targetDate,
-                matchInTwoDaysTarget,
+                d1Target,
+                d2Target,
                 cancellationToken);
             matchDatesByCategory[categoryId] = matchDates;
         }
@@ -123,18 +125,29 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
                     )).ToList();
 
                     // Verificar si la categoría del atleta tiene partido en D-2 (dentro de 2 días)
-                    bool hasMatchInTwoDays = false;
+                    DateOnly? upcomingMatchDate = null;
+                    int? daysUntilMatch = null;
                     if (athlete.CategoryId.HasValue &&
                         matchDatesByCategory.TryGetValue(athlete.CategoryId.Value, out var categoryMatches))
                     {
-                        hasMatchInTwoDays = categoryMatches.Contains(matchInTwoDaysTarget);
+                        if (categoryMatches.Contains(d1Target))
+                        {
+                            upcomingMatchDate = d1Target;
+                            daysUntilMatch = 1;
+                        }
+                        else if (categoryMatches.Contains(d2Target))
+                        {
+                            upcomingMatchDate = d2Target;
+                            daysUntilMatch = 2;
+                        }
                     }
 
                     var patternResult = OverloadPatternDetector.Detect(
                         athlete.Id,
                         records,
-                        hasMatchInTwoDays: hasMatchInTwoDays,
-                        matchDate: hasMatchInTwoDays ? matchInTwoDaysTarget : null);
+                        hasMatchInTwoDays: upcomingMatchDate.HasValue,
+                        matchDate: upcomingMatchDate,
+                        daysUntilMatch: daysUntilMatch);
 
                     if (!patternResult.HasPattern)
                     {
