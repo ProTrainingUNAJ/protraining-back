@@ -5,6 +5,7 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
@@ -74,6 +75,7 @@ builder.Services.AddScoped<GetHealthQueryHandler>();
 // todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
 builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
+builder.Services.AddScoped<GetTodayCheckInQueryHandler>();
 builder.Services.AddScoped<RegisterDailyLoadCommandHandler>();
 builder.Services.AddScoped<GetAthleteWeekQueryHandler>();
 // Catálogo de tests físicos por capacidad motora (KAN-333).

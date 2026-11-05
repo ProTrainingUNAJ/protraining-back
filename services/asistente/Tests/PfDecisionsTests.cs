@@ -8,6 +8,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Ai.SuggestRoutine;
+using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.PfDecisions.GetAthleteDecisions;
 using Application.UseCases.PfDecisions.RecordDayAdjustmentDecision;
 using Domain.Entities;
@@ -423,7 +424,10 @@ public sealed class PfDecisionsTests
         var queryHandler = new GetAthleteDecisionsQueryHandler(decisionRepoMock.Object, structureClientMock.Object);
         var suggestUseCase = new SuggestRoutineUseCase(Mock.Of<IAiService>(), Mock.Of<IRoutineDraftRepository>(), Mock.Of<IUnitOfWork>());
 
-        var controller = new AssistantController(suggestUseCase, queryHandler);
+        var controller = new AssistantController(
+            suggestUseCase,
+            queryHandler,
+            new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         // Act
         var actionResult = await controller.GetAthleteDecisions(MyAthleteId, "espalda_baja", CancellationToken.None);
@@ -451,7 +455,10 @@ public sealed class PfDecisionsTests
         var queryHandler = new GetAthleteDecisionsQueryHandler(decisionRepoMock.Object, structureClientMock.Object);
         var suggestUseCase = new SuggestRoutineUseCase(Mock.Of<IAiService>(), Mock.Of<IRoutineDraftRepository>(), Mock.Of<IUnitOfWork>());
 
-        var controller = new AssistantController(suggestUseCase, queryHandler);
+        var controller = new AssistantController(
+            suggestUseCase,
+            queryHandler,
+            new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() =>
