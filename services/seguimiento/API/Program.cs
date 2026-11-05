@@ -6,9 +6,11 @@ using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
+using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
+using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Injuries.CreateAthleteInjury;
@@ -75,11 +77,13 @@ builder.Services.AddScoped<GetHealthQueryHandler>();
 // todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
 builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
+builder.Services.AddScoped<ListAthleteCheckInsQueryHandler>();
 builder.Services.AddScoped<GetTodayCheckInQueryHandler>();
 builder.Services.AddScoped<RegisterDailyLoadCommandHandler>();
 builder.Services.AddScoped<GetAthleteWeekQueryHandler>();
-// Catálogo de tests físicos por capacidad motora (KAN-333).
+// Catálogo de tests físicos por capacidad motora (KAN-333) e historial de tests del atleta (KAN-434).
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
+builder.Services.AddScoped<ListAthleteFitnessTestsQueryHandler>();
 // Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
 builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
 builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();

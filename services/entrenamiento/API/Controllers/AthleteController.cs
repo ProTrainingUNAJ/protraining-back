@@ -42,10 +42,15 @@ namespace API.Controllers
         [Tags("Records")]
         public async Task<ActionResult<List<AthleteRecordDto>>> GetRecords(
             [FromRoute] Guid athleteId,
-            [FromQuery] bool currentOnly = true,
+            [FromQuery] bool? currentOnly = null,
+            [FromQuery] Guid? exerciseId = null,
+            [FromQuery] DateOnly? from = null,
+            [FromQuery] DateOnly? to = null,
             CancellationToken cancellationToken = default)
         {
-            var result = await listRecordsHandler.Handle(new ListAthleteRecordsQuery(athleteId, currentOnly), cancellationToken);
+            var result = await listRecordsHandler.Handle(
+                new ListAthleteRecordsQuery(athleteId, currentOnly, exerciseId, from, to),
+                cancellationToken);
             return Ok(result);
         }
 

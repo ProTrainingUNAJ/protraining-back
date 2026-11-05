@@ -177,6 +177,22 @@ paths:
           schema:
             type: integer
             default: 14
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de consulta (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de consulta (inclusive).
       responses:
         "200":
           description: Historial de check-ins obtenido.
@@ -590,6 +606,62 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/athletes/{athleteId}/fitness-tests:
+    get:
+      tags:
+        - Fitness Tests
+        - Evolution and Benchmark
+      summary: Historial de tests físicos de un atleta
+      description: >
+        Devuelve el historial de resultados de pruebas físicas del atleta, con opción
+        de filtrar por un test específico del catálogo y por rango de fechas.
+      operationId: listAthleteFitnessTests
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: testId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Identificador del test del catálogo para consultar su evolución.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de consulta (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de consulta (inclusive).
+      responses:
+        "200":
+          description: Historial de tests obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteFitnessTest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/health:
     get:
@@ -1180,6 +1252,53 @@ components:
           type: string
           format: date-time
           example: "2026-10-10T09:30:00Z"
+
+    AthleteFitnessTest:
+      type: object
+      description: Resultado histórico de una prueba física de un atleta.
+      required:
+        - id
+        - athleteId
+        - catalogTestId
+        - testName
+        - motorCapacity
+        - value
+        - measurementUnit
+        - attempt
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6c24fcf8-0fb5-48b2-b01f-0e4c67eb2581"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          type: string
+          example: "Power"
+        value:
+          type: number
+          format: double
+          example: 45.5
+        measurementUnit:
+          type: string
+          example: "cm"
+        attempt:
+          type: integer
+          example: 1
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-10-15T14:30:00Z"
 
     FitnessTest:
       type: object

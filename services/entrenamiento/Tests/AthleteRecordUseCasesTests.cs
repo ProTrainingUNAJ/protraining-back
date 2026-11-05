@@ -60,7 +60,7 @@ public class AthleteRecordUseCasesTests
         new(new AthleteRecordRepository(context), _structureClient.Object);
 
     [Fact]
-    public async Task Registrar_DadoUnRecordNuevo_DeberiaGuardarloYDevolverloConElNombreDelEjercicio()
+    public async Task Registrar_RecordNuevo_GuardaYDevuelveConNombre()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
 
@@ -80,7 +80,7 @@ public class AthleteRecordUseCasesTests
     }
 
     [Fact]
-    public async Task Registrar_DadoUnRecordVigente_DeberiaDejarloComoNoVigenteYQuedarSoloElNuevo()
+    public async Task Registrar_RecordVigente_DesactivaAnteriorYDejaNuevo()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
 
@@ -100,7 +100,7 @@ public class AthleteRecordUseCasesTests
     }
 
     [Fact]
-    public async Task Listar_DadoRecordsVigentesYAnteriores_DeberiaDevolverSoloLosVigentesConSuNombre()
+    public async Task Listar_RecordsVarios_DevuelveSoloVigentes()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
         var bench = await SeedExerciseAsync("Press de banca plano");
@@ -127,7 +127,7 @@ public class AthleteRecordUseCasesTests
 
     [Fact]
     [Trait("Category", "Isolation")]
-    public async Task Listar_DadoRecordsDeOtroPf_NoDeberiaDevolverlos()
+    public async Task Listar_RecordsOtroPf_NoDevuelveNada()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
 
@@ -145,7 +145,7 @@ public class AthleteRecordUseCasesTests
     }
 
     [Fact]
-    public async Task Registrar_DadoUnAtletaQueNoEsDelPf_DeberiaLanzarNotFound()
+    public async Task Registrar_AtletaOtroPf_LanzaNotFound()
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
         var foreignAthleteId = Guid.NewGuid();
@@ -161,7 +161,7 @@ public class AthleteRecordUseCasesTests
     }
 
     [Fact]
-    public async Task Registrar_DadoUnEjercicioInexistente_DeberiaLanzarNotFound()
+    public async Task Registrar_EjercicioInexistente_LanzaNotFound()
     {
         await using var context = CreateContext();
 
@@ -172,12 +172,79 @@ public class AthleteRecordUseCasesTests
     [Theory]
     [InlineData(0, "TestedInSession")]
     [InlineData(100, "Medido")]
-    public async Task Registrar_DadoPesoUOrigenInvalidos_DeberiaLanzarDomainException(decimal weight, string origin)
+    public async Task Registrar_DatosInvalidos_LanzaDomainException(decimal weight, string origin)
     {
         var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
         await using var context = CreateContext();
 
         await Assert.ThrowsAsync<DomainException>(() => CreateRegisterHandler(context).Handle(
             new RegisterAthleteRecordCommand(_athleteId, new SaveAthleteRecordRequest(squat.Id, weight, origin))));
+    }
+
+    [Fact]
+    public async Task Listar_TresRecordsSentadilla_DevuelveEvolucion()
+    {
+        // Criterio de aceptación KAN-434: DADO un atleta con 3 récords de sentadilla CUANDO se pide su evolución ENTONCES devuelve los 3 con su fecha.
+        var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
+
+        var date1 = new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc);
+        var date2 = new DateTime(2026, 4, 10, 10, 0, 0, DateTimeKind.Utc);
+        var date3 = new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc);
+
+        await using (var context = CreateContext())
+        {
+            var r1 = AthleteRecord.Create(_athleteId, squat.Id, 100m, RecordSource.Tested, date1);
+            r1.Deactivate();
+            var r2 = AthleteRecord.Create(_athleteId, squat.Id, 110m, RecordSource.Tested, date2);
+            r2.Deactivate();
+            var r3 = AthleteRecord.Create(_athleteId, squat.Id, 120m, RecordSource.Tested, date3);
+
+            await context.AthleteRecords.AddRangeAsync(r1, r2, r3);
+            await context.SaveChangesAsync();
+        }
+
+        await using var listContext = CreateContext();
+        var handler = CreateListHandler(listContext);
+
+        // Cuando se pide la evolución del ejercicio sentadilla (exerciseId especificado)
+        var evolution = await handler.Handle(new ListAthleteRecordsQuery(_athleteId, ExerciseId: squat.Id));
+
+        Assert.Equal(3, evolution.Count);
+        Assert.Equal(100m, evolution[0].WeightOneRepMaxKg);
+        Assert.Equal(date1, evolution[0].AchievedAt);
+        Assert.Equal(110m, evolution[1].WeightOneRepMaxKg);
+        Assert.Equal(date2, evolution[1].AchievedAt);
+        Assert.Equal(120m, evolution[2].WeightOneRepMaxKg);
+        Assert.Equal(date3, evolution[2].AchievedAt);
+    }
+
+    [Fact]
+    public async Task Listar_RangoFechas_FiltraPorRango()
+    {
+        var squat = await SeedExerciseAsync("Sentadilla trasera con barra");
+
+        await using (var context = CreateContext())
+        {
+            var r1 = AthleteRecord.Create(_athleteId, squat.Id, 100m, RecordSource.Tested, new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc));
+            r1.Deactivate();
+            var r2 = AthleteRecord.Create(_athleteId, squat.Id, 110m, RecordSource.Tested, new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc));
+            r2.Deactivate();
+            var r3 = AthleteRecord.Create(_athleteId, squat.Id, 120m, RecordSource.Tested, new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc));
+
+            await context.AthleteRecords.AddRangeAsync(r1, r2, r3);
+            await context.SaveChangesAsync();
+        }
+
+        await using var listContext = CreateContext();
+        var handler = CreateListHandler(listContext);
+
+        var filtered = await handler.Handle(new ListAthleteRecordsQuery(
+            _athleteId,
+            ExerciseId: squat.Id,
+            From: new DateOnly(2026, 2, 1),
+            To: new DateOnly(2026, 4, 1)));
+
+        Assert.Single(filtered);
+        Assert.Equal(110m, filtered[0].WeightOneRepMaxKg);
     }
 }

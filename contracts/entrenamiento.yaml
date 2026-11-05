@@ -293,6 +293,29 @@ paths:
             type: boolean
             default: true
           description: Filtrar solo marcas vigentes activas.
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por un ejercicio específico para ver su evolución histórica.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de evolución (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de evolución (inclusive).
       responses:
         "200":
           description: Lista de récords personales obtenida con éxito.

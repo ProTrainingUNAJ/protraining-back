@@ -23,7 +23,15 @@ public class ListAthleteRecordsQueryHandler
         if (athlete == null)
             throw new NotFoundException($"No se encontró el atleta con ID '{query.AthleteId}'.");
 
-        var records = await _repository.ListAsync(query.AthleteId, query.CurrentOnly, cancellationToken);
+        var currentOnly = query.CurrentOnly ?? (!query.ExerciseId.HasValue);
+
+        var records = await _repository.ListAsync(
+            query.AthleteId,
+            currentOnly,
+            query.ExerciseId,
+            query.From,
+            query.To,
+            cancellationToken);
 
         return records
             .Select(r => AthleteRecordMapper.ToDto(r, r.Exercise?.Name ?? string.Empty))
