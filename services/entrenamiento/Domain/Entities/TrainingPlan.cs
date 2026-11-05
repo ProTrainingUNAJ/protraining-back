@@ -12,6 +12,9 @@ public class TrainingPlan : BaseEntity
     public IReadOnlyCollection<TrainingWeek> Weeks => _weeks.AsReadOnly();
     private readonly List<TrainingWeek> _weeks = new();
 
+    // Duración en semanas: el número de la última semana (las semanas se numeran desde 1).
+    public int WeekCount => _weeks.Count == 0 ? 0 : _weeks.Max(w => w.WeekNumber);
+
     public IReadOnlyCollection<PlanAssignment> Assignments => _assignments.AsReadOnly();
     private readonly List<PlanAssignment> _assignments = new();
 
@@ -71,7 +74,8 @@ public class TrainingPlan : BaseEntity
                     session.Name,
                     session.Order,
                     session.DayOfWeek,
-                    session.CoachNotes);
+                    session.CoachNotes,
+                    session.StartTime);
                 foreach (var ex in session.PrescribedExercises)
                 {
                     var newEx = PrescribedExercise.Create(

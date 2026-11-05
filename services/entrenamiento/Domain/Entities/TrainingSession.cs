@@ -13,19 +13,29 @@ public class TrainingSession : BaseEntity
     public DayOfWeek DayOfWeek { get; private set; }
     public string? CoachNotes { get; private set; }
 
+    // Hora de inicio opcional, en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+    public TimeOnly? StartTime { get; private set; }
+
     public IReadOnlyCollection<PrescribedExercise> PrescribedExercises => _prescribedExercises.AsReadOnly();
     private readonly List<PrescribedExercise> _prescribedExercises = new();
 
-    private TrainingSession(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes)
+    private TrainingSession(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes, TimeOnly? startTime)
     {
         TrainingWeekId = trainingWeekId;
         Name = name;
         Order = order;
         DayOfWeek = dayOfWeek;
         CoachNotes = coachNotes;
+        StartTime = startTime;
     }
 
-    public static TrainingSession Create(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes = null)
+    public static TrainingSession Create(
+        Guid trainingWeekId,
+        string name,
+        int order,
+        DayOfWeek dayOfWeek,
+        string? coachNotes = null,
+        TimeOnly? startTime = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre de la sesión no puede estar vacío.");
@@ -33,7 +43,7 @@ public class TrainingSession : BaseEntity
         if (order <= 0)
             throw new DomainException("El orden debe ser mayor a cero.");
 
-        return new TrainingSession(trainingWeekId, name, order, dayOfWeek, coachNotes);
+        return new TrainingSession(trainingWeekId, name, order, dayOfWeek, coachNotes, startTime);
     }
 
     public void UpdateCoachNotes(string? notes)
@@ -41,7 +51,7 @@ public class TrainingSession : BaseEntity
         CoachNotes = notes;
     }
 
-    public void Update(string name, int order, DayOfWeek dayOfWeek, string? coachNotes)
+    public void Update(string name, int order, DayOfWeek dayOfWeek, string? coachNotes, TimeOnly? startTime = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre de la sesión no puede estar vacío.");
@@ -53,6 +63,7 @@ public class TrainingSession : BaseEntity
         Order = order;
         DayOfWeek = dayOfWeek;
         CoachNotes = coachNotes;
+        StartTime = startTime;
     }
 
     public void SetTemporaryOrder(int temporaryOrder)

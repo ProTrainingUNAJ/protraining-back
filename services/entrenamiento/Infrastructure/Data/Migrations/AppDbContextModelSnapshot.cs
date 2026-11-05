@@ -536,6 +536,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
 
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
+
                     b.Property<Guid>("TrainingWeekId")
                         .HasColumnType("uuid")
                         .HasColumnName("training_week_id");
