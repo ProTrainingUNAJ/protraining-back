@@ -4,7 +4,8 @@ public sealed record StructureAthleteSummaryDto(
     Guid Id,
     string FullName,
     Guid? CategoryId = null,
-    bool Active = true);
+    bool Active = true,
+    Guid PfId = default);
 
 public interface IStructureAthleteClient
 {

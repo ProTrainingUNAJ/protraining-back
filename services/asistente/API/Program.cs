@@ -59,6 +59,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 
 var trainingBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"];
