@@ -9,10 +9,12 @@ namespace Application.UseCases.Exercise.ListExercises
         private const int DefaultPageSize = 20;
 
         private readonly IExerciseRepository exerciseRepository;
+        private readonly IExerciseVideoRepository? exerciseVideoRepository;
 
-        public ListExercisesQueryHandler(IExerciseRepository exerciseRepository)
+        public ListExercisesQueryHandler(IExerciseRepository exerciseRepository, IExerciseVideoRepository? exerciseVideoRepository = null)
         {
             this.exerciseRepository = exerciseRepository;
+            this.exerciseVideoRepository = exerciseVideoRepository;
         }
 
         public async Task<PaginatedExerciseResponse> Handle(ListExercisesQuery request, CancellationToken cancellationToken = default)
@@ -73,6 +75,57 @@ namespace Application.UseCases.Exercise.ListExercises
 
                 exercisesDto = exercises.Select(ToDto).ToList();
                 totalCount = total;
+            }
+
+            if (exerciseVideoRepository != null)
+            {
+                var allIds = exercisesDto
+                    .Select(e => e.Id)
+                    .Concat(exercisesDto.SelectMany(e => e.Variants ?? []).Select(v => v.Id))
+                    .Distinct()
+                    .ToList();
+
+                var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(allIds, cancellationToken);
+
+                void ApplyVideo(ExerciseDto dto)
+                {
+                    if (pfVideos.TryGetValue(dto.Id, out var pfVideoUrl))
+                    {
+                        dto.VideoUrl = pfVideoUrl;
+                        dto.VideoSource = "Pf";
+                    }
+                    else
+                    {
+                        dto.VideoSource = string.IsNullOrEmpty(dto.VideoUrl) ? null : "Catalog";
+                    }
+
+                    if (dto.Variants != null)
+                    {
+                        foreach (var v in dto.Variants)
+                        {
+                            ApplyVideo(v);
+                        }
+                    }
+                }
+
+                foreach (var dto in exercisesDto)
+                {
+                    ApplyVideo(dto);
+                }
+            }
+            else
+            {
+                foreach (var dto in exercisesDto)
+                {
+                    dto.VideoSource = string.IsNullOrEmpty(dto.VideoUrl) ? null : "Catalog";
+                    if (dto.Variants != null)
+                    {
+                        foreach (var v in dto.Variants)
+                        {
+                            v.VideoSource = string.IsNullOrEmpty(v.VideoUrl) ? null : "Catalog";
+                        }
+                    }
+                }
             }
 
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);

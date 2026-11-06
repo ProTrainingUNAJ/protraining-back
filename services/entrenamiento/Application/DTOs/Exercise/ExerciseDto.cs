@@ -11,6 +11,7 @@ namespace Application.DTOs.Exercise
         public string? Description { get; set; }
         public string? AnimationUrl { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoSource { get; set; }
         public string? Equipment { get; set; }
         public List<string> Images { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];

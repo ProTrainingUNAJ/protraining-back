@@ -181,13 +181,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                videoUrl:
-                  type: string
-                  nullable: true
-                  description: URL del video de YouTube o null para quitarlo.
-                  example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+              $ref: '#/components/schemas/UpdateExerciseVideoRequest'
       responses:
         "200":
           description: Video actualizado exitosamente. Devuelve el ejercicio actualizado.
@@ -1415,6 +1409,15 @@ components:
             $ref: '#/components/schemas/ExerciseSubstitute'
           description: Lista ordenada de ejercicios sustitutos recomendados.
 
+    UpdateExerciseVideoRequest:
+      type: object
+      properties:
+        videoUrl:
+          type: string
+          nullable: true
+          description: URL del video de YouTube o null para quitarlo.
+          example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+
     Exercise:
       type: object
       required:
@@ -1458,6 +1461,12 @@ components:
           nullable: true
           description: Enlace al video explicativo de YouTube (reproducible embebido o externo).
           example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+        videoSource:
+          type: string
+          enum: [Pf, Catalog]
+          nullable: true
+          description: Origen del video de técnica ("Pf" si es video propio del preparador físico, "Catalog" si es sugerido por la plataforma).
+          example: "Pf"
         animationUrl:
           type: string
           nullable: true
