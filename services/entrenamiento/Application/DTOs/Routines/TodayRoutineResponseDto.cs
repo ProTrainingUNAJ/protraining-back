@@ -1,4 +1,3 @@
-
 namespace Application.DTOs.Routines
 {
     public class TodayRoutineResponseDto
@@ -6,8 +5,11 @@ namespace Application.DTOs.Routines
         public Guid AthleteId { get; set; }
         public string AthleteName { get; set; } = string.Empty;
         public DateOnly Date { get; set; }
+        public Guid? SessionId { get; set; }
         public bool HasActiveInjuries { get; set; }
         public bool RoutineAdapted { get; set; }
+        public bool AdjustedByCoach { get; set; }
+        public string? AdjustmentNote { get; set; }
         public string? CoachNotes { get; set; }
         // Hora de la sesión (hora Argentina), si el PF la cargó (KAN-558)
         public TimeOnly? StartTime { get; set; }

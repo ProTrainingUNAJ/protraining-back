@@ -1,7 +1,11 @@
 using Application.DTOs.Ai;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PfDecisions;
 using Application.UseCases.Ai.SuggestRoutine;
+using Application.UseCases.DayAdjustments.ApproveDayAdjustment;
+using Application.UseCases.DayAdjustments.CreateDayAdjustment;
+using Application.UseCases.DayAdjustments.RejectDayAdjustment;
 using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.PfDecisions.GetAthleteDecisions;
 using Microsoft.AspNetCore.Authorization;
@@ -15,7 +19,10 @@ namespace API.Controllers;
 public sealed class AssistantController(
     SuggestRoutineUseCase suggestRoutineUseCase,
     GetAthleteDecisionsQueryHandler getAthleteDecisionsHandler,
-    GetDayConflictsQueryHandler getDayConflictsHandler) : ControllerBase
+    GetDayConflictsQueryHandler getDayConflictsHandler,
+    CreateDayAdjustmentCommandHandler? createDayAdjustmentHandler = null,
+    ApproveDayAdjustmentCommandHandler? approveDayAdjustmentHandler = null,
+    RejectDayAdjustmentCommandHandler? rejectDayAdjustmentHandler = null) : ControllerBase
 {
     /// <summary>
     /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
@@ -69,6 +76,80 @@ public sealed class AssistantController(
     {
         var result = await getDayConflictsHandler.HandleAsync(
             new GetDayConflictsQuery(athleteId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Genera la propuesta de ajuste del día a partir de los conflictos de hoy (#157 · KAN-452).
+    /// Si ya existe una propuesta Pending para hoy, devuelve esa sin duplicarla.
+    /// </summary>
+    [HttpPost("athletes/{athleteId:guid}/day-adjustments")]
+    [ProducesResponseType(typeof(DayAdjustmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<DayAdjustmentResponseDto>> CreateDayAdjustment(
+        Guid athleteId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(createDayAdjustmentHandler);
+
+        var result = await createDayAdjustmentHandler.HandleAsync(
+            new CreateDayAdjustmentCommand(athleteId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Aprueba la propuesta de ajuste del día (pudiendo cambiar el sustituto por otro de la lista de KAN-387)
+    /// y aplica el cambio en la sesión del atleta en Entrenamiento (#157 · KAN-452).
+    /// </summary>
+    [HttpPost("day-adjustments/{id:guid}/approve")]
+    [ProducesResponseType(typeof(DayAdjustmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<DayAdjustmentResponseDto>> ApproveDayAdjustment(
+        Guid id,
+        [FromBody] ApproveDayAdjustmentRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(approveDayAdjustmentHandler);
+
+        var result = await approveDayAdjustmentHandler.HandleAsync(
+            new ApproveDayAdjustmentCommand(id, request),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Rechaza la propuesta de ajuste del día dejando la sesión sin cambios (#157 · KAN-452).
+    /// </summary>
+    [HttpPost("day-adjustments/{id:guid}/reject")]
+    [ProducesResponseType(typeof(DayAdjustmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<DayAdjustmentResponseDto>> RejectDayAdjustment(
+        Guid id,
+        [FromBody] RejectDayAdjustmentRequestDto? request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rejectDayAdjustmentHandler);
+
+        var result = await rejectDayAdjustmentHandler.HandleAsync(
+            new RejectDayAdjustmentCommand(id, request),
             cancellationToken);
 
         return Ok(result);

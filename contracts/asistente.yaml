@@ -370,6 +370,129 @@ paths:
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/v1/assistant/athletes/{athleteId}/day-adjustments:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Generar propuesta de ajuste del día a partir de los conflictos de hoy
+      description: >
+        Genera y persiste la propuesta de ajuste del día (`day_adjustments`) a partir de los conflictos
+        de dolor de hoy (KAN-451). El ejercicio sustituto se elige por reglas (el primero de la lista de
+        sustitutos habilitados de KAN-387) y la IA solo redacta la justificación (con respaldo por reglas
+        si Ollama y Gemini fallan o están apagados). Si ya existe una propuesta `Pending` para hoy, devuelve
+        esa sin duplicarla.
+      operationId: createAthleteDayAdjustment
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      responses:
+        "200":
+          description: Propuesta de ajuste del día generada o recuperada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/day-adjustments/{id}/approve:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Aprobar propuesta de ajuste del día y aplicarla en Entrenamiento
+      description: >
+        Aprueba la propuesta de ajuste del día (permitiendo cambiar el sustituto por otro de la lista
+        de sustitutos habilitados de KAN-387), llama a Entrenamiento para aplicar el ajuste en la sesión
+        del atleta y guarda la decisión en la memoria del PF (`pf_decisions`) dentro de la misma transacción.
+      operationId: approveDayAdjustment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la propuesta de ajuste del día.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveDayAdjustmentRequest'
+      responses:
+        "200":
+          description: Propuesta aprobada y aplicada en la rutina del atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/day-adjustments/{id}/reject:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Rechazar propuesta de ajuste del día
+      description: >
+        Rechaza la propuesta dejando la sesión sin cambios y registra la decisión en la memoria del PF
+        (`pf_decisions`) dentro de la misma transacción.
+      operationId: rejectDayAdjustment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la propuesta de ajuste del día.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectDayAdjustmentRequest'
+      responses:
+        "200":
+          description: Propuesta rechazada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
   /api/v1/assistant/athletes/{athleteId}/decisions:
     get:
       tags:
@@ -1065,6 +1188,147 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DayConflictItem'
+
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+
+    DayAdjustmentItem:
+      type: object
+      required:
+        - originalExerciseId
+        - originalExerciseName
+        - suggestedSubstituteExerciseId
+        - suggestedSubstituteExerciseName
+        - substituteExerciseId
+        - substituteExerciseName
+        - zone
+        - painLevel
+        - reason
+        - availableSubstitutes
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        originalExerciseName:
+          type: string
+          example: "Salto al cajón"
+        suggestedSubstituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        suggestedSubstituteExerciseName:
+          type: string
+          example: "Prensa de piernas"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        substituteExerciseName:
+          type: string
+          example: "Prensa de piernas"
+        zone:
+          type: string
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        reason:
+          type: string
+          example: "Impacto y absorción excéntrica sobre cuádriceps con molestia reportada."
+        availableSubstitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictSubstitute'
+
+    DayAdjustmentResponse:
+      type: object
+      required:
+        - id
+        - athleteId
+        - date
+        - sessionId
+        - status
+        - items
+        - justification
+        - provider
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "12345678-1234-1234-1234-123456789012"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        sessionId:
+          type: string
+          format: uuid
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        status:
+          type: string
+          enum: [Pending, Approved, Rejected]
+          example: "Pending"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayAdjustmentItem'
+        justification:
+          type: string
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        provider:
+          type: string
+          example: "Reglas"
+        rejectionReason:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-06T12:00:00Z"
+
+    ApproveDayAdjustmentItemInput:
+      type: object
+      required:
+        - originalExerciseId
+        - substituteExerciseId
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000012"
+
+    ApproveDayAdjustmentRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ApproveDayAdjustmentItemInput'
+
+    RejectDayAdjustmentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+          example: "Es molestia leve, que haga la sesión con menos carga."
 
     DayConflictItem:
       type: object

@@ -80,6 +80,60 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("athlete_records", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.AthleteSessionAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Items")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("items");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_session_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingSessionId", "AthleteId", "Date")
+                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date");
+
+                    b.ToTable("athlete_session_adjustments", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Exercise", b =>
                 {
                     b.Property<Guid>("Id")

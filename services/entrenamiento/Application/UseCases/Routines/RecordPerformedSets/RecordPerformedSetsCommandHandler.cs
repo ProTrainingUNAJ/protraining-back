@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Application.DTOs.Routines;
+using Application.DTOs.TrainingSessions;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -11,11 +13,18 @@ namespace Application.UseCases.Routines.RecordPerformedSets;
 
 public class RecordPerformedSetsCommandHandler
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IStructureClient _structureClient;
     private readonly ITrainingSessionRepository _trainingSessionRepository;
     private readonly IAthleteRecordRepository _athleteRecordRepository;
     private readonly IPerformedSetRepository _performedSetRepository;
     private readonly IRecordProposalRepository _recordProposalRepository;
+    private readonly IAthleteSessionAdjustmentRepository? _adjustmentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public RecordPerformedSetsCommandHandler(
@@ -24,7 +33,8 @@ public class RecordPerformedSetsCommandHandler
         IAthleteRecordRepository athleteRecordRepository,
         IPerformedSetRepository performedSetRepository,
         IRecordProposalRepository recordProposalRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAthleteSessionAdjustmentRepository? adjustmentRepository = null)
     {
         _structureClient = structureClient;
         _trainingSessionRepository = trainingSessionRepository;
@@ -32,6 +42,7 @@ public class RecordPerformedSetsCommandHandler
         _performedSetRepository = performedSetRepository;
         _recordProposalRepository = recordProposalRepository;
         _unitOfWork = unitOfWork;
+        _adjustmentRepository = adjustmentRepository;
     }
 
     public async Task<RecordPerformedSetsResponseDto> Handle(RecordPerformedSetsCommand command, CancellationToken cancellationToken = default)
@@ -56,8 +67,37 @@ public class RecordPerformedSetsCommandHandler
             throw new DomainException("El atleta no tiene una sesión programada para el día de hoy.");
         }
 
-        // Validar que los ejercicios pertenezcan a la sesión de hoy
+        // Validar que los ejercicios pertenezcan a la sesión de hoy (considerando ajustes aprobados por el PF, KAN-452)
         var validExerciseIds = session.PrescribedExercises.Select(p => p.ExerciseId).ToHashSet();
+
+        if (_adjustmentRepository != null)
+        {
+            var adjustment = await _adjustmentRepository.GetBySessionAthleteAndDateAsNoTrackingAsync(
+                session.Id,
+                athleteId,
+                today,
+                cancellationToken);
+
+            if (adjustment != null && !string.IsNullOrWhiteSpace(adjustment.Items))
+            {
+                try
+                {
+                    var items = JsonSerializer.Deserialize<List<AthleteSessionAdjustmentItemDto>>(adjustment.Items, JsonOptions) ?? [];
+                    foreach (var item in items)
+                    {
+                        if (item.SubstituteExerciseId != Guid.Empty)
+                        {
+                            validExerciseIds.Add(item.SubstituteExerciseId);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignorar si no se puede deserializar
+                }
+            }
+        }
+
         foreach (var set in command.Sets)
         {
             if (!validExerciseIds.Contains(set.ExerciseId))
@@ -128,4 +168,3 @@ public class RecordPerformedSetsCommandHandler
         };
     }
 }
-

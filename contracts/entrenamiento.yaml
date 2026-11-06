@@ -1089,6 +1089,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-sessions/{sessionId}/athlete-adjustments:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Aplicar ajuste de sesión por atleta y fecha
+      description: >
+        Guarda o reemplaza el ajuste del día de una sesión de entrenamiento para un atleta y fecha específicos
+        al aprobar una propuesta en el Asistente (#157 · KAN-452). Requiere rol PreparadorFisico.
+      operationId: applyAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentRequest'
+      responses:
+        "200":
+          description: Ajuste aplicado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/internal/training-sessions/athletes-with-session:
     get:
       tags:
@@ -2016,6 +2055,22 @@ components:
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
 
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la sesión de entrenamiento programada para la fecha.
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        adjustedByCoach:
+          type: boolean
+          description: Indica si el preparador físico aprobó un ajuste de la sesión para esta fecha (KAN-452).
+          example: true
+        adjustmentNote:
+          type: string
+          nullable: true
+          description: Nota explicativa del ajuste aprobado por el preparador físico (KAN-452).
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+
     PerformedSetInput:
       type: object
       required:
@@ -2259,6 +2314,84 @@ components:
           type: string
           nullable: true
           example: "Controlar tecnica en descenso"
+
+    ApplyAthleteSessionAdjustmentItem:
+      type: object
+      required:
+        - originalExerciseId
+        - substituteExerciseId
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "7e3b97f0-2581-4ebc-b3b0-642cf38a0f02"
+
+    ApplyAthleteSessionAdjustmentRequest:
+      type: object
+      required:
+        - athleteId
+        - date
+        - items
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        note:
+          type: string
+          nullable: true
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
+
+    ApplyAthleteSessionAdjustmentResponse:
+      type: object
+      required:
+        - id
+        - athleteId
+        - sessionId
+        - date
+        - adjustedByCoach
+        - items
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        sessionId:
+          type: string
+          format: uuid
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        adjustedByCoach:
+          type: boolean
+          example: true
+        note:
+          type: string
+          nullable: true
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
     UpdateCoachNotesRequest:
       type: object

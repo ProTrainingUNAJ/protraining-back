@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using Application.Common.Ai;
+using Application.Common.DayAdjustments;
+using Application.DTOs.DayAdjustments;
 using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
@@ -329,5 +331,30 @@ public sealed class RuleBasedAiClient(
         if (pull.Count == 0 && catalog.Count > 0) pull.AddRange(catalog);
 
         return (legs, push, pull);
+    }
+
+    public async Task<string?> TryGenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var stopwatch = Stopwatch.StartNew();
+
+        var justification = DayAdjustmentMapper.BuildDeterministicJustification(items);
+        stopwatch.Stop();
+
+        var prompt = DayAdjustmentMapper.BuildJustificationPrompt(items);
+        await aiAuditService.LogAsync(AiLog.Create(
+            ProviderName,
+            prompt,
+            stopwatch.ElapsedMilliseconds,
+            isValid: true,
+            validationResult: "Valido",
+            response: justification,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0), cancellationToken);
+
+        return justification;
     }
 }
