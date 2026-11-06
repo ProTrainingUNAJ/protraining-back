@@ -198,6 +198,10 @@ namespace Infrastructure.Data.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("difficulty_level");
 
+                    b.Property<Guid?>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
                     b.Property<string>("MeasurementUnit")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -219,6 +223,11 @@ namespace Infrastructure.Data.Migrations
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
+
+                    b.Property<string>("TargetExerciseName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("target_exercise_name");
 
                     b.HasKey("Id");
 

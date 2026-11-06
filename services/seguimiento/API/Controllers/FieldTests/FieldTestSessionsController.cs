@@ -1,4 +1,5 @@
 using Application.DTOs.FieldTests;
+using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
 using Application.UseCases.FieldTests.GetFieldTestSession;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
@@ -17,7 +18,8 @@ namespace API.Controllers.FieldTests;
 public sealed class FieldTestSessionsController(
     CreateFieldTestResultCommandHandler createHandler,
     GetFieldTestSessionQueryHandler getHandler,
-    UpdateFieldTestResultCommandHandler updateHandler) : ControllerBase
+    UpdateFieldTestResultCommandHandler updateHandler,
+    ConfirmFieldTestResultCommandHandler confirmHandler) : ControllerBase
 {
     // Sesión con sus tests y resultados (contrato: getFieldTestSession): la pantalla
     // del móvil se pinta con un solo GET.
@@ -86,6 +88,30 @@ public sealed class FieldTestSessionsController(
                 resultId,
                 request.Value!.Value,
                 request.Attempt),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    // Confirmación de un resultado de fuerza (contrato: confirmFieldTestResult): resuelve
+    // el ejercicio de Entrenamiento (con caché del GUID) y envía el 1RM con origen
+    // "testeado". Síncrono: 200 si Entrenamiento lo guardó; 400 si el test no genera
+    // récord 1RM; 404 si la sesión, el resultado o la prueba no son del PF; 503 si
+    // Entrenamiento no responde tras los reintentos de Polly.
+    [HttpPost("{sessionId:guid}/results/{resultId:guid}/confirm")]
+    [ProducesResponseType(typeof(FieldTestResultDto), 200)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
+    public async Task<ActionResult<FieldTestResultDto>> ConfirmResult(
+        Guid sessionId,
+        Guid resultId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await confirmHandler.HandleAsync(
+            new ConfirmFieldTestResultCommand(sessionId, resultId),
             cancellationToken);
 
         return Ok(result);

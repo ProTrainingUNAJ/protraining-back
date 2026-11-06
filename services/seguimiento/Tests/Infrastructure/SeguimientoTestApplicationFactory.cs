@@ -11,6 +11,7 @@ using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
 using Application.UseCases.FieldTests.GetFieldTestSession;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
@@ -25,6 +26,7 @@ using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
+using Infrastructure.Services.Entrenamiento;
 using Infrastructure.Services.Structure;
 using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Builder;
@@ -54,13 +56,18 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
     // Entrenamiento falso: control del llamado de récords 1RM (#140 / KAN-435).
     public FakeTrainingHandler Training { get; }
 
+    // Entrenamiento falso: cada test define qué le pasa a la confirmación.
+    public FakeEntrenamientoHandler Entrenamiento { get; }
+
     private SeguimientoTestApplicationFactory(
-        SqliteConnection sqliteConnection, TestServer server, FakeStructureHandler structure, FakeTrainingHandler training)
+        SqliteConnection sqliteConnection, TestServer server, FakeStructureHandler structure,
+        FakeTrainingHandler training, FakeEntrenamientoHandler entrenamiento)
     {
         _sqliteConnection = sqliteConnection;
         _server = server;
         Structure = structure;
         Training = training;
+        Entrenamiento = entrenamiento;
     }
 
     // Levanta el host con el mismo DI de infraestructura que el servicio y ejecuta
@@ -86,6 +93,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
         var structureHandler = new FakeStructureHandler();
         var trainingHandler = new FakeTrainingHandler();
+        var entrenamientoHandler = new FakeEntrenamientoHandler();
 
         var builder = new WebHostBuilder()
             .UseEnvironment("Development")
@@ -146,6 +154,10 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetFieldTestSessionQueryHandler>();
                 services.AddScoped<UpdateFieldTestResultCommandHandler>();
 
+                // Confirmación de un resultado de fuerza con envío del 1RM a Entrenamiento:
+                // mismo registro que en Program.cs.
+                services.AddScoped<ConfirmFieldTestResultCommandHandler>();
+
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();
                 services.AddScoped<GetAthleteEvolutionQueryHandler>();
@@ -162,6 +174,14 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddHttpClient<ITrainingClient, TrainingClient>(client =>
                         client.BaseAddress = new Uri("http://entrenamiento.test/"))
                     .ConfigurePrimaryHttpMessageHandler(() => trainingHandler)
+                    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
+                // Entrenamiento por HTTP hacia el handler falso: misma cadena de
+                // producción (EntrenamientoClient + reenvío del token), sin el pipeline real
+                // de Polly (las rejecciones las simula el propio fake, igual que Estructura).
+                services.AddHttpClient<IEntrenamientoClient, EntrenamientoClient>(client =>
+                        client.BaseAddress = new Uri("http://entrenamiento.test/"))
+                    .ConfigurePrimaryHttpMessageHandler(() => entrenamientoHandler)
                     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 
                 // Autenticación y controllers reales: el endpoint exige rol PreparadorFisico.
@@ -199,7 +219,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
             await CatalogTestSeeder.SeedAsync(context, logger);
         }
 
-        return new SeguimientoTestApplicationFactory(sqliteConnection, server, structureHandler, trainingHandler);
+        return new SeguimientoTestApplicationFactory(sqliteConnection, server, structureHandler, trainingHandler, entrenamientoHandler);
     }
 
     // Cliente HTTP sin token: sirve para probar los 401/403 del endpoint.
