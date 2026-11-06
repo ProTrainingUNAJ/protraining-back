@@ -96,7 +96,7 @@ public class CreateExerciseTests : IAsyncLifetime
         await using (var contextPf1 = CreateContext(pf1Id))
         {
             var repoPf1 = new ExerciseRepository(contextPf1);
-            var listHandlerPf1 = new ListExercisesQueryHandler(repoPf1);
+            var listHandlerPf1 = new ListExercisesQueryHandler(repoPf1, new ExerciseVideoRepository(contextPf1));
 
             var responsePf1 = await listHandlerPf1.Handle(new ListExercisesQuery
             {
@@ -112,7 +112,7 @@ public class CreateExerciseTests : IAsyncLifetime
         await using (var contextPf2 = CreateContext(pf2Id))
         {
             var repoPf2 = new ExerciseRepository(contextPf2);
-            var listHandlerPf2 = new ListExercisesQueryHandler(repoPf2);
+            var listHandlerPf2 = new ListExercisesQueryHandler(repoPf2, new ExerciseVideoRepository(contextPf2));
 
             var responsePf2 = await listHandlerPf2.Handle(new ListExercisesQuery
             {
@@ -369,7 +369,7 @@ public class CreateExerciseTests : IAsyncLifetime
         var uow = new UnitOfWork(context);
         var repo = new ExerciseRepository(context);
         var createHandler = new CreateExerciseCommandHandler(uow, repo);
-        var listHandler = new ListExercisesQueryHandler(repo);
+        var listHandler = new ListExercisesQueryHandler(repo, new ExerciseVideoRepository(context));
 
         var controller = new ExerciseController(
             listHandler,

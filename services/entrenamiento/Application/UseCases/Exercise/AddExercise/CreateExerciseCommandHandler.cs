@@ -33,7 +33,8 @@ namespace Application.UseCases.Exercise.AddExercise
                                                  equipment: request.Equipment,
                                                  primaryMuscles: request.PrimaryMuscles,
                                                  secondaryMuscles: request.SecondaryMuscles,
-                                                 origin: request.Origin ?? Origin.Coach
+                                                 origin: request.Origin ?? Origin.Coach,
+                                                 exerciseType: request.ExerciseType ?? ExerciseType.Weight
                                                  );
 
             await _exerciseRepository.AddExercise(exercise, cancellationToken);
@@ -51,7 +52,8 @@ namespace Application.UseCases.Exercise.AddExercise
                 Images = exercise.Images,
                 PrimaryMuscles = exercise.PrimaryMuscles,
                 SecondaryMuscles = exercise.SecondaryMuscles,
-                Origin = exercise.Origin
+                Origin = exercise.Origin,
+                ExerciseType = exercise.ExerciseType
             };
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);

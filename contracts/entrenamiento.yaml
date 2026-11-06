@@ -63,6 +63,13 @@ paths:
           schema:
             type: string
           description: Filtrar por equipamiento requerido (ej. Barra Olímpica, Mancuerna, Máquina).
+        - name: exerciseType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Weight, Time, Distance, Reps]
+          description: Filtrar por tipo de ejercicio (Weight, Time, Distance, Reps).
         - name: usedByPf
           in: query
           required: false
@@ -1485,6 +1492,11 @@ components:
           enum: [Catalog, Coach, Ai]
           description: Origen del ejercicio (Catálogo inicial, cargado por el PF o propuesto por la IA).
           example: "Ai"
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          description: Modalidad o tipo de ejercicio (con carga, tiempo, distancia, repeticiones).
+          example: "Distance"
         parentExerciseId:
           type: string
           format: uuid
@@ -1540,6 +1552,11 @@ components:
           enum: [Catalog, Coach, Ai]
           default: "Coach"
           example: "Ai"
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          default: "Weight"
+          example: "Distance"
 
     PaginatedExerciseResponse:
       type: object

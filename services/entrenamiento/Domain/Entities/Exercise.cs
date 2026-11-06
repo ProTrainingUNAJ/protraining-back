@@ -16,6 +16,7 @@ namespace Domain.Entities
         public List<string> PrimaryMuscles { get; private set; } = [];
         public List<string> SecondaryMuscles { get; private set; } = [];
         public Origin Origin { get; private set; }
+        public ExerciseType ExerciseType { get; private set; }
 
         // Variantes (KAN-554): una variante es un ejercicio "hijo" de su ejercicio base
         // (por ejemplo "Agarre cerrado" de "Press de banca con barra"). Conserva su id,
@@ -36,7 +37,8 @@ namespace Domain.Entities
             List<string>? images = null,
             List<string>? primaryMuscles = null,
             List<string>? secondaryMuscles = null,
-            Origin origin = Origin.Catalog
+            Origin origin = Origin.Catalog,
+            ExerciseType exerciseType = ExerciseType.Weight
             )
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -55,7 +57,8 @@ namespace Domain.Entities
                 Images = images ?? [],
                 PrimaryMuscles = primaryMuscles ?? [],
                 SecondaryMuscles = secondaryMuscles ?? [],
-                Origin = origin
+                Origin = origin,
+                ExerciseType = exerciseType
             };
         }
 
@@ -95,12 +98,6 @@ namespace Domain.Entities
             ParentExerciseId = null;
             VariantLabel = null;
         }
-
-        // Actualiza el link del video
-        public void UpdateVideoUrl(string? videoUrl)
-        {
-            VideoUrl = string.IsNullOrWhiteSpace(videoUrl) ? null : videoUrl.Trim();
-        }
     }
     
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -109,5 +106,14 @@ namespace Domain.Entities
         Catalog,
         Coach,
         Ai
+    }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum ExerciseType
+    {
+        Weight,
+        Time,
+        Distance,
+        Reps
     }
 }

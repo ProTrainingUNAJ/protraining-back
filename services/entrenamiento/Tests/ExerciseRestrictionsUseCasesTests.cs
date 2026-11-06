@@ -209,7 +209,7 @@ public class ExerciseRestrictionsUseCasesTests
             var restrictionRepo = new ExerciseRestrictionRepository(context);
             var checker = new ExerciseRestrictionChecker();
 
-            var listHandler = new Application.UseCases.Exercise.ListExercises.ListExercisesQueryHandler(exerciseRepo);
+            var listHandler = new Application.UseCases.Exercise.ListExercises.ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(context));
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 

@@ -106,6 +106,14 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("equipment");
 
+                    b.Property<string>("ExerciseType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Weight")
+                        .HasColumnName("exercise_type");
+
                     b.Property<List<string>>("Images")
                         .IsRequired()
                         .HasColumnType("text[]")
