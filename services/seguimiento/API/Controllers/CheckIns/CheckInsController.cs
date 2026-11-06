@@ -17,7 +17,8 @@ public sealed class CheckInsController(
     SubmitCheckInCommandHandler handler,
     ListAthleteCheckInsQueryHandler listHandler,
     GetTodayCheckInQueryHandler getTodayHandler,
-    IStructureClient structureClient) : ControllerBase
+    IStructureClient structureClient,
+    IAthleteAccessGuard athleteAccessGuard) : ControllerBase
 {
     [HttpGet("~/api/v1/athletes/{athleteId:guid}/check-ins")]
     [ProducesResponseType(typeof(IReadOnlyList<CheckInDto>), StatusCodes.Status200OK)]
@@ -31,19 +32,7 @@ public sealed class CheckInsController(
         [FromQuery] int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        if (User.IsInRole("PreparadorFisico"))
-        {
-            if (!await structureClient.IsOwnAthleteAsync(athleteId, cancellationToken))
-                throw new AthleteNotFoundException();
-        }
-        else
-        {
-            var me = await structureClient.GetMeAsync(cancellationToken);
-            if (me is null)
-                throw new NoAthleteLinkedException();
-            if (me.AthleteId != athleteId)
-                throw new AthleteNotFoundException();
-        }
+        await athleteAccessGuard.EnsureCanReadAsync(athleteId, cancellationToken);
 
         var result = await listHandler.HandleAsync(
             new ListAthleteCheckInsQuery(athleteId, from, to, limit),

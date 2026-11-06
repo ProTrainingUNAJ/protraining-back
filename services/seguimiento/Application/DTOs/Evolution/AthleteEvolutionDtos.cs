@@ -44,6 +44,7 @@ public sealed record AthleteEvolutionResponseDto(
     DateOnly To,
     IReadOnlyList<StrengthEvolutionSeriesDto> Strength,
     IReadOnlyList<FitnessTestEvolutionSeriesDto> FitnessTests,
-    WellnessEvolutionDto Wellness
+    WellnessEvolutionDto Wellness,
+    bool StrengthUnavailable = false
 );
 

@@ -6,6 +6,7 @@ using Application.DTOs.Memberships;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.Services;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -25,11 +26,16 @@ public class AthleteControllerTests
     {
         var listHandler = new ListAthleteRecordsQueryHandler(_repository.Object);
 
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.IsInRole(It.IsAny<string>()))
+            .Returns<string>(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
+        var guard = new AthleteAccessGuard(currentUserMock.Object, _structureClient.Object);
+
         var controller = new AthleteController(
             null!,
             listHandler,
             null!,
-            _structureClient.Object);
+            guard);
 
         var claims = new List<Claim>();
         if (!string.IsNullOrEmpty(role))
@@ -56,7 +62,7 @@ public class AthleteControllerTests
 
         var controller = CreateController("Atleta");
 
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Assert.ThrowsAnyAsync<NotFoundException>(() =>
             controller.GetRecords(athleteId, cancellationToken: CancellationToken.None));
     }
 
@@ -70,7 +76,7 @@ public class AthleteControllerTests
 
         var controller = CreateController("Atleta");
 
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Assert.ThrowsAnyAsync<NotFoundException>(() =>
             controller.GetRecords(athleteId, cancellationToken: CancellationToken.None));
     }
 
@@ -124,7 +130,7 @@ public class AthleteControllerTests
 
         var controller = CreateController("PreparadorFisico");
 
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Assert.ThrowsAnyAsync<NotFoundException>(() =>
             controller.GetRecords(athleteId, cancellationToken: CancellationToken.None));
     }
 

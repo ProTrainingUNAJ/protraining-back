@@ -8,12 +8,15 @@ namespace Application.UseCases.Evolution.GetAthleteEvolution;
 public sealed class GetAthleteEvolutionQueryHandler(
     ITrainingClient trainingClient,
     IFieldTestResultRepository fieldTestResultRepository,
-    ICheckInRepository checkInRepository)
+    ICheckInRepository checkInRepository,
+    IAthleteAccessGuard athleteAccessGuard)
 {
     public async Task<AthleteEvolutionResponseDto> HandleAsync(
         GetAthleteEvolutionQuery query,
         CancellationToken cancellationToken = default)
     {
+        await athleteAccessGuard.EnsureCanReadAsync(query.AthleteId, cancellationToken);
+
         var today = ArgentinaTime.Today;
 
         var toDate = query.To ?? today;
@@ -26,11 +29,13 @@ public sealed class GetAthleteEvolutionQueryHandler(
         var fromDateTime = ArgentinaTime.ToUtcStartOfDay(fromDate);
         var toDateTime = ArgentinaTime.ToUtcEndOfDay(toDate);
 
-        var records = await trainingClient.GetAthleteRecordsAsync(
+        var trainingResult = await trainingClient.GetAthleteRecordsAsync(
             query.AthleteId,
             fromDate,
             toDate,
             cancellationToken);
+
+        var records = trainingResult.Records;
 
         var fitnessTests = await fieldTestResultRepository.ListByAthleteAndDateRangeAsync(
             query.AthleteId,
@@ -123,6 +128,7 @@ public sealed class GetAthleteEvolutionQueryHandler(
             toDate,
             strengthSeries,
             fitnessSeries,
-            wellness);
+            wellness,
+            trainingResult.IsUnavailable);
     }
 }
