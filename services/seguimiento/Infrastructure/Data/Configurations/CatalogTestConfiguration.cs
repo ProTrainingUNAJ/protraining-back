@@ -38,7 +38,7 @@ public sealed class CatalogTestConfiguration : IEntityTypeConfiguration<CatalogT
             .IsRequired()
             .HasDefaultValue(true);
 
-        // KAN-426: mapeo test → ejercicio de Entrenamiento. Ambas columnas son nullable:
+        // Mapeo test → ejercicio de Entrenamiento. Ambas columnas son nullable:
         // solo los tests de fuerza en kg tienen objetivo, y el GUID se cachea en la primera
         // confirmación (los ids de Entrenamiento no son estables entre entornos).
         builder.Property(e => e.TargetExerciseName)

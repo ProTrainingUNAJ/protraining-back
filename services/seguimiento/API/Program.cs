@@ -100,7 +100,7 @@ builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();
 builder.Services.AddScoped<CreateFieldTestResultCommandHandler>();
 builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
 builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
-// Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento (KAN-426).
+// Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento.
 builder.Services.AddScoped<ConfirmFieldTestResultCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
@@ -121,7 +121,7 @@ if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
-// Entrenamiento por HTTP (KAN-426 confirmación del 1RM / KAN-435 evolución): misma cadena
+// Entrenamiento por HTTP (confirmación del 1RM y consulta de récords de evolución): misma cadena
 // que Estructura (token reenviado + resiliencia global de Polly de ConfigureHttpClientDefaults)
 // y la misma Services__Entrenamiento__BaseUrl. La URL es obligatoria: sin ella el envío del
 // 1RM no tendría destino y el error aparecería tarde.

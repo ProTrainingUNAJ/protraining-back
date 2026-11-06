@@ -9,7 +9,7 @@ using Polly;
 
 namespace Infrastructure.Services.Entrenamiento;
 
-// Cliente HTTP hacia Entrenamiento (KAN-426). El token de la petición lo agrega
+// Cliente HTTP hacia Entrenamiento. El token de la petición lo agrega
 // ForwardAuthorizationHandler (en la API) y la resiliencia (reintentos con backoff,
 // timeout por intento y circuit breaker) viene del pipeline global de Polly aplicado
 // en Program.cs con AddProTrainingResilience.
@@ -38,7 +38,7 @@ public sealed class EntrenamientoClient(HttpClient httpClient, ILogger<Entrenami
         {
             throw;
         }
-        // Mismo criterio que StructureClient (KAN-367): las rejecciones del pipeline de
+        // Mismo criterio que StructureClient: las rejecciones del pipeline de
         // resiliencia (breaker abierto o timeout) deben degradar a EntrenamientoUnavailable
         // (503), nunca escapar como 500.
         catch (Exception exception) when (exception is HttpRequestException

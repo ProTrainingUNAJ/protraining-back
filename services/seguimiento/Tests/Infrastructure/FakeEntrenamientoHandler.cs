@@ -6,7 +6,7 @@ using Polly.Timeout;
 
 namespace Seguimiento.Tests.Infrastructure;
 
-// Entrenamiento falso para los tests de confirmación de KAN-426: cada test decide qué
+// Entrenamiento falso para los tests de confirmación: cada test decide qué
 // le pasa a las dos llamadas del cliente (búsqueda de ejercicio y guardado del récord).
 // Por defecto responde todo OK. Las rejecciones del pipeline de Polly se simulan acá
 // para que los tests sean determinísticos y rápidos, sin depender del

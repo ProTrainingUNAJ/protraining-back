@@ -8,7 +8,7 @@ using Moq;
 
 namespace Seguimiento.Tests;
 
-// KAN-426: la confirmación resuelve el ejercicio de Entrenamiento por nombre exacto la
+// La confirmación resuelve el ejercicio de Entrenamiento por nombre exacto la
 // primera vez (y cachea el GUID), envía el 1RM con origen TestedInSession, y degrada a
 // 404/400/503 según el fallo. No persiste estado de confirmación.
 public class ConfirmFieldTestResultCommandHandlerTests
@@ -101,7 +101,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             Times.Once);
     }
 
-    // KAN-426 (AC): primera confirmación → resuelve por nombre exacto, cachea el GUID
+    // Primera confirmación → resuelve por nombre exacto, cachea el GUID
     // y envía el 1RM testeado (origen "testeado" = TestedInSession).
     [Fact]
     public async Task HandleAsync_WithoutCachedId_ResolvesByNameCachesAndSendsTestedRecord()
@@ -157,7 +157,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             Times.Never);
     }
 
-    // KAN-426: test sin mapeo (no fuerza/kg, p. ej. Carrera 30 m) → 400, sin llamar a
+    // Test sin mapeo (no fuerza/kg, p. ej. Carrera 30 m) → 400, sin llamar a
     // Entrenamiento.
     [Fact]
     public async Task HandleAsync_WithoutTargetExercise_ThrowsDomainExceptionWithoutCallingEntrenamiento()
@@ -198,7 +198,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             Times.Never);
     }
 
-    // KAN-426 (decisión): Entrenamiento caído tras los reintentos de Polly → el error se
+    // Entrenamiento caído tras los reintentos de Polly → el error se
     // propaga (503), no se responde 200 como si hubiera sincronizado.
     [Fact]
     public async Task HandleAsync_WhenEntrenamientoUnavailable_Propagates503WithoutSwallowing()
@@ -216,7 +216,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             () => CreateHandler().HandleAsync(Command()));
     }
 
-    // KAN-426: el resultado ajeno o de otra sesión nunca llega a Entrenamiento (404).
+    // El resultado ajeno o de otra sesión nunca llega a Entrenamiento (404).
     [Fact]
     [Trait("Category", "Isolation")]
     public async Task HandleAsync_WithResultOfAnotherSession_ThrowsNotFoundWithoutCallingEntrenamiento()

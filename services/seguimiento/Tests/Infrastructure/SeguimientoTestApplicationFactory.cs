@@ -56,7 +56,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
     // Entrenamiento falso: control del llamado de récords 1RM (#140 / KAN-435).
     public FakeTrainingHandler Training { get; }
 
-    // Entrenamiento falso (KAN-426): cada test define qué le pasa a la confirmación.
+    // Entrenamiento falso: cada test define qué le pasa a la confirmación.
     public FakeEntrenamientoHandler Entrenamiento { get; }
 
     private SeguimientoTestApplicationFactory(
@@ -154,8 +154,8 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetFieldTestSessionQueryHandler>();
                 services.AddScoped<UpdateFieldTestResultCommandHandler>();
 
-                // Confirmación de un resultado de fuerza con envío del 1RM a Entrenamiento
-                // (KAN-426): mismo registro que en Program.cs.
+                // Confirmación de un resultado de fuerza con envío del 1RM a Entrenamiento:
+                // mismo registro que en Program.cs.
                 services.AddScoped<ConfirmFieldTestResultCommandHandler>();
 
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
@@ -176,7 +176,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                     .ConfigurePrimaryHttpMessageHandler(() => trainingHandler)
                     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 
-                // Entrenamiento por HTTP hacia el handler falso (KAN-426): misma cadena de
+                // Entrenamiento por HTTP hacia el handler falso: misma cadena de
                 // producción (EntrenamientoClient + reenvío del token), sin el pipeline real
                 // de Polly (las rejecciones las simula el propio fake, igual que Estructura).
                 services.AddHttpClient<IEntrenamientoClient, EntrenamientoClient>(client =>

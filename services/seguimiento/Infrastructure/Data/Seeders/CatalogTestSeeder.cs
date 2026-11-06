@@ -6,7 +6,7 @@ namespace Infrastructure.Data.Seeders;
 
 public static class CatalogTestSeeder
 {
-    // KAN-426: tests de fuerza en kg que generan récord 1RM en Entrenamiento, con el nombre
+    // Tests de fuerza en kg que generan récord 1RM en Entrenamiento, con el nombre
     // exacto del ejercicio homónimo en su catálogo (los dos catálogos no comparten ids ni
     // nombres). Solo "Sentadilla 1RM" queda mapeada por ahora: no se adivinan equivalencias
     // para el resto (p. ej. "Press Banca") hasta confirmar el nombre correcto.
@@ -60,7 +60,7 @@ public static class CatalogTestSeeder
         logger.LogInformation("Se sembraron {Count} pruebas del catálogo motor.", tests.Count);
     }
 
-    // KAN-426: las bases creadas antes del mapeo no pasan por el alta de arriba (el seeder
+    // Las bases creadas antes del mapeo no pasan por el alta de arriba (el seeder
     // hace early return). Este backfill completa TargetExerciseName en los tests que lo
     // necesitan; es idempotente y no toca ExerciseId (la caché de GUIDs ya resueltos).
     private static async Task BackfillTargetExercisesAsync(AppDbContext context, ILogger logger)

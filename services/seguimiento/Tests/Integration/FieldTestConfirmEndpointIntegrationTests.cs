@@ -8,7 +8,7 @@ using Seguimiento.Tests.Infrastructure;
 
 namespace Seguimiento.Tests.Integration;
 
-// Certificación HTTP de KAN-426: la confirmación de un resultado de fuerza envía el 1RM
+// Certificación HTTP de la confirmación de un resultado de fuerza: envía el 1RM
 // testeado a Entrenamiento de forma síncrona (200 solo si Entrenamiento lo guardó),
 // aísla todo lo ajeno con 404, responde 400 a los tests sin mapeo y 503 si Entrenamiento
 // no responde tras los reintentos de Polly.
@@ -20,7 +20,7 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
     private static string ConfirmEndpoint(Guid sessionId, Guid resultId) =>
         $"api/v1/field-test-sessions/{sessionId}/results/{resultId}/confirm";
 
-    // El test sembrado que tiene mapeo a ejercicio de Entrenamiento (KAN-426).
+    // El test sembrado que tiene mapeo a ejercicio de Entrenamiento.
     private static Task<Guid> ObtenerTestIdMapeadoAsync(SeguimientoTestApplicationFactory factory) =>
         factory.ExecuteInDbContextAsync(db => db.CatalogTests
             .Where(test => test.Name == "Sentadilla 1RM")
@@ -56,7 +56,7 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
         return session.Id;
     }
 
-    // Resultado cargado en la sesión propia (como lo dejaría el POST de KAN-425).
+    // Resultado cargado en la sesión propia (como lo dejaría el POST de carga).
     private async Task<Guid> CrearResultadoAsync(
         SeguimientoTestApplicationFactory factory, Guid sessionId, Guid catalogTestId, decimal value = 120.0m)
     {
@@ -106,7 +106,7 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
 
     // ---------- Confirmación feliz (AC) ----------
 
-    // KAN-426 (AC): DADO un test de Sentadilla de 120 kg CUANDO se confirma ENTONCES
+    // DADO un test de Sentadilla de 120 kg CUANDO se confirma ENTONCES
     // Entrenamiento recibe el 1RM con origen testeado (TestedInSession).
     [Fact]
     public async Task Given_ForceResult_When_Confirm_Then_Returns200AndSendsTestedRecord()
@@ -143,7 +143,7 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
         Assert.Equal(exerciseId, cached.ExerciseId);
     }
 
-    // KAN-426: con el GUID cacheado, la segunda confirmación va directo al guardado
+    // Con el GUID cacheado, la segunda confirmación va directo al guardado
     // (sin volver a buscar el ejercicio) y vuelve a enviar el mismo valor.
     [Fact]
     public async Task Given_CachedExercise_When_ConfirmAgain_Then_SkipsSearchAndResends()

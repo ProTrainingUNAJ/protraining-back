@@ -97,7 +97,7 @@ public sealed class FieldTestSessionsController(
     // el ejercicio de Entrenamiento (con caché del GUID) y envía el 1RM con origen
     // "testeado". Síncrono: 200 si Entrenamiento lo guardó; 400 si el test no genera
     // récord 1RM; 404 si la sesión, el resultado o la prueba no son del PF; 503 si
-    // Entrenamiento no responde tras los reintentos de Polly (KAN-426).
+    // Entrenamiento no responde tras los reintentos de Polly.
     [HttpPost("{sessionId:guid}/results/{resultId:guid}/confirm")]
     [ProducesResponseType(typeof(FieldTestResultDto), 200)]
     [ProducesResponseType(typeof(ValidationProblemDetails), 400)]

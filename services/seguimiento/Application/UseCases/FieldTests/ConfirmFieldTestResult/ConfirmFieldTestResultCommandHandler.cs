@@ -7,8 +7,8 @@ using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.ConfirmFieldTestResult;
 
-// Confirmación de un resultado de fuerza y envío síncrono del 1RM a Entrenamiento
-// (KAN-426): 1 SELECT (sesión) + 1 SELECT (resultado) + 1 SELECT (test del catálogo),
+// Confirmación de un resultado de fuerza y envío síncrono del 1RM a Entrenamiento:
+// 1 SELECT (sesión) + 1 SELECT (resultado) + 1 SELECT (test del catálogo),
 // y después la llamada HTTP con la resiliencia global de Polly. Sesión, resultado o
 // test ajeno → 404. Test sin mapeo a ejercicio (no fuerza/kg) → 400. Si Entrenamiento
 // no responde tras los reintentos → EntrenamientoUnavailableException → 503: la

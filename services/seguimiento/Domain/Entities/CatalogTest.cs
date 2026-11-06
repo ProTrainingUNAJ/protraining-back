@@ -15,7 +15,7 @@ public sealed class CatalogTest : BaseEntity
     public int DifficultyLevel { get; private set; }
     public bool Active { get; private set; }
 
-    // KAN-426: mapeo hacia el catálogo de ejercicios de Entrenamiento para los tests de
+    // Mapeo hacia el catálogo de ejercicios de Entrenamiento para los tests de
     // fuerza en kg. TargetExerciseName es el nombre exacto del ejercicio en Entrenamiento
     // (los catálogos no comparten ids ni nombres). ExerciseId es una caché del GUID
     // resuelto la primera vez que se confirma: los ids de Entrenamiento se generan con
@@ -55,7 +55,7 @@ public sealed class CatalogTest : BaseEntity
             SetTargetExercise(targetExerciseName);
     }
 
-    // Vincula el test con el ejercicio homónimo del catálogo de Entrenamiento (KAN-426).
+    // Vincula el test con el ejercicio homónimo del catálogo de Entrenamiento.
     public void SetTargetExercise(string targetExerciseName)
     {
         if (string.IsNullOrWhiteSpace(targetExerciseName))
@@ -66,7 +66,7 @@ public sealed class CatalogTest : BaseEntity
         ExerciseId = null;
     }
 
-    // Persiste el ejercicio resuelto por nombre la primera vez que se confirma (KAN-426):
+    // Persiste el ejercicio resuelto por nombre la primera vez que se confirma:
     // a partir de ahí las confirmaciones siguientes van directo contra Entrenamiento.
     public void CacheExerciseId(Guid exerciseId)
     {
