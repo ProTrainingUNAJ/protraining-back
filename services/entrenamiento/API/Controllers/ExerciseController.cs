@@ -25,7 +25,7 @@ namespace API.Controllers
             CheckExerciseRestrictionsQueryHandler checkRestrictionsQueryHandler,
             GetExerciseSubstitutesQueryHandler getSubstitutesQueryHandler,
             CreateExerciseCommandHandler createExerciseCommandHandler,
-            UpdateExerciseVideoCommandHandler updateExerciseVideoCommandHandler = null!)
+            UpdateExerciseVideoCommandHandler updateExerciseVideoCommandHandler)
         {
             _listExercisesQueryHandler = listExercisesQueryHandler;
             _checkRestrictionsQueryHandler = checkRestrictionsQueryHandler;
@@ -80,10 +80,10 @@ namespace API.Controllers
 
         [HttpPut("{id:guid}/video")]
         [Authorize(Roles = "PreparadorFisico")]
-        public async Task<IActionResult> UpdateVideoUrl([FromRoute] Guid id, [FromBody] UpdateExerciseVideoCommand request, CancellationToken cancellationToken)
+        public async Task<IActionResult> UpdateVideoUrl([FromRoute] Guid id, [FromBody] UpdateExerciseVideoRequest request, CancellationToken cancellationToken)
         {
-            request.ExerciseId = id;
-            var result = await _updateExerciseVideoCommandHandler.Handle(request, cancellationToken);
+            var command = new UpdateExerciseVideoCommand(id, request.VideoUrl);
+            var result = await _updateExerciseVideoCommandHandler.Handle(command, cancellationToken);
             return Ok(result);
         }
     }

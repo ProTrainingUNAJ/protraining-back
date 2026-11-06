@@ -5,7 +5,6 @@ using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.ListExercises;
 using Application.Exceptions;
 using Domain.Entities;
-using Domain.Exceptions;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Mvc;
@@ -376,7 +375,8 @@ public class CreateExerciseTests : IAsyncLifetime
             listHandler,
             null!,
             null!,
-            createHandler
+            createHandler,
+            null!
         );
 
         var command = new CreateExerciseCommand

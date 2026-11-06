@@ -213,7 +213,7 @@ public class ExerciseRestrictionsUseCasesTests
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 
-            var controller = new API.Controllers.ExerciseController(listHandler, checkHandler, getSubstitutesHandler, null!);
+            var controller = new API.Controllers.ExerciseController(listHandler, checkHandler, getSubstitutesHandler, null!, null!);
 
             // Test POST /restrictions/check
             var postResult = await controller.CheckRestrictions(new Application.DTOs.Exercise.CheckExerciseRestrictionsRequest

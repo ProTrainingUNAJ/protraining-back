@@ -638,4 +638,36 @@ public class ListExercisesTests : IAsyncLifetime
             Assert.Equal("Sentadilla trasera", items[0].Name);
         }
     }
+
+    [Fact]
+    public async Task Handler_ListExercises_Isolation_PFA_SetsVideo_PFB_SeesCatalogVideo()
+    {
+        // KAN-380: PF A tiene video propio, PF B ve el video del catálogo (o ninguno)
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var exerciseRepoMock = new Mock<IExerciseRepository>();
+        exerciseRepoMock.Setup(r => r.ListAsync(null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([exercise], 1));
+
+        // Para PF A, el repositorio devuelve su video propio
+        var videoRepoMockPFA = new Mock<IExerciseVideoRepository>();
+        videoRepoMockPFA.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { { exercise.Id, "https://www.youtube.com/watch?v=pfAVideo" } });
+
+        var handlerPFA = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFA.Object);
+        var resultPFA = await handlerPFA.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Equal("https://www.youtube.com/watch?v=pfAVideo", resultPFA.Items[0].VideoUrl);
+        Assert.Equal("Pf", resultPFA.Items[0].VideoSource);
+
+        // Para PF B, el repositorio no tiene video para este ejercicio
+        var videoRepoMockPFB = new Mock<IExerciseVideoRepository>();
+        videoRepoMockPFB.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var handlerPFB = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFB.Object);
+        var resultPFB = await handlerPFB.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Equal("https://www.youtube.com/watch?v=catalogVid", resultPFB.Items[0].VideoUrl);
+        Assert.Equal("Catalog", resultPFB.Items[0].VideoSource);
+    }
 }

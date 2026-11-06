@@ -46,6 +46,7 @@ namespace Application.UseCases.Exercise.AddExercise
                 Description = exercise.Description,
                 AnimationUrl = exercise.AnimationUrl,
                 VideoUrl = exercise.VideoUrl,
+                VideoSource = string.IsNullOrEmpty(exercise.VideoUrl) ? null : (exercise.Origin == Origin.Coach ? "Pf" : "Catalog"),
                 Equipment = exercise.Equipment,
                 Images = exercise.Images,
                 PrimaryMuscles = exercise.PrimaryMuscles,

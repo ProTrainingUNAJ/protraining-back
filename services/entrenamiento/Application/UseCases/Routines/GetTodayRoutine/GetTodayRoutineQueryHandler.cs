@@ -12,15 +12,17 @@ namespace Application.UseCases.Routines.GetTodayRoutine
     {
         private readonly IAthleteRecordRepository athleteRecordRepository;
         private readonly ITrainingSessionRepository trainingSessionRepository;
+        private readonly IExerciseVideoRepository? exerciseVideoRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
 
-        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator, IStructureClient structureClient)
+        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator, IStructureClient structureClient, IExerciseVideoRepository? exerciseVideoRepository = null)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
             this.calculator = calculator;
             this.structureClient = structureClient;
+            this.exerciseVideoRepository = exerciseVideoRepository;
         }
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
@@ -73,6 +75,11 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
             var exercisesDto = new List<TodayRoutineExerciseDto>();
 
+            var prescribedExerciseIds = routine.PrescribedExercises.Select(p => p.ExerciseId).Distinct().ToList();
+            var pfVideos = exerciseVideoRepository != null
+                ? await exerciseVideoRepository.GetVideosByExerciseIdsAsync(prescribedExerciseIds, cancellationToken)
+                : new Dictionary<Guid, string>();
+
             // Por cada ejercicio prescrito, resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)
             {
@@ -95,13 +102,16 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 double? weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
 
                 var exercise = prescribed.Exercise;
+                var effectiveVideoUrl = pfVideos.TryGetValue(prescribed.ExerciseId, out var customVideo)
+                    ? customVideo
+                    : exercise?.VideoUrl;
 
                 exercisesDto.Add(new TodayRoutineExerciseDto
                 {
                     ExerciseId = prescribed.ExerciseId,
                     Name = exercise?.Name ?? string.Empty,
                     MuscleGroup = exercise?.MuscleGroup ?? string.Empty,
-                    VideoUrl = exercise?.VideoUrl,
+                    VideoUrl = effectiveVideoUrl,
                     Images = exercise?.Images.ToList() ?? [],
                     PrimaryMuscles = exercise?.PrimaryMuscles.ToList() ?? [],
                     SecondaryMuscles = exercise?.SecondaryMuscles.ToList() ?? [],

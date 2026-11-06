@@ -338,5 +338,69 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.NotNull(item.SecondaryMuscles);
         Assert.Empty(item.SecondaryMuscles);
     }
+
+    [Fact]
+    public async Task Given_AthleteRoutine_When_PFHasCustomVideo_Then_ResolvesPFVideo()
+    {
+        // KAN-380: El atleta ve el video de su PF para el ejercicio prescrito
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 5);
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.Is<List<Guid>>(ids => ids.Contains(exercise.Id)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { { exercise.Id, "https://www.youtube.com/watch?v=pfCustomVid" } });
+
+        var handler = new GetTodayRoutineQueryHandler(
+            _athleteRecordRepoMock.Object,
+            _sessionRepoMock.Object,
+            _loadCalculatorEngine,
+            _structureClientMock.Object,
+            videoRepoMock.Object
+        );
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal("https://www.youtube.com/watch?v=pfCustomVid", item.VideoUrl);
+    }
+
+    [Fact]
+    public async Task Given_AthleteRoutine_When_PFHasNoCustomVideo_Then_FallsBackToCatalogVideo()
+    {
+        // KAN-380: Si el PF no cargó video propio, el atleta ve el del catálogo
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 5);
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var handler = new GetTodayRoutineQueryHandler(
+            _athleteRecordRepoMock.Object,
+            _sessionRepoMock.Object,
+            _loadCalculatorEngine,
+            _structureClientMock.Object,
+            videoRepoMock.Object
+        );
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal("https://www.youtube.com/watch?v=catalogVid", item.VideoUrl);
+    }
 }
 
