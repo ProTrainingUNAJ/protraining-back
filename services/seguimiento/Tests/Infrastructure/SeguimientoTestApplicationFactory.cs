@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
 using API.Controllers.Categories;
 using API.Extensions;
 using API.Middleware;
@@ -21,6 +22,7 @@ using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.Services;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Data.Seeders;
@@ -115,7 +117,8 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
                 services.AddHttpContextAccessor();
-                services.AddScoped<ICurrentUser>(_ => new TestCurrentUser(pfId));
+                services.AddScoped<ICurrentUser>(sp => new TestCurrentUser(pfId, sp.GetService<IHttpContextAccessor>()));
+                services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 
                 // Semáforo del día (KAN-367): motor y caso de uso registrados como en Program.cs.
                 services.AddScoped<TrafficLightEngine>();

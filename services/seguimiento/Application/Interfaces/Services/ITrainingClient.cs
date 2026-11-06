@@ -4,7 +4,7 @@ namespace Application.Interfaces.Services;
 
 public interface ITrainingClient
 {
-    Task<IReadOnlyList<AthleteRecordRemoteDto>> GetAthleteRecordsAsync(
+    Task<TrainingRecordsResultDto> GetAthleteRecordsAsync(
         Guid athleteId,
         DateOnly? from = null,
         DateOnly? to = null,

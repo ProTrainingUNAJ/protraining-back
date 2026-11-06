@@ -26,6 +26,7 @@ using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.Services;
 using Infrastructure.Services;
 using Domain.Services;
 using Infrastructure;
@@ -113,6 +114,7 @@ builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
 builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 // Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
 // del token con el athleteId de la ruta antes de registrar el check-in.
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];

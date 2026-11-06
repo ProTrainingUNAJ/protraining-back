@@ -5,6 +5,7 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.Services;
 using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,9 +21,14 @@ public class AthleteFitnessTestsControllerTests
 
     private AthleteFitnessTestsController CreateController(string? role = null)
     {
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.IsInRole(It.IsAny<string>()))
+            .Returns<string>(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
+        var guard = new AthleteAccessGuard(currentUserMock.Object, _estructura.Object);
+
         var controller = new AthleteFitnessTestsController(
             new ListAthleteFitnessTestsQueryHandler(_repository.Object),
-            _estructura.Object);
+            guard);
 
         var claims = new List<Claim>();
         if (!string.IsNullOrEmpty(role))

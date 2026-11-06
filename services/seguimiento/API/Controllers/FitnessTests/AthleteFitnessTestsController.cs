@@ -13,7 +13,7 @@ namespace API.Controllers.FitnessTests;
 [Authorize]
 public sealed class AthleteFitnessTestsController(
     ListAthleteFitnessTestsQueryHandler handler,
-    IStructureClient structureClient) : ControllerBase
+    IAthleteAccessGuard athleteAccessGuard) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<AthleteFitnessTestDto>), StatusCodes.Status200OK)]
@@ -27,19 +27,7 @@ public sealed class AthleteFitnessTestsController(
         [FromQuery] DateOnly? to = null,
         CancellationToken cancellationToken = default)
     {
-        if (User.IsInRole("PreparadorFisico"))
-        {
-            if (!await structureClient.IsOwnAthleteAsync(athleteId, cancellationToken))
-                throw new AthleteNotFoundException();
-        }
-        else
-        {
-            var me = await structureClient.GetMeAsync(cancellationToken);
-            if (me is null)
-                throw new NoAthleteLinkedException();
-            if (me.AthleteId != athleteId)
-                throw new AthleteNotFoundException();
-        }
+        await athleteAccessGuard.EnsureCanReadAsync(athleteId, cancellationToken);
 
         var result = await handler.HandleAsync(
             new ListAthleteFitnessTestsQuery(athleteId, testId, from, to),

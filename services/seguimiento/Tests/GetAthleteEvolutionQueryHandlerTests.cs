@@ -1,5 +1,7 @@
+using Application.DTOs.Evolution;
 using Application.DTOs.FitnessTests;
 using Application.DTOs.Training;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Evolution.GetAthleteEvolution;
@@ -14,6 +16,14 @@ public class GetAthleteEvolutionQueryHandlerTests
     private readonly Mock<ITrainingClient> _trainingClient = new();
     private readonly Mock<IFieldTestResultRepository> _fieldTestRepo = new();
     private readonly Mock<ICheckInRepository> _checkInRepo = new();
+    private readonly Mock<IAthleteAccessGuard> _athleteAccessGuard = new();
+
+    private GetAthleteEvolutionQueryHandler CreateHandler() =>
+        new(
+            _trainingClient.Object,
+            _fieldTestRepo.Object,
+            _checkInRepo.Object,
+            _athleteAccessGuard.Object);
 
     [Fact]
     public async Task HandleAsync_ConRangoPorDefecto_CalculaUltimos3MesesYUnificaCurvas()
@@ -59,7 +69,7 @@ public class GetAthleteEvolutionQueryHandlerTests
 
         _trainingClient
             .Setup(c => c.GetAthleteRecordsAsync(athleteId, It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AthleteRecordRemoteDto> { recordDto });
+            .ReturnsAsync(new TrainingRecordsResultDto(new List<AthleteRecordRemoteDto> { recordDto }, IsUnavailable: false));
 
         _fieldTestRepo
             .Setup(r => r.ListByAthleteAndDateRangeAsync(athleteId, null, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -69,15 +79,13 @@ public class GetAthleteEvolutionQueryHandlerTests
             .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn> { checkIn });
 
-        var handler = new GetAthleteEvolutionQueryHandler(
-            _trainingClient.Object,
-            _fieldTestRepo.Object,
-            _checkInRepo.Object);
+        var handler = CreateHandler();
 
         var result = await handler.HandleAsync(new GetAthleteEvolutionQuery(athleteId));
 
         Assert.Equal(athleteId, result.AthleteId);
         Assert.True(result.From < result.To);
+        Assert.False(result.StrengthUnavailable);
 
         // Fuerza
         Assert.Single(result.Strength);
@@ -120,7 +128,7 @@ public class GetAthleteEvolutionQueryHandlerTests
 
         _trainingClient
             .Setup(c => c.GetAthleteRecordsAsync(athleteId, It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AthleteRecordRemoteDto>());
+            .ReturnsAsync(new TrainingRecordsResultDto([], IsUnavailable: false));
 
         _fieldTestRepo
             .Setup(r => r.ListByAthleteAndDateRangeAsync(athleteId, null, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -130,12 +138,11 @@ public class GetAthleteEvolutionQueryHandlerTests
             .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn>());
 
-        var handler = new GetAthleteEvolutionQueryHandler(
-            _trainingClient.Object,
-            _fieldTestRepo.Object,
-            _checkInRepo.Object);
+        var handler = CreateHandler();
 
         var result = await handler.HandleAsync(new GetAthleteEvolutionQuery(athleteId));
+
+        Assert.False(result.StrengthUnavailable);
 
         var jumpSeries = result.FitnessTests.First(t => t.TestName == "CMJ");
         Assert.Single(jumpSeries.Points);
@@ -147,13 +154,13 @@ public class GetAthleteEvolutionQueryHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_CuandoEntrenamientoNoTieneDatos_DegradaYDevuelveCurvasLocales()
+    public async Task HandleAsync_CuandoEntrenamientoNoTieneDatos_DevuelveStrengthUnavailableFalseYCurvasVacias()
     {
         var athleteId = Guid.NewGuid();
 
         _trainingClient
             .Setup(c => c.GetAthleteRecordsAsync(athleteId, It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AthleteRecordRemoteDto>());
+            .ReturnsAsync(new TrainingRecordsResultDto([], IsUnavailable: false));
 
         _fieldTestRepo
             .Setup(r => r.ListByAthleteAndDateRangeAsync(athleteId, null, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -163,17 +170,60 @@ public class GetAthleteEvolutionQueryHandlerTests
             .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn>());
 
-        var handler = new GetAthleteEvolutionQueryHandler(
-            _trainingClient.Object,
-            _fieldTestRepo.Object,
-            _checkInRepo.Object);
+        var handler = CreateHandler();
 
         var result = await handler.HandleAsync(new GetAthleteEvolutionQuery(athleteId));
 
         Assert.NotNull(result);
+        Assert.False(result.StrengthUnavailable);
         Assert.Empty(result.Strength);
         Assert.Empty(result.FitnessTests);
         Assert.Empty(result.Wellness.FatiguePoints);
         Assert.Empty(result.Wellness.DailyPoints);
+    }
+
+    [Fact]
+    public async Task HandleAsync_CuandoEntrenamientoFalla_DevuelveStrengthUnavailableTrue()
+    {
+        var athleteId = Guid.NewGuid();
+
+        _trainingClient
+            .Setup(c => c.GetAthleteRecordsAsync(athleteId, It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TrainingRecordsResultDto([], IsUnavailable: true));
+
+        _fieldTestRepo
+            .Setup(r => r.ListByAthleteAndDateRangeAsync(athleteId, null, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AthleteFitnessTestDto>());
+
+        _checkInRepo
+            .Setup(r => r.GetByAthleteAndDateRangeAsync(athleteId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CheckIn>());
+
+        var handler = CreateHandler();
+
+        var result = await handler.HandleAsync(new GetAthleteEvolutionQuery(athleteId));
+
+        Assert.NotNull(result);
+        Assert.True(result.StrengthUnavailable);
+        Assert.Empty(result.Strength);
+    }
+
+    [Fact]
+    public async Task HandleAsync_AtletaDeOtroPf_LanzaAthleteNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+
+        _athleteAccessGuard
+            .Setup(g => g.EnsureCanReadAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new AthleteNotFoundException());
+
+        var handler = CreateHandler();
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
+            handler.HandleAsync(new GetAthleteEvolutionQuery(athleteId)));
+
+        _trainingClient.Verify(
+            c => c.GetAthleteRecordsAsync(It.IsAny<Guid>(), It.IsAny<DateOnly?>(), It.IsAny<DateOnly?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

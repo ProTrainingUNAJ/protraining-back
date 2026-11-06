@@ -5,6 +5,7 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
@@ -27,11 +28,17 @@ public class CheckInsControllerTests
 
     private CheckInsController CreateController(string? role = null)
     {
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.IsInRole(It.IsAny<string>()))
+            .Returns<string>(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
+        var guard = new AthleteAccessGuard(currentUserMock.Object, _estructura.Object);
+
         var controller = new CheckInsController(
             new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine),
             new ListAthleteCheckInsQueryHandler(_checkIns.Object),
             new GetTodayCheckInQueryHandler(_checkIns.Object),
-            _estructura.Object);
+            _estructura.Object,
+            guard);
 
         var claims = new List<Claim>();
         if (!string.IsNullOrEmpty(role))

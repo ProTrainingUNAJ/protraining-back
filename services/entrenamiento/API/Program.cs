@@ -3,6 +3,7 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.Services;
 using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.AthleteRecord.ConfirmRecordsImport;
 using Application.UseCases.AthleteRecord.GetRecordsReliability;
@@ -79,6 +80,7 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilien
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
 builder.Services.AddScoped<AssignPlanCommandHandler>();
 builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();

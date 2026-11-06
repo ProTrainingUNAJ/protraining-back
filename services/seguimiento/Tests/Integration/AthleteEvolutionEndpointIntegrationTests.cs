@@ -26,20 +26,35 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
     }
 
     [Fact]
-    public async Task GetEvolution_RolAtleta_Devuelve403()
+    public async Task GetEvolution_RolAtleta_MismoAtleta_Devuelve200()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondWith(HttpStatusCode.OK, $"{{\"athleteId\":\"{_athleteId}\"}}");
+        factory.Training.RespondWith(HttpStatusCode.OK, "[]");
 
         var client = factory.CreateAuthenticatedClient(_pfId, role: "Atleta");
         var response = await client.GetAsync(Endpoint(_athleteId));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetEvolution_RolAtleta_AtletaAjeno_Devuelve404()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondWith(HttpStatusCode.OK, $"{{\"athleteId\":\"{Guid.NewGuid()}\"}}");
+
+        var client = factory.CreateAuthenticatedClient(_pfId, role: "Atleta");
+        var response = await client.GetAsync(Endpoint(_athleteId));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
     public async Task GetEvolution_RolPf_Devuelve200ConCurvas()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
 
         // 1. Sembrar check-in local
         var nowUtc = DateTime.UtcNow;
@@ -106,6 +121,7 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
         var evolution = await response.Content.ReadFromJsonAsync<AthleteEvolutionResponseDto>();
         Assert.NotNull(evolution);
         Assert.Equal(_athleteId, evolution.AthleteId);
+        Assert.False(evolution.StrengthUnavailable);
 
         // Curvas de fuerza
         Assert.Single(evolution.Strength);
@@ -123,5 +139,36 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
         Assert.Equal(3, evolution.Wellness.FatiguePoints[0].Value);
         Assert.Single(evolution.Wellness.DailyPoints);
         Assert.Equal(3, evolution.Wellness.DailyPoints[0].FatigueLevel);
+    }
+
+    [Fact]
+    public async Task GetEvolution_RolPf_AtletaDeOtroPf_Devuelve404()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        // Estructura responde 404 (el atleta no existe o no es de este PF)
+        factory.Structure.RespondWith(HttpStatusCode.NotFound, "");
+
+        var client = factory.CreateAuthenticatedClient(_pfId, role: "PreparadorFisico");
+        var response = await client.GetAsync(Endpoint(_athleteId));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetEvolution_RolPf_EntrenamientoCaido_Devuelve200ConStrengthUnavailableTrue()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        factory.Structure.RespondAllAthletesAreOwn();
+        factory.Training.SimulateDown();
+
+        var client = factory.CreateAuthenticatedClient(_pfId, role: "PreparadorFisico");
+        var response = await client.GetAsync(Endpoint(_athleteId));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var evolution = await response.Content.ReadFromJsonAsync<AthleteEvolutionResponseDto>();
+        Assert.NotNull(evolution);
+        Assert.True(evolution.StrengthUnavailable);
+        Assert.Empty(evolution.Strength);
     }
 }

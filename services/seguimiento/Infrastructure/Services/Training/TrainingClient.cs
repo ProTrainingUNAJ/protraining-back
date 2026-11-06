@@ -9,7 +9,7 @@ public sealed class TrainingClient(
     HttpClient httpClient,
     ILogger<TrainingClient> logger) : ITrainingClient
 {
-    public async Task<IReadOnlyList<AthleteRecordRemoteDto>> GetAthleteRecordsAsync(
+    public async Task<TrainingRecordsResultDto> GetAthleteRecordsAsync(
         Guid athleteId,
         DateOnly? from = null,
         DateOnly? to = null,
@@ -30,11 +30,11 @@ public sealed class TrainingClient(
                     "El microservicio de Entrenamiento respondió con status {StatusCode} al obtener los récords del atleta {AthleteId}.",
                     response.StatusCode,
                     athleteId);
-                return [];
+                return new TrainingRecordsResultDto([], IsUnavailable: true);
             }
 
             var records = await response.Content.ReadFromJsonAsync<List<AthleteRecordRemoteDto>>(cancellationToken);
-            return records ?? [];
+            return new TrainingRecordsResultDto(records ?? [], IsUnavailable: false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -46,7 +46,7 @@ public sealed class TrainingClient(
                 ex,
                 "Error de red o comunicación con el microservicio de Entrenamiento al obtener récords del atleta {AthleteId}.",
                 athleteId);
-            return [];
+            return new TrainingRecordsResultDto([], IsUnavailable: true);
         }
     }
 }

@@ -18,18 +18,18 @@ namespace API.Controllers
         private readonly GetTodayRoutineQueryHandler queryHandler;
         private readonly ListAthleteRecordsQueryHandler listRecordsHandler;
         private readonly RegisterAthleteRecordCommandHandler registerRecordHandler;
-        private readonly IStructureClient structureClient;
+        private readonly IAthleteAccessGuard athleteAccessGuard;
 
         public AthleteController(
             GetTodayRoutineQueryHandler queryHandler,
             ListAthleteRecordsQueryHandler listRecordsHandler,
             RegisterAthleteRecordCommandHandler registerRecordHandler,
-            IStructureClient structureClient)
+            IAthleteAccessGuard athleteAccessGuard)
         {
             this.queryHandler = queryHandler;
             this.listRecordsHandler = listRecordsHandler;
             this.registerRecordHandler = registerRecordHandler;
-            this.structureClient = structureClient;
+            this.athleteAccessGuard = athleteAccessGuard;
         }
 
         [HttpGet("{athleteId:guid}/today-routine")]
@@ -55,20 +55,7 @@ namespace API.Controllers
             [FromQuery] DateOnly? to = null,
             CancellationToken cancellationToken = default)
         {
-            if (User.IsInRole("PreparadorFisico"))
-            {
-                var athlete = await structureClient.GetAthleteByIdAsync(athleteId, cancellationToken);
-                if (athlete == null)
-                    throw new NotFoundException($"No se encontró el atleta con ID '{athleteId}'.");
-            }
-            else
-            {
-                var me = await structureClient.GetMeAsync(cancellationToken);
-                if (me is null)
-                    throw new NotFoundException("No se encontró un perfil de atleta vinculado a la cuenta actual.");
-                if (me.AthleteId != athleteId)
-                    throw new NotFoundException($"No se encontró el atleta con ID '{athleteId}'.");
-            }
+            await athleteAccessGuard.EnsureCanReadAsync(athleteId, cancellationToken);
 
             var result = await listRecordsHandler.Handle(
                 new ListAthleteRecordsQuery(athleteId, currentOnly, exerciseId, from, to),

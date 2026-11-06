@@ -7,7 +7,7 @@ namespace API.Controllers.Evolution;
 
 [ApiController]
 [Route("api/v1/athletes/{athleteId:guid}/evolution")]
-[Authorize(Roles = "PreparadorFisico")]
+[Authorize]
 public sealed class AthleteEvolutionController(GetAthleteEvolutionQueryHandler queryHandler) : ControllerBase
 {
     [HttpGet]
