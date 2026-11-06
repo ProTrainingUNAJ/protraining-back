@@ -36,6 +36,10 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
         var response = await client.GetAsync(Endpoint(_athleteId));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var evolution = await response.Content.ReadFromJsonAsync<AthleteEvolutionResponseDto>();
+        Assert.NotNull(evolution);
+        Assert.Empty(evolution.WeeklyLoads);
     }
 
     [Fact]
@@ -83,6 +87,14 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
                 Value = 44.5m,
                 Attempt = 1,
                 RecordedAt = nowUtc
+            });
+
+            context.DailyLoads.Add(new DailyLoad
+            {
+                AthleteId = _athleteId,
+                Date = nowUtc.Date,
+                GymMinutes = 60,
+                GymRpe = 8
             });
 
             await context.SaveChangesAsync();
@@ -139,6 +151,10 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
         Assert.Equal(3, evolution.Wellness.FatiguePoints[0].Value);
         Assert.Single(evolution.Wellness.DailyPoints);
         Assert.Equal(3, evolution.Wellness.DailyPoints[0].FatigueLevel);
+
+        // Curvas de carga semanal acumulada (solo para PF)
+        Assert.NotEmpty(evolution.WeeklyLoads);
+        Assert.Contains(evolution.WeeklyLoads, w => w.TotalLoad == 480 && w.TotalMinutes == 60);
     }
 
     [Fact]

@@ -1408,6 +1408,7 @@ components:
         - strength
         - fitnessTests
         - wellness
+        - weeklyLoads
         - strengthUnavailable
       properties:
         athleteId:
@@ -1434,6 +1435,11 @@ components:
             $ref: '#/components/schemas/FitnessTestEvolutionSeries'
         wellness:
           $ref: '#/components/schemas/WellnessEvolution'
+        weeklyLoads:
+          type: array
+          description: Series de carga semanal acumulada (lunes a domingo en hora de Argentina). Solo disponible para el Preparador Físico; para el atleta se devuelve un arreglo vacío.
+          items:
+            $ref: '#/components/schemas/WeeklyLoadEvolutionPoint'
         strengthUnavailable:
           type: boolean
           description: Indica si el servicio de Entrenamiento no estuvo disponible para consultar los récords (modo degradado).
@@ -1567,6 +1573,31 @@ components:
         hasActiveInjury:
           type: boolean
           example: false
+
+    WeeklyLoadEvolutionPoint:
+      type: object
+      required:
+        - weekStartDate
+        - weekEndDate
+        - totalLoad
+        - totalMinutes
+      properties:
+        weekStartDate:
+          type: string
+          format: date
+          example: "2026-10-12"
+        weekEndDate:
+          type: string
+          format: date
+          example: "2026-10-18"
+        totalLoad:
+          type: integer
+          description: Carga semanal acumulada (suma de minutos × RPE de todas las actividades). Las semanas sin actividad registrada se devuelven en 0.
+          example: 1850
+        totalMinutes:
+          type: integer
+          description: Minutos totales de actividad física en la semana.
+          example: 320
 
     CreateInjuryRequest:
       type: object

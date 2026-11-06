@@ -38,6 +38,13 @@ public sealed record WellnessEvolutionDto(
     IReadOnlyList<DailyWellnessPointDto> DailyPoints
 );
 
+public sealed record WeeklyLoadEvolutionPointDto(
+    DateOnly WeekStartDate,
+    DateOnly WeekEndDate,
+    int TotalLoad,
+    int TotalMinutes
+);
+
 public sealed record AthleteEvolutionResponseDto(
     Guid AthleteId,
     DateOnly From,
@@ -45,6 +52,7 @@ public sealed record AthleteEvolutionResponseDto(
     IReadOnlyList<StrengthEvolutionSeriesDto> Strength,
     IReadOnlyList<FitnessTestEvolutionSeriesDto> FitnessTests,
     WellnessEvolutionDto Wellness,
+    IReadOnlyList<WeeklyLoadEvolutionPointDto> WeeklyLoads,
     bool StrengthUnavailable = false
 );
 
