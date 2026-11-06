@@ -9,7 +9,9 @@ public sealed class GetAthleteEvolutionQueryHandler(
     ITrainingClient trainingClient,
     IFieldTestResultRepository fieldTestResultRepository,
     ICheckInRepository checkInRepository,
-    IAthleteAccessGuard athleteAccessGuard)
+    IAthleteAccessGuard athleteAccessGuard,
+    IDailyLoadRepository dailyLoadRepository,
+    ICurrentUser currentUser)
 {
     public async Task<AthleteEvolutionResponseDto> HandleAsync(
         GetAthleteEvolutionQuery query,
@@ -122,6 +124,54 @@ public sealed class GetAthleteEvolutionQueryHandler(
 
         var wellness = new WellnessEvolutionDto(fatiguePoints, dailyPoints);
 
+        // 4. Series de carga semanal acumulada (solo para PreparadorFisico)
+        IReadOnlyList<WeeklyLoadEvolutionPointDto> weeklyLoads;
+        if (currentUser.IsInRole("PreparadorFisico"))
+        {
+            var dailyLoads = await dailyLoadRepository.GetByAthleteAndDateRangeAsync(
+                query.AthleteId,
+                fromDate,
+                toDate,
+                cancellationToken);
+
+            var loadsByWeek = dailyLoads
+                .GroupBy(load => GetWeekStart(ToArgentinaDate(load.Date)))
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var startMonday = GetWeekStart(fromDate);
+            var points = new List<WeeklyLoadEvolutionPointDto>();
+
+            if (fromDate <= toDate)
+            {
+                for (var weekStart = startMonday; weekStart <= toDate; weekStart = weekStart.AddDays(7))
+                {
+                    var weekEnd = weekStart.AddDays(6);
+                    if (loadsByWeek.TryGetValue(weekStart, out var weekLoads))
+                    {
+                        points.Add(new WeeklyLoadEvolutionPointDto(
+                            weekStart,
+                            weekEnd,
+                            weekLoads.Sum(l => l.TotalLoad),
+                            weekLoads.Sum(l => l.TotalMinutes)));
+                    }
+                    else
+                    {
+                        points.Add(new WeeklyLoadEvolutionPointDto(
+                            weekStart,
+                            weekEnd,
+                            0,
+                            0));
+                    }
+                }
+            }
+
+            weeklyLoads = points;
+        }
+        else
+        {
+            weeklyLoads = Array.Empty<WeeklyLoadEvolutionPointDto>();
+        }
+
         return new AthleteEvolutionResponseDto(
             query.AthleteId,
             fromDate,
@@ -129,6 +179,18 @@ public sealed class GetAthleteEvolutionQueryHandler(
             strengthSeries,
             fitnessSeries,
             wellness,
+            weeklyLoads,
             trainingResult.IsUnavailable);
+    }
+
+    private static DateOnly GetWeekStart(DateOnly date) =>
+        date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+
+    private static DateOnly ToArgentinaDate(DateTime date)
+    {
+        if (date.Kind == DateTimeKind.Utc && date.TimeOfDay != TimeSpan.Zero)
+            return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(date, ArgentinaTime.ZonaArgentina));
+
+        return DateOnly.FromDateTime(date);
     }
 }
