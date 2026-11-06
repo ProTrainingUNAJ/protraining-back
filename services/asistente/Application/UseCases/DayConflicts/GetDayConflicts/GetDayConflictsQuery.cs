@@ -35,7 +35,8 @@ public sealed class GetDayConflictsQueryHandler(
                 HasConflicts: false,
                 PainZones: null,
                 Conflicts: [],
-                Message: MissingCheckInMessage);
+                Message: MissingCheckInMessage,
+                SessionId: routine.SessionId);
         }
 
         // 3. Si no reportó zonas de dolor o no tiene ejercicios hoy, no hay conflictos.
@@ -45,7 +46,9 @@ public sealed class GetDayConflictsQueryHandler(
             return new DayConflictsResponseDto(
                 HasConflicts: false,
                 PainZones: checkIn.PainZones,
-                Conflicts: []);
+                Conflicts: [],
+                Message: null,
+                SessionId: routine.SessionId);
         }
 
         var exerciseIds = exercises
@@ -59,7 +62,9 @@ public sealed class GetDayConflictsQueryHandler(
             return new DayConflictsResponseDto(
                 HasConflicts: false,
                 PainZones: checkIn.PainZones,
-                Conflicts: []);
+                Conflicts: [],
+                Message: null,
+                SessionId: routine.SessionId);
         }
 
         // 4. Cruzar painZones con los ejercicios de la rutina en Entrenamiento.
@@ -87,6 +92,8 @@ public sealed class GetDayConflictsQueryHandler(
         return new DayConflictsResponseDto(
             HasConflicts: conflicts.Count > 0,
             PainZones: checkIn.PainZones,
-            Conflicts: conflicts);
+            Conflicts: conflicts,
+            Message: null,
+            SessionId: routine.SessionId);
     }
 }

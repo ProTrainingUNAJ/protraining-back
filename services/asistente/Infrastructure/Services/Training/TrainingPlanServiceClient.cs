@@ -2,18 +2,20 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PlanDrafts;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services.Training;
 
 /// <summary>
 /// Cliente HTTP hacia el microservicio de Entrenamiento para crear una planificación
-/// y asignarla al aprobar un borrador de IA (#116 · KAN-411) y para consultar la rutina de hoy
-/// y sus restricciones biomecánicas por dolor (#156 · KAN-451).
+/// y asignarla al aprobar un borrador de IA (#116 · KAN-411), consultar la rutina de hoy
+/// y sus restricciones biomecánicas por dolor (#156 · KAN-451) y aplicar el ajuste del día (#157 · KAN-452).
 /// Reenvía el token del preparador físico mediante ForwardAuthorizationHandler.
 /// </summary>
 public sealed class TrainingPlanServiceClient(
@@ -268,6 +270,65 @@ public sealed class TrainingPlanServiceClient(
                     logger.LogError(
                         "Entrenamiento respondió {StatusCode} al chequear restricciones de ejercicios.",
                         (int)response.StatusCode);
+                    throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+            }
+        }
+    }
+
+    public async Task ApplyAthleteSessionAdjustmentAsync(
+        Guid sessionId,
+        ApplyAthleteAdjustmentRequestRemoteDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (httpClient.BaseAddress is null)
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.PostAsJsonAsync(
+                $"api/v1/training-sessions/{sessionId}/athlete-adjustments",
+                request,
+                JsonOptions,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                "Error de comunicación con Entrenamiento al aplicar ajuste de sesión {SessionId} para atleta {AthleteId}: {ErrorType}.",
+                sessionId,
+                request.AthleteId,
+                ex.GetType().Name);
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage, ex);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                case HttpStatusCode.Created:
+                case HttpStatusCode.NoContent:
+                    return;
+
+                case HttpStatusCode.NotFound:
+                    throw new NotFoundException("La sesión de entrenamiento a ajustar no fue encontrada.");
+
+                case HttpStatusCode.Unauthorized:
+                    throw new UnauthorizedAccessException();
+
+                default:
+                    logger.LogError(
+                        "Entrenamiento respondió {StatusCode} al aplicar ajuste de sesión {SessionId} para atleta {AthleteId}.",
+                        (int)response.StatusCode,
+                        sessionId,
+                        request.AthleteId);
                     throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
             }
         }

@@ -1,4 +1,6 @@
 using Application.Common.PlanDrafts;
+using Application.Common.DayAdjustments;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
 using Application.Exceptions;
 using Domain.Exceptions;
@@ -387,5 +389,49 @@ public sealed class ResilientAiService : IAiService
         _logger.LogError("Los tres proveedores de IA fallaron al generar el borrador de planificación tras {ElapsedMs} ms.", totalStopwatch.ElapsedMilliseconds);
 
         throw new AiServiceUnavailableException("El servicio de generación de planificaciones con inteligencia artificial no se encuentra disponible. Por favor intente más tarde.");
+    }
+
+    public async Task<(string Justification, string Provider)> GenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var justification = await provider.TryGenerateDayAdjustmentJustificationAsync(items, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (!string.IsNullOrWhiteSpace(justification))
+                {
+                    return (justification.Trim(), provider.ProviderName);
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la justificación del ajuste del día tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(ex, "Excepción en proveedor '{Provider}' al redactar justificación de ajuste del día. Pasando al siguiente respaldo.", provider.ProviderName);
+            }
+        }
+
+        return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas");
     }
 }

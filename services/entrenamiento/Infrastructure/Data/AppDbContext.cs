@@ -28,6 +28,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<PerformedSet> PerformedSets => Set<PerformedSet>();
     public DbSet<RecordProposal> RecordProposals => Set<RecordProposal>();
     public DbSet<ExerciseVideo> ExerciseVideos => Set<ExerciseVideo>();
+    public DbSet<AthleteSessionAdjustment> AthleteSessionAdjustments => Set<AthleteSessionAdjustment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

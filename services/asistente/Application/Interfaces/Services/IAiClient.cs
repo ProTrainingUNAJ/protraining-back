@@ -1,6 +1,8 @@
 namespace Application.Interfaces.Services;
 
+using Application.Common.DayAdjustments;
 using Application.DTOs.Ai;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
 
 public interface IAiClient
@@ -15,4 +17,9 @@ public interface IAiClient
         CreatePlanDraftRequestDto request,
         IReadOnlyList<DateOnly>? matchDates = null,
         CancellationToken cancellationToken = default);
+
+    Task<string?> TryGenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
 }

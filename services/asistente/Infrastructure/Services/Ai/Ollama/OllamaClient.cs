@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Ai;
+using Application.Common.DayAdjustments;
 using Application.Common.PlanDrafts;
 using Application.DTOs.Ai;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Services;
 using Domain.Entities;
@@ -174,6 +176,66 @@ public sealed class OllamaClient(
                 validationResult: "ErrorConexion",
                 athleteId: request.AthleteId,
                 errorMessage: ex.Message));
+            return null;
+        }
+    }
+
+    public async Task<string?> TryGenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (items.Count == 0)
+            return null;
+
+        var stopwatch = Stopwatch.StartNew();
+        var prompt = DayAdjustmentMapper.BuildJustificationPrompt(items);
+
+        try
+        {
+            var payload = new
+            {
+                model = _options.Model,
+                prompt,
+                format = "json",
+                stream = false
+            };
+
+            var url = $"{_options.BaseUrl.TrimEnd('/')}/api/generate";
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
+            using var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("Ollama respondió con error {StatusCode} al redactar justificación de ajuste del día. Activando respaldo.", response.StatusCode);
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var document = JsonDocument.Parse(responseBody);
+
+            if (!document.RootElement.TryGetProperty("response", out var rawTextProp))
+            {
+                stopwatch.Stop();
+                return null;
+            }
+
+            var justification = DayAdjustmentMapper.ExtractJustificationFromModelOutput(rawTextProp.GetString());
+            stopwatch.Stop();
+            return string.IsNullOrWhiteSpace(justification) ? null : justification;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning(ex, "Ollama no estuvo disponible para redactar la justificación del ajuste del día. Activando respaldo.");
             return null;
         }
     }

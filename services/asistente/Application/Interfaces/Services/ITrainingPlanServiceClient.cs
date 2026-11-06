@@ -1,3 +1,4 @@
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PlanDrafts;
 
@@ -10,8 +11,8 @@ public sealed record AssignTrainingPlanResult(
 
 /// <summary>
 /// Cliente HTTP hacia el microservicio de Entrenamiento para crear y asignar
-/// la planificación aprobada (#116 · KAN-411) y consultar la rutina del día y
-/// restricciones por dolor (#156 · KAN-451).
+/// la planificación aprobada (#116 · KAN-411), consultar la rutina del día y
+/// restricciones por dolor (#156 · KAN-451) y aplicar el ajuste del día (#157 · KAN-452).
 /// </summary>
 public interface ITrainingPlanServiceClient
 {
@@ -30,5 +31,10 @@ public interface ITrainingPlanServiceClient
     Task<IReadOnlyList<ExerciseRestrictionCheckResultRemoteDto>> CheckExerciseRestrictionsAsync(
         string painZones,
         IReadOnlyList<Guid> exerciseIds,
+        CancellationToken cancellationToken = default);
+
+    Task ApplyAthleteSessionAdjustmentAsync(
+        Guid sessionId,
+        ApplyAthleteAdjustmentRequestRemoteDto request,
         CancellationToken cancellationToken = default);
 }

@@ -3,8 +3,10 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Ai;
+using Application.Common.DayAdjustments;
 using Application.Common.PlanDrafts;
 using Application.DTOs.Ai;
+using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Services;
 using Domain.Entities;
@@ -148,6 +150,84 @@ public sealed class GeminiClient(
                 validationResult: "ErrorConexion",
                 athleteId: request.AthleteId,
                 errorMessage: ex.Message));
+            return null;
+        }
+    }
+
+    public async Task<string?> TryGenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (items.Count == 0 || string.IsNullOrWhiteSpace(_options.ApiKey))
+            return null;
+
+        var stopwatch = Stopwatch.StartNew();
+        var prompt = DayAdjustmentMapper.BuildJustificationPrompt(items);
+
+        try
+        {
+            var payload = new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        parts = new[]
+                        {
+                            new { text = prompt }
+                        }
+                    }
+                },
+                generationConfig = new
+                {
+                    responseMimeType = "application/json",
+                    temperature = 0.2
+                }
+            };
+
+            var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://generativelanguage.googleapis.com" : _options.BaseUrl.TrimEnd('/');
+            var url = $"{baseUrl}/v1beta/models/{_options.Model}:generateContent";
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, url);
+            requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", _options.ApiKey);
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
+            using var response = await httpClient.SendAsync(requestMessage, timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("Gemini respondió con error {StatusCode} al redactar justificación de ajuste del día. Activando respaldo.", response.StatusCode);
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var document = JsonDocument.Parse(responseBody);
+            var root = document.RootElement;
+
+            if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
+                return null;
+
+            var text = candidates[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+
+            var justification = DayAdjustmentMapper.ExtractJustificationFromModelOutput(text);
+            stopwatch.Stop();
+            return string.IsNullOrWhiteSpace(justification) ? null : justification;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning(ex, "Gemini no estuvo disponible para redactar la justificación del ajuste del día. Activando respaldo.");
             return null;
         }
     }
