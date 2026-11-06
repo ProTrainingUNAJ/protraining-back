@@ -66,7 +66,7 @@ public sealed class ExerciseRestrictionsEndpointPostgresTests
             var restrictionRepo = new ExerciseRestrictionRepository(queryContext);
             var checker = new ExerciseRestrictionChecker();
 
-            var listHandler = new ListExercisesQueryHandler(exerciseRepo);
+            var listHandler = new ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(queryContext));
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 

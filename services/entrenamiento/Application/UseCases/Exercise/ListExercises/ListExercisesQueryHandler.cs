@@ -9,9 +9,9 @@ namespace Application.UseCases.Exercise.ListExercises
         private const int DefaultPageSize = 20;
 
         private readonly IExerciseRepository exerciseRepository;
-        private readonly IExerciseVideoRepository? exerciseVideoRepository;
+        private readonly IExerciseVideoRepository exerciseVideoRepository;
 
-        public ListExercisesQueryHandler(IExerciseRepository exerciseRepository, IExerciseVideoRepository? exerciseVideoRepository = null)
+        public ListExercisesQueryHandler(IExerciseRepository exerciseRepository, IExerciseVideoRepository exerciseVideoRepository)
         {
             this.exerciseRepository = exerciseRepository;
             this.exerciseVideoRepository = exerciseVideoRepository;
@@ -42,6 +42,7 @@ namespace Application.UseCases.Exercise.ListExercises
                     request.Equipment,
                     request.MuscleGroup,
                     request.Muscle,
+                    request.ExerciseType,
                     request.UsedByPf,
                     page,
                     pageSize,
@@ -68,6 +69,7 @@ namespace Application.UseCases.Exercise.ListExercises
                     request.Equipment,
                     request.MuscleGroup,
                     request.Muscle,
+                    request.ExerciseType,
                     request.UsedByPf,
                     page,
                     pageSize,
@@ -77,55 +79,39 @@ namespace Application.UseCases.Exercise.ListExercises
                 totalCount = total;
             }
 
-            if (exerciseVideoRepository != null)
+            var allIds = exercisesDto
+                .Select(e => e.Id)
+                .Concat(exercisesDto.SelectMany(e => e.Variants ?? []).Select(v => v.Id))
+                .Distinct()
+                .ToList();
+
+            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(allIds, cancellationToken)
+                ?? new Dictionary<Guid, string>();
+
+            void ApplyVideo(ExerciseDto dto)
             {
-                var allIds = exercisesDto
-                    .Select(e => e.Id)
-                    .Concat(exercisesDto.SelectMany(e => e.Variants ?? []).Select(v => v.Id))
-                    .Distinct()
-                    .ToList();
-
-                var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(allIds, cancellationToken);
-
-                void ApplyVideo(ExerciseDto dto)
+                if (pfVideos.TryGetValue(dto.Id, out var pfVideoUrl))
                 {
-                    if (pfVideos.TryGetValue(dto.Id, out var pfVideoUrl))
-                    {
-                        dto.VideoUrl = pfVideoUrl;
-                        dto.VideoSource = "Pf";
-                    }
-                    else
-                    {
-                        dto.VideoSource = string.IsNullOrEmpty(dto.VideoUrl) ? null : "Catalog";
-                    }
-
-                    if (dto.Variants != null)
-                    {
-                        foreach (var v in dto.Variants)
-                        {
-                            ApplyVideo(v);
-                        }
-                    }
+                    dto.VideoUrl = pfVideoUrl;
+                    dto.VideoSource = "Pf";
                 }
-
-                foreach (var dto in exercisesDto)
-                {
-                    ApplyVideo(dto);
-                }
-            }
-            else
-            {
-                foreach (var dto in exercisesDto)
+                else
                 {
                     dto.VideoSource = string.IsNullOrEmpty(dto.VideoUrl) ? null : "Catalog";
-                    if (dto.Variants != null)
+                }
+
+                if (dto.Variants != null)
+                {
+                    foreach (var v in dto.Variants)
                     {
-                        foreach (var v in dto.Variants)
-                        {
-                            v.VideoSource = string.IsNullOrEmpty(v.VideoUrl) ? null : "Catalog";
-                        }
+                        ApplyVideo(v);
                     }
                 }
+            }
+
+            foreach (var dto in exercisesDto)
+            {
+                ApplyVideo(dto);
             }
 
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
@@ -147,7 +133,8 @@ namespace Application.UseCases.Exercise.ListExercises
             SecondaryMuscles = e.SecondaryMuscles,
             ParentExerciseId = e.ParentExerciseId,
             VariantLabel = e.VariantLabel,
-            Origin = e.Origin
+            Origin = e.Origin,
+            ExerciseType = e.ExerciseType
         };
     }
 }

@@ -71,5 +71,6 @@ public static class DependencyInjection
         await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
         await ExerciseNameSyncSeeder.SeedAsync(context, dataDirectory, logger);
         await ExerciseVariantSeeder.SeedAsync(context, dataDirectory, logger);
+        await EnduranceExerciseSeeder.SeedAsync(context, logger);
     }
 }

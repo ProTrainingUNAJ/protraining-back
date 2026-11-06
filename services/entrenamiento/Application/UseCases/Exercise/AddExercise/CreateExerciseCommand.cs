@@ -11,5 +11,6 @@ namespace Application.UseCases.Exercise.AddExercise
         public string? Equipment { get; set; }
         public string? Instructions { get; set; }
         public Origin? Origin { get; set; }
+        public ExerciseType? ExerciseType { get; set; }
     }
 }

@@ -15,6 +15,7 @@ public class GetTodayRoutineQueryHandlerTests
     private readonly Mock<ITrainingSessionRepository> _sessionRepoMock = new();
     private readonly Mock<IAthleteRecordRepository> _athleteRecordRepoMock = new();
     private readonly Mock<IStructureClient> _structureClientMock = new();
+    private readonly Mock<IExerciseVideoRepository> _videoRepoMock = new();
     private readonly LoadCalculatorEngine _loadCalculatorEngine = new();
 
     public GetTodayRoutineQueryHandlerTests()
@@ -27,7 +28,7 @@ public class GetTodayRoutineQueryHandlerTests
 
     private GetTodayRoutineQueryHandler CreateHandler()
     {
-        return new(_athleteRecordRepoMock.Object, _sessionRepoMock.Object, _loadCalculatorEngine, _structureClientMock.Object);
+        return new(_athleteRecordRepoMock.Object, _sessionRepoMock.Object, _loadCalculatorEngine, _structureClientMock.Object, _videoRepoMock.Object);
     }
 
     [Fact]

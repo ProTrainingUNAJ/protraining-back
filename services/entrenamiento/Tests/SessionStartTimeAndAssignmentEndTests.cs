@@ -168,7 +168,7 @@ public class SessionStartTimeAndAssignmentEndTests
         structure.Setup(client => client.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
         var handler = new GetTodayRoutineQueryHandler(
-            Mock.Of<IAthleteRecordRepository>(), sessions.Object, new LoadCalculatorEngine(), structure.Object);
+            Mock.Of<IAthleteRecordRepository>(), sessions.Object, new LoadCalculatorEngine(), structure.Object, Mock.Of<IExerciseVideoRepository>());
 
         var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId });
 

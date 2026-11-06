@@ -23,6 +23,8 @@ public class ListExercisesTests : IAsyncLifetime
         public Guid? PfId => pfId;
     }
 
+    private static IExerciseVideoRepository EmptyVideoRepo() => new Mock<IExerciseVideoRepository>().Object;
+
     public ListExercisesTests()
     {
         _connection = new SqliteConnection("DataSource=:memory:");
@@ -56,10 +58,10 @@ public class ListExercisesTests : IAsyncLifetime
             .Select(i => Exercise.Create($"Ejercicio {i}", "Pecho"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((dummyExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 20 };
@@ -88,10 +90,10 @@ public class ListExercisesTests : IAsyncLifetime
             Exercise.Create("Sentadilla Goblet", "Piernas")
         };
 
-        repoMock.Setup(r => r.ListAsync("sentadilla", null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("sentadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((sentadillas, 5));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Search = "sentadilla", Page = 1, PageSize = 20 };
@@ -114,10 +116,10 @@ public class ListExercisesTests : IAsyncLifetime
             .Select(i => Exercise.Create($"Ejercicio {i}", "Espalda"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, false, 44, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 44, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((lastPageExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Page = 44, PageSize = 20 };
@@ -141,10 +143,10 @@ public class ListExercisesTests : IAsyncLifetime
             .Select(i => Exercise.Create($"Ejercicio {i}", "Piernas"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync((exercises100, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 500 };
@@ -156,7 +158,7 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.Equal(100, result.Items.Count);
         Assert.Equal(876, result.TotalCount);
         Assert.Equal(9, result.TotalPages);
-        repoMock.Verify(r => r.ListAsync(null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -168,10 +170,10 @@ public class ListExercisesTests : IAsyncLifetime
             .Select(i => Exercise.Create($"Ejercicio {i}", "Brazos"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((defaultExercises, 100));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Page = 0, PageSize = -5 };
@@ -183,7 +185,7 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.Equal(20, result.Items.Count);
         Assert.Equal(100, result.TotalCount);
         Assert.Equal(5, result.TotalPages);
-        repoMock.Verify(r => r.ListAsync(null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -191,10 +193,10 @@ public class ListExercisesTests : IAsyncLifetime
     {
         // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
-        repoMock.Setup(r => r.ListAsync("inexistente", null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("inexistente", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Search = "inexistente" };
@@ -217,10 +219,10 @@ public class ListExercisesTests : IAsyncLifetime
             Exercise.Create("Press de banca", "Pecho")
         };
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((pfExercises, 2));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { UsedByPf = true, Page = 1, PageSize = 20 };
@@ -230,7 +232,7 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.NotNull(result);
         Assert.Equal(2, result.Items.Count);
         Assert.Equal(2, result.TotalCount);
-        repoMock.Verify(r => r.ListAsync(null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -244,10 +246,10 @@ public class ListExercisesTests : IAsyncLifetime
             Exercise.Create("Sentadilla frontal", "Piernas")
         };
 
-        repoMock.Setup(r => r.ListAsync("setnadilla", null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("setnadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((sentadillas, 2));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
 
         // ACT
         var query = new ListExercisesQuery { Search = "setnadilla", Page = 1, PageSize = 20 };
@@ -275,7 +277,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, false, 1, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 1, 10);
 
             // ASSERT
             Assert.Equal(10, items.Count);
@@ -304,7 +306,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", null, false, 1, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", null, null, false, 1, 10);
 
             // ASSERT
             Assert.Equal(10, items.Count);
@@ -330,7 +332,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, false, 3, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 3, 10);
 
             // ASSERT
             Assert.Equal(5, items.Count);
@@ -369,7 +371,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, true, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
 
             // ASSERT: Solo los 3 ejercicios del plan
             Assert.Equal(3, totalCount);
@@ -412,7 +414,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, true, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
 
             // ASSERT: 3 ejercicios (2 del plan + 1 del récord)
             Assert.Equal(3, totalCount);
@@ -469,7 +471,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext2 = CreateContext(pf2Id))
         {
             var repo = new ExerciseRepository(actContext2);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, true, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
 
             // ASSERT: PF 2 solo ve su propio ejercicio, NO el de PF 1
             Assert.Equal(1, totalCount);
@@ -494,7 +496,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext(pfNuevo))
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, true, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
 
             // ASSERT
             Assert.Empty(items);
@@ -526,7 +528,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, false, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 1, 20);
 
             // ASSERT: Retorna todos los ejercicios del catálogo
             Assert.True(totalCount >= 2);
@@ -575,7 +577,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "isquiotibiales", false, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "isquiotibiales", null, false, 1, 20);
 
             Assert.Equal(2, totalCount);
             Assert.Contains(items, e => e.Name == "Peso muerto rumano");
@@ -590,16 +592,16 @@ public class ListExercisesTests : IAsyncLifetime
         var repoMock = new Mock<IExerciseRepository>();
         var rdl = Exercise.Create("Peso muerto rumano", "Piernas", primaryMuscles: ["isquiotibiales"]);
 
-        repoMock.Setup(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([rdl], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
         var query = new ListExercisesQuery { Search = "rumano", MuscleGroup = "Piernas", Muscle = "isquiotibiales", Page = 1, PageSize = 20 };
         var result = await handler.Handle(query);
 
         Assert.Single(result.Items);
         Assert.Equal("Peso muerto rumano", result.Items[0].Name);
-        repoMock.Verify(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", null, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -608,7 +610,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "musculo_sin_ejercicios", false, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "musculo_sin_ejercicios", null, false, 1, 20);
 
             Assert.Empty(items);
             Assert.Equal(0, totalCount);
@@ -631,7 +633,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "cuádriceps", false, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "cuádriceps", null, false, 1, 20);
 
             Assert.Equal(1, totalCount);
             Assert.Single(items);
@@ -645,7 +647,7 @@ public class ListExercisesTests : IAsyncLifetime
         // KAN-380: PF A tiene video propio, PF B ve el video del catálogo (o ninguno)
         var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
         var exerciseRepoMock = new Mock<IExerciseRepository>();
-        exerciseRepoMock.Setup(r => r.ListAsync(null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+        exerciseRepoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([exercise], 1));
 
         // Para PF A, el repositorio devuelve su video propio
@@ -669,5 +671,50 @@ public class ListExercisesTests : IAsyncLifetime
 
         Assert.Equal("https://www.youtube.com/watch?v=catalogVid", resultPFB.Items[0].VideoUrl);
         Assert.Equal("Catalog", resultPFB.Items[0].VideoSource);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_ConFiltroExerciseType_PasaParametroAlRepositorio()
+    {
+        var repoMock = new Mock<IExerciseRepository>();
+        var sprint = Exercise.Create("Sprints", "Piernas", exerciseType: ExerciseType.Distance);
+
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, "distancia", false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([sprint], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var query = new ListExercisesQuery { ExerciseType = "distancia", Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        Assert.Single(result.Items);
+        Assert.Equal("Sprints", result.Items[0].Name);
+        Assert.Equal(ExerciseType.Distance, result.Items[0].ExerciseType);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, "distancia", false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConFiltroExerciseType_Distancia_RetornaPasadasYSprints()
+    {
+        // KAN-453: Criterio de aceptación: DADO la biblioteca CUANDO se filtra por «distancia» ENTONCES aparecen pasadas y sprints
+        var pasadas = Exercise.Create("Pasadas", "Piernas", exerciseType: ExerciseType.Distance);
+        var sprints = Exercise.Create("Sprints", "Piernas", exerciseType: ExerciseType.Distance);
+        var sentadilla = Exercise.Create("Sentadilla", "Piernas", exerciseType: ExerciseType.Weight);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(pasadas, sprints, sentadilla);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, "distancia", false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Pasadas");
+            Assert.Contains(items, e => e.Name == "Sprints");
+            Assert.DoesNotContain(items, e => e.Name == "Sentadilla");
+        }
     }
 }

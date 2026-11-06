@@ -17,6 +17,7 @@ namespace Application.DTOs.Exercise
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
         public Origin Origin { get; set; }
+        public ExerciseType ExerciseType { get; set; }
 
         // Variantes (KAN-554). En una variante, el id de su ejercicio base y la etiqueta
         // ("Agarre cerrado"). Variants solo viene con groupVariants=true, en los ejercicios base.

@@ -21,9 +21,9 @@ namespace Infrastructure.Repositories
             await context.Exercises.AddAsync(exercise, cancellationToken);
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, string? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var exercises = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, usedByPf);
+            var exercises = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, exerciseType, usedByPf);
 
             var totalCount = await exercises.CountAsync(cancellationToken);
 
@@ -41,9 +41,9 @@ namespace Infrastructure.Repositories
             return (items, totalCount);
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, string? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var matches = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, usedByPf);
+            var matches = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, exerciseType, usedByPf);
 
             // Un base entra si coincide él o alguna de sus variantes.
             var bases = context.Exercises.AsNoTracking()
@@ -126,7 +126,7 @@ namespace Infrastructure.Repositories
         }
 
 
-        private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, string? muscle, bool usedByPf)
+        private IQueryable<Exercise> ApplyFilters(IQueryable<Exercise> exercises, string? searchTerm, string? equipment, string? muscleGroup, string? muscle, string? exerciseType, bool usedByPf)
         {
             if (usedByPf)
             {
@@ -161,6 +161,25 @@ namespace Infrastructure.Repositories
                                               || targets.Any(t => e.SecondaryMuscles.Contains(t)))
                                      .OrderByDescending(e => targets.Any(t => e.PrimaryMuscles.Contains(t)))
                                      .ThenBy(e => e.Name);
+            }
+
+            if (!string.IsNullOrWhiteSpace(exerciseType))
+            {
+                var normalized = exerciseType.Trim().ToLowerInvariant();
+
+                var targetType = normalized switch
+                {
+                    "distancia" or "distance" => ExerciseType.Distance,
+                    "tiempo" or "time" => ExerciseType.Time,
+                    "repeticiones" or "reps" => ExerciseType.Reps,
+                    "con carga" or "carga" or "peso" or "weight" => ExerciseType.Weight,
+                    _ => Enum.TryParse<ExerciseType>(exerciseType, true, out var parsed) ? parsed : (ExerciseType?)null
+                };
+
+                if (targetType.HasValue)
+                {
+                    exercises = exercises.Where(e => e.ExerciseType == targetType.Value);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(searchTerm))

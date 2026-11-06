@@ -12,11 +12,11 @@ namespace Application.UseCases.Routines.GetTodayRoutine
     {
         private readonly IAthleteRecordRepository athleteRecordRepository;
         private readonly ITrainingSessionRepository trainingSessionRepository;
-        private readonly IExerciseVideoRepository? exerciseVideoRepository;
+        private readonly IExerciseVideoRepository exerciseVideoRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
 
-        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator, IStructureClient structureClient, IExerciseVideoRepository? exerciseVideoRepository = null)
+        public GetTodayRoutineQueryHandler(IAthleteRecordRepository athleteRecordRepository, ITrainingSessionRepository trainingSessionRepository, ILoadCalculatorEngine calculator, IStructureClient structureClient, IExerciseVideoRepository exerciseVideoRepository)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
@@ -76,9 +76,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             var exercisesDto = new List<TodayRoutineExerciseDto>();
 
             var prescribedExerciseIds = routine.PrescribedExercises.Select(p => p.ExerciseId).Distinct().ToList();
-            var pfVideos = exerciseVideoRepository != null
-                ? await exerciseVideoRepository.GetVideosByExerciseIdsAsync(prescribedExerciseIds, cancellationToken)
-                : new Dictionary<Guid, string>();
+            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(prescribedExerciseIds, cancellationToken)
+                ?? new Dictionary<Guid, string>();
 
             // Por cada ejercicio prescrito, resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)
