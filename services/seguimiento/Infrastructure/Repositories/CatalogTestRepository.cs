@@ -26,4 +26,12 @@ public sealed class CatalogTestRepository(AppDbContext context) : ICatalogTestRe
                 .OrderBy(test => test.Name)
                 .ToListAsync(cancellationToken);
         });
+
+    // Sin AsNoTracking: el caso de uso de confirmación cachea el exerciseId resuelto en la
+    // misma entidad y lo persiste con su SaveChanges. El filtro global deja invisible el
+    // test de otro PF (o borrado) → null → 404.
+    public async Task<CatalogTest?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.CatalogTests
+                .FirstOrDefaultAsync(test => test.Id == id, cancellationToken));
 }

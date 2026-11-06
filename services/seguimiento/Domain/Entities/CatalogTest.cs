@@ -15,9 +15,23 @@ public sealed class CatalogTest : BaseEntity
     public int DifficultyLevel { get; private set; }
     public bool Active { get; private set; }
 
+    // KAN-426: mapeo hacia el catálogo de ejercicios de Entrenamiento para los tests de
+    // fuerza en kg. TargetExerciseName es el nombre exacto del ejercicio en Entrenamiento
+    // (los catálogos no comparten ids ni nombres). ExerciseId es una caché del GUID
+    // resuelto la primera vez que se confirma: los ids de Entrenamiento se generan con
+    // Guid.NewGuid() por entorno, así que no pueden fijarse en el seed.
+    public string? TargetExerciseName { get; private set; }
+    public Guid? ExerciseId { get; private set; }
+
     private CatalogTest() { }
 
-    public CatalogTest(string name, MotorCapacity motorCapacity, string measurementUnit, int difficultyLevel = 1, bool active = true)
+    public CatalogTest(
+        string name,
+        MotorCapacity motorCapacity,
+        string measurementUnit,
+        int difficultyLevel = 1,
+        bool active = true,
+        string? targetExerciseName = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre del test no puede estar vacío.");
@@ -36,6 +50,30 @@ public sealed class CatalogTest : BaseEntity
         MeasurementUnit = measurementUnit.Trim();
         DifficultyLevel = difficultyLevel;
         Active = active;
+
+        if (targetExerciseName is not null)
+            SetTargetExercise(targetExerciseName);
+    }
+
+    // Vincula el test con el ejercicio homónimo del catálogo de Entrenamiento (KAN-426).
+    public void SetTargetExercise(string targetExerciseName)
+    {
+        if (string.IsNullOrWhiteSpace(targetExerciseName))
+            throw new DomainException("El nombre del ejercicio objetivo no puede estar vacío.");
+
+        TargetExerciseName = targetExerciseName.Trim();
+        // Cambiar el ejercicio objetivo invalida el GUID cacheado de la resolución anterior.
+        ExerciseId = null;
+    }
+
+    // Persiste el ejercicio resuelto por nombre la primera vez que se confirma (KAN-426):
+    // a partir de ahí las confirmaciones siguientes van directo contra Entrenamiento.
+    public void CacheExerciseId(Guid exerciseId)
+    {
+        if (exerciseId == Guid.Empty)
+            throw new DomainException("El ejercicio resuelto no puede ser vacío.");
+
+        ExerciseId = exerciseId;
     }
 
     public void Update(string name, MotorCapacity motorCapacity, string measurementUnit, int difficultyLevel, bool active)

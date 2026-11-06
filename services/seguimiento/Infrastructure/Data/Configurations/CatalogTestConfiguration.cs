@@ -38,6 +38,16 @@ public sealed class CatalogTestConfiguration : IEntityTypeConfiguration<CatalogT
             .IsRequired()
             .HasDefaultValue(true);
 
+        // KAN-426: mapeo test → ejercicio de Entrenamiento. Ambas columnas son nullable:
+        // solo los tests de fuerza en kg tienen objetivo, y el GUID se cachea en la primera
+        // confirmación (los ids de Entrenamiento no son estables entre entornos).
+        builder.Property(e => e.TargetExerciseName)
+            .HasColumnName("target_exercise_name")
+            .HasMaxLength(150);
+
+        builder.Property(e => e.ExerciseId)
+            .HasColumnName("exercise_id");
+
         // El índice simple por PfId ya lo crea ConfigureBaseEntities en AppDbContext.
         builder.HasIndex(e => new { e.PfId, e.Active });
     }

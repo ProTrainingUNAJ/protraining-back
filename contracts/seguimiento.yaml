@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.6.0
+  version: 1.7.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -837,6 +837,52 @@ paths:
         "409":
           $ref: '#/components/responses/Conflict'
 
+  /api/v1/field-test-sessions/{sessionId}/results/{resultId}/confirm:
+    post:
+      tags:
+        - Fitness Tests
+      summary: Confirmar un resultado de fuerza y sincronizar el 1RM
+      description: >
+        Confirma un resultado de fuerza (test en kg) y envía de forma síncrona el 1RM
+        testeado al microservicio Entrenamiento con origen TestedInSession, resolviendo
+        el ejercicio homónimo por nombre exacto la primera vez (el GUID resuelto queda
+        cacheado en la prueba del catálogo). Responde 404 si la sesión, el resultado o
+        la prueba no existen o son de otro PF; 400 si el test no genera récord 1RM o si
+        Entrenamiento no tiene un ejercicio con ese nombre; y 503 si Entrenamiento no
+        responde tras los reintentos de Polly (la confirmación no quedó registrada allí).
+        Re-confirmar reenvía el mismo valor (idempotente del lado de Entrenamiento).
+      operationId: confirmFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resultado confirmado y 1RM sincronizado con Entrenamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/health:
     get:
       tags:
@@ -890,6 +936,14 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
     Conflict:
       description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: >
+        Servicio dependiente no disponible (Estructura o Entrenamiento no respondió
+        tras los reintentos de Polly). La operación no se completó y puede reintentarse.
       content:
         application/json:
           schema:

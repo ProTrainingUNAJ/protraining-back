@@ -12,6 +12,7 @@ using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
+using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
 using Application.UseCases.FieldTests.GetFieldTestSession;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
@@ -28,6 +29,7 @@ using Application.UseCases.Evolution.GetAthleteEvolution;
 using Infrastructure.Services;
 using Domain.Services;
 using Infrastructure;
+using Infrastructure.Services.Entrenamiento;
 using Infrastructure.Services.Structure;
 using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Mvc;
@@ -98,6 +100,8 @@ builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();
 builder.Services.AddScoped<CreateFieldTestResultCommandHandler>();
 builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
 builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
+// Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento (KAN-426).
+builder.Services.AddScoped<ConfirmFieldTestResultCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
@@ -117,14 +121,17 @@ if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
-
-// Entrenamiento por HTTP, con el token del usuario (#140 / KAN-435): consulta de récords 1RM para evolución.
-var trainingBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"] ?? "http://localhost:8083";
-if (Uri.TryCreate(trainingBaseUrl, UriKind.Absolute, out var trainingUri))
-{
-    builder.Services.AddHttpClient<ITrainingClient, TrainingClient>(client => client.BaseAddress = trainingUri)
-        .AddHttpMessageHandler<ForwardAuthorizationHandler>();
-}
+// Entrenamiento por HTTP (KAN-426 confirmación del 1RM / KAN-435 evolución): misma cadena
+// que Estructura (token reenviado + resiliencia global de Polly de ConfigureHttpClientDefaults)
+// y la misma Services__Entrenamiento__BaseUrl. La URL es obligatoria: sin ella el envío del
+// 1RM no tendría destino y el error aparecería tarde.
+var entrenamientoBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"];
+if (!Uri.TryCreate(entrenamientoBaseUrl, UriKind.Absolute, out var entrenamientoUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Entrenamiento__BaseUrl (URL absoluta).");
+builder.Services.AddHttpClient<IEntrenamientoClient, EntrenamientoClient>(client => client.BaseAddress = entrenamientoUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<ITrainingClient, TrainingClient>(client => client.BaseAddress = entrenamientoUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 if (builder.Environment.IsDevelopment())
