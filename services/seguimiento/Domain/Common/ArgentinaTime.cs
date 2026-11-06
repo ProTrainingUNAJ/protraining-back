@@ -5,7 +5,7 @@ public static class ArgentinaTime
 {
     // Mismo criterio en Windows y Linux: la convención del repo es la zona
     // America/Argentina/Buenos_Aires (README, sección "Fechas: solo Argentina").
-    private static readonly TimeZoneInfo ZonaArgentina = TimeZoneInfo.FindSystemTimeZoneById(
+    public static readonly TimeZoneInfo ZonaArgentina = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows()
             ? "Argentina Standard Time"
             : "America/Argentina/Buenos_Aires");
@@ -17,4 +17,10 @@ public static class ArgentinaTime
     public static DateTime Now => FromUtc(DateTime.UtcNow);
 
     public static DateOnly Today => DateOnly.FromDateTime(Now);
+
+    public static DateTime ToUtcStartOfDay(DateOnly date) =>
+        TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), ZonaArgentina);
+
+    public static DateTime ToUtcEndOfDay(DateOnly date) =>
+        TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(new TimeOnly(23, 59, 59, 999)), ZonaArgentina);
 }

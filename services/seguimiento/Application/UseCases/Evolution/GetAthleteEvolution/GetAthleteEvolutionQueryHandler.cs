@@ -1,6 +1,7 @@
 using Application.DTOs.Evolution;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Domain.Common;
 
 namespace Application.UseCases.Evolution.GetAthleteEvolution;
 
@@ -9,15 +10,11 @@ public sealed class GetAthleteEvolutionQueryHandler(
     IFieldTestResultRepository fieldTestResultRepository,
     ICheckInRepository checkInRepository)
 {
-    private static readonly TimeZoneInfo ArgentinaTimeZone =
-        TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
-
     public async Task<AthleteEvolutionResponseDto> HandleAsync(
         GetAthleteEvolutionQuery query,
         CancellationToken cancellationToken = default)
     {
-        var nowInArgentina = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ArgentinaTimeZone);
-        var today = DateOnly.FromDateTime(nowInArgentina);
+        var today = ArgentinaTime.Today;
 
         var toDate = query.To ?? today;
         var months = query.Months.GetValueOrDefault(3);
@@ -26,8 +23,8 @@ public sealed class GetAthleteEvolutionQueryHandler(
 
         var fromDate = query.From ?? toDate.AddMonths(-months);
 
-        var fromDateTime = fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toDateTime = toDate.ToDateTime(new TimeOnly(23, 59, 59, 999), DateTimeKind.Utc);
+        var fromDateTime = ArgentinaTime.ToUtcStartOfDay(fromDate);
+        var toDateTime = ArgentinaTime.ToUtcEndOfDay(toDate);
 
         var records = await trainingClient.GetAthleteRecordsAsync(
             query.AthleteId,
@@ -56,7 +53,7 @@ public sealed class GetAthleteEvolutionQueryHandler(
                 g.Key.ExerciseId,
                 g.Key.ExerciseName,
                 "kg",
-                g.GroupBy(r => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.AchievedAt, DateTimeKind.Utc), ArgentinaTimeZone)))
+                g.GroupBy(r => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.AchievedAt, DateTimeKind.Utc), ArgentinaTime.ZonaArgentina)))
                  .Select(dg =>
                  {
                      var best = dg.MaxBy(r => r.WeightOneRepMaxKg)!;
@@ -78,7 +75,7 @@ public sealed class GetAthleteEvolutionQueryHandler(
                 g.Key.TestName,
                 g.Key.MotorCapacity,
                 g.Key.MeasurementUnit,
-                g.GroupBy(t => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(t.RecordedAt, DateTimeKind.Utc), ArgentinaTimeZone)))
+                g.GroupBy(t => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(t.RecordedAt, DateTimeKind.Utc), ArgentinaTime.ZonaArgentina)))
                  .Select(dg =>
                  {
                      var isSpeed = dg.First().MotorCapacity.Equals("Speed", StringComparison.OrdinalIgnoreCase);
