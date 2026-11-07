@@ -24,6 +24,9 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
 
     public string? Role =>
         httpContextAccessor.HttpContext?.User.FindFirst("role")?.Value;
+    public string? Email =>
+    httpContextAccessor.HttpContext?.User.FindFirst("email")?.Value
+    ?? httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
 
     public IDisposable UsePfContext(Guid pfId)
     {

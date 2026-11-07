@@ -414,4 +414,118 @@ public sealed class AcceptCategoryInvitationTests
         _athleteRepoMock.Verify(r => r.AddAsync(It.Is<Athlete>(a => a.IsMinor && a.HasSignedConsent), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+    [Fact]
+    public async Task Given_BodyEmailDifferentFromAccountEmail_When_AcceptInvitation_Then_UsesAccountEmail()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-email-test";
+        const string accountEmail = "cuenta.login@protraining.com";
+        const string bodyEmail = "otro.email@distinto.com";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+        _currentUserMock.Setup(u => u.Email).Returns(accountEmail);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-20"));
+
+        _athleteRepoMock.Setup(r => r.GetByAccountIdAsync(athleteAccountId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Athlete?)null);
+
+        var handler = CreateHandler();
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Lautaro",
+            LastName: "Martinez",
+            Email: bodyEmail,
+            Phone: "+5491133334444",
+            BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
+
+        // Act
+        var result = await handler.HandleAsync(command);
+
+        // Assert: El atleta debe crearse con el email de la cuenta autenticada y no con el del body
+        Assert.NotNull(result);
+        _athleteRepoMock.Verify(r => r.AddAsync(
+            It.Is<Athlete>(a => a.Email == accountEmail && a.AccountId == athleteAccountId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_FutureBirthDate_When_AcceptInvitation_Then_ThrowsDomainException_AndDoesNotCreateAthlete()
+    {
+        // Arrange
+        var athleteAccountId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        const string token = "token-fecha-futura";
+
+        _currentUserMock.Setup(u => u.UserId).Returns(athleteAccountId);
+        _currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var invitation = CategoryInvitation.Create(categoryId, _fixedNow.UtcDateTime.AddDays(5), token);
+        typeof(BaseEntity).GetProperty(nameof(BaseEntity.PfId))!.SetValue(invitation, pfId);
+        _invitationRepoMock.Setup(r => r.GetDetailsByTokenAsync(token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryInvitationDetails(invitation, "Sub-15"));
+
+        _athleteRepoMock.Setup(r => r.GetByAccountIdAsync(athleteAccountId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Athlete?)null);
+
+        var handler = CreateHandler();
+        var futureBirthDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var command = new AcceptCategoryInvitationCommand(
+            Token: token,
+            FirstName: "Mateo",
+            LastName: "Menor",
+            Email: "mateo@protraining.com",
+            Phone: "+5491133334444",
+            BirthDate: futureBirthDate);
+
+        // Act & Assert: lanza DomainException con mensaje claro y no crea el atleta
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.HandleAsync(command));
+        Assert.Contains("no puede ser futura", ex.Message, StringComparison.OrdinalIgnoreCase);
+        _athleteRepoMock.Verify(r => r.AddAsync(It.IsAny<Athlete>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(16, true)]   // 16 años -> menor
+    [InlineData(17, true)]   // 17 años -> menor
+    [InlineData(18, false)]  // 18 años -> mayor
+    [InlineData(25, false)]  // 25 años -> mayor
+    public void Given_ReferenceDate_When_IsMinorOn_Then_CalculatesCorrectly(int yearsAgo, bool expectedMinor)
+    {
+        var today = new DateOnly(2026, 11, 6);
+        var birthDate = today.AddYears(-yearsAgo);
+
+        var isMinor = Athlete.IsMinorOn(birthDate, today);
+
+        Assert.Equal(expectedMinor, isMinor);
+    }
+
+    [Fact]
+    public void Given_BirthdayTomorrow_When_IsMinorOn_Then_StillMinor()
+    {
+        // 17 años y 364 días (cumple 18 mañana)
+        var today = new DateOnly(2026, 11, 6);
+        var birthDate = new DateOnly(2008, 11, 7);
+
+        var isMinor = Athlete.IsMinorOn(birthDate, today);
+
+        Assert.True(isMinor);
+    }
+
+    [Fact]
+    public void Given_FutureBirthDate_When_IsMinorOn_Then_ThrowsDomainException()
+    {
+        var today = new DateOnly(2026, 11, 6);
+        var futureDate = today.AddDays(1);
+
+        var ex = Assert.Throws<DomainException>(() => Athlete.IsMinorOn(futureDate, today));
+        Assert.Contains("no puede ser futura", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -23,6 +23,24 @@ public sealed class Athlete : BaseEntity
 
     private Athlete() { }
 
+    // Calcula la edad en años cumplidos respecto a una fecha de referencia (ej. hora de Argentina).
+    public static int CalculateAgeOn(DateOnly birthDate, DateOnly referenceDate)
+    {
+        if (birthDate > referenceDate)
+            throw new DomainException("La fecha de nacimiento no puede ser futura.");
+
+        var age = referenceDate.Year - birthDate.Year;
+        if (birthDate > referenceDate.AddYears(-age))
+        {
+            age--;
+        }
+
+        return age;
+    }
+
+    // Determina si una persona es menor de 18 años a una fecha de referencia dada (KAN-401).
+    public static bool IsMinorOn(DateOnly birthDate, DateOnly referenceDate) =>
+        CalculateAgeOn(birthDate, referenceDate) < 18;
     public static Athlete CreateMinor(
         string? firstName,
         string? lastName,
