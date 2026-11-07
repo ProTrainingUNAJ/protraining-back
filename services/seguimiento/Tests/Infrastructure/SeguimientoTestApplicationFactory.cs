@@ -39,6 +39,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Application.UseCases.FitnessTests.ListFitnessTests;
 
 namespace Seguimiento.Tests.Infrastructure;
 
@@ -116,6 +117,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<IFieldTestResultRepository, FieldTestResultRepository>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
+
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser>(sp => new TestCurrentUser(pfId, sp.GetService<IHttpContextAccessor>()));
                 services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
@@ -144,6 +146,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<Application.UseCases.CheckIns.ListAthleteCheckIns.ListAthleteCheckInsQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
                 services.AddScoped<Application.UseCases.FitnessTests.ListAthleteFitnessTests.ListAthleteFitnessTestsQueryHandler>();
+                services.AddScoped<ListFitnessTestsQueryHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
                 services.AddScoped<CreateAthleteInjuryCommandHandler>();
@@ -235,6 +238,20 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
         var token = TestJwtGenerator.GenerateToken(pfId, role);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
+    }
+
+    public AppDbContext CreateDbContext(Guid? overridePfId = null)
+    {
+        var currentUserMock = new Moq.Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(overridePfId);
+        currentUserMock.Setup(u => u.IsInRole(Moq.It.IsAny<string>()))
+            .Returns<string>(role => overridePfId.HasValue && role == "PreparadorFisico");
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_sqliteConnection)
+            .Options;
+
+        return new AppDbContext(options, currentUserMock.Object);
     }
 
     // Ejecuta una consulta contra la base del factory con un scope propio y limpio.
