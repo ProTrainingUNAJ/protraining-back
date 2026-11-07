@@ -91,7 +91,8 @@ public sealed class DigitalConsent : BaseEntity
         AllowsHabitsRecommendations = allowsHabitsRecommendations;
     }
 
-    // Verifica que el consentimiento esté firmado y cumpla con las condiciones si el atleta es menor.
+    // Verifica que el consentimiento esté firmado y cumpla con la regla de tutor para menores
+    // (nombre del tutor y al menos un medio de contacto: email o teléfono, KAN-401).
     public bool IsValidForAthlete(bool athleteIsMinor)
     {
         if (!IsSigned || !AllowsPhysicalTraining)

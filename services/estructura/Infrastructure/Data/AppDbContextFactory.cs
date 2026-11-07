@@ -21,5 +21,6 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
         public Guid? PfId => null;
         public Guid? UserId => null;
         public string? Role => null;
+        public string? Email => null;
     }
 }

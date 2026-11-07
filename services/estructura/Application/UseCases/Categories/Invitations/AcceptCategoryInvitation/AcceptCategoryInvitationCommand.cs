@@ -37,6 +37,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
     {
         var accountId = currentUser.UserId ?? throw new UnauthorizedAccessException();
         var userPfId = currentUser.PfId ?? throw new UnauthorizedAccessException();
+        var athleteEmail = !string.IsNullOrWhiteSpace(currentUser.Email) ? currentUser.Email : command.Email;
 
         if (string.IsNullOrWhiteSpace(command.Token))
             throw new InvitationNotFoundException();
@@ -63,12 +64,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
             // Cálculo de minoría de edad según fecha actual en hora de Argentina (KAN-401)
             var argentinaNow = ArgentinaTime.FromUtc(now);
             var today = DateOnly.FromDateTime(argentinaNow);
-            var age = today.Year - command.BirthDate.Year;
-            if (command.BirthDate > today.AddYears(-age))
-            {
-                age--;
-            }
-            var isMinor = age < 18;
+            var isMinor = Athlete.IsMinorOn(command.BirthDate, today);
 
             if (isMinor)
             {
@@ -87,7 +83,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                 athlete = Athlete.CreateMinor(
                     command.FirstName,
                     command.LastName,
-                    command.Email,
+                    athleteEmail,
                     command.Phone,
                     command.GuardianName,
                     command.GuardianEmail,
@@ -102,7 +98,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                 athlete = Athlete.CreateAdult(
                     command.FirstName,
                     command.LastName,
-                    command.Email,
+                    athleteEmail,
                     command.Phone,
                     signsInitialConsent: false,
                     command.EmergencyContact);
