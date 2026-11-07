@@ -9,7 +9,8 @@ public sealed record ApplyAthleteSessionAdjustmentRequest(
     Guid AthleteId,
     DateOnly Date,
     string? Note,
-    IReadOnlyList<AthleteSessionAdjustmentItemDto> Items
+    IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
+    Guid? TrainingPlanId = null
 );
 
 public sealed record AthleteSessionAdjustmentResponseDto(
@@ -18,5 +19,6 @@ public sealed record AthleteSessionAdjustmentResponseDto(
     Guid AthleteId,
     DateOnly Date,
     string? Note,
-    IReadOnlyList<AthleteSessionAdjustmentItemDto> Items
+    IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
+    Guid? TrainingPlanId = null
 );

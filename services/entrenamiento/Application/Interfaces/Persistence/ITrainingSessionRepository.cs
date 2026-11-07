@@ -5,6 +5,7 @@ namespace Application.Interfaces.Persistence;
 public interface ITrainingSessionRepository
 {
     Task<TrainingSession?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Guid?> GetPlanIdBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default);
     // Sesión que le toca al atleta en una fecha, por asignación directa o por alguna de sus categorías
     Task<TrainingSession?> GetByAthleteIdAsync(Guid athleteId, IReadOnlyList<Guid> categoryIds, DateOnly date, CancellationToken cancellationToken = default);
     // Asignaciones del PF con el plan completo (semanas y sesiones), para la agenda del día

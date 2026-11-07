@@ -116,6 +116,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
 
+                    b.Property<Guid>("TrainingPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_plan_id");
+
                     b.Property<Guid>("TrainingSessionId")
                         .HasColumnType("uuid")
                         .HasColumnName("training_session_id");
@@ -127,6 +131,9 @@ namespace Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingPlanId", "AthleteId")
+                        .HasDatabaseName("IX_athlete_session_adjustments_plan_athlete");
 
                     b.HasIndex("TrainingSessionId", "AthleteId", "Date")
                         .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date");

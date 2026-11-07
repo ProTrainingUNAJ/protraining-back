@@ -10,6 +10,7 @@ using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
@@ -298,5 +299,175 @@ public sealed class AthleteSessionAdjustmentsTests
                 It.Is<IEnumerable<PerformedSet>>(sets => sets.Any(ps => ps.ExerciseId == legPress.Id && ps.Weight == 120m)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    // =========================================================================
+    //    Criterio: DADO el PF aprobando la adaptación de Lucas CUANDO se guarda
+    //    la variante en Entrenamiento ENTONCES queda registrada en base de datos vinculada a Lucas y al plan vigente
+    // =========================================================================
+    [Fact]
+    public async Task Given_PfApprovingLucasAdaptation_When_SavedInTraining_Then_RegisteredInDbLinkedToLucasAndActivePlan()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var boxJump = Exercise.Create("Salto al cajón", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(boxJump, legPress);
+
+        // Crear plan de entrenamiento vigente con semana y sesión
+        var plan = TrainingPlan.Create("Pretemporada 2026", "Acondicionamiento físico");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1 - Fuerza", 1, DayOfWeek.Monday);
+        var prescribed = PrescribedExercise.Create(1, 4, 6, 80m, session.Id, boxJump.Id);
+        session.AddPrescribedExercise(prescribed);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var athleteId = Guid.NewGuid(); // Lucas
+        var today = ArgentinaTime.Today;
+        var assignment = PlanAssignment.Create(plan.Id, today.AddDays(-7), athleteId: athleteId);
+
+        db.TrainingPlans.Add(plan);
+        db.PlanAssignments.Add(assignment);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Rodríguez"));
+
+        var handler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow);
+
+        var note = "Adaptación aprobada por el PF para Lucas por molestia en rodilla.";
+        var command = new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                note,
+                [new AthleteSessionAdjustmentItemDto(boxJump.Id, legPress.Id)]));
+
+        var result = await handler.Handle(command);
+
+        // Verificar respuesta del DTO
+        Assert.NotNull(result);
+        Assert.Equal(athleteId, result.AthleteId);
+        Assert.Equal(session.Id, result.SessionId);
+        Assert.Equal(plan.Id, result.TrainingPlanId);
+
+        // Verificar que en base de datos quedó registrada vinculada a Lucas y al plan vigente
+        var savedAdjustment = await db.AthleteSessionAdjustments.FirstOrDefaultAsync(a => a.Id == result.Id);
+        Assert.NotNull(savedAdjustment);
+        Assert.Equal(athleteId, savedAdjustment.AthleteId);
+        Assert.Equal(plan.Id, savedAdjustment.TrainingPlanId);
+        Assert.Equal(session.Id, savedAdjustment.TrainingSessionId);
+        Assert.Equal(today, savedAdjustment.Date);
+        Assert.Equal(note, savedAdjustment.Note);
+    }
+
+    [Fact]
+    public async Task Given_MismatchedTrainingPlan_When_ApplyAthleteSessionAdjustment_Then_ThrowsDomainException()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var boxJump = Exercise.Create("Salto al cajón", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(boxJump, legPress);
+
+        var plan = TrainingPlan.Create("Plan Real", "Objetivo");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1", 1, DayOfWeek.Monday);
+        var prescribed = PrescribedExercise.Create(1, 4, 6, 80m, session.Id, boxJump.Id);
+        session.AddPrescribedExercise(prescribed);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        db.TrainingPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var athleteId = Guid.NewGuid();
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas"));
+
+        var handler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow);
+
+        var wrongPlanId = Guid.NewGuid();
+        var command = new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                ArgentinaTime.Today,
+                "Nota",
+                [new AthleteSessionAdjustmentItemDto(boxJump.Id, legPress.Id)],
+                TrainingPlanId: wrongPlanId));
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.Handle(command));
+        Assert.Equal("La sesión indicada no pertenece al plan de entrenamiento especificado.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Given_RegisteredAdjustment_When_GetAthleteAdjustmentViaController_Then_ReturnsDtoWithTrainingPlanId()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+        var note = "Variante aprobada";
+
+        var adjustment = AthleteSessionAdjustment.Create(
+            sessionId,
+            athleteId,
+            today,
+            "[{\"originalExerciseId\":\"00000000-0000-0000-0000-000000000001\",\"substituteExerciseId\":\"00000000-0000-0000-0000-000000000002\"}]",
+            note,
+            planId);
+
+        db.AthleteSessionAdjustments.Add(adjustment);
+        await db.SaveChangesAsync();
+
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var controller = new API.Controllers.TrainingSessionController(
+            null!,
+            null!,
+            null,
+            adjustmentRepo);
+
+        var actionResult = await controller.GetAthleteAdjustment(sessionId, athleteId, today);
+        var okResult = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(actionResult.Result);
+        var response = Assert.IsType<AthleteSessionAdjustmentResponseDto>(okResult.Value);
+
+        Assert.Equal(adjustment.Id, response.Id);
+        Assert.Equal(sessionId, response.SessionId);
+        Assert.Equal(athleteId, response.AthleteId);
+        Assert.Equal(planId, response.TrainingPlanId);
+        Assert.Equal(note, response.Note);
+        Assert.Single(response.Items);
     }
 }

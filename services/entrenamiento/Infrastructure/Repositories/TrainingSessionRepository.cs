@@ -21,6 +21,14 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
+    public async Task<Guid?> GetPlanIdBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        return await _context.TrainingSessions
+            .Where(s => s.Id == sessionId)
+            .Select(s => (Guid?)s.Week.TrainingPlanId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<TrainingSession?> GetByAthleteIdAsync(Guid athleteId, IReadOnlyList<Guid> categoryIds, DateOnly date, CancellationToken cancellationToken = default)
     {
         // 1. Obtenemos las asignaciones del atleta o sus categorías, incluyendo el plan completo con semanas y sesiones

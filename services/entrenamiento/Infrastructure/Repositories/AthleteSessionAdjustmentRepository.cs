@@ -32,6 +32,18 @@ public sealed class AthleteSessionAdjustmentRepository(AppDbContext context) : I
                 cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AthleteSessionAdjustment>> ListByAthleteAndPlanAsNoTrackingAsync(
+        Guid athleteId,
+        Guid trainingPlanId,
+        CancellationToken cancellationToken = default)
+    {
+        return await context.AthleteSessionAdjustments
+            .AsNoTracking()
+            .Where(a => a.AthleteId == athleteId && a.TrainingPlanId == trainingPlanId)
+            .OrderByDescending(a => a.Date)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(AthleteSessionAdjustment adjustment, CancellationToken cancellationToken = default)
     {
         await context.AthleteSessionAdjustments.AddAsync(adjustment, cancellationToken);

@@ -16,5 +16,10 @@ public interface IAthleteSessionAdjustmentRepository
         DateOnly date,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AthleteSessionAdjustment>> ListByAthleteAndPlanAsNoTrackingAsync(
+        Guid athleteId,
+        Guid trainingPlanId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(AthleteSessionAdjustment adjustment, CancellationToken cancellationToken = default);
 }
