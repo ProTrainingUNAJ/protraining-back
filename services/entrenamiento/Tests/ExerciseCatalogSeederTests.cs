@@ -1,3 +1,4 @@
+using Domain.Entities;
 using Infrastructure.Data.Seeders;
 
 namespace Entrenamiento.Tests;
@@ -50,5 +51,17 @@ public class ExerciseCatalogSeederTests
     {
         var result = ExerciseCatalogSeeder.NormalizeMuscleGroup(inputMuscle);
         Assert.Equal(expectedGroup, result);
+    }
+
+    [Theory]
+    [InlineData("plyometrics", "otro", ExerciseType.Reps)]                   // "Saltos de vallas"
+    [InlineData("strength", "solo el cuerpo", ExerciseType.Reps)]           // "Dominadas"
+    [InlineData("stretching", "solo el cuerpo", ExerciseType.Time)]         // Estiramiento
+    [InlineData("strength", "barra con pesas", ExerciseType.Weight)]        // "Press de banca"
+    public void DadoCategoriaYEquipamiento_CuandoDeterminaTipo_EntoncesRetornaTipoEsperado(
+    string category, string equipment, ExerciseType expected)
+    {
+        var result = ExerciseTypeClassificationSeeder.DetermineExerciseType(category, equipment);
+        Assert.Equal(expected, result);
     }
 }

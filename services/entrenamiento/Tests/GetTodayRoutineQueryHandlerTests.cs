@@ -24,6 +24,10 @@ public class GetTodayRoutineQueryHandlerTests
         _structureClientMock
             .Setup(c => c.GetAthleteByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => new StructureAthleteDto(id, "Lucas Gómez"));
+
+        _videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
     }
 
     private GetTodayRoutineQueryHandler CreateHandler()

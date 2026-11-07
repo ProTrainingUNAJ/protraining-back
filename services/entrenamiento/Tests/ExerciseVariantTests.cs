@@ -410,6 +410,9 @@ public class ExerciseVariantTests
             .ReturnsAsync(new List<Exercise> { closeGrip, dumbbell });
 
         var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
         var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object);
         var result = await handler.Handle(new ListExercisesQuery { Search = "press de banca", GroupVariants = true });
 
@@ -419,7 +422,7 @@ public class ExerciseVariantTests
         Assert.Equal(2, item.Variants!.Count);
         Assert.Contains(item.Variants, v => v.Id == closeGrip.Id && v.VariantLabel == "Agarre cerrado" && v.ParentExerciseId == bench.Id);
         Assert.Equal(1, result.TotalCount);
-        repoMock.Verify(r => r.ListAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        repoMock.Verify(r => r.ListAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<ExerciseType?>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -434,12 +437,15 @@ public class ExerciseVariantTests
             .ReturnsAsync((new List<Exercise> { bench, closeGrip }, 2));
 
         var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
         var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object);
         var result = await handler.Handle(new ListExercisesQuery());
 
         Assert.Equal(2, result.Items.Count);
         Assert.All(result.Items, i => Assert.Null(i.Variants));
         Assert.Equal(bench.Id, result.Items.Single(i => i.Id == closeGrip.Id).ParentExerciseId);
-        repoMock.Verify(r => r.ListBasesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        repoMock.Verify(r => r.ListBasesAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<ExerciseType?>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

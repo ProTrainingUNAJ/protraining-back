@@ -142,8 +142,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 .Distinct()
                 .ToList();
 
-            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(effectiveExerciseIds, cancellationToken)
-                ?? new Dictionary<Guid, string>();
+            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(effectiveExerciseIds, cancellationToken);
 
             // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)

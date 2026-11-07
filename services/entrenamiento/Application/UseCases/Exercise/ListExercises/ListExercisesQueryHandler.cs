@@ -85,8 +85,7 @@ namespace Application.UseCases.Exercise.ListExercises
                 .Distinct()
                 .ToList();
 
-            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(allIds, cancellationToken)
-                ?? new Dictionary<Guid, string>();
+            var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(allIds, cancellationToken);
 
             void ApplyVideo(ExerciseDto dto)
             {
