@@ -98,6 +98,12 @@ namespace Domain.Entities
             ParentExerciseId = null;
             VariantLabel = null;
         }
+
+        // Actualiza la modalidad o tipo de ejercicio
+        public void UpdateExerciseType(ExerciseType exerciseType)
+        {
+            ExerciseType = exerciseType;
+        }
     }
     
     [JsonConverter(typeof(JsonStringEnumConverter))]

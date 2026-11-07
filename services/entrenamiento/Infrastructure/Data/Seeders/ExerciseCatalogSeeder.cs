@@ -45,6 +45,10 @@ namespace Infrastructure.Data.Seeders
                     // Mapear grupo muscular con el primer primaryMuscle
                     var firstMuscle = primaryMuscles.FirstOrDefault() ?? "general";
 
+                    var category = elem.TryGetProperty("category", out var catProp) ? catProp.GetString() : null;
+
+                    var exerciseType = ExerciseTypeClassificationSeeder.DetermineExerciseType(category, equipment);
+
                     exercises.Add(Exercise.Create(
                         name: name,
                         muscleGroup: NormalizeMuscleGroup(firstMuscle),
@@ -52,7 +56,9 @@ namespace Infrastructure.Data.Seeders
                         equipment: equipment,
                         images: images,
                         primaryMuscles: primaryMuscles,
-                        secondaryMuscles: secondaryMuscles
+                        secondaryMuscles: secondaryMuscles,
+                        origin: Origin.Catalog,
+                        exerciseType: exerciseType
                     ));
                 }
 

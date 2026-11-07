@@ -28,6 +28,7 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
                 .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
                     .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
+                        .ThenInclude(e => e.Exercise)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 

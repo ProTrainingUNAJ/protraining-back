@@ -23,7 +23,13 @@ public class ListExercisesTests : IAsyncLifetime
         public Guid? PfId => pfId;
     }
 
-    private static IExerciseVideoRepository EmptyVideoRepo() => new Mock<IExerciseVideoRepository>().Object;
+    private static IExerciseVideoRepository EmptyVideoRepo()
+    {
+        var mock = new Mock<IExerciseVideoRepository>();
+        mock.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+        return mock.Object;
+    }
 
     public ListExercisesTests()
     {
@@ -679,17 +685,17 @@ public class ListExercisesTests : IAsyncLifetime
         var repoMock = new Mock<IExerciseRepository>();
         var sprint = Exercise.Create("Sprints", "Piernas", exerciseType: ExerciseType.Distance);
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, null, "distancia", false, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([sprint], 1));
 
         var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
-        var query = new ListExercisesQuery { ExerciseType = "distancia", Page = 1, PageSize = 20 };
+        var query = new ListExercisesQuery { ExerciseType = ExerciseType.Distance, Page = 1, PageSize = 20 };
         var result = await handler.Handle(query);
 
         Assert.Single(result.Items);
         Assert.Equal("Sprints", result.Items[0].Name);
         Assert.Equal(ExerciseType.Distance, result.Items[0].ExerciseType);
-        repoMock.Verify(r => r.ListAsync(null, null, null, null, "distancia", false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -709,7 +715,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, null, "distancia", false, 1, 20);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20);
 
             Assert.Equal(2, totalCount);
             Assert.Contains(items, e => e.Name == "Pasadas");

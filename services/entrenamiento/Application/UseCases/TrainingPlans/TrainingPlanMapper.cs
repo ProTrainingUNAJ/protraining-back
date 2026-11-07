@@ -37,7 +37,8 @@ public static class TrainingPlanMapper
                                 e.Order,
                                 e.Sets,
                                 e.Reps,
-                                e.TargetPercentage
+                                e.TargetPercentage,
+                                e.Exercise?.ExerciseType ?? ExerciseType.Weight
                             )).ToList(),
                         s.StartTime
                     )).ToList()
