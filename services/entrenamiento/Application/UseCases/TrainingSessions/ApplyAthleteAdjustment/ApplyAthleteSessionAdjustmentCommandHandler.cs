@@ -63,6 +63,19 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
         if (foundExercises.Count != substituteIds.Count)
             throw new DomainException("Uno o más ejercicios sustitutos no existen en el catálogo.");
 
+        // 4. Resolver y vincular al plan vigente (#168 · KAN-463).
+        var planIdFromSession = await trainingSessionRepository.GetPlanIdBySessionIdAsync(session.Id, cancellationToken);
+        var sessionPlanId = planIdFromSession ?? session.Week?.TrainingPlanId ?? Guid.Empty;
+        var trainingPlanId = request.TrainingPlanId ?? (sessionPlanId != Guid.Empty ? sessionPlanId : Guid.Empty);
+
+        if (request.TrainingPlanId.HasValue &&
+            request.TrainingPlanId.Value != Guid.Empty &&
+            sessionPlanId != Guid.Empty &&
+            request.TrainingPlanId.Value != sessionPlanId)
+        {
+            throw new DomainException("La sesión indicada no pertenece al plan de entrenamiento especificado.");
+        }
+
         var itemsJson = JsonSerializer.Serialize(request.Items, JsonOptions);
 
         var existing = await adjustmentRepository.GetBySessionAthleteAndDateAsync(
@@ -74,7 +87,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
         AthleteSessionAdjustment adjustment;
         if (existing is not null)
         {
-            existing.Update(itemsJson, request.Note);
+            existing.Update(itemsJson, request.Note, trainingPlanId);
             adjustment = existing;
         }
         else
@@ -84,7 +97,8 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
                 athleteId: athlete.Id,
                 date: request.Date,
                 itemsJson: itemsJson,
-                note: request.Note);
+                note: request.Note,
+                trainingPlanId: trainingPlanId);
 
             await adjustmentRepository.AddAsync(adjustment, cancellationToken);
         }
@@ -97,6 +111,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             AthleteId: adjustment.AthleteId,
             Date: adjustment.Date,
             Note: adjustment.Note,
-            Items: request.Items);
+            Items: request.Items,
+            TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null);
     }
 }

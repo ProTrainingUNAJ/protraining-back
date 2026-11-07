@@ -1090,6 +1090,52 @@ paths:
           $ref: '#/components/responses/NotFound'
 
   /api/v1/training-sessions/{sessionId}/athlete-adjustments:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Obtener ajuste o variante de sesión por atleta y fecha
+      description: >
+        Devuelve el ajuste o variante individual de sesión registrado para un atleta y fecha (#168 · KAN-463).
+        Requiere rol PreparadorFisico.
+      operationId: getAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+        - name: athleteId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Fecha de la sesión (por defecto hoy en hora de Argentina).
+      responses:
+        "200":
+          description: Ajuste o variante de sesión recuperado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
     post:
       tags:
         - Routines and Templates
@@ -2345,6 +2391,12 @@ components:
           type: string
           format: date
           example: "2026-11-06"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del plan de entrenamiento vigente vinculado (KAN-463).
+          example: "11111111-2222-3333-4444-555555555555"
         note:
           type: string
           nullable: true
@@ -2373,6 +2425,12 @@ components:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del plan de entrenamiento vigente vinculado (KAN-463).
+          example: "11111111-2222-3333-4444-555555555555"
         sessionId:
           type: string
           format: uuid
