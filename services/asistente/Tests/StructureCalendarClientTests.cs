@@ -134,34 +134,29 @@ public sealed class StructureCalendarClientTests
     }
 
     [Fact]
-    public async Task Given_StructureReturns500InternalServerError_When_GetMatchDates_Then_ReturnsEmptyListAndLogsWarningWithoutThrowing()
+    public async Task Given_StructureReturns500InternalServerError_When_GetMatchDates_Then_ThrowsStructureServiceUnavailableException()
     {
         // Arrange: Estructura falla con HTTP 500
         var categoryId = Guid.NewGuid();
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var client = CreateClient(handler);
 
-        // Act: No debe arrojar excepción para errores 500 transitorios
-        var result = await client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8));
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Empty(result);
+        // Act & Assert: No se debe ocultar un fallo del servicio como ausencia de partidos.
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8)));
     }
 
     [Fact]
-    public async Task Given_StructureUnreachableConnectionRefused_When_GetMatchDates_Then_ReturnsEmptyListWithoutThrowing()
+    public async Task Given_StructureUnreachableConnectionRefused_When_GetMatchDates_Then_ThrowsStructureServiceUnavailableException()
     {
         // Arrange: Fallo de red a nivel socket / conexión rechazada
         var categoryId = Guid.NewGuid();
         var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("Connection refused (estructura:8080)"));
         var client = CreateClient(handler);
 
-        // Act & Assert
-        var result = await client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8));
-
-        Assert.NotNull(result);
-        Assert.Empty(result);
+        // Act & Assert: Un servicio caído no equivale a un calendario vacío.
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.GetMatchDatesAsync(categoryId, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 8)));
     }
 
     [Fact]

@@ -27,8 +27,15 @@ public sealed class StructureCalendarClient(
         DateOnly to,
         CancellationToken cancellationToken = default)
     {
-        if (categoryId == Guid.Empty || httpClient.BaseAddress is null)
+        if (categoryId == Guid.Empty)
             return [];
+
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogError("La dirección base de Estructura no está configurada.");
+            throw new StructureServiceUnavailableException(
+                "La dirección base del microservicio de Estructura no está configurada.");
+        }
 
         try
         {
@@ -47,11 +54,12 @@ public sealed class StructureCalendarClient(
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning(
+                logger.LogError(
                     "No se pudo obtener el calendario de la categoría {CategoryId}. Código HTTP {StatusCode}.",
                     categoryId,
                     (int)response.StatusCode);
-                return [];
+                throw new StructureServiceUnavailableException(
+                    $"Estructura no pudo consultar el calendario (código {(int)response.StatusCode}).");
             }
 
             var events = await response.Content.ReadFromJsonAsync<List<CategoryCalendarEventDto>>(cancellationToken);
@@ -74,11 +82,12 @@ public sealed class StructureCalendarClient(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(
-                "Error al consultar el calendario de partidos en Estructura para la categoría {CategoryId}: {ErrorType}.",
-                categoryId,
-                ex.GetType().Name);
-            return [];
+            logger.LogError(
+                ex,
+                "Error al consultar el calendario de partidos en Estructura para la categoría {CategoryId}.",
+                categoryId);
+            throw new StructureServiceUnavailableException(
+                "El microservicio de Estructura no se encuentra disponible.", ex);
         }
     }
 }

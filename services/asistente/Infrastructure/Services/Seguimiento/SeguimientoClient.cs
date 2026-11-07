@@ -57,23 +57,39 @@ public sealed class SeguimientoClient(
                 return [];
             }
 
-            logger.LogWarning(
+            logger.LogError(
                 "Seguimiento respondió código {StatusCode} al consultar el historial de check-ins.",
                 (int)response.StatusCode);
-            return [];
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                throw new UnauthorizedAccessException(
+                    "Seguimiento rechazó la autenticación del servicio al consultar el historial de check-ins.");
+            }
+
+            throw new SeguimientoServiceUnavailableException(
+                $"Seguimiento no pudo consultar el historial de check-ins (código {(int)response.StatusCode}).");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (SeguimientoServiceUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(
+            logger.LogError(
                 ex,
                 "Error al comunicarse con el microservicio de Seguimiento para consultar check-ins ({FromDate} a {ToDate}).",
                 from,
                 to);
-            return [];
+            throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage, ex);
         }
     }
 
