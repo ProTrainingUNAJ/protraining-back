@@ -92,7 +92,7 @@ public sealed class AthleteEvolutionEndpointIntegrationTests
             context.DailyLoads.Add(new DailyLoad
             {
                 AthleteId = _athleteId,
-                Date = nowUtc.Date,
+                Date = Domain.Common.ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue),
                 GymMinutes = 60,
                 GymRpe = 8
             });
