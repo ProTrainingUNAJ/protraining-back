@@ -6,9 +6,10 @@ using Domain.Entities;
 
 namespace Application.UseCases.AthleteRecord.GetRecordsReliability;
 
-// Devuelve, por categoría, cómo se distribuyen los atletas entre los 4 grupos de
-// confiabilidad de sus récords vigentes. Un récord con origen Epley cuenta como
-// Testeado (KAN-416).
+// Devuelve, por categoría, cuántos récords vigentes hay de cada grupo de
+// confiabilidad y qué atletas los tienen. Un atleta puede aparecer en más de un
+// grupo si tiene récords de distintos orígenes. Un récord con origen Epley cuenta
+// como Testeado (KAN-416).
 public sealed class GetRecordsReliabilityQueryHandler
 {
     private readonly IStructureClient _structureClient;
@@ -44,67 +45,80 @@ public sealed class GetRecordsReliabilityQueryHandler
 
         var totalAthletes = athletes.Count;
 
-        // Acumulador por grupo.
+        // Acumulador por grupo. Cada atleta puede sumarse a varios grupos.
         var grouped = GroupOrder.ToDictionary(
             g => g,
             _ => new List<RecordReliabilityAthleteDto>()
         );
+
+        var totalRecords = 0;
 
         foreach (var (athleteId, name) in athletes)
         {
             var records = await _recordRepository.ListAsync(athleteId, currentOnly: true, cancellationToken);
 
             // Si se filtra por ejercicio, solo se consideran los récords de ese ejercicio.
-            var relevant = query.ExerciseId.HasValue
-                ? records.Where(r => r.ExerciseId == query.ExerciseId.Value).ToList()
-                : records;
+            var relevant = (query.ExerciseId.HasValue
+                    ? records.Where(r => r.ExerciseId == query.ExerciseId.Value)
+                    : records)
+                .Where(r => r.Source != RecordSource.NoData)
+                .ToList();
 
-            var group = ResolveGroup(relevant);
-            grouped[group].Add(new RecordReliabilityAthleteDto(athleteId, name));
+            if (relevant.Count == 0)
+            {
+                grouped["NoData"].Add(new RecordReliabilityAthleteDto(athleteId, name, 0));
+                continue;
+            }
+
+            totalRecords += relevant.Count;
+
+            var countsByGroup = relevant
+                .GroupBy(r => ResolveGroup(r.Source))
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            foreach (var group in GroupOrder)
+            {
+                if (group == "NoData")
+                    continue;
+
+                if (countsByGroup.TryGetValue(group, out var recordCount) && recordCount > 0)
+                    grouped[group].Add(new RecordReliabilityAthleteDto(athleteId, name, recordCount));
+            }
         }
 
-        var groups = GroupOrder.Select(group => new RecordReliabilityGroupDto(
-            group,
-            grouped[group].Count,
-            totalAthletes > 0 ? grouped[group].Count * 100.0 / totalAthletes : 0.0,
-            grouped[group]
-        )).ToList();
+        var groups = GroupOrder.Select(group =>
+        {
+            var groupAthletes = grouped[group];
+            var recordCount = groupAthletes.Sum(a => a.RecordCount);
+            var percentage = group == "NoData"
+                ? totalAthletes > 0 ? groupAthletes.Count * 100.0 / totalAthletes : 0.0
+                : totalRecords > 0 ? recordCount * 100.0 / totalRecords : 0.0;
+
+            return new RecordReliabilityGroupDto(
+                group,
+                groupAthletes.Count,
+                recordCount,
+                percentage,
+                groupAthletes
+            );
+        }).ToList();
 
         return new RecordReliabilitySummaryDto(
             query.CategoryId,
             query.ExerciseId,
             totalAthletes,
+            totalRecords,
             groups
         );
     }
 
-    // Devuelve el grupo del récord vigente más confiable del atleta.
-    private static string ResolveGroup(IReadOnlyList<Domain.Entities.AthleteRecord> records)
+    // Devuelve el grupo de confiabilidad del origen de un récord.
+    private static string ResolveGroup(RecordSource source) => source switch
     {
-        if (records.Count == 0)
-            return "NoData";
-
-        // Menor rango = más confiable.
-        int Rank(RecordSource source) => source switch
-        {
-            RecordSource.Tested => 0,
-            RecordSource.Epley => 0, // un récord Epley cuenta como Testeado
-            RecordSource.Reported => 1,
-            RecordSource.Estimated => 2,
-            _ => 3,
-        };
-
-        var best = records
-            .OrderBy(r => Rank(r.Source))
-            .FirstOrDefault();
-
-        return best is null ? "NoData" : best.Source switch
-        {
-            RecordSource.Tested => "Tested",
-            RecordSource.Epley => "Tested",
-            RecordSource.Reported => "Reported",
-            RecordSource.Estimated => "Estimated",
-            _ => "NoData",
-        };
-    }
+        RecordSource.Tested => "Tested",
+        RecordSource.Epley => "Tested", // un récord Epley cuenta como Testeado
+        RecordSource.Reported => "Reported",
+        RecordSource.Estimated => "Estimated",
+        _ => "NoData",
+    };
 }
