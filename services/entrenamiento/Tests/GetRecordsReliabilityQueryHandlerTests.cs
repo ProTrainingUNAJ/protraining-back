@@ -140,6 +140,61 @@ public class GetRecordsReliabilityQueryHandlerTests
         Assert.Equal(0, Assert.Single(Group(result, "NoData").Athletes).RecordCount);
     }
 
+    [Fact]
+    public async Task Given_CategoriaCon12Testeados3Reportados4Estimados1SinDato_When_ConsultaConfiabilidad_Then_SumaGruposEs20YPorcentajesCoinciden()
+    {
+        var categoryId = Guid.NewGuid();
+
+        var athletes = new List<(Guid Id, string Name)>();
+        for (var i = 1; i <= 20; i++)
+            athletes.Add((Guid.NewGuid(), $"Atleta {i}"));
+
+        SetupCategory(categoryId, athletes.ToArray());
+
+        // 12 atletas testeados (un récord testeado cada uno).
+        for (var i = 0; i < 12; i++)
+            SetupRecords(athletes[i].Id, [CreateRecord(athletes[i].Id, RecordSource.Tested)]);
+
+        // 3 atletas reportados.
+        for (var i = 12; i < 15; i++)
+            SetupRecords(athletes[i].Id, [CreateRecord(athletes[i].Id, RecordSource.Reported)]);
+
+        // 4 atletas estimados.
+        for (var i = 15; i < 19; i++)
+            SetupRecords(athletes[i].Id, [CreateRecord(athletes[i].Id, RecordSource.Estimated)]);
+
+        // 1 atleta sin dato.
+        SetupRecords(athletes[19].Id, []);
+
+        var result = await CreateHandler().Handle(new GetRecordsReliabilityQuery(categoryId));
+
+        Assert.Equal(20, result.TotalAthletes);
+        Assert.Equal(19, result.TotalRecords);
+
+        var tested = Group(result, "Tested");
+        Assert.Equal(12, tested.AthleteCount);
+        Assert.Equal(12, tested.RecordCount);
+        Assert.Equal(63.158, tested.Percentage, 3);
+
+        var reported = Group(result, "Reported");
+        Assert.Equal(3, reported.AthleteCount);
+        Assert.Equal(3, reported.RecordCount);
+        Assert.Equal(15.789, reported.Percentage, 3);
+
+        var estimated = Group(result, "Estimated");
+        Assert.Equal(4, estimated.AthleteCount);
+        Assert.Equal(4, estimated.RecordCount);
+        Assert.Equal(21.053, estimated.Percentage, 3);
+
+        var noData = Group(result, "NoData");
+        Assert.Equal(1, noData.AthleteCount);
+        Assert.Equal(0, noData.RecordCount);
+        Assert.Equal(5.0, noData.Percentage, 3);
+
+        var totalAthletesInGroups = result.Groups.Sum(g => g.AthleteCount);
+        Assert.Equal(20, totalAthletesInGroups);
+    }
+
     private void SetupCategory(Guid categoryId, params (Guid Id, string Name)[] athletes)
     {
         _structureClientMock
