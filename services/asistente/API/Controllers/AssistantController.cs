@@ -43,6 +43,26 @@ public sealed class AssistantController(
     }
 
     /// <summary>
+    /// Genera una rutina contextualizada con lesiones, récords y sustitutos autorizados (#166 · KAN-461).
+    /// </summary>
+    [HttpPost("athletes/{athleteId:guid}/adaptation")]
+    [ProducesResponseType(typeof(RoutineSuggestionResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<RoutineSuggestionResponseDto>> GenerateAthleteAdaptation(
+        Guid athleteId,
+        [FromBody] RoutineSuggestionRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await suggestRoutineUseCase.ExecuteAdaptationAsync(
+            request with { AthleteId = athleteId },
+            cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Consulta las decisiones históricas del PF sobre propuestas del asistente (#128 · KAN-423).
     /// Devuelve como máximo las últimas 50 decisiones para el atleta especificado, con filtro opcional por zona.
     /// Responde 404 si el atleta no existe o no pertenece al preparador físico autenticado.

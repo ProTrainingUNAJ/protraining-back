@@ -27,6 +27,46 @@ public static class RoutinePromptBuilder
         sb.AppendLine($"Énfasis muscular solicitado: {muscles}");
         sb.AppendLine();
 
+        if (request.AdaptationContext is not null)
+        {
+            var context = request.AdaptationContext;
+            sb.AppendLine("CONTEXTO MÉDICO-DEPORTIVO DEL ATLETA:");
+            if (context.ActiveInjuries.Count == 0)
+                sb.AppendLine("- No hay lesiones activas informadas.");
+            else
+                foreach (var injury in context.ActiveInjuries)
+                    sb.AppendLine($"- Lesión activa en {injury.Zone}: {injury.Description}");
+
+            if (context.CurrentRecords.Count == 0)
+            {
+                sb.AppendLine("- No hay récords vigentes: no inventes cargas ni porcentajes basados en 1RM.");
+            }
+            else
+            {
+                foreach (var record in context.CurrentRecords)
+                    sb.AppendLine($"- Récord vigente: {record.ExerciseName}, 1RM {record.WeightOneRepMaxKg:0.##} kg ({record.Origin}).");
+            }
+
+            if (context.Restrictions.Count > 0)
+            {
+                sb.AppendLine("RESTRICCIONES Y SUSTITUTOS AUTORIZADOS:");
+                foreach (var restriction in context.Restrictions)
+                {
+                    var substitutes = restriction.Substitutes.Count == 0
+                        ? "sin sustituto autorizado"
+                        : string.Join(", ", restriction.Substitutes.Select(s => $"{s.Name} [{s.ExerciseId}]"));
+                    sb.AppendLine($"- No usar ejercicio {restriction.ExerciseId} por {restriction.Zone}: {substitutes}.");
+                }
+            }
+
+            sb.AppendLine("REGLAS DE ADAPTACIÓN:");
+            sb.AppendLine("1. No propongas ejercicios restringidos.");
+            sb.AppendLine("2. Si debes reemplazar un ejercicio restringido, usa únicamente el sustituto autorizado indicado.");
+            sb.AppendLine("3. Explica la sustitución y avisa al preparador físico en el resumen.");
+            sb.AppendLine("4. Distingue los récords estimados de los testeados y no inventes datos faltantes.");
+            sb.AppendLine();
+        }
+
         var exercises = availableExercises ?? request.AvailableExercises;
         if (exercises is { Count: > 0 })
         {
