@@ -24,7 +24,7 @@ public sealed class GenerateCategoryInvitationTokenCommandHandler(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var expiresAt = now.AddDays(7); // Criterio 1: expiracion 7 dias exactos
 
-        var invitation = CategoryInvitation.Create(category.Id, expiresAt);
+        var invitation = CategoryInvitation.Create(category.Id, expiresAt, timeProvider);
         await invitationRepository.AddAsync(invitation, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
