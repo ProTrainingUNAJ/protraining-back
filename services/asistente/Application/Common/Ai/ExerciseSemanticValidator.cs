@@ -81,7 +81,11 @@ public sealed class ExerciseSemanticValidator(
         };
 
         if (adaptationContext is not null)
-            sanitizedRoutine = ApplyAuthorizedAdaptations(sanitizedRoutine, adaptationContext, messages, itemResults);
+        {
+            var adaptation = ApplyAuthorizedAdaptations(sanitizedRoutine, adaptationContext, messages, itemResults);
+            sanitizedRoutine = adaptation.Routine;
+            hasCorrections |= adaptation.HasCorrections;
+        }
 
         return new RoutineSemanticValidationResult(
             IsValid: !requiresFallback,
@@ -93,14 +97,14 @@ public sealed class ExerciseSemanticValidator(
         );
     }
 
-    private static RoutineSuggestionResponseDto ApplyAuthorizedAdaptations(
+    private static AdaptationValidationResult ApplyAuthorizedAdaptations(
         RoutineSuggestionResponseDto routine,
         AthleteAdaptationContextDto context,
         ICollection<string> messages,
         ICollection<ExerciseSemanticValidationItemResult> itemResults)
     {
         if (context.Restrictions.Count == 0)
-            return routine;
+            return new(routine, false);
 
         var restrictionsByExercise = context.Restrictions
             .Where(r => r.Substitutes.Count > 0)
@@ -108,6 +112,7 @@ public sealed class ExerciseSemanticValidator(
             .ToDictionary(g => g.Key, g => g.First());
 
         var exercises = new List<SuggestedExerciseDto>(routine.Exercises.Count);
+        var changes = new List<AdaptationChangeDto>();
         var adaptedAny = false;
         foreach (var exercise in routine.Exercises)
         {
@@ -128,8 +133,15 @@ public sealed class ExerciseSemanticValidator(
             exercises.Add(adapted);
             adaptedAny = true;
             var message =
-                $"El ejercicio '{exercise.ExerciseName}' fue reemplazado por el sustituto autorizado '{substitute.Name}' por la restricción de {restriction.Zone}.";
+                BuildAdaptationReason(restriction, substitute.Name);
             messages.Add(message);
+            changes.Add(new(
+                exercise.ExerciseId,
+                exercise.ExerciseName,
+                substitute.ExerciseId,
+                substitute.Name,
+                restriction.Zone ?? string.Empty,
+                message));
             itemResults.Add(new ExerciseSemanticValidationItemResult(
                 exercise,
                 adapted,
@@ -152,8 +164,15 @@ public sealed class ExerciseSemanticValidator(
                     IsReference = false
                 };
                 var message =
-                    $"El sustituto propuesto '{proposed.ExerciseName}' no estaba autorizado y fue reemplazado por '{substitute.Name}' por la restricción de {restriction.Zone}.";
+                    BuildUnauthorizedSubstituteReason(restriction, proposed.ExerciseName, substitute.Name);
                 messages.Add(message);
+                changes.Add(new(
+                    proposed.ExerciseId,
+                    proposed.ExerciseName,
+                    substitute.ExerciseId,
+                    substitute.Name,
+                    restriction.Zone ?? string.Empty,
+                    message));
                 itemResults.Add(new ExerciseSemanticValidationItemResult(
                     proposed,
                     adapted,
@@ -164,13 +183,47 @@ public sealed class ExerciseSemanticValidator(
             }
         }
 
-        return routine with
+        return new(
+            routine with
         {
             Exercises = exercises,
             WasAdapted = adaptedAny,
-            AdaptationWarnings = messages.Where(message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase)).ToList()
-        };
+            AdaptationWarnings = messages.Where(message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase)).ToList(),
+            AdaptationChanges = changes
+        },
+            adaptedAny);
     }
+
+    private static string BuildAdaptationReason(
+        ExerciseRestrictionContextDto restriction,
+        string substituteName) =>
+        $"Sustitución biomecánica por lesión de {restriction.Zone ?? "zona afectada"} para {NormalizeReason(restriction.Zone, restriction.Reason)}. Sustituto autorizado: {substituteName}.";
+
+    private static string BuildUnauthorizedSubstituteReason(
+        ExerciseRestrictionContextDto restriction,
+        string proposedName,
+        string substituteName) =>
+        $"El sustituto propuesto '{proposedName}' no estaba autorizado. " +
+        $"{BuildAdaptationReason(restriction, substituteName)}";
+
+    private static string NormalizeReason(string? zone, string? reason)
+    {
+        if (string.Equals(zone?.Trim(), "rodilla", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(reason) &&
+            reason.Contains("rotul", StringComparison.OrdinalIgnoreCase))
+        {
+            return "reducir estrés en tendón rotuliano";
+        }
+
+        var normalized = string.IsNullOrWhiteSpace(reason)
+            ? "reducir el estrés de la zona lesionada"
+            : reason.Trim().TrimEnd('.');
+        return char.ToLowerInvariant(normalized[0]) + normalized[1..];
+    }
+
+    private sealed record AdaptationValidationResult(
+        RoutineSuggestionResponseDto Routine,
+        bool HasCorrections);
 
     public async Task<RoutineSuggestionResponseDto> ValidateOrFallbackAsync(
         RoutineSuggestionResponseDto draft,
