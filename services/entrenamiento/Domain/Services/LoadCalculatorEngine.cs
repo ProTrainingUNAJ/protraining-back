@@ -48,4 +48,15 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
 
         return (totalWeightKg.Value - barWeightKg) / 2.0;
     }
+
+    public decimal? CalculateTimeTarget(decimal? bestTimeSeconds, decimal? targetPercentage)
+    {
+        if (!bestTimeSeconds.HasValue || !targetPercentage.HasValue || targetPercentage.Value <= 0)
+            return null;
+
+        decimal target = bestTimeSeconds.Value / (targetPercentage.Value / 100m);
+
+        // Redondeo a 1 decimal
+        return Math.Round(target, 1, MidpointRounding.AwayFromZero);
+    }
 }
