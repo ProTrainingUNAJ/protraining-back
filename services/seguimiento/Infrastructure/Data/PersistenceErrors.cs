@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace Infrastructure.Data;
 
-internal static class PersistenceErrors
+public static class PersistenceErrors
 {
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)
     {
@@ -17,9 +17,9 @@ internal static class PersistenceErrors
         {
             throw new PersistenceConcurrencyException();
         }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        catch (Exception exception) when (IsUniqueViolation(exception))
         {
-            // KAN-425: el índice único (sesión, prueba, atleta, intento) es la última línea
+            // KAN-425 / KAN-527: el índice único es la última línea
             // de defensa contra cargas duplicadas; se traduce a 409 y no a un 503.
             throw new PersistenceConflictException();
         }
@@ -30,15 +30,25 @@ internal static class PersistenceErrors
         }
     }
 
-    private static bool IsUniqueViolation(DbUpdateException exception) =>
-        exception.InnerException switch
+    public static async Task ExecuteAsync(Func<Task> operation)
+    {
+        await ExecuteAsync(async () =>
+        {
+            await operation();
+            return true;
+        });
+    }
+
+    private static bool IsUniqueViolation(Exception exception) =>
+        exception switch
         {
             // PostgreSQL (producción): SqlState 23505 = unique_violation.
             PostgresException postgres => postgres.SqlState == PostgresErrorCodes.UniqueViolation,
             // SQLite (tests): el proveedor no expone un código tipado acá, pero el motor
             // siempre reporta el texto fijo "UNIQUE constraint failed: tabla.columna, ...".
-            DbException provider => provider.Message.Contains("UNIQUE constraint failed", StringComparison.Ordinal),
-            _ => false
+            DbException provider when provider.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase) => true,
+            DbUpdateException dbUpdate when dbUpdate.InnerException is not null => IsUniqueViolation(dbUpdate.InnerException),
+            _ => exception.InnerException is not null && IsUniqueViolation(exception.InnerException)
         };
 
     private static bool IsUnavailable(Exception exception) =>
