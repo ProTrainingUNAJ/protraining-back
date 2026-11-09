@@ -2048,6 +2048,10 @@ components:
             type: string
           description: Músculos secundarios o estabilizadores involucrados.
           example: ["Isquiotibiales", "Zona Lumbar"]
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          example: Distance
         sets:
           type: integer
           example: 4
@@ -2086,6 +2090,12 @@ components:
           type: boolean
           description: True si el ejercicio no tiene récord previo y la serie se prescribe como de referencia para probar y registrar.
           example: false
+        targetTimeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Meta de tiempo calculada en segundos (KAN-455). Null si no tiene test.
+          example: 15.6
 
     TodayRoutineResponse:
       type: object
