@@ -160,6 +160,24 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
                 decimal percentage = prescribed.TargetPercentage ?? 100m;
 
+                var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
+
+                double? targetTime = null;
+
+                double? bestMark = null;
+
+                if (exerciseType == ExerciseType.Distance || exerciseType == ExerciseType.Time)
+                {
+                    // Si el ejercicio tiene test/marca de tiempo
+                    decimal? bestTestTime = activeRecord?.Weight;
+
+                    var timeResult = calculator.CalculateTimeTarget(bestTestTime, prescribed.TargetPercentage);
+
+                    targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
+
+                    bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
+                }
+
                 decimal? current1RmKg = activeRecord?.Weight;
 
                 var source = activeRecord?.Source;
@@ -187,6 +205,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     Images = effectiveExercise?.Images.ToList() ?? [],
                     PrimaryMuscles = effectiveExercise?.PrimaryMuscles.ToList() ?? [],
                     SecondaryMuscles = effectiveExercise?.SecondaryMuscles.ToList() ?? [],
+                    ExerciseType = exerciseType,
                     Sets = prescribed.Sets,
                     Reps = prescribed.Reps,
                     Percentage = (double)percentage,
@@ -194,7 +213,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     BarWeight = barWeight,
                     WeightPerSide = weightPerSide,
                     Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
-                    IsReference = loadResult.IsReference
+                    IsReference = loadResult.IsReference,
+                    TargetTimeSeconds = targetTime,
+                    BestMarkSeconds = bestMark
                 });
             }
 
