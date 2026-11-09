@@ -86,6 +86,51 @@ public sealed class AthleteAdaptationContextServiceTests
     }
 
     [Fact]
+    public async Task Given_InjuriesAndRecords_When_ContextIsRequested_Then_StartsBothQueriesBeforeWaitingForResults()
+    {
+        var athleteId = Guid.NewGuid();
+        var injuriesStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recordsStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseQueries = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seguimiento = new Mock<ISeguimientoClient>();
+        var training = new Mock<ITrainingPlanServiceClient>();
+
+        seguimiento
+            .Setup(client => client.GetActiveInjuriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                injuriesStarted.SetResult(true);
+                await releaseQueries.Task;
+                return (IReadOnlyList<ActiveInjuryRemoteDto>)[];
+            });
+        training
+            .Setup(client => client.GetCurrentRecordsAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                recordsStarted.SetResult(true);
+                await releaseQueries.Task;
+                return (IReadOnlyList<AthleteRecordRemoteDto>)[];
+            });
+
+        var service = new AthleteAdaptationContextService(
+            seguimiento.Object,
+            training.Object,
+            NullLogger<AthleteAdaptationContextService>.Instance);
+
+        var contextTask = service.GetAsync(athleteId);
+        await Task.WhenAll(injuriesStarted.Task, recordsStarted.Task);
+
+        Assert.False(contextTask.IsCompleted);
+        releaseQueries.SetResult(true);
+
+        var result = await contextTask;
+
+        Assert.Empty(result.ActiveInjuries);
+        Assert.Empty(result.CurrentRecords);
+        Assert.Empty(result.Restrictions);
+    }
+
+    [Fact]
     public async Task Given_InactiveInjuryAndHistoricalRecord_When_ContextIsRequested_Then_ExcludesThem()
     {
         var athleteId = Guid.NewGuid();
