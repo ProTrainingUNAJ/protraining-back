@@ -28,5 +28,6 @@ public sealed record RoutineSuggestionResponseDto(
     [property: JsonPropertyName("aiProvider")] string ProviderUsed,
     [property: JsonPropertyName("id")] Guid? Id = null,
     [property: JsonPropertyName("wasAdapted")] bool WasAdapted = false,
-    [property: JsonPropertyName("adaptationWarnings")] IReadOnlyList<string>? AdaptationWarnings = null
+    [property: JsonPropertyName("adaptationWarnings")] IReadOnlyList<string>? AdaptationWarnings = null,
+    [property: JsonPropertyName("adaptationChanges")] IReadOnlyList<AdaptationChangeDto>? AdaptationChanges = null
 );

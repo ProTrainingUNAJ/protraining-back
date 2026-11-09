@@ -31,6 +31,14 @@ public sealed record ExerciseRestrictionContextDto(
     string? Reason,
     IReadOnlyList<AuthorizedSubstituteDto> Substitutes);
 
+public sealed record AdaptationChangeDto(
+    Guid? OriginalExerciseId,
+    string OriginalExerciseName,
+    Guid FinalExerciseId,
+    string FinalExerciseName,
+    string Zone,
+    string Reason);
+
 public sealed record AthleteAdaptationContextDto(
     Guid AthleteId,
     IReadOnlyList<ActiveInjuryRemoteDto> ActiveInjuries,

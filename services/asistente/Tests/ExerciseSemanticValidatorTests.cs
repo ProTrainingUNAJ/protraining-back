@@ -151,7 +151,50 @@ public sealed class ExerciseSemanticValidatorTests
         Assert.Equal(PrensaPiernasId, exercise.ExerciseId);
         Assert.Equal("Prensa de piernas 45°", exercise.ExerciseName);
         Assert.True(result.SanitizedRoutine.WasAdapted);
+        Assert.True(result.HasCorrections);
+        var change = Assert.Single(result.SanitizedRoutine.AdaptationChanges!);
+        Assert.Equal(SentadillaId, change.OriginalExerciseId);
+        Assert.Equal(PrensaPiernasId, change.FinalExerciseId);
+        Assert.Equal(
+            "Sustitución biomecánica por lesión de rodilla para reducir estrés en tendón rotuliano. Sustituto autorizado: Prensa de piernas 45°.",
+            change.Reason);
         Assert.Contains(result.ValidationMessages, message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Given_AdaptedExerciseAndOtherInvalidExercises_When_Validated_Then_KeepsFallbackRequired()
+    {
+        var athleteId = Guid.NewGuid();
+        var context = new AthleteAdaptationContextDto(
+            athleteId,
+            [],
+            [],
+            [
+                new ExerciseRestrictionContextDto(
+                    SentadillaId,
+                    "rodilla",
+                    "Dolor rotuliano",
+                    [new AuthorizedSubstituteDto(PrensaPiernasId, "Prensa de piernas 45°")])
+            ]);
+        var draft = new RoutineSuggestionResponseDto(
+            athleteId,
+            "Adaptación",
+            "Propuesta",
+            [
+                new SuggestedExerciseDto("Sentadilla trasera con barra", 4, 6, 70m, SentadillaId),
+                new SuggestedExerciseDto("Ejercicio inventado A", 3, 10, 60m, Guid.NewGuid()),
+                new SuggestedExerciseDto("Ejercicio inventado B", 3, 10, 60m, Guid.NewGuid())
+            ],
+            "Ollama");
+
+        var result = await _validator.ValidateDraftAsync(
+            draft,
+            SemanticValidationPolicy.Strict,
+            context);
+
+        Assert.Equal(PrensaPiernasId, result.SanitizedRoutine.Exercises[0].ExerciseId);
+        Assert.True(result.HasCorrections);
+        Assert.True(result.RequiresDeterministicFallback);
     }
 
     [Fact]
