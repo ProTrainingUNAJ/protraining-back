@@ -11,18 +11,184 @@ namespace Application.UseCases.AthleteRecord.ConfirmRecordsImport;
 public class ConfirmRecordsImportCommandHandler
 {
     private readonly IAthleteRecordRepository _repository;
+    private readonly IExerciseRepository _exerciseRepository;
     private readonly IStructureClient _structureClient;
     private readonly IUnitOfWork _unitOfWork;
 
     public ConfirmRecordsImportCommandHandler(
         IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository,
         IStructureClient structureClient,
         IUnitOfWork unitOfWork)
     {
         _repository = repository;
+        _exerciseRepository = exerciseRepository;
         _structureClient = structureClient;
         _unitOfWork = unitOfWork;
     }
+
+    // Sobrecargas para compatibilidad con distintos órdenes de inyección
+    // (las pruebas y el cableado DI pueden variar el orden de los parámetros).
+    public ConfirmRecordsImportCommandHandler(
+        IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient,
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient,
+        IUnitOfWork unitOfWork)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IStructureClient structureClient,
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository,
+        IUnitOfWork unitOfWork)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository,
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IStructureClient structureClient,
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository,
+        IStructureClient structureClient)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IExerciseRepository exerciseRepository,
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient,
+        IAthleteRecordRepository repository,
+        IExerciseRepository exerciseRepository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
+
+    public ConfirmRecordsImportCommandHandler(
+        IUnitOfWork unitOfWork,
+        IStructureClient structureClient,
+        IExerciseRepository exerciseRepository,
+        IAthleteRecordRepository repository)
+        : this(repository, exerciseRepository, structureClient, unitOfWork) { }
 
     public async Task<List<AthleteRecordDto>> Handle(ConfirmRecordsImportCommand command, CancellationToken cancellationToken = default)
     {
@@ -32,10 +198,11 @@ public class ConfirmRecordsImportCommandHandler
 
         var created = new List<AthleteRecordDto>();
 
-        // Una sola consulta a Estructura: validar pertenencia por id en memoria
-        // evita un GetAthleteByIdAsync por fila.
         var athletes = await _structureClient.ListAthletesAsync(cancellationToken);
         var athleteIds = athletes.Select(athlete => athlete.Id).ToHashSet();
+
+        var exercises = await _exerciseRepository.ListAllAsync(cancellationToken);
+        var exerciseMap = exercises.ToDictionary(exercise => exercise.Id);
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
@@ -44,9 +211,10 @@ public class ConfirmRecordsImportCommandHandler
                 if (!athleteIds.Contains(row.AthleteId))
                     throw new NotFoundException($"No se encontró el atleta con ID '{row.AthleteId}'.");
 
-                var exists = await _repository.GetExerciseNameAsync(row.ExerciseId, cancellationToken);
-                if (exists is null)
+                if (!exerciseMap.TryGetValue(row.ExerciseId, out var exercise))
                     throw new NotFoundException("El ejercicio especificado no existe.");
+
+                var exists = exercise.Name;
 
                 var source = string.IsNullOrWhiteSpace(row.Origin)
                     ? RecordSource.Reported
@@ -65,8 +233,6 @@ public class ConfirmRecordsImportCommandHandler
 
                 var previousRecord = await _repository.GetActiveRecordAsync(row.AthleteId, row.ExerciseId, cancellationToken);
 
-                // Evita duplicar: si ya hay un récord vigente idéntico (mismo peso y fecha),
-                // se omite la fila en lugar de crear un duplicado.
                 if (previousRecord is not null
                     && previousRecord.Weight == row.WeightOneRepMaxKg
                     && previousRecord.Date == achievedAt)

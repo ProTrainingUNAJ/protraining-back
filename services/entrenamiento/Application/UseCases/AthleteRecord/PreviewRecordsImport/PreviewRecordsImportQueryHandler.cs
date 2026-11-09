@@ -164,17 +164,12 @@ public class PreviewRecordsImportQueryHandler
 
             if (status != ImportRecordRowStatus.Ok)
             {
-                if (status == ImportRecordRowStatus.AthleteNotFound)
-                {
-                    exerciseId = null;
-                    weight = null;
-                    achievedAt = null;
-                    origin = null;
-                }
-                else if (status == ImportRecordRowStatus.ExerciseNotFound)
-                {
-                    weight = null;
-                }
+                // Las filas no importables no deben conservar datos parciales
+                // (peso, fecha u origen parseados) para que el front no los envíe al confirmar.
+                exerciseId = null;
+                weight = null;
+                achievedAt = null;
+                origin = null;
             }
 
             result.Add(new ImportRecordPreviewRowDto(

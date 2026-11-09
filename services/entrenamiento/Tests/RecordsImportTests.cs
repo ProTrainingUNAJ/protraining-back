@@ -51,7 +51,7 @@ public class RecordsImportTests
         new(new ExerciseRepository(context), _structureClient.Object);
 
     private ConfirmRecordsImportCommandHandler CreateConfirmHandler(AppDbContext context) =>
-        new(new AthleteRecordRepository(context), _structureClient.Object, new UnitOfWork(context));
+        new(new AthleteRecordRepository(context), new ExerciseRepository(context), _structureClient.Object, new UnitOfWork(context));
 
     private void SetupAthletes(params StructureAthleteDto[] athletes) =>
         _structureClient
@@ -127,6 +127,7 @@ public class RecordsImportTests
             Mock.Of<IStructureClient>());
         var confirmHandler = new ConfirmRecordsImportCommandHandler(
             Mock.Of<IAthleteRecordRepository>(),
+            Mock.Of<IExerciseRepository>(),
             Mock.Of<IStructureClient>(),
             Mock.Of<IUnitOfWork>());
         var controller = new RecordsImportController(previewHandler, confirmHandler);
@@ -215,5 +216,37 @@ public class RecordsImportTests
 
         // Queda exactamente un vigente por ejercicio.
         Assert.Equal(8, records.Where(record => record.IsActive).Select(record => record.ExerciseId).Distinct().Count());
+
+        // Sin N+1 a Estructura: una sola consulta de atletas y nunca por id.
+        _structureClient.Verify(client => client.ListAthletesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _structureClient.Verify(client => client.GetAthleteByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_NonOkRowWithDateAndSource_When_Previewed_Then_NoPartialFieldsAreRetained()
+    {
+        await SeedExercisesAsync("Sentadilla trasera con barra");
+        var athlete = new StructureAthleteDto(_athleteId, "Lucas Fernández");
+        SetupAthletes(athlete);
+
+        var csv = "Atleta,Ejercicio,Peso,Fecha,Origen\nLucas Fernández,Sentadilla,100,2024-01-01,TestedInSession";
+
+        await using var context = CreateContext();
+        var result = await CreatePreviewHandler(context).Handle(
+            new PreviewRecordsImportQuery(csv, "Atleta", "Ejercicio", "Peso", "Fecha", "Origen"));
+
+        var row = Assert.Single(result);
+        Assert.Equal(ImportRecordRowStatus.ExerciseApproximate, row.Status);
+        Assert.Null(row.ExerciseId);
+        Assert.Null(row.WeightOneRepMaxKg);
+        Assert.Null(row.AchievedAt);
+        Assert.Null(row.Origin);
+    }
+
+    [Fact]
+    public void Given_ImportRecordRowStatus_When_Serialized_Then_UsesTextNotNumber()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(ImportRecordRowStatus.Ok);
+        Assert.Equal("\"Ok\"", json);
     }
 }
