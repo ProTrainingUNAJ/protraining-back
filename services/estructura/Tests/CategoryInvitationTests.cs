@@ -89,12 +89,9 @@ public sealed class CategoryInvitationTests
         var timeProvider = new TestTimeProvider(now);
 
         var categoryId = Guid.NewGuid();
+        var creationTime = now.UtcDateTime.AddDays(-10);
         var expiredDate = now.UtcDateTime.AddDays(-1); // Expiró ayer
-        var invitation = CategoryInvitation.Create(categoryId, DateTime.UtcNow.AddMinutes(1), "token-vencido");
-
-        // Usamos reflection para fijar la fecha expirada en el test
-        typeof(CategoryInvitation).GetProperty(nameof(CategoryInvitation.ExpiresAt))!
-            .SetValue(invitation, expiredDate);
+        var invitation = CategoryInvitation.Create(categoryId, expiredDate, "token-vencido", utcNow: creationTime);
 
         var details = new CategoryInvitationDetails(invitation, "Primera División");
 
@@ -112,13 +109,13 @@ public sealed class CategoryInvitationTests
     [Fact]
     public async Task Given_ValidToken_When_Validate_Then_ReturnsCategoryInvitationDtoWithCategoryName()
     {
-        // Se usa una fecha fija futura para asegurar que CategoryInvitation.Create (que valida contra DateTime.UtcNow) no lance DomainException
-        var now = new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        // Se usa una fecha fija controlada para asegurar determinismo completo sin depender del reloj del sistema ni vencer en el futuro
+        var now = new DateTimeOffset(2026, 11, 10, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
 
         var categoryId = Guid.NewGuid();
         var futureDate = now.UtcDateTime.AddDays(5);
-        var invitation = CategoryInvitation.Create(categoryId, futureDate, "token-activo");
+        var invitation = CategoryInvitation.Create(categoryId, futureDate, timeProvider, "token-activo");
 
         var details = new CategoryInvitationDetails(invitation, "Primera División");
 

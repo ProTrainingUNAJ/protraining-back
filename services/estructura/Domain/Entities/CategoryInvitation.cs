@@ -12,12 +12,17 @@ public sealed class CategoryInvitation : BaseEntity
 
     private CategoryInvitation() { }
 
-    public static CategoryInvitation Create(Guid categoryId, DateTime expiresAt, string? customToken = null)
+    public static CategoryInvitation Create(
+        Guid categoryId,
+        DateTime expiresAt,
+        string? customToken = null,
+        DateTime? utcNow = null)
     {
         if (categoryId == Guid.Empty)
             throw new DomainException("El identificador de la categoría es inválido.");
 
-        if (expiresAt <= DateTime.UtcNow)
+        var now = utcNow ?? DateTime.UtcNow;
+        if (expiresAt <= now)
             throw new DomainException("La fecha de expiración debe ser en el futuro.");
 
         var token = string.IsNullOrWhiteSpace(customToken)
@@ -31,6 +36,13 @@ public sealed class CategoryInvitation : BaseEntity
             ExpiresAt = expiresAt
         };
     }
+
+    public static CategoryInvitation Create(
+        Guid categoryId,
+        DateTime expiresAt,
+        TimeProvider timeProvider,
+        string? customToken = null)
+        => Create(categoryId, expiresAt, customToken, timeProvider.GetUtcNow().UtcDateTime);
 
     public bool IsExpired(DateTime utcNow) => utcNow >= ExpiresAt;
 }
