@@ -1,4 +1,5 @@
 using Application.DTOs.Alerts;
+using Application.DTOs.Adaptation;
 using Application.DTOs.DayConflicts;
 
 namespace Application.Interfaces.Services;
@@ -23,6 +24,10 @@ public interface ISeguimientoClient
     /// Lanza SeguimientoServiceUnavailableException (503) si Seguimiento no responde.
     /// </summary>
     Task<TodayCheckInDto?> GetTodayCheckInAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ActiveInjuryRemoteDto>> GetActiveInjuriesAsync(
         Guid athleteId,
         CancellationToken cancellationToken = default);
 }
