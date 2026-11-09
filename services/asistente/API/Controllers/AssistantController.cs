@@ -1,8 +1,10 @@
 using Application.DTOs.Ai;
+using Application.DTOs.Adaptation;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PfDecisions;
 using Application.UseCases.Ai.SuggestRoutine;
+using Application.UseCases.Adaptation.GetAthleteAdaptationContext;
 using Application.UseCases.DayAdjustments.ApproveDayAdjustment;
 using Application.UseCases.DayAdjustments.CreateDayAdjustment;
 using Application.UseCases.DayAdjustments.RejectDayAdjustment;
@@ -22,7 +24,8 @@ public sealed class AssistantController(
     GetDayConflictsQueryHandler getDayConflictsHandler,
     CreateDayAdjustmentCommandHandler? createDayAdjustmentHandler = null,
     ApproveDayAdjustmentCommandHandler? approveDayAdjustmentHandler = null,
-    RejectDayAdjustmentCommandHandler? rejectDayAdjustmentHandler = null) : ControllerBase
+    RejectDayAdjustmentCommandHandler? rejectDayAdjustmentHandler = null,
+    GetAthleteAdaptationContextQueryHandler? getAthleteAdaptationContextHandler = null) : ControllerBase
 {
     /// <summary>
     /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
@@ -76,6 +79,28 @@ public sealed class AssistantController(
     {
         var result = await getDayConflictsHandler.HandleAsync(
             new GetDayConflictsQuery(athleteId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Reúne lesiones activas, récords vigentes y sustitutos autorizados para preparar una adaptación individual (#164 · KAN-459).
+    /// </summary>
+    [HttpGet("athletes/{athleteId:guid}/adaptation-context")]
+    [ProducesResponseType(typeof(AthleteAdaptationContextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<AthleteAdaptationContextDto>> GetAthleteAdaptationContext(
+        Guid athleteId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(getAthleteAdaptationContextHandler);
+
+        var result = await getAthleteAdaptationContextHandler.HandleAsync(
+            new GetAthleteAdaptationContextQuery(athleteId),
             cancellationToken);
 
         return Ok(result);

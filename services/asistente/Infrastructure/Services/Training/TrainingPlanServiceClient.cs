@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.DTOs.Adaptation;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PlanDrafts;
@@ -271,6 +272,70 @@ public sealed class TrainingPlanServiceClient(
                         "Entrenamiento respondió {StatusCode} al chequear restricciones de ejercicios.",
                         (int)response.StatusCode);
                     throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+            }
+        }
+    }
+
+    public async Task<IReadOnlyList<AthleteRecordRemoteDto>> GetCurrentRecordsAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty || httpClient.BaseAddress is null)
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(
+                $"api/v1/athletes/{athleteId}/records?currentOnly=true",
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                "Error de comunicación con Entrenamiento al consultar récords del atleta {AthleteId}: {ErrorType}.",
+                athleteId,
+                ex.GetType().Name);
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage, ex);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                throw new NotFoundException(
+                    "El atleta no existe o no pertenece al preparador físico autenticado.");
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new UnauthorizedAccessException(
+                    "Entrenamiento rechazó la autenticación o permisos al consultar récords.");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogError(
+                    "Entrenamiento respondió {StatusCode} al consultar récords del atleta {AthleteId}.",
+                    (int)response.StatusCode,
+                    athleteId);
+                throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+            }
+
+            try
+            {
+                return await response.Content.ReadFromJsonAsync<List<AthleteRecordRemoteDto>>(
+                           JsonOptions,
+                           cancellationToken)
+                       ?? [];
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "No se pudo interpretar los récords del atleta {AthleteId}.",
+                    athleteId);
+                throw new TrainingServiceUnavailableException(TrainingUnavailableMessage, ex);
             }
         }
     }

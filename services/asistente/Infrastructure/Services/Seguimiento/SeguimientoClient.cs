@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Alerts;
 using Application.DTOs.DayConflicts;
 using Application.Exceptions;
@@ -75,6 +76,10 @@ public sealed class SeguimientoClient(
             throw;
         }
         catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (NotFoundException)
         {
             throw;
         }
@@ -154,6 +159,63 @@ public sealed class SeguimientoClient(
                         athleteId);
                     throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage);
             }
+        }
+    }
+
+    public async Task<IReadOnlyList<ActiveInjuryRemoteDto>> GetActiveInjuriesAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty || httpClient.BaseAddress is null)
+            throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage);
+
+        try
+        {
+            using var response = await httpClient.GetAsync(
+                $"api/v1/athletes/{athleteId}/injuries?status=Active",
+                cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                throw new NotFoundException(
+                    "El atleta no existe o no pertenece al preparador físico autenticado.");
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new UnauthorizedAccessException(
+                    "Seguimiento rechazó la autenticación o permisos al consultar lesiones.");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogError(
+                    "Seguimiento respondió {StatusCode} al consultar lesiones del atleta {AthleteId}.",
+                    (int)response.StatusCode,
+                    athleteId);
+                throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage);
+            }
+
+            return await response.Content.ReadFromJsonAsync<List<ActiveInjuryRemoteDto>>(
+                       JsonOptions,
+                       cancellationToken)
+                   ?? [];
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (SeguimientoServiceUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Error al consultar lesiones del atleta {AthleteId} en Seguimiento.",
+                athleteId);
+            throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage, ex);
         }
     }
 }

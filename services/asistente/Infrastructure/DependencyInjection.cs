@@ -6,6 +6,7 @@ using Infrastructure.Services.Ai;
 using Infrastructure.Services.Ai.Gemini;
 using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
+using Infrastructure.Services.Adaptation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<RuleBasedAiClient>();
         services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
         services.AddScoped<IAiService, ResilientAiService>();
+        services.AddScoped<IAthleteAdaptationContextService, AthleteAdaptationContextService>();
 
         return services;
     }

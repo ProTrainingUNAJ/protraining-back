@@ -1,6 +1,7 @@
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.DayConflicts;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Adaptation;
 
 namespace Application.Interfaces.Services;
 
@@ -31,6 +32,10 @@ public interface ITrainingPlanServiceClient
     Task<IReadOnlyList<ExerciseRestrictionCheckResultRemoteDto>> CheckExerciseRestrictionsAsync(
         string painZones,
         IReadOnlyList<Guid> exerciseIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AthleteRecordRemoteDto>> GetCurrentRecordsAsync(
+        Guid athleteId,
         CancellationToken cancellationToken = default);
 
     Task ApplyAthleteSessionAdjustmentAsync(
