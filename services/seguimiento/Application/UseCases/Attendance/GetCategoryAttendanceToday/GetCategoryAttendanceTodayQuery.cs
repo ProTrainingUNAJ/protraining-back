@@ -3,7 +3,6 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
-using Domain.Entities;
 using Domain.Common;
 using Domain.Entities;
 
@@ -19,19 +18,12 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
 {
     private readonly IStructureClient _structureClient;
     private readonly IDailyLoadRepository _dailyLoadRepository;
-    private readonly IAttendanceRepository? _attendanceRepository;
-
-    public GetCategoryAttendanceTodayQueryHandler(
-        IStructureClient structureClient,
-        IDailyLoadRepository dailyLoadRepository)
-        : this(structureClient, dailyLoadRepository, null)
-    {
-    }
+    private readonly IAttendanceRepository _attendanceRepository;
 
     public GetCategoryAttendanceTodayQueryHandler(
         IStructureClient structureClient,
         IDailyLoadRepository dailyLoadRepository,
-        IAttendanceRepository? attendanceRepository)
+        IAttendanceRepository attendanceRepository)
     {
         _structureClient = structureClient;
         _dailyLoadRepository = dailyLoadRepository;
@@ -46,7 +38,7 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
 
         IReadOnlyList<CategoryAthleteDto> athletes;
         IReadOnlyList<DailyLoad> loads;
-        IReadOnlyList<Domain.Entities.Attendance> corrections = Array.Empty<Domain.Entities.Attendance>();
+        IReadOnlyList<Domain.Entities.Attendance> corrections;
 
         try
         {
@@ -56,21 +48,16 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
                 date,
                 cancellationToken);
 
-            if (_attendanceRepository is not null)
-            {
-                corrections = await _attendanceRepository.GetByAthletesAndDateAsync(
-                    athletes.Select(athlete => athlete.Id).ToList(),
-                    date,
-                    cancellationToken);
-            }
+            corrections = await _attendanceRepository.GetByAthletesAndDateAsync(
+                athletes.Select(athlete => athlete.Id).ToList(),
+                date,
+                cancellationToken);
         }
         catch (StructureUnavailableException)
         {
             // Resiliencia (KAN-445): Estructura caída no puede tumbar la asistencia del PF.
             var todaysLoads = await _dailyLoadRepository.GetByDateAsync(date, cancellationToken);
-            var todaysCorrections = _attendanceRepository is null
-                ? Array.Empty<Domain.Entities.Attendance>()
-                : await _attendanceRepository.GetByDateAsync(date, cancellationToken);
+            var todaysCorrections = await _attendanceRepository.GetByDateAsync(date, cancellationToken);
 
             var automaticPresent = todaysLoads.Select(load => load.AthleteId).ToHashSet();
             var correctionByAthlete = todaysCorrections.ToDictionary(c => c.AthleteId);
@@ -124,9 +111,4 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
             percentage,
             athleteSummaries);
     }
-
-    public Task<CategoryAttendanceSummaryDto> Handle(
-        GetCategoryAttendanceTodayQuery query,
-        CancellationToken cancellationToken = default) =>
-        HandleAsync(query, cancellationToken);
 }

@@ -15,9 +15,19 @@ public class GetCategoryAttendanceTodayQueryHandlerTests
     private readonly Guid _categoryId = Guid.NewGuid();
     private readonly Mock<IStructureClient> _structure = new();
     private readonly Mock<IDailyLoadRepository> _loads = new();
+    private readonly Mock<IAttendanceRepository> _attendance = new();
 
-    private GetCategoryAttendanceTodayQueryHandler CreateHandler() =>
-        new(_structure.Object, _loads.Object);
+    private GetCategoryAttendanceTodayQueryHandler CreateHandler()
+    {
+        _attendance
+            .Setup(repo => repo.GetByAthletesAndDateAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Domain.Entities.Attendance>());
+        _attendance
+            .Setup(repo => repo.GetByDateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Domain.Entities.Attendance>());
+        return new(_structure.Object, _loads.Object, _attendance.Object);
+    }
 
     private static CategoryAthleteDto CreateAthleteDto(Guid id, string fullName) =>
         new() { Id = id, FullName = fullName };
@@ -35,6 +45,12 @@ public class GetCategoryAttendanceTodayQueryHandlerTests
             .Setup(repo => repo.GetByAthletesAndDateAsync(
                 It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(loads.ToList());
+
+    private void SetupAttendance(params Domain.Entities.Attendance[] corrections) =>
+        _attendance
+            .Setup(repo => repo.GetByAthletesAndDateAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(corrections.ToList());
 
     [Fact]
     public async Task HandleAsync_MixesPresentAndMissing()
