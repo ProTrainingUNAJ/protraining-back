@@ -16,11 +16,20 @@ public sealed class AthleteAdaptationContextService(
         if (athleteId == Guid.Empty)
             throw new ArgumentException("El identificador del atleta no puede ser vacío.", nameof(athleteId));
 
-        var injuries = (await seguimientoClient.GetActiveInjuriesAsync(athleteId, cancellationToken))
+        var injuriesTask = seguimientoClient.GetActiveInjuriesAsync(
+            athleteId,
+            cancellationToken);
+        var recordsTask = trainingClient.GetCurrentRecordsAsync(
+            athleteId,
+            cancellationToken);
+
+        await Task.WhenAll(injuriesTask, recordsTask);
+
+        var injuries = (await injuriesTask)
             .Where(injury => string.Equals(injury.Status, "Active", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var records = (await trainingClient.GetCurrentRecordsAsync(athleteId, cancellationToken))
+        var records = (await recordsTask)
             .Where(record => record.IsCurrent)
             .ToList();
 
