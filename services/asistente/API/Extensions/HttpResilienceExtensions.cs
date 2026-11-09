@@ -9,6 +9,7 @@ namespace API.Extensions;
 /// - Timeout por intento individual de 5 segundos.
 /// - Circuit Breaker que abre tras 5 fallos seguidos y corta llamadas durante 30 segundos.
 /// - Reintentos con Backoff Exponencial y Jitter (hasta 3 intentos) para evitar tormentas de reintentos.
+/// - Sin reintentos para métodos HTTP no seguros para evitar duplicar operaciones.
 /// - Timeout total de solicitud de 30 segundos.
 /// </summary>
 public static class HttpResilienceExtensions
@@ -37,6 +38,25 @@ public static class HttpResilienceExtensions
         options.Retry.BackoffType = DelayBackoffType.Exponential;
         options.Retry.UseJitter = true;
         options.Retry.Delay = TimeSpan.FromSeconds(1);
+        DisableRetriesForUnsafeHttpMethods(options);
+    }
+
+    private static void DisableRetriesForUnsafeHttpMethods(HttpStandardResilienceOptions options)
+    {
+        var defaultShouldHandle = options.Retry.ShouldHandle;
+        options.Retry.ShouldHandle = args =>
+        {
+            var request = args.Context.GetRequestMessage();
+            if (request is not null &&
+                (request.Method == HttpMethod.Post ||
+                 request.Method == HttpMethod.Patch ||
+                 request.Method == HttpMethod.Delete ||
+                 request.Method == HttpMethod.Connect))
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            return defaultShouldHandle(args);
+        };
     }
 }
-

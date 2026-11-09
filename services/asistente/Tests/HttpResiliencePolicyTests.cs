@@ -42,6 +42,98 @@ public sealed class HttpResiliencePolicyTests
     }
 
     [Fact]
+    public async Task Given_FailingPost_When_ResiliencePipelineProcessesIt_Then_PostIsSentOnlyOnce()
+    {
+        var handler = new CountingHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        using var provider = BuildResilienceProvider(handler);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("TestClient");
+
+        using var response = await client.PostAsync(
+            "http://dummy-internal-service/api/test",
+            new StringContent("{}"));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Given_TransientGetFailure_When_ResiliencePipelineProcessesIt_Then_GetIsRetried()
+    {
+        var attempts = 0;
+        var handler = new CountingHandler(_ =>
+        {
+            attempts++;
+            return new HttpResponseMessage(
+                attempts == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
+        });
+        using var provider = BuildResilienceProvider(handler);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("TestClient");
+
+        using var response = await client.GetAsync("http://dummy-internal-service/api/test");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Given_TransientPutFailure_When_ResiliencePipelineProcessesIt_Then_PutIsRetried()
+    {
+        var attempts = 0;
+        var handler = new CountingHandler(_ =>
+        {
+            attempts++;
+            return new HttpResponseMessage(
+                attempts == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
+        });
+        using var provider = BuildResilienceProvider(handler);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("TestClient");
+
+        using var response = await client.PutAsync(
+            "http://dummy-internal-service/api/test",
+            new StringContent("{}"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Given_FailingDelete_When_ResiliencePipelineProcessesIt_Then_DeleteIsSentOnlyOnce()
+    {
+        var handler = new CountingHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        using var provider = BuildResilienceProvider(handler);
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("TestClient");
+
+        using var response = await client.DeleteAsync("http://dummy-internal-service/api/test");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Given_SlowPost_When_AttemptTimesOut_Then_PostIsNotRetried()
+    {
+        var handler = new CountingDelayingHandler(TimeSpan.FromMilliseconds(200));
+        var services = new ServiceCollection();
+        services.AddHttpClient("PostTimeoutClient")
+            .ConfigurePrimaryHttpMessageHandler(() => handler)
+            .AddStandardResilienceHandler(options =>
+            {
+                HttpResilienceExtensions.ConfigureProTrainingResilienceOptions(options);
+                options.AttemptTimeout.Timeout = TimeSpan.FromMilliseconds(50);
+                options.Retry.Delay = TimeSpan.FromMilliseconds(1);
+            });
+
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("PostTimeoutClient");
+
+        await Assert.ThrowsAsync<TimeoutRejectedException>(() => client.PostAsync(
+            "http://dummy-internal-service/api/test",
+            new StringContent("{}")));
+
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
     public async Task Given_FailingDownstream_When_FiveFailuresAccumulate_Then_CircuitBreaker_Opens_And_Cuts_Subsequent_Calls_Fast()
     {
         // Arrange: Handler que siempre devuelve 500 Internal Server Error
@@ -120,5 +212,33 @@ public sealed class HttpResiliencePolicyTests
             await Task.Delay(delay, cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
+    }
+
+    private sealed class CountingDelayingHandler(TimeSpan delay) : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            await Task.Delay(delay, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
+    private static ServiceProvider BuildResilienceProvider(CountingHandler handler)
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient("TestClient")
+            .ConfigurePrimaryHttpMessageHandler(() => handler)
+            .AddStandardResilienceHandler(options =>
+            {
+                HttpResilienceExtensions.ConfigureProTrainingResilienceOptions(options);
+                options.Retry.Delay = TimeSpan.FromMilliseconds(1);
+            });
+
+        return services.BuildServiceProvider();
     }
 }
