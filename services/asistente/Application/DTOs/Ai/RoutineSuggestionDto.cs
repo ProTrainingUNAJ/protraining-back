@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Application.DTOs.Adaptation;
 
 namespace Application.DTOs.Ai;
 
@@ -6,7 +7,8 @@ public sealed record RoutineSuggestionRequestDto(
     [property: JsonPropertyName("athleteId")] Guid AthleteId,
     [property: JsonPropertyName("goal")] string Goal,
     [property: JsonPropertyName("muscleGroupEmphasis")] List<string>? MuscleGroupEmphasis = null,
-    [property: JsonIgnore] IReadOnlyList<CatalogExerciseDto>? AvailableExercises = null
+    [property: JsonIgnore] IReadOnlyList<CatalogExerciseDto>? AvailableExercises = null,
+    [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null
 );
 
 public sealed record SuggestedExerciseDto(
@@ -24,5 +26,7 @@ public sealed record RoutineSuggestionResponseDto(
     [property: JsonPropertyName("justificationSummary")] string JustificationSummary,
     [property: JsonPropertyName("exercises")] List<SuggestedExerciseDto> Exercises,
     [property: JsonPropertyName("aiProvider")] string ProviderUsed,
-    [property: JsonPropertyName("id")] Guid? Id = null
+    [property: JsonPropertyName("id")] Guid? Id = null,
+    [property: JsonPropertyName("wasAdapted")] bool WasAdapted = false,
+    [property: JsonPropertyName("adaptationWarnings")] IReadOnlyList<string>? AdaptationWarnings = null
 );

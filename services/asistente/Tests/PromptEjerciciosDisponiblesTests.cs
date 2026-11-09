@@ -2,6 +2,7 @@ namespace Asistente.Tests;
 
 using Application.Common.Ai;
 using Application.DTOs.Ai;
+using Application.DTOs.Adaptation;
 using Application.Interfaces.Services;
 using Infrastructure.Services.Ai;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -71,6 +72,46 @@ public sealed class PromptEjerciciosDisponiblesTests
         Assert.Contains("Fuerza Máxima", prompt);
         Assert.Contains("Espalda", prompt);
         Assert.Contains("REGLAS ESTRICTAS DE PRIVACIDAD", prompt);
+    }
+
+    [Fact]
+    public void BuildPrompt_WhenAdaptationContextExists_IncludesInjuryRecordsAndAuthorizedSubstitutes()
+    {
+        var context = new AthleteAdaptationContextDto(
+            _athleteId,
+            [
+                new ActiveInjuryRemoteDto(
+                    Guid.NewGuid(),
+                    _athleteId,
+                    "rodilla",
+                    "Dolor rotuliano",
+                    DateTime.UtcNow.AddDays(-1),
+                    DateTime.UtcNow.AddDays(5),
+                    "Active",
+                    null,
+                    DateTime.UtcNow.AddDays(-1))
+            ],
+            [],
+            [
+                new ExerciseRestrictionContextDto(
+                    _squatId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [new AuthorizedSubstituteDto(_benchPressId, "Prensa autorizada")])
+            ]);
+        var request = new RoutineSuggestionRequestDto(
+            _athleteId,
+            "Fuerza",
+            ["Piernas"],
+            AdaptationContext: context);
+
+        var prompt = RoutinePromptBuilder.BuildPrompt(request);
+
+        Assert.Contains("CONTEXTO MÉDICO-DEPORTIVO", prompt);
+        Assert.Contains("No hay récords vigentes", prompt);
+        Assert.True(prompt.Contains("sustitutos autorizados", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Prensa autorizada", prompt);
+        Assert.Contains("no inventes cargas", prompt);
     }
 
     [Fact]

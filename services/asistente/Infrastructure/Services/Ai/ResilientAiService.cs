@@ -137,7 +137,7 @@ public sealed class ResilientAiService : IAiService
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
         string? promptHash = null;
-        if (_responseCache != null)
+        if (_responseCache != null && request.AdaptationContext is null)
         {
             var pfId = _currentUser?.PfId;
             promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis, pfId);
@@ -256,7 +256,10 @@ public sealed class ResilientAiService : IAiService
                 // Validación semántica de ejercicios en caso de contar con el validador
                 if (_semanticValidator != null)
                 {
-                    var validationResult = await _semanticValidator.ValidateDraftAsync(response, cancellationToken: cancellationToken);
+                    var validationResult = await _semanticValidator.ValidateDraftAsync(
+                        response,
+                        adaptationContext: request.AdaptationContext,
+                        cancellationToken: cancellationToken);
                     if (validationResult.RequiresDeterministicFallback && !isLast)
                     {
                         _logger.LogWarning(
@@ -273,6 +276,7 @@ public sealed class ResilientAiService : IAiService
                 // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (Ollama o Gemini),
                 // excluyendo deliberadamente las reglas determinísticas para no degradar el servicio si la IA se recupera.
                 if (_responseCache != null &&
+                    request.AdaptationContext is null &&
                     !string.IsNullOrEmpty(promptHash) &&
                     provider is not RuleBasedAiClient &&
                     !response.ProviderUsed.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
