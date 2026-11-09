@@ -38,7 +38,4 @@ public sealed class SetAttendanceCommandHandler(
         return new SetAttendanceResult(attendance, created);
     }
 
-    public Task<SetAttendanceResult> Handle(
-        SetAttendanceCommand command, CancellationToken cancellationToken = default) =>
-        HandleAsync(command, cancellationToken);
 }

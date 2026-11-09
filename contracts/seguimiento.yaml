@@ -1142,6 +1142,7 @@ components:
       required:
         - message
         - totalMinutes
+        - totalLoad
         - date
         - gym
         - sportTraining
@@ -1252,6 +1253,26 @@ components:
           type: number
           format: double
           example: 90.6
+        athletes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AthleteAttendanceSummary'
+
+    AthleteAttendanceSummary:
+      type: object
+      required:
+        - athleteId
+        - athleteName
+        - status
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        athleteName:
+          type: string
+        status:
+          type: string
+          enum: [Present, NoRecord]
 
     AthleteTrafficLightSummary:
       type: object
