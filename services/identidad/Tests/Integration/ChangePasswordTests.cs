@@ -124,8 +124,7 @@ public sealed class ChangePasswordTests : IAsyncDisposable
 
     [Theory]
     [InlineData("corta1!", "Menos de 8 caracteres")]
-    [InlineData("passwordsegura1!", "Sin mayúscula")]
-    [InlineData("PASSWORDSEGURA123", "Sin caracter especial")]
+    [InlineData("sololetras", "Sin número")]
     [InlineData("", "Contraseña vacía")]
     [InlineData("PasswordSegura123!", "Igual a la actual")]
     public async Task CP05_Given_InvalidNewPassword_When_ChangePassword_Then_Returns400_AndDoesNotModifyPassword(string invalidNewPassword, string reason)
@@ -149,6 +148,33 @@ public sealed class ChangePasswordTests : IAsyncDisposable
         var userInDb = await _factory.FindUserByEmailAsync(user.Email!);
         Assert.NotNull(userInDb);
         Assert.Equal(originalHash, userInDb.PasswordHash);
+    }
+
+    [Theory]
+    [InlineData("passwordsegura1", "Sin mayúscula y sin carácter especial")]
+    [InlineData("PASSWORDSEGURA123", "Sin minúscula y sin carácter especial")]
+    [InlineData("protrain8", "Exactamente 8 caracteres con número")]
+    public async Task CP05b_Given_UnifiedPasswordPolicy_When_PasswordHas8CharsAndDigit_Then_Succeeds(string validNewPassword, string reason)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(reason));
+        // Arrange
+        var user = await _factory.SeedUserAsync($"atleta.{Guid.NewGuid():N}@protraining.com", "Atleta Test", "Atleta", "PasswordSegura123!");
+        var originalHash = user.PasswordHash;
+
+        var login = await LoginUserAsync(user.Email!, "PasswordSegura123!");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        var request = new ChangePasswordRequestDto("PasswordSegura123!", validNewPassword);
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/change-password", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var userInDb = await _factory.FindUserByEmailAsync(user.Email!);
+        Assert.NotNull(userInDb);
+        Assert.NotEqual(originalHash, userInDb.PasswordHash);
     }
 
     [Fact]

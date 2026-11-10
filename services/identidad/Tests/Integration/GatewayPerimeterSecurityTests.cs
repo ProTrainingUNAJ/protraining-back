@@ -7,6 +7,7 @@ using Gateway.Services;
 using Identidad.Tests.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -198,6 +199,106 @@ public sealed class GatewayPerimeterSecurityTests : IAsyncDisposable
         Assert.NotEqual(HttpStatusCode.Forbidden, response2.StatusCode);
     }
 
+    [Fact]
+    public async Task Gateway_ConsecutiveRequestsWithSameToken_UsesCache_AndCallsIdentidadOnlyOnce()
+    {
+        // Arrange
+        var athlete = await _identidadFactory.SeedUserAsync("atleta.cache1@protraining.com", "Atleta Cache1", "Atleta");
+        var login = await LoginUserAsync(athlete.Email!, "PasswordSegura123!");
+        _gatewayClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        var initialCalls = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Act: Enviar primera petición
+        var response1 = await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var callsAfterFirst = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Act: Enviar segunda petición con el mismo token (debe resolver desde caché)
+        var response2 = await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var callsAfterSecond = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Assert: Identidad solo se llamó 1 vez en la primera petición y 0 en la segunda
+        Assert.Equal(initialCalls + 1, callsAfterFirst);
+        Assert.Equal(callsAfterFirst, callsAfterSecond);
+    }
+
+    [Fact]
+    public async Task Gateway_EvictedCacheEntry_QueriesIdentidadAgain()
+    {
+        // Arrange
+        var athlete = await _identidadFactory.SeedUserAsync("atleta.cache2@protraining.com", "Atleta Cache2", "Atleta");
+        var login = await LoginUserAsync(athlete.Email!, "PasswordSegura123!");
+        _gatewayClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        // Primera petición -> cache miss -> llamada 1
+        var response1 = await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var callsAfterFirst = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Simular expiración de caché desalojando la clave
+        var cache = _gatewayFactory.Services.GetRequiredService<IMemoryCache>();
+        var userInDb = await _identidadFactory.FindUserByEmailAsync(athlete.Email!);
+        var cacheKey = $"session:{athlete.Id}:{userInDb!.SecurityStamp}";
+        cache.Remove(cacheKey);
+
+        // Act: Segunda petición tras expiración
+        var response2 = await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var callsAfterSecond = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Assert: Volvió a consultar a Identidad
+        Assert.Equal(callsAfterFirst + 1, callsAfterSecond);
+    }
+
+    [Fact]
+    public async Task Gateway_TokenWithDifferentSecurityStamp_DoesNotReusePreviousCacheEntry()
+    {
+        // Arrange: Dos atletas distintos
+        var athlete1 = await _identidadFactory.SeedUserAsync("atleta.diff1@protraining.com", "Atleta Diff1", "Atleta");
+        var athlete2 = await _identidadFactory.SeedUserAsync("atleta.diff2@protraining.com", "Atleta Diff2", "Atleta");
+
+        var login1 = await LoginUserAsync(athlete1.Email!, "PasswordSegura123!");
+        var login2 = await LoginUserAsync(athlete2.Email!, "PasswordSegura123!");
+
+        // Act: Petición con Token 1
+        _gatewayClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login1.AccessToken);
+        await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var calls1 = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Act: Petición con Token 2 (diferente usuario y SecurityStamp)
+        _gatewayClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login2.AccessToken);
+        await _gatewayClient.GetAsync("/estructura/api/v1/athletes");
+        var calls2 = _gatewayFactory.CountingHandler.ValidateSessionCalls;
+
+        // Assert: Token 2 generó su propia consulta sin reutilizar la entrada previa
+        Assert.Equal(calls1 + 1, calls2);
+    }
+
+    [Theory]
+    [InlineData("Jwt:Key", "")]
+    [InlineData("Jwt:Issuer", "")]
+    [InlineData("Jwt:Audience", "")]
+    public void Gateway_Startup_MissingMandatoryConfiguration_ThrowsInvalidOperationException(string missingKey, string emptyValue)
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var dict = new Dictionary<string, string?>
+                {
+                    ["Jwt:Key"] = "clave_local_de_desarrollo_cambiar_32+",
+                    ["Jwt:Issuer"] = "protraining-identidad",
+                    ["Jwt:Audience"] = "protraining",
+                    ["Services:Identidad:BaseUrl"] = "http://localhost/"
+                };
+                dict[missingKey] = emptyValue;
+                config.AddInMemoryCollection(dict);
+            });
+        });
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains(missingKey, ex.ToString());
+    }
+
     public async ValueTask DisposeAsync()
     {
         _gatewayFactory.Dispose();
@@ -209,10 +310,12 @@ public sealed class GatewayPerimeterSecurityTests : IAsyncDisposable
 public sealed class GatewayTestFactory : WebApplicationFactory<Program>
 {
     private readonly IdentidadTestApplicationFactory _identidadFactory;
+    public CallCountingHandler CountingHandler { get; }
 
     public GatewayTestFactory(IdentidadTestApplicationFactory identidadFactory)
     {
         _identidadFactory = identidadFactory;
+        CountingHandler = new CallCountingHandler(_identidadFactory.Server.CreateHandler());
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -236,10 +339,29 @@ public sealed class GatewayTestFactory : WebApplicationFactory<Program>
             {
                 client.BaseAddress = new Uri("http://localhost/");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => _identidadFactory.Server.CreateHandler());
+            .ConfigurePrimaryHttpMessageHandler(() => CountingHandler);
 
             services.AddSingleton<IForwarderHttpClientFactory>(new TestForwarderHttpClientFactory(_identidadFactory.Server.CreateHandler()));
         });
+    }
+}
+
+public sealed class CallCountingHandler : DelegatingHandler
+{
+    private int _calls;
+    public int ValidateSessionCalls => _calls;
+
+    public CallCountingHandler(HttpMessageHandler inner) : base(inner)
+    {
+    }
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.RequestUri?.AbsolutePath.Contains("validate-session", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            Interlocked.Increment(ref _calls);
+        }
+        return base.SendAsync(request, cancellationToken);
     }
 }
 

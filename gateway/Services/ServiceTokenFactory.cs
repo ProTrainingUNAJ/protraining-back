@@ -34,7 +34,7 @@ public sealed class ServiceTokenFactory(IConfiguration configuration) : IService
 
         var audience = configuration["Jwt:Audience"]
             ?? configuration["Jwt__Audience"]
-            ?? "protraining";
+            ?? throw new InvalidOperationException("Falta la variable de configuración Jwt:Audience.");
 
         var claims = new List<Claim>
         {
