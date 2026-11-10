@@ -567,4 +567,129 @@ public sealed class DayAdjustmentsTests
         await Assert.ThrowsAsync<NotFoundException>(() =>
             rejectHandlerPfB.HandleAsync(new RejectDayAdjustmentCommand(proposal.Id)));
     }
+
+    // =========================================================================
+    // DETALLE BACK KAN-452: Reintento idempotente tras falla en SaveChangesAsync de Asistente
+    // =========================================================================
+    [Fact]
+    public async Task Given_TrainingAppliedSuccessfully_When_AsistenteSaveChangesFails_Then_ProposalRemainsPending_And_SubsequentRetrySucceedsWithoutDuplication()
+    {
+        var items = new List<DayAdjustmentItemDto>
+        {
+            new(
+                OriginalExerciseId: BoxJumpId,
+                OriginalExerciseName: "Salto al cajón",
+                SuggestedSubstituteExerciseId: LegPressId,
+                SuggestedSubstituteExerciseName: "Prensa de piernas",
+                SubstituteExerciseId: LegPressId,
+                SubstituteExerciseName: "Prensa de piernas",
+                Zone: "cuadriceps",
+                PainLevel: 2,
+                Reason: "Impacto reactivo.",
+                AvailableSubstitutes: [new DayConflictSubstituteDto(LegPressId, "Prensa de piernas")])
+        };
+
+        DayAdjustment CreatePendingSnapshot(Guid id)
+        {
+            var copy = DayAdjustment.Create(
+                athleteId: AthleteId,
+                date: ArgentinaTime.Today,
+                sessionId: SessionId,
+                itemsJson: DayAdjustmentMapper.SerializeItems(items),
+                justification: "Se cambia Salto al cajón por Prensa de piernas.",
+                provider: "Reglas");
+            typeof(BaseEntity).GetProperty(nameof(BaseEntity.Id))!.SetValue(copy, id);
+            SetPfId(copy, PfId);
+            return copy;
+        }
+
+        var proposalId = Guid.NewGuid();
+        var persistedAdjustments = new List<DayAdjustment> { CreatePendingSnapshot(proposalId) };
+        var persistedDecisions = new List<PfDecision>();
+
+        // Simulamos el comportamiento transaccional de EF Core por request:
+        // cada request hidrata una copia de la fila persistida y solo impacta la base cuando SaveChangesAsync tiene éxito.
+        DayAdjustment? trackedAdjustment = null;
+        var stagedDecisions = new List<PfDecision>();
+
+        var dayAdjustmentRepoMock = new Mock<IDayAdjustmentRepository>();
+        dayAdjustmentRepoMock
+            .Setup(r => r.GetByIdAsync(proposalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var current = persistedAdjustments.Single(x => x.Id == proposalId);
+                trackedAdjustment = CreatePendingSnapshot(current.Id);
+                if (current.Status == DayAdjustmentStatus.Approved)
+                {
+                    trackedAdjustment.Approve(current.Items, current.Justification);
+                }
+                return trackedAdjustment;
+            });
+
+        var pfDecisionRepoMock = new Mock<IPfDecisionRepository>();
+        pfDecisionRepoMock
+            .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PfDecision>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PfDecision>, CancellationToken>((decisions, _) =>
+            {
+                stagedDecisions.AddRange(decisions);
+            })
+            .Returns(Task.CompletedTask);
+
+        var trainingHttpCallCount = 0;
+        var trainingHttp = new FakeHttpHandler(_ =>
+        {
+            trainingHttpCallCount++;
+            return Json(HttpStatusCode.OK, "{}");
+        });
+
+        var trainingClient = new TrainingPlanServiceClient(
+            new HttpClient(trainingHttp) { BaseAddress = new Uri("http://entrenamiento:8080/") },
+            NullLogger<TrainingPlanServiceClient>.Instance);
+
+        var shouldThrowOnSave = true;
+        var uowMock = new Mock<IUnitOfWork>();
+        uowMock
+            .Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                if (shouldThrowOnSave)
+                {
+                    stagedDecisions.Clear();
+                    trackedAdjustment = null;
+                    throw new InvalidOperationException("Falla simulada de conexión en Asistente DB");
+                }
+
+                if (trackedAdjustment is not null)
+                {
+                    persistedAdjustments[0] = trackedAdjustment;
+                }
+                persistedDecisions.AddRange(stagedDecisions);
+                stagedDecisions.Clear();
+                return Task.FromResult(1);
+            });
+
+        var approveHandler = new ApproveDayAdjustmentCommandHandler(
+            dayAdjustmentRepoMock.Object,
+            pfDecisionRepoMock.Object,
+            trainingClient,
+            uowMock.Object);
+
+        // 1. Primer intento: Entrenamiento responde 200 OK, pero SaveChangesAsync en Asistente falla
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            approveHandler.HandleAsync(new ApproveDayAdjustmentCommand(proposalId)));
+
+        Assert.Equal(1, trainingHttpCallCount);
+        Assert.Equal(DayAdjustmentStatus.Pending, persistedAdjustments[0].Status);
+        Assert.Empty(persistedDecisions);
+
+        // 2. Segundo intento (reintento del PF): la propuesta sigue Pending, vuelve a llamar a Entrenamiento (upsert idempotente) y persiste en Asistente
+        shouldThrowOnSave = false;
+        var retryResponse = await approveHandler.HandleAsync(new ApproveDayAdjustmentCommand(proposalId));
+
+        Assert.Equal("Approved", retryResponse.Status);
+        Assert.Equal(DayAdjustmentStatus.Approved, persistedAdjustments[0].Status);
+        Assert.Equal(2, trainingHttpCallCount);
+        var decision = Assert.Single(persistedDecisions);
+        Assert.Equal(PfDecisionType.Approved, decision.Decision);
+    }
 }
