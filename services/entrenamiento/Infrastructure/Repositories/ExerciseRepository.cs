@@ -21,9 +21,55 @@ namespace Infrastructure.Repositories
             await context.Exercises.AddAsync(exercise, cancellationToken);
         }
 
-        public async Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, ExerciseType? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
+        public Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, ExerciseType? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var exercises = ApplyFilters(context.Exercises.AsNoTracking(), searchTerm, equipment, muscleGroup, muscle, exerciseType, usedByPf);
+            return QueryAsync(
+                context.Exercises.AsNoTracking(),
+                searchTerm,
+                equipment,
+                muscleGroup,
+                muscle,
+                exerciseType,
+                usedByPf,
+                page,
+                pageSize,
+                cancellationToken);
+        }
+
+        // E51: catálogo compartido únicamente. Se combina con el filtro global del AppDbContext,
+        // que ya impide ver ejercicios de otros PF, y se refuerza con pf_id = Guid.Empty.
+        public Task<(List<Exercise> Items, int TotalCount)> SearchCatalogAsync(string? searchTerm, string? equipment, string? muscle, int page, int pageSize, CancellationToken cancellationToken = default)
+        {
+            var catalog = context.Exercises
+                .AsNoTracking()
+                .Where(e => e.PfId == Guid.Empty);
+
+            return QueryAsync(
+                catalog,
+                searchTerm,
+                equipment,
+                muscleGroup: null,
+                muscle,
+                exerciseType: null,
+                usedByPf: false,
+                page,
+                pageSize,
+                cancellationToken);
+        }
+
+        private async Task<(List<Exercise> Items, int TotalCount)> QueryAsync(
+            IQueryable<Exercise> source,
+            string? searchTerm,
+            string? equipment,
+            string? muscleGroup,
+            string? muscle,
+            ExerciseType? exerciseType,
+            bool usedByPf,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken)
+        {
+            var exercises = ApplyFilters(source, searchTerm, equipment, muscleGroup, muscle, exerciseType, usedByPf);
 
             var totalCount = await exercises.CountAsync(cancellationToken);
 
