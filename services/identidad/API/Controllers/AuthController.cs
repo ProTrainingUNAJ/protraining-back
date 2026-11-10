@@ -1,4 +1,6 @@
 using Application.DTOs.Auth;
+using Application.Interfaces.Services;
+using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
@@ -8,22 +10,24 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 /// <summary>
-/// controlador para autenticacion, registro y emision de tokens
+/// Controlador para autenticación, registro, emisión de tokens y gestión de credenciales
 /// </summary>
-[AllowAnonymous]
 [ApiController]
 [Route("api/v1/auth")]
 public class AuthController(
     LoginUseCase loginUseCase,
     RefreshUseCase refreshTokenUseCase,
-    RegisterByInvitationUseCase registerByInvitationUseCase) : ControllerBase
+    RegisterByInvitationUseCase registerByInvitationUseCase,
+    ChangePasswordUseCase changePasswordUseCase,
+    ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>
-    /// inicia sesion con email y contraseña, emitiendo un token JWT firmado
+    /// Inicia sesión con email y contraseña, emitiendo un token JWT firmado
     /// </summary>
     /// <param name="request">Credenciales del usuario.</param>
-    /// <returns>HTTP 200 con el JWT o HTTP 401 si las credenciales son invalidas.</returns>
+    /// <returns>HTTP 200 con el JWT o HTTP 401 si las credenciales son inválidas.</returns>
     [HttpPost("login")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
@@ -33,11 +37,12 @@ public class AuthController(
     }
 
     /// <summary>
-    /// renueva el access token rotando el refresh token de 30 dias para el dispositivo indicado
+    /// Renueva el access token rotando el refresh token de 30 días para el dispositivo indicado
     /// </summary>
     /// <param name="request">Refresh token y deviceId del atleta.</param>
-    /// <returns>HTTP 200 con el nuevo access token y refresh token rotado, o HTTP 401 si es invalido/expirado.</returns>
+    /// <returns>HTTP 200 con el nuevo access token y refresh token rotado, o HTTP 401 si es inválido/expirado.</returns>
     [HttpPost("refresh")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(RefreshResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto request)
@@ -47,11 +52,13 @@ public class AuthController(
     }
 
     /// <summary>
-    /// registra a un atleta mediante enlace o código de invitación (KAN-397)
+    /// Registra a un atleta mediante enlace o código de invitación (KAN-397)
     /// </summary>
     /// <param name="request">Datos del atleta y token de invitación.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
     /// <returns>HTTP 200 con tokens de sesión o error correspondiente.</returns>
     [HttpPost("register-by-invitation")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -63,5 +70,30 @@ public class AuthController(
     {
         var response = await registerByInvitationUseCase.ExecuteAsync(request, cancellationToken);
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Cambia la contraseña del usuario autenticado, valida complejidad y revoca sesiones activas (KAN-538).
+    /// </summary>
+    /// <param name="request">Contraseña actual y nueva contraseña.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 204 si el cambio es exitoso, o HTTP 400 si la contraseña actual o nueva es inválida.</returns>
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        await changePasswordUseCase.ExecuteAsync(userId.Value, request, cancellationToken);
+        return NoContent();
     }
 }

@@ -1,10 +1,11 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using API.Extensions;
 using API.Middleware;
 using API.Services;
 using Application.Common.Security;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
@@ -98,6 +99,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<UpdateWhatsAppPhoneUseCase>();
                 services.AddScoped<GetPfContactUseCase>();
                 services.AddScoped<RegisterByInvitationUseCase>();
+                services.AddScoped<ChangePasswordUseCase>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);
