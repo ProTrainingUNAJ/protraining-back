@@ -138,6 +138,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
                 app.UseAuthentication();
                 app.UseAuthorization();
+                app.UseMiddleware<MustChangePasswordMiddleware>();
 
                 app.UseEndpoints(endpoints =>
                 {
@@ -163,6 +164,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
     }
 
     public HttpClient CreateClient() => _server.CreateClient();
+    public TestServer Server => _server;
+    public IServiceProvider Services => _server.Services;
 
     public async Task<User?> FindUserByEmailAsync(string email)
     {

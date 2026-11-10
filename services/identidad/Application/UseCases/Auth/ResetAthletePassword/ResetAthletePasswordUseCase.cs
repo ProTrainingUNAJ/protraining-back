@@ -17,7 +17,8 @@ public class ResetAthletePasswordUseCase(
     UserManager<User> userManager,
     IRefreshTokenRepository refreshTokenRepository,
     ITemporaryPasswordGenerator passwordGenerator,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IUnitOfWork unitOfWork)
 {
     public async Task<ResetAthletePasswordResponseDto> ExecuteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
@@ -52,24 +53,28 @@ public class ResetAthletePasswordUseCase(
         // 5. Generar contraseña temporal criptográficamente segura (CSPRNG)
         var temporaryPassword = passwordGenerator.Generate(12);
 
-        // 6. Almacenar únicamente su hash PBKDF2 y marcar para cambio obligatorio
+        // 6. Almacenar únicamente su hash PBKDF2, nuevo SecurityStamp y marcar para cambio obligatorio
         athlete.PasswordHash = userManager.PasswordHasher.HashPassword(athlete, temporaryPassword);
         athlete.SecurityStamp = Guid.NewGuid().ToString();
         athlete.MustChangePassword = true;
         athlete.UpdatedAt = DateTime.UtcNow;
 
-        var updateResult = await userManager.UpdateAsync(athlete);
-        if (!updateResult.Succeeded)
+        // Ejecutar de forma atómica: actualización de usuario, reinicio de intentos fallidos y revocación de tokens
+        await unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            var errors = string.Join("; ", updateResult.Errors.Select(e => e.Description));
-            throw new DomainException($"No se pudo resetear la contraseña: {errors}");
-        }
+            var updateResult = await userManager.UpdateAsync(athlete);
+            if (!updateResult.Succeeded)
+            {
+                var errors = string.Join("; ", updateResult.Errors.Select(e => e.Description));
+                throw new DomainException($"No se pudo resetear la contraseña: {errors}");
+            }
 
-        // 7. Reiniciar contador de intentos fallidos
-        await userManager.ResetAccessFailedCountAsync(athlete);
+            // 7. Reiniciar contador de intentos fallidos
+            await userManager.ResetAccessFailedCountAsync(athlete);
 
-        // 8. Revocar todos los refresh tokens activos del atleta (cierre de todas sus sesiones)
-        await refreshTokenRepository.RevokeAllActiveByUserAsync(athlete.Id, cancellationToken);
+            // 8. Revocar todos los refresh tokens activos del atleta (cierre de todas sus sesiones)
+            await refreshTokenRepository.RevokeAllActiveByUserAsync(athlete.Id, cancellationToken);
+        }, cancellationToken);
 
         // 9. Retornar la respuesta con la contraseña temporal generada
         return new ResetAthletePasswordResponseDto(
