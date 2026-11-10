@@ -15,6 +15,22 @@ public sealed class FieldTestRepository(AppDbContext context) : IFieldTestReposi
                 .AsNoTracking()
                 .FirstOrDefaultAsync(session => session.Id == sessionId, cancellationToken));
 
+    // Sin AsNoTracking: el caso de uso cambia el estado y lo guarda con el mismo
+    // SaveChanges. El filtro global deja fuera las sesiones de otro PF.
+    public async Task<FieldTestSession?> GetSessionByIdForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.FieldTestSessions
+                .FirstOrDefaultAsync(session => session.Id == sessionId, cancellationToken));
+
+    public async Task<IReadOnlyList<FieldTestSession>> ListSessionsByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.FieldTestSessions
+                .AsNoTracking()
+                .Where(session => session.CategoryId == categoryId)
+                .OrderByDescending(session => session.Date)
+                .ThenByDescending(session => session.CreatedAt)
+                .ToListAsync(cancellationToken));
+
     public async Task<IReadOnlyList<FieldTestSessionTest>> ListSessionTestsAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.FieldTestSessionTests
@@ -45,6 +61,18 @@ public sealed class FieldTestRepository(AppDbContext context) : IFieldTestReposi
     public Task AddResultAsync(FieldTestResult result, CancellationToken cancellationToken = default)
     {
         context.FieldTestResults.Add(result);
+        return Task.CompletedTask;
+    }
+
+    // Encola la sesión y sus pruebas juntas: el alta se confirma con el único
+    // SaveChangesAsync del caso de uso.
+    public Task AddSessionAsync(
+        FieldTestSession session,
+        IReadOnlyList<FieldTestSessionTest> tests,
+        CancellationToken cancellationToken = default)
+    {
+        context.FieldTestSessions.Add(session);
+        context.FieldTestSessionTests.AddRange(tests);
         return Task.CompletedTask;
     }
 }

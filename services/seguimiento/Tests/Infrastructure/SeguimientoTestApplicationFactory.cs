@@ -14,8 +14,11 @@ using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
 using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.CreateFieldTestSession;
 using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.ListFieldTestSessions;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
+using Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 using Application.UseCases.Attendance.GetCategoryAttendanceToday;
 using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
@@ -163,6 +166,12 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Confirmación de un resultado de fuerza con envío del 1RM a Entrenamiento:
                 // mismo registro que en Program.cs.
                 services.AddScoped<ConfirmFieldTestResultCommandHandler>();
+
+                // Gestión de las sesiones de test de campo y sus estados:
+                // mismo registro que en Program.cs.
+                services.AddScoped<CreateFieldTestSessionCommandHandler>();
+                services.AddScoped<ListFieldTestSessionsQueryHandler>();
+                services.AddScoped<UpdateFieldTestSessionStatusCommandHandler>();
 
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();

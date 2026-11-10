@@ -3,6 +3,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.Mappings;
+using Domain.Entities;
 using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.ConfirmFieldTestResult;
@@ -31,8 +32,13 @@ public sealed class ConfirmFieldTestResultCommandHandler(
         CancellationToken cancellationToken = default)
     {
         // Sesión inexistente o de otro PF (filtro global) → 404.
-        _ = await fieldTestRepository.GetSessionByIdAsync(command.SessionId, cancellationToken)
+        var session = await fieldTestRepository.GetSessionByIdAsync(command.SessionId, cancellationToken)
             ?? throw new FieldTestSessionNotFoundException();
+
+        // Sesión cerrada → 400: no se re-confirma ni se dispara un envío tardío de 1RM
+        // a Entrenamiento.
+        if (session.Status == FieldTestSessionStatus.Closed)
+            throw new DomainException("La sesión ya está cerrada.");
 
         // Resultado inexistente, de otra sesión o de otro PF → 404.
         var result = await fieldTestRepository.GetResultAsync(command.SessionId, command.ResultId, cancellationToken)

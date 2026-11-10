@@ -2,6 +2,8 @@ using Application.DTOs.FieldTests;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Mappings;
+using Domain.Entities;
+using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.UpdateFieldTestResult;
 
@@ -18,8 +20,12 @@ public sealed class UpdateFieldTestResultCommandHandler(
         CancellationToken cancellationToken = default)
     {
         // Sesión inexistente o de otro PF (filtro global) → 404.
-        _ = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
+        var session = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
             ?? throw new FieldTestSessionNotFoundException();
+
+        // Sesión cerrada → 400: la corrección también queda bloqueada.
+        if (session.Status == FieldTestSessionStatus.Closed)
+            throw new DomainException("La sesión ya está cerrada.");
 
         // Resultado inexistente, de otra sesión o de otro PF → 404.
         var result = await repository.GetResultAsync(command.SessionId, command.ResultId, cancellationToken)
