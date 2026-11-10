@@ -91,6 +91,13 @@ public sealed class ApproveDayAdjustmentCommandHandler(
                 .Select(i => new ApplyAthleteAdjustmentItemRemoteDto(i.OriginalExerciseId, i.SubstituteExerciseId))
                 .ToList());
 
+        // Nota sobre consistencia entre servicios (#157 · KAN-452):
+        // Primero se aplica el ajuste en Entrenamiento y posteriormente se persiste el estado
+        // Approved y las decisiones del PF en Asistente. Si el guardado en Asistente llega a fallar,
+        // Entrenamiento ya tiene registrado el ajuste mientras que la propuesta continúa en Pending.
+        // Dado que el endpoint de Entrenamiento (ApplyAthleteSessionAdjustment) actúa como un upsert
+        // idempotente (actualiza el registro existente en lugar de duplicarlo), un reintento posterior
+        // por parte del PF es completamente seguro y no corrompe los datos.
         await trainingPlanServiceClient.ApplyAthleteSessionAdjustmentAsync(
             adjustment.SessionId,
             remoteRequest,
