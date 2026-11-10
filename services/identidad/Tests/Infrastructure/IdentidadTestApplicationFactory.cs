@@ -68,7 +68,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddIdentityCore<User>(options =>
                 {
                     options.Password.RequireDigit = true;
-                    options.Password.RequiredLength = 6;
+                    options.Password.RequiredLength = 8;
                     options.Password.RequireNonAlphanumeric = false;
                     options.Password.RequireUppercase = false;
                     options.Password.RequireLowercase = false;
@@ -76,7 +76,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 })
                 .AddRoles<IdentityRole<Guid>>()
                 .AddEntityFrameworkStores<AppDbContext>()
-                .AddDefaultTokenProviders();
+                .AddDefaultTokenProviders()
+                .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
                 // Repositorios y Servicios
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

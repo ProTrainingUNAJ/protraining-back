@@ -50,17 +50,7 @@ public class ChangePasswordUseCase(
             throw new DomainException("La nueva contraseña no puede ser igual a la actual.");
         }
 
-        // 6. Validar reglas de complejidad de la nueva contraseña (8 chars, 1 mayúscula, 1 caracter especial)
-        var hasMinLength = request.NewPassword.Length >= 8;
-        var hasUpper = request.NewPassword.Any(char.IsUpper);
-        var hasSpecial = request.NewPassword.Any(ch => !char.IsLetterOrDigit(ch));
-
-        if (!hasMinLength || !hasUpper || !hasSpecial)
-        {
-            throw new DomainException("La nueva contraseña debe tener al menos 8 caracteres, una letra mayúscula y un carácter especial.");
-        }
-
-        // 7. Actualizar la contraseña del usuario (actualiza PasswordHash y SecurityStamp)
+        // 6. Actualizar la contraseña del usuario (valida reglas nativas de Identity: mín 8 chars y dígito obligatorio)
         var changeResult = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         if (!changeResult.Succeeded)
         {
