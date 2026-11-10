@@ -13,5 +13,9 @@ public interface IExerciseRestrictionRepository
         Guid exerciseId,
         string zone,
         CancellationToken cancellationToken = default);
+
+    Task<List<ExerciseRestriction>> GetRestrictionsByZonesAsync(
+        IEnumerable<string> zones,
+        CancellationToken cancellationToken = default);
 }
 

@@ -422,7 +422,12 @@ public sealed class PfDecisionsTests
             .ReturnsAsync([decision]);
 
         var queryHandler = new GetAthleteDecisionsQueryHandler(decisionRepoMock.Object, structureClientMock.Object);
-        var suggestUseCase = new SuggestRoutineUseCase(Mock.Of<IAiService>(), Mock.Of<IRoutineDraftRepository>(), Mock.Of<IUnitOfWork>());
+        var suggestUseCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>(),
+            Mock.Of<IRoutineDraftRepository>(),
+            Mock.Of<IUnitOfWork>());
 
         var controller = new AssistantController(
             suggestUseCase,
@@ -453,7 +458,12 @@ public sealed class PfDecisionsTests
             .ReturnsAsync(false);
 
         var queryHandler = new GetAthleteDecisionsQueryHandler(decisionRepoMock.Object, structureClientMock.Object);
-        var suggestUseCase = new SuggestRoutineUseCase(Mock.Of<IAiService>(), Mock.Of<IRoutineDraftRepository>(), Mock.Of<IUnitOfWork>());
+        var suggestUseCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>(),
+            Mock.Of<IRoutineDraftRepository>(),
+            Mock.Of<IUnitOfWork>());
 
         var controller = new AssistantController(
             suggestUseCase,

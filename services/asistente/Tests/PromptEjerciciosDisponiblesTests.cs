@@ -115,6 +115,39 @@ public sealed class PromptEjerciciosDisponiblesTests
     }
 
     [Fact]
+    public void BuildPrompt_WhenActiveInjuryExists_DoesNotIncludeInjuryDescription()
+    {
+        var description = "Dolor rotuliano con inflamación visible y nombre del jugador";
+        var context = new AthleteAdaptationContextDto(
+            _athleteId,
+            [
+                new ActiveInjuryRemoteDto(
+                    Guid.NewGuid(),
+                    _athleteId,
+                    "rodilla",
+                    description,
+                    DateTime.UtcNow.AddDays(-1),
+                    DateTime.UtcNow.AddDays(5),
+                    "Active",
+                    null,
+                    DateTime.UtcNow.AddDays(-1))
+            ],
+            [],
+            []);
+        var request = new RoutineSuggestionRequestDto(
+            _athleteId,
+            "Fuerza",
+            ["Piernas"],
+            AdaptationContext: context);
+
+        var prompt = RoutinePromptBuilder.BuildPrompt(request);
+
+        Assert.DoesNotContain(description, prompt);
+        Assert.Contains("Lesión activa en rodilla", prompt);
+        Assert.Contains("estado: Active", prompt);
+    }
+
+    [Fact]
     public void FilterRelevantExercises_WhenEmphasisMatches_PrioritizesMatchingExercises()
     {
         // Arrange

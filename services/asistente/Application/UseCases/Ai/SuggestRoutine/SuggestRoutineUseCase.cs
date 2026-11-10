@@ -11,11 +11,11 @@ using Microsoft.Extensions.Logging;
 
 public sealed class SuggestRoutineUseCase(
     IAiService aiService,
+    IAthleteAdaptationContextService adaptationContextService,
+    IStructureAthleteClient structureAthleteClient,
     IRoutineDraftRepository? routineDraftRepository = null,
     IUnitOfWork? unitOfWork = null,
-    ILogger<SuggestRoutineUseCase>? logger = null,
-    IAthleteAdaptationContextService? adaptationContextService = null,
-    IStructureAthleteClient? structureAthleteClient = null)
+    ILogger<SuggestRoutineUseCase>? logger = null)
 {
     public async Task<RoutineSuggestionResponseDto> ExecuteAsync(
         RoutineSuggestionRequestDto request,
@@ -63,11 +63,6 @@ public sealed class SuggestRoutineUseCase(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        if (adaptationContextService is null)
-            throw new InvalidOperationException("El servicio de contexto de adaptación no está configurado.");
-        if (structureAthleteClient is null)
-            throw new InvalidOperationException("El cliente de estructura para validar ownership no está configurado.");
-
         if (request.AthleteId == Guid.Empty)
             throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
 

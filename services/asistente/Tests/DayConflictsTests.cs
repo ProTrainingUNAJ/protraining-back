@@ -378,7 +378,10 @@ public sealed class DayConflictsTests
             ]);
 
         var controller = new AssistantController(
-            new SuggestRoutineUseCase(Mock.Of<IAiService>()),
+            new SuggestRoutineUseCase(
+                Mock.Of<IAiService>(),
+                Mock.Of<IAthleteAdaptationContextService>(),
+                Mock.Of<IStructureAthleteClient>()),
             new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()),
             new GetDayConflictsQueryHandler(trainingMock.Object, seguimientoMock.Object));
 

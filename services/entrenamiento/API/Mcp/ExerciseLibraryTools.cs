@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using Application.DTOs.Exercise;
+using Application.DTOs.Mcp;
+using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.SearchCatalogExercises;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
@@ -7,11 +9,11 @@ using ModelContextProtocol.Server;
 
 namespace API.Mcp;
 
-// E51: herramienta MCP de solo lectura sobre la biblioteca compartida de ejercicios.
-// El nombre público debe ser exactamente "BuscarEjercicios" (criterio de aceptación de la tarjeta).
+// E51: herramientas MCP de solo lectura sobre la biblioteca compartida de ejercicios.
 [McpServerToolType]
 public sealed class ExerciseLibraryTools(
     SearchCatalogExercisesQueryHandler searchCatalogExercisesQueryHandler,
+    GetSubstitutesByZoneQueryHandler getSubstitutesByZoneQueryHandler,
     ILogger<ExerciseLibraryTools> logger)
 {
     [McpServerTool(
@@ -59,5 +61,43 @@ public sealed class ExerciseLibraryTools(
             result.Total);
 
         return result;
+    }
+
+    [McpServerTool(
+        Name = "ObtenerSustitutos",
+        Title = "Obtener sustitutos por zona",
+        ReadOnly = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description(
+        "Obtiene ejercicios sustitutos seguros para una zona de dolor/molestia (por ejemplo, rodilla). " +
+        "Devuelve la zona consultada y la lista de sustitutos disponibles.")]
+    public async Task<ZoneSubstitutesResultDto> GetSubstitutes(
+        [Description("Zona de dolor o molestia. Ejemplo: «rodilla».")]
+        string zona,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(zona))
+        {
+            throw new McpException("Indicá una zona válida. Ejemplo: «rodilla».");
+        }
+
+        try
+        {
+            var result = await getSubstitutesByZoneQueryHandler.Handle(
+                new GetSubstitutesByZoneQuery(zona),
+                cancellationToken);
+
+            // Solo métricas: no se registran datos de personas.
+            logger.LogInformation(
+                "ObtenerSustitutos devolvió {Count} sustitutos.",
+                result.Substitutes.Count);
+
+            return result;
+        }
+        catch (Domain.Exceptions.DomainException ex)
+        {
+            throw new McpException(ex.Message);
+        }
     }
 }

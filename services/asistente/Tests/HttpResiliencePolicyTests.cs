@@ -112,7 +112,7 @@ public sealed class HttpResiliencePolicyTests
     [Fact]
     public async Task Given_SlowPost_When_AttemptTimesOut_Then_PostIsNotRetried()
     {
-        var handler = new CountingDelayingHandler(TimeSpan.FromMilliseconds(200));
+        var handler = new CountingDelayingHandler(TimeSpan.FromSeconds(10));
         var services = new ServiceCollection();
         services.AddHttpClient("PostTimeoutClient")
             .ConfigurePrimaryHttpMessageHandler(() => handler)
@@ -184,10 +184,10 @@ public sealed class HttpResiliencePolicyTests
     [Fact]
     public async Task Given_SlowDownstream_When_ExceedingAttemptTimeout_Then_Throws_TimeoutRejectedException()
     {
-        // Arrange: Handler que tarda 200ms
+        // Arrange: Handler que tarda lo suficiente para no competir con el timeout
         var services = new ServiceCollection();
         services.AddHttpClient("TimeoutClient")
-            .ConfigurePrimaryHttpMessageHandler(() => new DelayingHandler(TimeSpan.FromMilliseconds(200)))
+            .ConfigurePrimaryHttpMessageHandler(() => new DelayingHandler(TimeSpan.FromSeconds(10)))
             .AddStandardResilienceHandler(options =>
             {
                 HttpResilienceExtensions.ConfigureProTrainingResilienceOptions(options);
