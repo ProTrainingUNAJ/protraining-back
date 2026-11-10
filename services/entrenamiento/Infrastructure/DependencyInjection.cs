@@ -63,16 +63,25 @@ public static class DependencyInjection
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (context.Database.GetMigrations().Any())
-            await context.Database.MigrateAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
-        var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
 
-        await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
-        await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
-        await ExerciseNameSyncSeeder.SeedAsync(context, dataDirectory, logger);
-        await ExerciseVariantSeeder.SeedAsync(context, dataDirectory, logger);
-        await EnduranceExerciseSeeder.SeedAsync(context, logger);
-        await ExerciseTypeClassificationSeeder.SeedAsync(context, dataDirectory, logger);
+        if (context.Database.IsRelational())
+        {
+            if (context.Database.GetMigrations().Any())
+                await context.Database.MigrateAsync();
+
+            var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+            await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseNameSyncSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseVariantSeeder.SeedAsync(context, dataDirectory, logger);
+            await EnduranceExerciseSeeder.SeedAsync(context, logger);
+            await ExerciseTypeClassificationSeeder.SeedAsync(context, dataDirectory, logger);
+        }
+        else
+        {
+            // En proveedores no relacionales (p.ej. InMemory en tests) se omiten migraciones/seeders físicos.
+            logger.LogInformation("Se omitieron migraciones y seeders porque el proveedor de base de datos no es relacional.");
+        }
     }
 }

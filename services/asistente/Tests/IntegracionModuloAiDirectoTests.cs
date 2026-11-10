@@ -43,7 +43,7 @@ public sealed class IntegracionModuloAiDirectoTests
                 ProviderUsed: providerName
             ));
 
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(mockAiService.Object, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
         var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         var request = new RoutineSuggestionRequestDto(
@@ -91,7 +91,7 @@ public sealed class IntegracionModuloAiDirectoTests
                 ProviderUsed: "Ollama"
             ));
 
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(mockAiService.Object, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
         var request = new RoutineSuggestionRequestDto(
             AthleteId: TestAthleteId,
             Goal: "   Hipertrofia de Torso   ",
@@ -112,7 +112,7 @@ public sealed class IntegracionModuloAiDirectoTests
     {
         // Arrange
         var mockAiService = new Mock<IAiService>();
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(mockAiService.Object, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
 
         var request = new RoutineSuggestionRequestDto(
             AthleteId: Guid.Empty,
@@ -133,7 +133,7 @@ public sealed class IntegracionModuloAiDirectoTests
     {
         // Arrange
         var mockAiService = new Mock<IAiService>();
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(mockAiService.Object, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
 
         var request = new RoutineSuggestionRequestDto(
             AthleteId: TestAthleteId,
@@ -168,7 +168,7 @@ public sealed class IntegracionModuloAiDirectoTests
                 ProviderUsed: "Ollama"
             ));
 
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(mockAiService.Object, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
         var request = new RoutineSuggestionRequestDto(TestAthleteId, "Fuerza");
 
         // Act
@@ -232,7 +232,7 @@ public sealed class IntegracionModuloAiDirectoTests
             logger: Microsoft.Extensions.Logging.Abstractions.NullLogger<Infrastructure.Services.Ai.ResilientAiService>.Instance
         );
 
-        var useCase = new SuggestRoutineUseCase(resilientAiService);
+        var useCase = new SuggestRoutineUseCase(resilientAiService, Mock.Of<IAthleteAdaptationContextService>(), Mock.Of<IStructureAthleteClient>());
         var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
         var request = new RoutineSuggestionRequestDto(TestAthleteId, "Fuerza Máxima");
 
