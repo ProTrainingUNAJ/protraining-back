@@ -75,7 +75,7 @@ public class CompleteOnboardingCommandHandlerTests
         await using var context = CreateContext();
         var result = await CreateHandler(context).Handle(CreateCommand((squat.Id, 70m)));
 
-        var created = Assert.Single(result);
+        var created = Assert.Single(result.Created);
         Assert.Equal(70m, created.WeightOneRepMaxKg);
         Assert.Equal("EstimatedEpley", created.Origin);
         Assert.True(created.IsCurrent);
@@ -97,7 +97,7 @@ public class CompleteOnboardingCommandHandlerTests
         {
             var result = await CreateHandler(context).Handle(CreateCommand((squat.Id, 70m)));
 
-            Assert.Empty(result);
+            Assert.Empty(result.Created);
         }
 
         await using var verify = CreateContext();
@@ -120,7 +120,7 @@ public class CompleteOnboardingCommandHandlerTests
             var result = await CreateHandler(context)
                 .Handle(CreateCommand((squat.Id, 70m), (bench.Id, 60m)));
 
-            var created = Assert.Single(result);
+            var created = Assert.Single(result.Created);
             Assert.Equal(bench.Id, created.ExerciseId);
             Assert.Equal(60m, created.WeightOneRepMaxKg);
             Assert.Equal("EstimatedEpley", created.Origin);
@@ -149,13 +149,13 @@ public class CompleteOnboardingCommandHandlerTests
         await using (var context = CreateContext())
         {
             var first = await CreateHandler(context).Handle(CreateCommand((squat.Id, 70m)));
-            Assert.Single(first);
+            Assert.Single(first.Created);
         }
 
         await using (var context = CreateContext())
         {
             var second = await CreateHandler(context).Handle(CreateCommand((squat.Id, 90m)));
-            Assert.Empty(second);
+            Assert.Empty(second.Created);
         }
 
         await using var verify = CreateContext();
