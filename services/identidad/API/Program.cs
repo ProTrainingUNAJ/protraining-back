@@ -103,6 +103,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<MustChangePasswordMiddleware>();
 
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();
