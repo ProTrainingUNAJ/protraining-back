@@ -12,6 +12,7 @@ using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.GetPfContact;
 using Infrastructure.Services.Structure;
 using Application.UseCases.Auth.RegisterByInvitation;
@@ -64,6 +65,7 @@ builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();
 builder.Services.AddScoped<RegisterByInvitationUseCase>();
+builder.Services.AddScoped<ChangePasswordUseCase>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
