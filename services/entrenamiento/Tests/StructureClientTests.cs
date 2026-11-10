@@ -11,6 +11,7 @@ namespace Entrenamiento.Tests;
 
 public class StructureClientTests
 {
+    // Simula a Estructura: devuelve la respuesta configurada y guarda el pedido que recibió.
     private sealed class FakeStructureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }
@@ -52,10 +53,13 @@ public class StructureClientTests
     [Fact]
     public async Task Given_AccountNotLinkedToAthlete_When_GetMyCategories_Then_Returns_Empty()
     {
+        // arrange
         var client = CreateClient(new FakeStructureHandler(_ => Json(HttpStatusCode.NotFound, """{"title":"Atleta no encontrado."}""")));
 
+        // act
         var categories = await client.GetMyCategoriesAsync();
 
+        // assert
         Assert.Empty(categories);
     }
 
@@ -64,30 +68,37 @@ public class StructureClientTests
     [InlineData(HttpStatusCode.Forbidden)]
     public async Task Given_TokenRejectedByStructure_When_GetMyCategories_Then_Throws_Unauthorized(HttpStatusCode status)
     {
+        // arrange
         var client = CreateClient(new FakeStructureHandler(_ => new HttpResponseMessage(status)));
 
+        // act & assert
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => client.GetMyCategoriesAsync());
     }
 
     [Fact]
     public async Task Given_StructureFailing_When_GetMyCategories_Then_Throws_StructureUnavailable()
     {
+        // arrange
         var client = CreateClient(new FakeStructureHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
+        // act & assert
         await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetMyCategoriesAsync());
     }
 
     [Fact]
     public async Task Given_StructureUnreachable_When_GetMyCategories_Then_Throws_StructureUnavailable()
     {
+        // arrange
         var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused")));
 
+        // act & assert
         await Assert.ThrowsAsync<StructureUnavailableException>(() => client.GetMyCategoriesAsync());
     }
 
     [Fact]
     public async Task Given_RequestWithToken_When_CallingStructure_Then_Forwards_The_Same_Authorization_Header()
     {
+        // arrange
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers.Authorization = "Bearer token-del-atleta";
         var accessor = new Mock<IHttpContextAccessor>();
@@ -97,8 +108,10 @@ public class StructureClientTests
         var forward = new ForwardAuthorizationHandler(accessor.Object) { InnerHandler = structure };
         var client = CreateClient(forward);
 
+        // act
         await client.GetMyCategoriesAsync();
 
+        // assert
         Assert.Equal("Bearer token-del-atleta", structure.LastRequest!.Headers.Authorization!.ToString());
     }
 
