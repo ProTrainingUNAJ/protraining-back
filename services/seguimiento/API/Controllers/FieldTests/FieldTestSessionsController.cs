@@ -1,17 +1,21 @@
 using Application.DTOs.FieldTests;
 using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.CreateFieldTestSession;
 using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.ListFieldTestSessions;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
+using Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace API.Controllers.FieldTests;
 
-// Sesiones de test de campo con carga rápida de resultados (KAN-425): el rol
-// PreparadorFisico se valida en este servicio, como el resto de los datos del PF.
-// El aislamiento por pf_id lo garantiza el filtro global del AppDbContext: sesión o
-// resultado de otro PF → 404, sin revelar que el id exista.
+// Sesiones de test de campo con carga rápida de resultados (KAN-425) y gestión de las
+// sesiones y sus estados: el rol PreparadorFisico se valida en este servicio,
+// como el resto de los datos del PF. El aislamiento por pf_id lo garantiza el filtro
+// global del AppDbContext: sesión o resultado de otro PF → 404, sin revelar que el id exista.
 [ApiController]
 [Route("api/v1/field-test-sessions")]
 [Authorize(Roles = "PreparadorFisico")]
@@ -19,8 +23,74 @@ public sealed class FieldTestSessionsController(
     CreateFieldTestResultCommandHandler createHandler,
     GetFieldTestSessionQueryHandler getHandler,
     UpdateFieldTestResultCommandHandler updateHandler,
-    ConfirmFieldTestResultCommandHandler confirmHandler) : ControllerBase
+    ConfirmFieldTestResultCommandHandler confirmHandler,
+    CreateFieldTestSessionCommandHandler createSessionHandler,
+    ListFieldTestSessionsQueryHandler listSessionsHandler,
+    UpdateFieldTestSessionStatusCommandHandler updateStatusHandler) : ControllerBase
 {
+    // Listado por categoría (contrato: listFieldTestSessions): solo el resumen de cada
+    // sesión (sin tests ni resultados) para que la pantalla que elige sea liviana.
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<FieldTestSessionSummaryDto>), 200)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    public async Task<ActionResult<IReadOnlyList<FieldTestSessionSummaryDto>>> List(
+        [FromQuery, Required] Guid? categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        var sessions = await listSessionsHandler.HandleAsync(
+            new ListFieldTestSessionsQuery(categoryId!.Value),
+            cancellationToken);
+
+        return Ok(sessions);
+    }
+
+    // Alta de una sesión (contrato: createFieldTestSession): estado inicial Planned y
+    // 201 con la sesión creada. Categoría ajena o inexistente → 404; pruebas del
+    // catálogo inexistentes → 400.
+    [HttpPost]
+    [ProducesResponseType(typeof(FieldTestSessionDto), 201)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    public async Task<ActionResult<FieldTestSessionDto>> Create(
+        CreateFieldTestSessionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // Los ! están garantizados por el [Required] del contrato (400 automático).
+        var session = await createSessionHandler.HandleAsync(
+            new CreateFieldTestSessionCommand(
+                request.CategoryId!.Value,
+                request.Date!.Value,
+                request.Name!,
+                request.Tests!),
+            cancellationToken);
+
+        return Created($"/api/v1/field-test-sessions/{session.Id}", session);
+    }
+
+    // Avance de estado (contrato: updateFieldTestSessionStatus): Planned → InProgress →
+    // Closed en orden estricto; sin saltos ni reaperturas → 400. Sesión ajena → 404.
+    [HttpPatch("{sessionId:guid}/status")]
+    [ProducesResponseType(typeof(FieldTestSessionSummaryDto), 200)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    public async Task<ActionResult<FieldTestSessionSummaryDto>> UpdateStatus(
+        Guid sessionId,
+        UpdateFieldTestSessionStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await updateStatusHandler.HandleAsync(
+            new UpdateFieldTestSessionStatusCommand(sessionId, request.Status),
+            cancellationToken);
+
+        return Ok(session);
+    }
+
     // Sesión con sus tests y resultados (contrato: getFieldTestSession): la pantalla
     // del móvil se pinta con un solo GET.
     [HttpGet("{sessionId:guid}")]

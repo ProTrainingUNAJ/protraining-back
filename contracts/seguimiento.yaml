@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.7.0
+  version: 1.8.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -717,6 +717,111 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/field-test-sessions:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Sesiones de test de campo de una categoría
+      description: >
+        Devuelve el resumen (id, categoría, fecha, nombre y estado) de las sesiones de la
+        categoría pedida, de la más reciente a la más antigua. Solo aparecen las sesiones
+        del PF autenticado: las de otro PF no se devuelven. Sin tests ni resultados, para
+        que la pantalla que elige la sesión sea liviana.
+      operationId: listFieldTestSessions
+      parameters:
+        - name: categoryId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+      responses:
+        "200":
+          description: Listado obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FieldTestSessionSummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+        - Fitness Tests
+      summary: Crear una sesión de test de campo
+      description: >
+        Crea la sesión con sus pruebas del catálogo en el orden de evaluación. Estado
+        inicial Planned. Responde 404 si la categoría no existe o es de otro PF; 400 si
+        la lista de pruebas está vacía, si se repite una prueba o si alguna no existe en
+        el catálogo.
+      operationId: createFieldTestSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFieldTestSessionRequest'
+      responses:
+        "201":
+          description: Sesión creada con éxito (estado Planned).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSession'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions/{sessionId}/status:
+    patch:
+      tags:
+        - Fitness Tests
+      summary: Cambiar el estado de la sesión
+      description: >
+        Avanza el estado de la sesión en orden estricto Planned -> InProgress -> Closed.
+        Un salto (Planned -> Closed), una reapertura o repetir el estado actual responde
+        400 "Transición de estado no válida". La sesión no exista o sea de otro PF → 404.
+      operationId: updateFieldTestSessionStatus
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFieldTestSessionStatusRequest'
+      responses:
+        "200":
+          description: Estado actualizado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSessionSummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/field-test-sessions/{sessionId}:
     get:
       tags:
@@ -757,7 +862,8 @@ paths:
         Registra el valor de un atleta para un test de la sesión. Responde 404 si la
         sesión no existe o es de otro PF, o si el atleta no existe o es de otro PF (en
         ese caso no se persiste nada). Responde 409 si el mismo (sesión, prueba, atleta
-        e intento) ya fue cargado.
+        e intento) ya fue cargado. Si la sesión está en estado Closed responde 400
+        "La sesión ya está cerrada." (KAN-427).
       operationId: createFieldTestResult
       parameters:
         - name: sessionId
@@ -798,7 +904,8 @@ paths:
       description: >
         Actualiza el valor y el intento de un resultado ya cargado. Responde 404 si la
         sesión o el resultado no existen o son de otro PF. Responde 409 si la corrección
-        choca con un resultado ya cargado (misma prueba, atleta e intento).
+        choca con un resultado ya cargado (misma prueba, atleta e intento). Si la sesión
+        está en estado Closed responde 400 "La sesión ya está cerrada." (KAN-427).
       operationId: updateFieldTestResult
       parameters:
         - name: sessionId
@@ -850,7 +957,9 @@ paths:
         la prueba no existen o son de otro PF; 400 si el test no genera récord 1RM o si
         Entrenamiento no tiene un ejercicio con ese nombre; y 503 si Entrenamiento no
         responde tras los reintentos de Polly (la confirmación no quedó registrada allí).
-        Re-confirmar reenvía el mismo valor (idempotente del lado de Entrenamiento).
+        Re-confirmar reenvía el mismo valor (idempotente del lado de Entrenamiento). Si
+        la sesión está en estado Closed responde 400 "La sesión ya está cerrada." y no se
+        envía ningún 1RM (KAN-427).
       operationId: confirmFieldTestResult
       parameters:
         - name: sessionId
@@ -2061,3 +2170,102 @@ components:
           type: integer
           minimum: 1
           example: 1
+
+    FieldTestSessionSummary:
+      type: object
+      description: >
+        Resumen de sesión de test de campo para el listado por categoría (KAN-427), sin
+        tests ni resultados. El estado viaja como texto.
+      required:
+        - id
+        - categoryId
+        - date
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        status:
+          type: string
+          enum:
+            - Planned
+            - InProgress
+            - Closed
+          example: "Planned"
+
+    CreateFieldTestSessionRequest:
+      type: object
+      description: >
+        Alta de una sesión de test de campo (KAN-427): categoría del PF, fecha, nombre y
+        pruebas del catálogo en orden de evaluación.
+      required:
+        - categoryId
+        - date
+        - name
+        - tests
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          description: Categoría del PF autenticado; si no existe o es de otra → 404.
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        tests:
+          type: array
+          minItems: 1
+          description: Pruebas del catálogo en el orden en que se evalúan; sin repetidos.
+          items:
+            $ref: '#/components/schemas/FieldTestSessionTestInput'
+
+    FieldTestSessionTestInput:
+      type: object
+      description: Prueba del catálogo pedida al crear la sesión, con su orden.
+      required:
+        - catalogTestId
+        - order
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          description: Debe existir en el catálogo del PF; si no → 400.
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateFieldTestSessionStatusRequest:
+      type: object
+      description: >
+        Avance de estado de la sesión (KAN-427): solo Planned -> InProgress -> Closed, en
+        orden estricto. Un salto o una reapertura → 400.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - InProgress
+            - Closed
+          example: "InProgress"

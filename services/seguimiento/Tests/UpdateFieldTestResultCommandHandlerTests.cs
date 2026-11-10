@@ -101,4 +101,22 @@ public class UpdateFieldTestResultCommandHandlerTests
         Assert.Equal(42.5m, _result.Value);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    // La sesión cerrada ya no admite correcciones → 400 y la fila queda intacta.
+    [Fact]
+    public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutSaving()
+    {
+        _session.Status = FieldTestSessionStatus.Closed;
+
+        var exception = await Assert.ThrowsAsync<Domain.Exceptions.DomainException>(
+            () => CreateHandler().HandleAsync(
+                new UpdateFieldTestResultCommand(SessionId, ResultId, 41.8m, 2)));
+
+        Assert.Equal("La sesión ya está cerrada.", exception.Message);
+        Assert.Equal(42.5m, _result.Value);
+        _fieldTests.Verify(
+            repo => repo.GetResultAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

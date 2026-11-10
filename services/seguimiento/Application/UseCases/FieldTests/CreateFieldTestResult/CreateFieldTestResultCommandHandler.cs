@@ -4,6 +4,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.Mappings;
 using Domain.Entities;
+using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.CreateFieldTestResult;
 
@@ -22,8 +23,12 @@ public sealed class CreateFieldTestResultCommandHandler(
         CancellationToken cancellationToken = default)
     {
         // Sesión inexistente o de otro PF (filtro global) → 404.
-        _ = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
+        var session = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
             ?? throw new FieldTestSessionNotFoundException();
+
+        // Sesión cerrada → 400: la toma de marcas terminó y nada más se carga.
+        if (session.Status == FieldTestSessionStatus.Closed)
+            throw new DomainException("La sesión ya está cerrada.");
 
         // Atleta inexistente o de otro PF → 404; no se persiste ningún resultado.
         if (!await structureClient.IsOwnAthleteAsync(command.AthleteId, cancellationToken))
