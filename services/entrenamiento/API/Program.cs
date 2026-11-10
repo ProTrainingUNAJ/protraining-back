@@ -1,5 +1,6 @@
 using API.Extensions;
 using API.HealthChecks;
+using API.Mcp;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
@@ -14,6 +15,7 @@ using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.CheckRestrictions;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.ListExercises;
+using Application.UseCases.Exercise.SearchCatalogExercises;
 using Application.UseCases.Exercise.UpdateVideoUrl;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
@@ -40,6 +42,7 @@ using Domain.Services;
 using Infrastructure;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
+using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Text.Json;
@@ -83,6 +86,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
+builder.Services.AddScoped<SearchCatalogExercisesQueryHandler>();
 builder.Services.AddScoped<AssignPlanCommandHandler>();
 builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();
 builder.Services.AddScoped<UpdateTrainingPlanCommandHandler>();
@@ -115,7 +119,11 @@ builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
 builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
 builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
 
-
+// E51: servidor MCP (Streamable HTTP, sin estado) para la biblioteca de ejercicios.
+// Se expone en /mcp y el gateway ya lo publica como /entrenamiento/mcp.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
+    .WithTools<ExerciseLibraryTools>();
 
 // Estructura por HTTP, con el token del usuario (#062).
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
@@ -151,5 +159,11 @@ app.UseAuthorization();
 app.UseStaticFiles();
 
 app.MapControllers();
+
+// E51: la biblioteca de ejercicios es de solo lectura y solo para PF o servicios internos.
+// La política fallback del servicio ya exige token; acá además se restringen los roles.
+app.MapMcp("/mcp")
+    .RequireAuthorization(policy => policy.RequireRole("PreparadorFisico", "Servicio"));
+
 app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();

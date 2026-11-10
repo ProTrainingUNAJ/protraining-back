@@ -137,6 +137,51 @@ Le saca el prefijo: `localhost:8000/estructura/api/athletes` llega a Estructura 
 
 El front llama a `/api/<servicio>/...` y su nginx (o el Vite en desarrollo) le saca el `/api` y se lo pasa al gateway. Ejemplo: `/api/estructura/api/athletes` → gateway `/estructura/api/athletes` → Estructura `/api/athletes`.
 
+## Servidor MCP de la biblioteca de ejercicios
+
+Entrenamiento expone la biblioteca compartida de ejercicios por **MCP** (Model Context Protocol), para que clientes de IA puedan buscarla con una herramienta estándar. Usa el SDK oficial `ModelContextProtocol.AspNetCore` con transporte **Streamable HTTP sin estado**.
+
+| | |
+|---|---|
+| URL por el gateway | `http://localhost:8000/entrenamiento/mcp` |
+| URL directa al servicio | `http://localhost:8083/mcp` |
+| Autenticación | `Authorization: Bearer <JWT>` obligatorio |
+| Roles permitidos | `PreparadorFisico` y `Servicio` |
+| Alcance | Solo catálogo compartido, de solo lectura |
+
+La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
+
+| Parámetro | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| `name` | string | Uno de los tres filtros | Texto del nombre. Ejemplo: `"sentadilla"`. |
+| `muscle` | string | Uno de los tres filtros | Músculo específico. Ejemplos: `"cuádriceps"`, `"glúteos"`, `"dorsales"`. |
+| `equipment` | string | Uno de los tres filtros | Equipamiento. Ejemplo: `"barra con pesas"`. |
+| `limit` | int | No | Máximo de resultados. Por defecto 20, tope 100. |
+
+Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
+
+Ejemplo con `curl` (el cuerpo debe ir en UTF-8 para que las tildes funcionen):
+
+```bash
+TOKEN="<pegar acá el JWT de un PF>"
+
+curl -s http://localhost:8000/entrenamiento/mcp \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"BuscarEjercicios","arguments":{"name":"sentadilla","limit":5}}}'
+```
+
+La respuesta llega como Server-Sent Events (`event: message` y una línea `data: {...}`). Para probarlo desde una interfaz, abrí `npx @modelcontextprotocol/inspector`, elegí el transporte **Streamable HTTP**, cargá la URL del gateway y agregá el header `Authorization: Bearer <JWT>`.
+
+### Seguridad y multi-tenancy
+
+- **Solo catálogo compartido:** la consulta fuerza `pf_id = Guid.Empty`. Aunque el token sea de un PF, la herramienta nunca devuelve ejercicios privados de ese PF ni de otro.
+- **Sin atajos de tenant:** no se usa `IgnoreQueryFilters`. El filtro global de `AppDbContext` sigue activo y la consulta lo refuerza con el filtro explícito de catálogo.
+- **Roles acotados:** un token válido sin rol `PreparadorFisico` o `Servicio` recibe **403**; sin token, **401**.
+- **Logs sin PII:** se registran solo el nombre de la herramienta y las cantidades devueltas. No se registran los términos de búsqueda, nombres de atletas ni otros datos personales.
+- **Sin migraciones ni cambios de contrato REST:** la tarjeta solo agrega superficie MCP de lectura; no toca tablas ni el OpenAPI.
+
 ## Correr un servicio con `dotnet run`
 
 Útil para debuggear. Levantá solo su base con Docker y pasale las variables:
