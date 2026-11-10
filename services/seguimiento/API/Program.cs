@@ -106,7 +106,7 @@ builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
 builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
 // Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento.
 builder.Services.AddScoped<ConfirmFieldTestResultCommandHandler>();
-// Gestión de las sesiones de test de campo y sus estados (KAN-427): alta, listado por
+// Gestión de las sesiones de test de campo y sus estados: alta, listado por
 // categoría y transición Planned → InProgress → Closed.
 builder.Services.AddScoped<CreateFieldTestSessionCommandHandler>();
 builder.Services.AddScoped<ListFieldTestSessionsQueryHandler>();

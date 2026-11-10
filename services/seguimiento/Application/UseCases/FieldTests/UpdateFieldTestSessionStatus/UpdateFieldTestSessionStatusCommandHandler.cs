@@ -7,7 +7,7 @@ using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 
-// Transición de estado de la sesión (KAN-427): 1 SELECT (sesión) + 1 UPDATE en un único
+// Transición de estado de la sesión: 1 SELECT (sesión) + 1 UPDATE en un único
 // SaveChangesAsync. Sesión ajena → 404. Máquina de estados estricta y secuencial
 // (mismo criterio que AthleteInjury.TransitionTo): solo Planned → InProgress → Closed,
 // sin saltos ni reaperturas → cualquier otra combinación responde 400.

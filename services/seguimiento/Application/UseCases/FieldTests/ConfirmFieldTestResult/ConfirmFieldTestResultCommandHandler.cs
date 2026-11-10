@@ -36,7 +36,7 @@ public sealed class ConfirmFieldTestResultCommandHandler(
             ?? throw new FieldTestSessionNotFoundException();
 
         // Sesión cerrada → 400: no se re-confirma ni se dispara un envío tardío de 1RM
-        // a Entrenamiento (KAN-427).
+        // a Entrenamiento.
         if (session.Status == FieldTestSessionStatus.Closed)
             throw new DomainException("La sesión ya está cerrada.");
 

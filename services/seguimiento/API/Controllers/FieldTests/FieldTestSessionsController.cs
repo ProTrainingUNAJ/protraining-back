@@ -13,7 +13,7 @@ using System.ComponentModel.DataAnnotations;
 namespace API.Controllers.FieldTests;
 
 // Sesiones de test de campo con carga rápida de resultados (KAN-425) y gestión de las
-// sesiones y sus estados (KAN-427): el rol PreparadorFisico se valida en este servicio,
+// sesiones y sus estados: el rol PreparadorFisico se valida en este servicio,
 // como el resto de los datos del PF. El aislamiento por pf_id lo garantiza el filtro
 // global del AppDbContext: sesión o resultado de otro PF → 404, sin revelar que el id exista.
 [ApiController]

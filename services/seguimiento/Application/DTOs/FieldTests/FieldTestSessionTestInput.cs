@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Application.DTOs.FieldTests;
 
-// Prueba del catálogo pedida al crear la sesión, con el orden en que se evalúa (KAN-427).
+// Prueba del catálogo pedida al crear la sesión, con el orden en que se evalúa.
 public sealed record FieldTestSessionTestInput
 {
     [Required(ErrorMessage = "La prueba del catálogo es obligatoria.")]

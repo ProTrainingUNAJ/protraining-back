@@ -10,7 +10,7 @@ using Seguimiento.Tests.Infrastructure;
 
 namespace Seguimiento.Tests.Integration;
 
-// Certificación HTTP de KAN-427: creación, listado por categoría y transición de estados
+// Certificación HTTP: creación, listado por categoría y transición de estados
 // de las sesiones de test de campo (Planned → InProgress → Closed, en orden estricto),
 // el bloqueo de carga/corrección/confirmación en sesiones Closed (400) y el aislamiento
 // por categoría de otro PF (404, sin escribir nada).
@@ -322,7 +322,7 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
 
     // ---------- Aislamiento por categoría y sesión de otro PF ----------
 
-    // KAN-427: el PATCH sobre la sesión de otro PF → 404 sin tocar la fila.
+    // El PATCH sobre la sesión de otro PF → 404 sin tocar la fila.
     [Fact]
     [Trait("Category", "Isolation")]
     public async Task Given_SessionOfAnotherPf_When_PatchStatus_Then_Returns404AndKeepsStatus()
@@ -344,7 +344,7 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
         Assert.Equal(_otherPfId, saved.PfId);
     }
 
-    // KAN-427: el listado de una categoría de otro PF no revela ninguna sesión.
+    // El listado de una categoría de otro PF no revela ninguna sesión.
     [Fact]
     [Trait("Category", "Isolation")]
     public async Task Given_CategoryOfAnotherPf_When_GetList_Then_Returns200Empty()

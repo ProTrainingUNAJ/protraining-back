@@ -8,7 +8,7 @@ using Domain.Exceptions;
 
 namespace Application.UseCases.FieldTests.CreateFieldTestSession;
 
-// Alta de la sesión con sus pruebas (KAN-427): 1 llamada a Estructura (categoría del PF)
+// Alta de la sesión con sus pruebas: 1 llamada a Estructura (categoría del PF)
 // + 1 SELECT por prueba del catálogo + 1 INSERT en un único SaveChangesAsync. Categoría
 // ajena o inexistente → 404; alguna prueba inexistente → 400; estado inicial Planned.
 public sealed class CreateFieldTestSessionCommandHandler(

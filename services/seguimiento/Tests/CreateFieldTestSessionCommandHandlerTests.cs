@@ -9,7 +9,7 @@ using Moq;
 
 namespace Seguimiento.Tests;
 
-// KAN-427: el alta valida la categoría contra Estructura (ajena o inexistente → 404) y
+// El alta valida la categoría contra Estructura (ajena o inexistente → 404) y
 // las pruebas del catálogo (inexistente, vacía o repetida → 400), y persiste la sesión
 // con sus pruebas en un único SaveChanges con estado inicial Planned.
 public class CreateFieldTestSessionCommandHandlerTests

@@ -134,7 +134,7 @@ public class CreateFieldTestResultCommandHandlerTests
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // KAN-427: la sesión cerrada ya no admite carga de marcas → 400 sin tocar nada.
+    // La sesión cerrada ya no admite carga de marcas → 400 sin tocar nada.
     [Fact]
     public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutSaving()
     {

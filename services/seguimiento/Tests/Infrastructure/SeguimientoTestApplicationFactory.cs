@@ -167,7 +167,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // mismo registro que en Program.cs.
                 services.AddScoped<ConfirmFieldTestResultCommandHandler>();
 
-                // Gestión de las sesiones de test de campo y sus estados (KAN-427):
+                // Gestión de las sesiones de test de campo y sus estados:
                 // mismo registro que en Program.cs.
                 services.AddScoped<CreateFieldTestSessionCommandHandler>();
                 services.AddScoped<ListFieldTestSessionsQueryHandler>();

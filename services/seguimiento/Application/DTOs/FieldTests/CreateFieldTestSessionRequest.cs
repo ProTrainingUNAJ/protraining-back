@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Application.DTOs.FieldTests;
 
-// Alta de una sesión de test de campo (KAN-427): el PF elige su categoría, la fecha,
+// Alta de una sesión de test de campo: el PF elige su categoría, la fecha,
 // el nombre y las pruebas del catálogo en orden de evaluación. La categoría debe ser
 // suya (404 si no) y todas las pruebas deben existir (400 si no).
 public sealed record CreateFieldTestSessionRequest

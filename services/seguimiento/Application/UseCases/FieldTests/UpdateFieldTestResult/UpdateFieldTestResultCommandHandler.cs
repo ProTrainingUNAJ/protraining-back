@@ -23,7 +23,7 @@ public sealed class UpdateFieldTestResultCommandHandler(
         var session = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
             ?? throw new FieldTestSessionNotFoundException();
 
-        // Sesión cerrada → 400: la corrección también queda bloqueada (KAN-427).
+        // Sesión cerrada → 400: la corrección también queda bloqueada.
         if (session.Status == FieldTestSessionStatus.Closed)
             throw new DomainException("La sesión ya está cerrada.");
 

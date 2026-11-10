@@ -237,7 +237,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             Times.Never);
     }
 
-    // KAN-427: en una sesión cerrada no se re-confirma ni se dispara un envío
+    // En una sesión cerrada no se re-confirma ni se dispara un envío
     // tardío de 1RM a Entrenamiento → 400 sin tocar nada.
     [Fact]
     public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutCallingEntrenamiento()

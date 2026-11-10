@@ -5,7 +5,7 @@ using Moq;
 
 namespace Seguimiento.Tests;
 
-// KAN-427: el listado es de solo lectura (sin SaveChanges) y devuelve el resumen de cada
+// El listado es de solo lectura (sin SaveChanges) y devuelve el resumen de cada
 // sesión de la categoría, con el estado como texto.
 public class ListFieldTestSessionsQueryHandlerTests
 {

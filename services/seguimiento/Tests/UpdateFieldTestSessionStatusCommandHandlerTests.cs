@@ -7,7 +7,7 @@ using Moq;
 
 namespace Seguimiento.Tests;
 
-// KAN-427: la máquina de estados es estricta y secuencial (Planned → InProgress → Closed),
+// La máquina de estados es estricta y secuencial (Planned → InProgress → Closed),
 // sin saltos ni reaperturas; sesión ajena o inexistente → 404 sin escribir nada.
 public class UpdateFieldTestSessionStatusCommandHandlerTests
 {

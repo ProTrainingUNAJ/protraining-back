@@ -1,6 +1,6 @@
 namespace Application.DTOs.FieldTests;
 
-// Resumen de sesión para el listado por categoría (KAN-427): sin tests ni resultados
+// Resumen de sesión para el listado por categoría: sin tests ni resultados
 // para no pesar el payload de la pantalla que elige la sesión. Estado como texto.
 public sealed record FieldTestSessionSummaryDto(
     Guid Id,

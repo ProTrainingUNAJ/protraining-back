@@ -26,7 +26,7 @@ public sealed class CreateFieldTestResultCommandHandler(
         var session = await repository.GetSessionByIdAsync(command.SessionId, cancellationToken)
             ?? throw new FieldTestSessionNotFoundException();
 
-        // Sesión cerrada → 400: la toma de marcas terminó y nada más se carga (KAN-427).
+        // Sesión cerrada → 400: la toma de marcas terminó y nada más se carga.
         if (session.Status == FieldTestSessionStatus.Closed)
             throw new DomainException("La sesión ya está cerrada.");
 

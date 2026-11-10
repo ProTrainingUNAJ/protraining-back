@@ -12,7 +12,7 @@ public interface IFieldTestRepository
     // con el mismo SaveChanges. Mismo filtro global → null → 404.
     Task<FieldTestSession?> GetSessionByIdForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
-    // Sesiones de una categoría del PF, de la más reciente a la más antigua (KAN-427).
+    // Sesiones de una categoría del PF, de la más reciente a la más antigua.
     Task<IReadOnlyList<FieldTestSession>> ListSessionsByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
 
     // Tests del catálogo asociados a la sesión, en el orden de evaluación.

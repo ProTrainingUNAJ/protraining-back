@@ -4,7 +4,7 @@ using Application.Mappings;
 
 namespace Application.UseCases.FieldTests.ListFieldTestSessions;
 
-// Resumen de sesiones por categoría (KAN-427): caso de uso de solo lectura (AsNoTracking
+// Resumen de sesiones por categoría: caso de uso de solo lectura (AsNoTracking
 // en el repositorio, sin llamadas a otros servicios ni SaveChanges). Devuelve el DTO
 // liviano (sin tests ni resultados) para que la pantalla que elige la sesión sea rápida.
 public sealed class ListFieldTestSessionsQueryHandler(IFieldTestRepository repository)

@@ -102,7 +102,7 @@ public class UpdateFieldTestResultCommandHandlerTests
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // KAN-427: la sesión cerrada ya no admite correcciones → 400 y la fila queda intacta.
+    // La sesión cerrada ya no admite correcciones → 400 y la fila queda intacta.
     [Fact]
     public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutSaving()
     {
