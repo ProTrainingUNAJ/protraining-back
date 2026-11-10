@@ -45,7 +45,10 @@ public sealed class AssistantControllerTests
                 ProviderUsed: "Reglas"
             ));
 
-        var useCase = new SuggestRoutineUseCase(mockAiService.Object);
+        var useCase = new SuggestRoutineUseCase(
+            mockAiService.Object,
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>());
         _controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
     }
 
@@ -145,7 +148,10 @@ public sealed class AssistantControllerTests
             logger: NullLogger<ResilientAiService>.Instance
         );
 
-        var useCase = new SuggestRoutineUseCase(realAiService);
+        var useCase = new SuggestRoutineUseCase(
+            realAiService,
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>());
         var controller = new AssistantController(useCase, new GetAthleteDecisionsQueryHandler(Mock.Of<IPfDecisionRepository>(), Mock.Of<IStructureAthleteClient>()), new GetDayConflictsQueryHandler(Mock.Of<ITrainingPlanServiceClient>(), Mock.Of<ISeguimientoClient>()));
 
         var athlete1 = Guid.NewGuid();

@@ -160,6 +160,10 @@ La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
 
 Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
 
+También se expone la herramienta MCP de solo lectura **`ObtenerSustitutos`**, que recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
+
+Esta ampliación es exclusiva de la superficie MCP: no modifica endpoints REST, esquemas OpenAPI ni contratos que consuma el frontend.
+
 Ejemplo con `curl` (el cuerpo debe ir en UTF-8 para que las tildes funcionen):
 
 ```bash

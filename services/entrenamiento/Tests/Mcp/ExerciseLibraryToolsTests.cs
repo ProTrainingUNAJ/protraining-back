@@ -1,5 +1,6 @@
 using API.Mcp;
 using Application.Interfaces.Persistence;
+using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.SearchCatalogExercises;
 using Domain.Entities;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,19 +12,24 @@ namespace Entrenamiento.Tests.Mcp;
 // E51: pruebas de la herramienta MCP BuscarEjercicios.
 public sealed class ExerciseLibraryToolsTests
 {
-    private static (ExerciseLibraryTools Tool, Mock<IExerciseRepository> Repository) CreateTool()
+    private static (
+        ExerciseLibraryTools Tool,
+        Mock<IExerciseRepository> Repository,
+        Mock<IExerciseRestrictionRepository> RestrictionRepository) CreateTool()
     {
         var repository = new Mock<IExerciseRepository>();
+        var restrictionRepository = new Mock<IExerciseRestrictionRepository>();
         var handler = new SearchCatalogExercisesQueryHandler(repository.Object);
-        var tool = new ExerciseLibraryTools(handler, NullLogger<ExerciseLibraryTools>.Instance);
-        return (tool, repository);
+        var substitutesHandler = new GetSubstitutesByZoneQueryHandler(restrictionRepository.Object);
+        var tool = new ExerciseLibraryTools(handler, substitutesHandler, NullLogger<ExerciseLibraryTools>.Instance);
+        return (tool, repository, restrictionRepository);
     }
 
     [Fact]
     public async Task Given_McpClient_When_CallsBuscarEjerciciosWithSentadilla_Then_ReturnsMatchingExercises()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         var matches = new List<Exercise>
         {
             Exercise.Create("Sentadilla con barra", "Piernas", equipment: "barra con pesas", primaryMuscles: ["cuádriceps"]),
@@ -50,7 +56,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_CatalogExercise_When_Searching_Then_ReturnsCompactFields()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         var exercise = Exercise.Create(
             name: "Sentadilla con barra",
             muscleGroup: "Piernas",
@@ -80,7 +86,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_MuscleFilter_When_Searching_Then_ForwardsMuscleToRepository()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         repository
             .Setup(r => r.SearchCatalogAsync(null, null, "cuádriceps", 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
@@ -98,7 +104,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_EquipmentFilter_When_Searching_Then_ForwardsEquipmentToRepository()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         repository
             .Setup(r => r.SearchCatalogAsync(null, "barra con pesas", null, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
@@ -120,7 +126,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_Limit_When_Searching_Then_ClampsBetweenOneAndMaxLimit(int requested, int expected)
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         repository
             .Setup(r => r.SearchCatalogAsync("sentadilla", null, null, 1, expected, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
@@ -138,7 +144,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_CancellationToken_When_Searching_Then_ForwardsItToRepository()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         using var cts = new CancellationTokenSource();
         repository
             .Setup(r => r.SearchCatalogAsync("sentadilla", null, null, 1, 20, cts.Token))
@@ -157,7 +163,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_NoMatches_When_Searching_Then_ReturnsEmptyResult()
     {
         // ARRANGE
-        var (tool, repository) = CreateTool();
+        var (tool, repository, _) = CreateTool();
         repository
             .Setup(r => r.SearchCatalogAsync("inexistente", null, null, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
@@ -174,7 +180,7 @@ public sealed class ExerciseLibraryToolsTests
     public async Task Given_NoFilters_When_Searching_Then_ThrowsMcpException()
     {
         // ARRANGE
-        var (tool, _) = CreateTool();
+        var (tool, _, _) = CreateTool();
 
         // ACT + ASSERT
         await Assert.ThrowsAsync<McpException>(() => tool.SearchExercises());
@@ -189,10 +195,34 @@ public sealed class ExerciseLibraryToolsTests
         string? muscle,
         string? equipment)
     {
-        var (tool, _) = CreateTool();
+        var (tool, _, _) = CreateTool();
 
         await Assert.ThrowsAsync<McpException>(() =>
             tool.SearchExercises(name, muscle, equipment));
+    }
+
+    [Theory]
+    [InlineData("rodilla")]
+    [InlineData("knee")]
+    public void Given_KneeAlias_When_ResolvingRestrictionZones_Then_UsesLowerBodyRestrictionZones(string zone)
+    {
+        var zones = GetSubstitutesByZoneQuery.ResolveRestrictionZones(zone);
+
+        Assert.Equal(["cuadriceps", "isquiotibiales", "gemelos"], zones);
+    }
+
+    [Fact]
+    public async Task Given_UnknownZone_When_GettingSubstitutes_Then_ThrowsMcpException()
+    {
+        var (tool, _, restrictionRepository) = CreateTool();
+
+        await Assert.ThrowsAsync<McpException>(() => tool.GetSubstitutes("zona-inexistente"));
+
+        restrictionRepository.Verify(
+            repository => repository.GetRestrictionsByZonesAsync(
+                It.IsAny<IEnumerable<string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

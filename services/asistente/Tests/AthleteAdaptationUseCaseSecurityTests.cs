@@ -25,8 +25,8 @@ public sealed class AthleteAdaptationUseCaseSecurityTests
 
         var useCase = new SuggestRoutineUseCase(
             ai.Object,
-            adaptationContextService: context.Object,
-            structureAthleteClient: structure.Object);
+            context.Object,
+            structure.Object);
 
         await Assert.ThrowsAsync<Application.Exceptions.NotFoundException>(() =>
             useCase.ExecuteAdaptationAsync(

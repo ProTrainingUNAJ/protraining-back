@@ -46,5 +46,26 @@ public class ExerciseRestrictionRepository : IExerciseRestrictionRepository
                 .ThenInclude(s => s.SubstituteExercise)
             .FirstOrDefaultAsync(r => r.ExerciseId == exerciseId && r.Zone == normalizedZone, cancellationToken);
     }
+
+    public async Task<List<ExerciseRestriction>> GetRestrictionsByZonesAsync(
+        IEnumerable<string> zones,
+        CancellationToken cancellationToken = default)
+    {
+        var zonesList = zones
+            .Where(zone => !string.IsNullOrWhiteSpace(zone))
+            .Select(zone => zone.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+        if (zonesList.Count == 0)
+            return [];
+
+        return await _context.ExerciseRestrictions
+            .AsNoTracking()
+            .Include(r => r.Substitutes)
+                .ThenInclude(s => s.SubstituteExercise)
+            .Where(r => zonesList.Contains(r.Zone))
+            .ToListAsync(cancellationToken);
+    }
 }
 

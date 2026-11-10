@@ -1,3 +1,4 @@
+using Application.DTOs.TrainingSessions;
 using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,11 +15,11 @@ namespace API.Controllers;
 public class InternalTrainingSessionsController(GetAthletesWithScheduledSessionQueryHandler handler) : ControllerBase
 {
     [HttpGet("athletes-with-session")]
-    [ProducesResponseType(typeof(IReadOnlyList<Guid>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ScheduledSessionTargetsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IReadOnlyList<Guid>>> GetAthletesWithScheduledSession(
+    public async Task<ActionResult<ScheduledSessionTargetsResponse>> GetAthletesWithScheduledSession(
         [FromQuery] DateOnly? date,
         [FromQuery] Guid? pfId,
         CancellationToken cancellationToken)
@@ -33,10 +34,10 @@ public class InternalTrainingSessionsController(GetAthletesWithScheduledSessionQ
             });
         }
 
-        var athleteIds = await handler.HandleAsync(
+        var targets = await handler.HandleAsync(
             new GetAthletesWithScheduledSessionQuery(date.Value, pfId.Value),
             cancellationToken);
 
-        return Ok(athleteIds);
+        return Ok(targets);
     }
 }

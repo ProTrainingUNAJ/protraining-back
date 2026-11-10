@@ -35,7 +35,11 @@ public static class RoutinePromptBuilder
                 sb.AppendLine("- No hay lesiones activas informadas.");
             else
                 foreach (var injury in context.ActiveInjuries)
-                    sb.AppendLine($"- Lesión activa en {injury.Zone}: {injury.Description}");
+                {
+                    var zone = string.IsNullOrWhiteSpace(injury.Zone) ? "zona no informada" : injury.Zone.Trim();
+                    var status = string.IsNullOrWhiteSpace(injury.Status) ? "estado no informado" : injury.Status.Trim();
+                    sb.AppendLine($"- Lesión activa en {zone} (estado: {status}; severidad: no informada).");
+                }
 
             if (context.CurrentRecords.Count == 0)
             {

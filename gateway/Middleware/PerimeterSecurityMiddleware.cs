@@ -28,11 +28,9 @@ public sealed class PerimeterSecurityMiddleware(
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // 1. Bloqueo perimetral de rutas internas para clientes externos
-        if (path.StartsWith("/api/v1/internal/", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/api/v1/internal", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/identidad/api/v1/internal/", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/identidad/api/v1/internal", StringComparison.OrdinalIgnoreCase))
+        // 1. Bloqueo perimetral de rutas internas para clientes externos (#KAN-528 / KAN-539)
+        if (path.Contains("/api/v1/internal/", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith("/api/v1/internal", StringComparison.OrdinalIgnoreCase))
         {
             await Results.Problem(
                 statusCode: StatusCodes.Status404NotFound,

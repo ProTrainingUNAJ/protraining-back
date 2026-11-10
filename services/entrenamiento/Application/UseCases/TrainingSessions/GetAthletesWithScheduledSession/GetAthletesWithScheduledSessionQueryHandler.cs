@@ -1,13 +1,12 @@
+using Application.DTOs.TrainingSessions;
 using Application.Interfaces.Persistence;
-using Application.Interfaces.Services;
 
 namespace Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 
 public class GetAthletesWithScheduledSessionQueryHandler(
-    ITrainingSessionRepository sessionRepository,
-    IStructureClient structureClient)
+    ITrainingSessionRepository sessionRepository)
 {
-    public async Task<IReadOnlyList<Guid>> HandleAsync(
+    public async Task<ScheduledSessionTargetsResponse> HandleAsync(
         GetAthletesWithScheduledSessionQuery query,
         CancellationToken cancellationToken = default)
     {
@@ -15,6 +14,7 @@ public class GetAthletesWithScheduledSessionQueryHandler(
         var assignments = await sessionRepository.ListAssignmentsWithPlansByPfIdAsync(query.PfId, cancellationToken);
 
         var athleteIds = new HashSet<Guid>();
+        var categoryIds = new HashSet<Guid>();
 
         foreach (var assignment in assignments)
         {
@@ -28,17 +28,15 @@ public class GetAthletesWithScheduledSessionQueryHandler(
             {
                 athleteIds.Add(assignment.AthleteId.Value);
             }
-            // Si está asignado a una categoría entera, consultamos los atletas de esa categoría a Estructura
+            // Si está asignado a una categoría, devolvemos el categoryId para que Estructura resuelva sus atletas
             else if (assignment.CategoryId.HasValue)
             {
-                var categoryAthletes = await structureClient.GetCategoryAthletesAsync(assignment.CategoryId.Value, cancellationToken);
-                foreach (var athleteId in categoryAthletes)
-                {
-                    athleteIds.Add(athleteId);
-                }
+                categoryIds.Add(assignment.CategoryId.Value);
             }
         }
 
-        return athleteIds.ToList();
+        return new ScheduledSessionTargetsResponse(
+            athleteIds.ToList(),
+            categoryIds.ToList());
     }
 }

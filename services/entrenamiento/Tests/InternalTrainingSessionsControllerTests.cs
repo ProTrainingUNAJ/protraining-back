@@ -1,8 +1,7 @@
 using System.Linq;
-using System.Security.Claims;
 using API.Controllers;
+using Application.DTOs.TrainingSessions;
 using Application.Interfaces.Persistence;
-using Application.Interfaces.Services;
 using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -16,15 +15,13 @@ namespace Tests;
 public class InternalTrainingSessionsControllerTests
 {
     private readonly Mock<ITrainingSessionRepository> _sessionRepositoryMock = new();
-    private readonly Mock<IStructureClient> _structureClientMock = new();
     private readonly GetAthletesWithScheduledSessionQueryHandler _handler;
     private readonly InternalTrainingSessionsController _controller;
 
     public InternalTrainingSessionsControllerTests()
     {
         _handler = new GetAthletesWithScheduledSessionQueryHandler(
-            _sessionRepositoryMock.Object,
-            _structureClientMock.Object);
+            _sessionRepositoryMock.Object);
 
         _controller = new InternalTrainingSessionsController(_handler);
     }
@@ -58,21 +55,25 @@ public class InternalTrainingSessionsControllerTests
         var pfB = Guid.NewGuid();
         var date = new DateOnly(2026, 10, 28);
         var athleteOfPfA = Guid.NewGuid();
+        var categoryOfPfA = Guid.NewGuid();
 
-        // Plan de PF A con sesion hoy asignado a su atleta
+        // Plan de PF A con sesion hoy asignado a su atleta y a su categoria
         var plan = TrainingPlan.Create("Plan PF A", null);
         var week = TrainingWeek.Create(1, plan.Id);
         var session = TrainingSession.Create(week.Id, "Fuerza", 1, date.DayOfWeek);
         week.AddSession(session);
         plan.AddWeek(week);
 
-        var assignmentPfA = PlanAssignment.Create(plan.Id, date, athleteId: athleteOfPfA);
-        typeof(PlanAssignment).GetProperty("Plan")!.SetValue(assignmentPfA, plan);
+        var assignmentAthlete = PlanAssignment.Create(plan.Id, date, athleteId: athleteOfPfA);
+        typeof(PlanAssignment).GetProperty("Plan")!.SetValue(assignmentAthlete, plan);
+
+        var assignmentCategory = PlanAssignment.Create(plan.Id, date, categoryId: categoryOfPfA);
+        typeof(PlanAssignment).GetProperty("Plan")!.SetValue(assignmentCategory, plan);
 
         // Simulamos que el repositorio solo devuelve asignaciones del PF consultado
         _sessionRepositoryMock
             .Setup(r => r.ListAssignmentsWithPlansByPfIdAsync(pfA, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<PlanAssignment> { assignmentPfA });
+            .ReturnsAsync(new List<PlanAssignment> { assignmentAthlete, assignmentCategory });
 
         _sessionRepositoryMock
             .Setup(r => r.ListAssignmentsWithPlansByPfIdAsync(pfB, It.IsAny<CancellationToken>()))
@@ -81,13 +82,15 @@ public class InternalTrainingSessionsControllerTests
         // Consultamos con PF B
         var resultPfB = await _controller.GetAthletesWithScheduledSession(date, pfB, CancellationToken.None);
         var okPfB = Assert.IsType<OkObjectResult>(resultPfB.Result);
-        var athletesPfB = Assert.IsAssignableFrom<IEnumerable<Guid>>(okPfB.Value);
-        Assert.Empty(athletesPfB);
+        var targetsPfB = Assert.IsType<ScheduledSessionTargetsResponse>(okPfB.Value);
+        Assert.Empty(targetsPfB.AthleteIds);
+        Assert.Empty(targetsPfB.CategoryIds);
 
         // Consultamos con PF A
         var resultPfA = await _controller.GetAthletesWithScheduledSession(date, pfA, CancellationToken.None);
         var okPfA = Assert.IsType<OkObjectResult>(resultPfA.Result);
-        var athletesPfA = Assert.IsAssignableFrom<IEnumerable<Guid>>(okPfA.Value);
-        Assert.Contains(athleteOfPfA, athletesPfA);
+        var targetsPfA = Assert.IsType<ScheduledSessionTargetsResponse>(okPfA.Value);
+        Assert.Single(targetsPfA.AthleteIds, athleteOfPfA);
+        Assert.Single(targetsPfA.CategoryIds, categoryOfPfA);
     }
 }

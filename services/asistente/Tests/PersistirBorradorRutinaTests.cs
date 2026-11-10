@@ -148,10 +148,11 @@ public sealed class PersistirBorradorRutinaTests
             .ReturnsAsync(1);
 
         var useCase = new SuggestRoutineUseCase(
-            aiService: aiServiceMock.Object,
-            routineDraftRepository: repositoryMock.Object,
-            unitOfWork: unitOfWorkMock.Object
-        );
+            aiServiceMock.Object,
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>(),
+            repositoryMock.Object,
+            unitOfWorkMock.Object);
 
         // Act
         var result = await useCase.ExecuteAsync(request);
@@ -204,10 +205,11 @@ public sealed class PersistirBorradorRutinaTests
         var unitOfWorkMock = new Mock<IUnitOfWork>();
 
         var useCase = new SuggestRoutineUseCase(
-            aiService: aiServiceMock.Object,
-            routineDraftRepository: repositoryMock.Object,
-            unitOfWork: unitOfWorkMock.Object
-        );
+            aiServiceMock.Object,
+            Mock.Of<IAthleteAdaptationContextService>(),
+            Mock.Of<IStructureAthleteClient>(),
+            repositoryMock.Object,
+            unitOfWorkMock.Object);
 
         // Act
         var result = await useCase.ExecuteAsync(request);
