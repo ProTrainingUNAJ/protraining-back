@@ -75,7 +75,7 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
         // Sin check-in: Amarillo con el motivo del motor, sin fecha de reporte ni indicadores.
         Assert.Equal(missingCheckIn, result[1].AthleteId);
         Assert.Equal("Yellow", result[1].TrafficLight);
-        Assert.Contains("sin check-in", result[1].TrafficLightReason!, StringComparison.Ordinal);
+        Assert.Contains("Sin check-in", result[1].TrafficLightReason!, StringComparison.Ordinal);
         Assert.False(result[1].HasReportedToday);
         Assert.Null(result[1].ReportedAt);
         Assert.Equal(50, result[1].ResultValue);
@@ -93,7 +93,7 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
     public async Task HandleAsync_WithReportedAthlete_KeepsPersistedColorAndMapsReportedAt()
     {
         var athleteId = Guid.NewGuid();
-        var checkIn = CreateCheckIn(athleteId, TrafficLight.Yellow, "Señales de alerta: poco sueño");
+        var checkIn = CreateCheckIn(athleteId, TrafficLight.Yellow, "Sueño moderado");
         checkIn.SleepHours = 4.5;
         checkIn.SleepQuality = 2;
         checkIn.EffortRate = 8;
@@ -107,7 +107,7 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
 
         var summary = Assert.Single(result);
         Assert.Equal("Yellow", summary.TrafficLight);
-        Assert.Equal("Señales de alerta: poco sueño", summary.TrafficLightReason);
+        Assert.Equal("Sueño moderado", summary.TrafficLightReason);
         Assert.True(summary.HasReportedToday);
         Assert.Equal(checkIn.CreatedAt, summary.ReportedAt);
         Assert.Equal(50, summary.ResultValue);
@@ -133,7 +133,7 @@ public class GetCategoryTrafficLightTodayQueryHandlerTests
 
         var summary = Assert.Single(result);
         Assert.Equal("Yellow", summary.TrafficLight);
-        Assert.Contains("sin check-in", summary.TrafficLightReason!, StringComparison.Ordinal);
+        Assert.Contains("Sin check-in", summary.TrafficLightReason!, StringComparison.Ordinal);
         Assert.False(summary.HasReportedToday);
     }
 
