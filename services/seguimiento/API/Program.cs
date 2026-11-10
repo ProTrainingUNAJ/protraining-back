@@ -14,8 +14,11 @@ using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
 using Application.UseCases.FieldTests.ConfirmFieldTestResult;
 using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.CreateFieldTestSession;
 using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.ListFieldTestSessions;
 using Application.UseCases.FieldTests.UpdateFieldTestResult;
+using Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
@@ -103,6 +106,11 @@ builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
 builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
 // Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento.
 builder.Services.AddScoped<ConfirmFieldTestResultCommandHandler>();
+// Gestión de las sesiones de test de campo y sus estados (KAN-427): alta, listado por
+// categoría y transición Planned → InProgress → Closed.
+builder.Services.AddScoped<CreateFieldTestSessionCommandHandler>();
+builder.Services.AddScoped<ListFieldTestSessionsQueryHandler>();
+builder.Services.AddScoped<UpdateFieldTestSessionStatusCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();

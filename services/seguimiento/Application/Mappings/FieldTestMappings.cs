@@ -26,4 +26,12 @@ public static class FieldTestMappings
             session.Status.ToString(),
             tests.Select(test => new FieldTestSessionTestDto(test.CatalogTestId, test.Order)).ToList(),
             results.Select(ToDto).ToList());
+
+    public static FieldTestSessionSummaryDto ToSummaryDto(FieldTestSession session) =>
+        new(
+            session.Id,
+            session.CategoryId,
+            session.Date,
+            session.Name,
+            session.Status.ToString());
 }

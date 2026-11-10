@@ -109,6 +109,51 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
         }
     }
 
+    public async Task<bool> IsOwnCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync($"api/v1/categories/{categoryId}", cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or ExecutionRejectedException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return true;
+
+                // Estructura responde 404 si la categoría no existe o es de otro PF (filtro global).
+                case HttpStatusCode.NotFound:
+                    logger.LogWarning("La categoría {CategoryId} no fue encontrada en Estructura.", categoryId);
+                    return false;
+
+                case HttpStatusCode.Unauthorized:
+                    throw new UnauthorizedAccessException();
+
+                // Estructura exige el rol PreparadorFisico: sin él, 403.
+                case HttpStatusCode.Forbidden:
+                    throw new ForbiddenException("La cuenta del token no está autorizada como preparador físico.");
+
+                default:
+                    logger.LogError("Estructura respondió {Status} al consultar la categoría {CategoryId}.",
+                        (int)response.StatusCode, categoryId);
+                    throw new StructureUnavailableException();
+            }
+        }
+    }
+
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
         HttpResponseMessage response;

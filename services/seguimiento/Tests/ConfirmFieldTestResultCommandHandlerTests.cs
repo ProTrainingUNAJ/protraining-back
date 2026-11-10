@@ -236,4 +236,25 @@ public class ConfirmFieldTestResultCommandHandlerTests
                 It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    // KAN-427: en una sesión cerrada no se re-confirma ni se dispara un envío
+    // tardío de 1RM a Entrenamiento → 400 sin tocar nada.
+    [Fact]
+    public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutCallingEntrenamiento()
+    {
+        _session.Status = FieldTestSessionStatus.Closed;
+
+        var error = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(Command()));
+
+        Assert.Equal("La sesión ya está cerrada.", error.Message);
+        _fieldTests.Verify(
+            repo => repo.GetResultAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _entrenamiento.Verify(
+            client => client.SaveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

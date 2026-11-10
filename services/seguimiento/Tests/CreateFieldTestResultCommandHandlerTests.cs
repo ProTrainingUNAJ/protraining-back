@@ -133,4 +133,23 @@ public class CreateFieldTestResultCommandHandlerTests
             Times.Once);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    // KAN-427: la sesión cerrada ya no admite carga de marcas → 400 sin tocar nada.
+    [Fact]
+    public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutSaving()
+    {
+        _session.Status = FieldTestSessionStatus.Closed;
+
+        var exception = await Assert.ThrowsAsync<Domain.Exceptions.DomainException>(
+            () => CreateHandler().HandleAsync(CommandValido()));
+
+        Assert.Equal("La sesión ya está cerrada.", exception.Message);
+        _structure.Verify(
+            client => client.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _fieldTests.Verify(
+            repo => repo.AddResultAsync(It.IsAny<FieldTestResult>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
