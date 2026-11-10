@@ -89,6 +89,7 @@ public class CreateExerciseTests : IAsyncLifetime
             Assert.Equal("Sentadilla búlgara con banda", result.Name);
             Assert.Equal("Piernas", result.MuscleGroup);
             Assert.Equal(Origin.Ai, result.Origin);
+            Assert.Null(result.ImageSource);
             createdId = result.Id;
         }
 

@@ -4,6 +4,7 @@ using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
+using Application.UseCases.Auth.ResetAthletePassword;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,6 +20,7 @@ public class AuthController(
     RefreshUseCase refreshTokenUseCase,
     RegisterByInvitationUseCase registerByInvitationUseCase,
     ChangePasswordUseCase changePasswordUseCase,
+    ResetAthletePasswordUseCase resetAthletePasswordUseCase,
     ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>
@@ -95,5 +97,28 @@ public class AuthController(
 
         await changePasswordUseCase.ExecuteAsync(userId.Value, request, cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Resetea la contraseña de un atleta a cargo del Preparador Físico autenticado generando una contraseña temporal (KAN-539).
+    /// </summary>
+    /// <param name="athleteId">Identificador del atleta a resetear.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 200 con la contraseña temporal generada y flag mustChangePassword.</returns>
+    [HttpPost("athletes/{athleteId:guid}/reset-password")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(ResetAthletePasswordResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResetAthletePassword(
+        [FromRoute] Guid athleteId,
+        CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "no-store, no-cache";
+        Response.Headers.Pragma = "no-cache";
+
+        var response = await resetAthletePasswordUseCase.ExecuteAsync(athleteId, cancellationToken);
+        return Ok(response);
     }
 }

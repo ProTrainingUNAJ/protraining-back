@@ -1,6 +1,9 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using API.Middleware;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Authorization;

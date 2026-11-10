@@ -16,6 +16,8 @@ using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.GetPfContact;
 using Infrastructure.Services.Structure;
 using Application.UseCases.Auth.RegisterByInvitation;
+using Application.UseCases.Auth.ResetAthletePassword;
+using Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -66,6 +68,8 @@ builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();
 builder.Services.AddScoped<RegisterByInvitationUseCase>();
 builder.Services.AddScoped<ChangePasswordUseCase>();
+builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
+builder.Services.AddScoped<ResetAthletePasswordUseCase>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
@@ -99,6 +103,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<MustChangePasswordMiddleware>();
 
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();

@@ -49,7 +49,7 @@ namespace API.Controllers
 
         [HttpPost("onboarding")]
         [Tags("Records")]
-        public async Task<ActionResult<List<AthleteRecordDto>>> CompleteOnboarding(
+        public async Task<ActionResult<CompleteOnboardingResponseDto>> CompleteOnboarding(
             [FromBody] List<OnboardingRecordRequest> records,
             CancellationToken cancellationToken = default)
         {

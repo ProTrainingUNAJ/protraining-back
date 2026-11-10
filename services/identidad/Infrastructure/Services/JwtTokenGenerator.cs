@@ -34,8 +34,15 @@ public class JwtTokenGenerator(IConfiguration configuration) : IJwtTokenGenerato
             new(JwtRegisteredClaimNames.Name, user.FullName),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("role", role),
-            new("pf_id", pfId.ToString())
+            new("pf_id", pfId.ToString()),
+            new("security_stamp", user.SecurityStamp ?? string.Empty),
+            new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
         };
+
+        if (user.MustChangePassword)
+        {
+            claims.Add(new Claim("must_change_password", "true"));
+        }
 
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);

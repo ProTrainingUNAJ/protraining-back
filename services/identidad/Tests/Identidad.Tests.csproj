@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
@@ -28,6 +28,7 @@
 		<ProjectReference Include="..\Application\Application.csproj" />
 		<ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
 		<ProjectReference Include="..\API\API.csproj" />
+		<ProjectReference Include="..\..\..\gateway\Gateway.csproj" />
 	</ItemGroup>
 
 </Project>

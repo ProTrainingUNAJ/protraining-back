@@ -10,6 +10,7 @@ using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
+using Application.UseCases.Auth.ResetAthletePassword;
 using Application.UseCases.Auth.UpdatePhone;
 using Application.UseCases.Health.GetHealth;
 using Domain.Entities;
@@ -67,7 +68,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddIdentityCore<User>(options =>
                 {
                     options.Password.RequireDigit = true;
-                    options.Password.RequiredLength = 6;
+                    options.Password.RequiredLength = 8;
                     options.Password.RequireNonAlphanumeric = false;
                     options.Password.RequireUppercase = false;
                     options.Password.RequireLowercase = false;
@@ -75,7 +76,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 })
                 .AddRoles<IdentityRole<Guid>>()
                 .AddEntityFrameworkStores<AppDbContext>()
-                .AddDefaultTokenProviders();
+                .AddDefaultTokenProviders()
+                .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
                 // Repositorios y Servicios
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
@@ -100,6 +102,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<GetPfContactUseCase>();
                 services.AddScoped<RegisterByInvitationUseCase>();
                 services.AddScoped<ChangePasswordUseCase>();
+                services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
+                services.AddScoped<ResetAthletePasswordUseCase>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);
@@ -135,6 +139,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
                 app.UseAuthentication();
                 app.UseAuthorization();
+                app.UseMiddleware<MustChangePasswordMiddleware>();
 
                 app.UseEndpoints(endpoints =>
                 {
@@ -160,6 +165,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
     }
 
     public HttpClient CreateClient() => _server.CreateClient();
+    public TestServer Server => _server;
+    public IServiceProvider Services => _server.Services;
 
     public async Task<User?> FindUserByEmailAsync(string email)
     {
@@ -175,7 +182,13 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
         return await userManager.GetRolesAsync(user);
     }
 
-    public async Task<User> SeedUserAsync(string email, string fullName, string role, string password = "PasswordSegura123!")
+    public async Task<User> SeedUserAsync(
+        string email,
+        string fullName,
+        string role,
+        string password = "PasswordSegura123!",
+        Guid? pfId = null,
+        bool mustChangePassword = false)
     {
         using var scope = _server.Services.CreateScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
@@ -185,7 +198,9 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
             Email = email,
             FullName = fullName,
             EmailConfirmed = true,
-            IsActive = true
+            IsActive = true,
+            PfId = pfId,
+            MustChangePassword = mustChangePassword
         };
         await userManager.CreateAsync(user, password);
         await userManager.AddToRoleAsync(user, role);

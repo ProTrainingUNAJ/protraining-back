@@ -46,21 +46,22 @@ public static class DependencyInjection
                // configuracion de ASP.NET Core Identity (PBKDF2)
         services.AddIdentityCore<User>(options =>
         {
-                       // reglas de contraseña
+            // reglas de contraseña unificadas (#KAN-539 / decisión Enzo)
+            options.Password.RequiredLength = 8;
             options.Password.RequireDigit = true;
-            options.Password.RequiredLength = 6;
             options.Password.RequireNonAlphanumeric = false;
             options.Password.RequireUppercase = false;
             options.Password.RequireLowercase = false;
             
-                       // reglas de usuario y bloqueo por intentos fallidos
+            // reglas de usuario y bloqueo por intentos fallidos
             options.User.RequireUniqueEmail = true;
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             options.Lockout.MaxFailedAccessAttempts = 5;
             options.Lockout.AllowedForNewUsers = true;
         })
         .AddRoles<IdentityRole<Guid>>()
-        .AddEntityFrameworkStores<AppDbContext>();
+        .AddEntityFrameworkStores<AppDbContext>()
+        .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();

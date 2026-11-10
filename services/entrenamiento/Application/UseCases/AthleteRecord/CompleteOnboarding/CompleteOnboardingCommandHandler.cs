@@ -26,7 +26,7 @@ public class CompleteOnboardingCommandHandler
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<List<AthleteRecordDto>> Handle(CompleteOnboardingCommand command, CancellationToken cancellationToken = default)
+    public async Task<CompleteOnboardingResponseDto> Handle(CompleteOnboardingCommand command, CancellationToken cancellationToken = default)
     {
         var records = command.Records ?? new List<OnboardingRecordRequest>();
         if (records.Count == 0)
@@ -45,6 +45,7 @@ public class CompleteOnboardingCommandHandler
 
         // El onboarding nunca pisa una marca existente: solo crea las de ejercicios sin récord vigente.
         var toCreate = new List<(OnboardingRecordRequest Item, string ExerciseName)>();
+        var skipped = new List<SkippedOnboardingRecordDto>();
         foreach (var item in records)
         {
             var exerciseName = await _repository.GetExerciseNameAsync(item.ExerciseId, cancellationToken)
@@ -53,15 +54,26 @@ public class CompleteOnboardingCommandHandler
             var activeRecord = await _repository.GetActiveRecordAsync(athleteId, item.ExerciseId, cancellationToken);
             if (activeRecord != null)
             {
+                skipped.Add(new SkippedOnboardingRecordDto
+                {
+                    ExerciseId = item.ExerciseId,
+                    ExerciseName = exerciseName,
+                });
                 continue;
             }
 
             toCreate.Add((item, exerciseName));
         }
 
+        var created = new List<AthleteRecordDto>();
+
         if (toCreate.Count == 0)
         {
-            return new List<AthleteRecordDto>();
+            return new CompleteOnboardingResponseDto
+            {
+                Created = created,
+                Skipped = skipped,
+            };
         }
 
         var newRecords = new List<(Domain.Entities.AthleteRecord Record, string ExerciseName)>();
@@ -84,9 +96,15 @@ public class CompleteOnboardingCommandHandler
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }, cancellationToken);
 
-        return newRecords
+        created = newRecords
             .Select(record => AthleteRecordMapper.ToDto(record.Record, record.ExerciseName))
             .ToList();
+
+        return new CompleteOnboardingResponseDto
+        {
+            Created = created,
+            Skipped = skipped,
+        };
     }
 
     private static void Validate(List<OnboardingRecordRequest> records)
