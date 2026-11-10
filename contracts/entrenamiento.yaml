@@ -1207,14 +1207,11 @@ paths:
           description: Identificador del preparador físico para aislar datos.
       responses:
         "200":
-          description: Lista de IDs de atletas con sesión programada.
+          description: Atletas y categorías con sesión programada para la fecha.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-                  format: uuid
+                $ref: '#/components/schemas/ScheduledSessionTargetsResponse'
         "401":
           $ref: '#/components/responses/Unauthorized'
         "403":
@@ -1355,6 +1352,22 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    ScheduledSessionTargetsResponse:
+      type: object
+      required:
+        - athleteIds
+        - categoryIds
+      properties:
+        athleteIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        categoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     ImportRecordPreviewRow:
       type: object
       properties:

@@ -1,6 +1,7 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.DTOs.CheckIns;
 using Application.DTOs.FitnessTests;
 using Application.DTOs.TrafficLight;
 using Domain.Common;
@@ -156,5 +157,43 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
 
         // PF B sí ve su propio test custom
         Assert.Contains(tests, t => t.Id == _customTestB.Id);
+    }
+
+    [Fact]
+    public async Task PostInternalCheckInsDone_PfAConsultando_NoDevuelveCheckInsDePfB()
+    {
+        // En InitializeAsync ya se sembró un check-in para _pfBId con _sharedAthleteId en ArgentinaTime.Today (#KAN-528)
+        var today = ArgentinaTime.Today;
+
+        // Act 1: cliente con rol Servicio consultando con el pfId de PF A
+        var serviceClient = _factory.CreateAuthenticatedClient(Guid.Empty, role: "Servicio");
+        var requestPfA = new
+        {
+            Date = today,
+            PfId = _pfAId,
+            AthleteIds = new[] { _sharedAthleteId }
+        };
+
+        var responsePfA = await serviceClient.PostAsJsonAsync("/api/v1/internal/check-ins/done", requestPfA);
+
+        // Assert: con el pfId de PF A no viene el check-in cargado para PF B
+        Assert.Equal(HttpStatusCode.OK, responsePfA.StatusCode);
+        var completedPfA = await responsePfA.Content.ReadFromJsonAsync<CheckInsDoneResponse>();
+        Assert.NotNull(completedPfA);
+        Assert.DoesNotContain(_sharedAthleteId, completedPfA.AthleteIds);
+
+        // Act 2: cliente con rol Servicio consultando con el pfId de PF B
+        var requestPfB = new
+        {
+            Date = today,
+            PfId = _pfBId,
+            AthleteIds = new[] { _sharedAthleteId }
+        };
+
+        var responsePfB = await serviceClient.PostAsJsonAsync("/api/v1/internal/check-ins/done", requestPfB);
+        Assert.Equal(HttpStatusCode.OK, responsePfB.StatusCode);
+        var completedPfB = await responsePfB.Content.ReadFromJsonAsync<CheckInsDoneResponse>();
+        Assert.NotNull(completedPfB);
+        Assert.Contains(_sharedAthleteId, completedPfB.AthleteIds);
     }
 }

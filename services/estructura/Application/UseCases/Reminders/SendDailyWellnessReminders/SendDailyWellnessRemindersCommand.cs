@@ -17,6 +17,7 @@ public sealed record SendDailyWellnessRemindersResult(
 
 public sealed class SendDailyWellnessRemindersCommandHandler(
     IAthleteRepository athleteRepository,
+    IAthleteCategoryRepository athleteCategoryRepository,
     ICurrentUser currentUser,
     ISessionScheduleService sessionScheduleService,
     IWellnessCheckInService wellnessCheckInService,
@@ -47,21 +48,38 @@ public sealed class SendDailyWellnessRemindersCommandHandler(
         {
             using (currentUser.UsePfContext(pfId))
             {
-                // 2. Busca atletas de este PF que tienen sesión en el calendario hoy
-                var athleteIdsWithSession = await sessionScheduleService.GetAthletesWithScheduledSessionAsync(today, pfId, cancellationToken);
+                // 2. Busca atletas y categorías de este PF con sesión en el calendario hoy
+                var targets = await sessionScheduleService.GetAthletesWithScheduledSessionAsync(today, pfId, cancellationToken);
+                var athleteIdsWithSession = new HashSet<Guid>(targets.AthleteIds ?? Array.Empty<Guid>());
+
+                // Si hay categorías con sesión, resolvemos localmente los atletas de esas categorías en Estructura (#KAN-528)
+                if (targets.CategoryIds != null)
+                {
+                    foreach (var categoryId in targets.CategoryIds)
+                    {
+                        var categoryAthletes = await athleteCategoryRepository.ListAthletesByCategoryAsync(categoryId, cancellationToken);
+                        foreach (var athlete in categoryAthletes)
+                        {
+                            athleteIdsWithSession.Add(athlete.Id);
+                        }
+                    }
+                }
+
                 if (athleteIdsWithSession.Count == 0)
                 {
                     continue;
                 }
 
+                var athleteListWithSession = athleteIdsWithSession.ToList();
+
                 // 3. Consulta en lote a Seguimiento los atletas que ya completaron check-in hoy
                 var completedAthleteIds = await wellnessCheckInService.GetCompletedCheckInAthleteIdsAsync(
-                    athleteIdsWithSession,
+                    athleteListWithSession,
                     today,
                     pfId,
                     cancellationToken);
 
-                foreach (var athleteId in athleteIdsWithSession)
+                foreach (var athleteId in athleteListWithSession)
                 {
                     // 4. Si el atleta ya hizo su check-in hoy, no recibe nada
                     if (completedAthleteIds.Contains(athleteId))
