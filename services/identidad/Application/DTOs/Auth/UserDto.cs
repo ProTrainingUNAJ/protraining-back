@@ -9,4 +9,5 @@ public record UserDto(
     string FullName,
     string Role,
     Guid? PfId,
-    string? PhoneNumber = null);
+    string? PhoneNumber = null,
+    bool MustChangePassword = false);

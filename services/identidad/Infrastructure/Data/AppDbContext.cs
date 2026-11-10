@@ -32,6 +32,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
             b.ToTable("users");
             b.Property(u => u.FullName).HasColumnName("full_name").HasMaxLength(200);
             b.Property(u => u.IsActive).HasColumnName("is_active");
+            b.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
             b.Property(u => u.CreatedAt).HasColumnName("created_at");
             b.Property(u => u.UpdatedAt).HasColumnName("updated_at");
         });

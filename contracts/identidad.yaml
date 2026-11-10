@@ -153,6 +153,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/auth/athletes/{athleteId}/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Resetear contraseña de un atleta (exclusivo para Preparador Físico)
+      description: >
+        Permite a un Preparador Físico restablecer la contraseña de un atleta a su cargo.
+        Genera una contraseña temporal segura, revoca todos los refresh tokens del atleta
+        y marca la cuenta para cambio obligatorio en el próximo inicio de sesión.
+      operationId: resetAthletePassword
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          description: Identificador único del atleta a resetear.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Contraseña temporal generada exitosamente.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "no-store, no-cache"
+            Pragma:
+              schema:
+                type: string
+                example: "no-cache"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetAthletePasswordResponse'
+        "401":
+          description: No autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Atleta no encontrado o no pertenece al Preparador Físico autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/users/me/phone:
     put:
       tags:
@@ -341,6 +396,10 @@ components:
           nullable: true
           description: Número de teléfono de WhatsApp normalizado (solo dígitos).
           example: "5491123456789"
+        mustChangePassword:
+          type: boolean
+          description: Indica si el usuario debe cambiar obligatoriamente su contraseña antes de acceder a la aplicación.
+          example: false
 
 
     LoginResponse:
@@ -386,6 +445,26 @@ components:
           type: string
           description: Nueva contraseña (mínimo 8 caracteres, al menos una mayúscula y un carácter especial).
           example: "ContraseñaNueva456!"
+
+    ResetAthletePasswordResponse:
+      type: object
+      required:
+        - athleteId
+        - temporaryPassword
+        - mustChangePassword
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+        temporaryPassword:
+          type: string
+          description: Contraseña temporal generada que debe ser entregada al atleta.
+          example: "Xk9#mP2$vL8q"
+        mustChangePassword:
+          type: boolean
+          description: Flag que indica que el atleta debe cambiar su contraseña al iniciar sesión.
+          example: true
 
     RefreshRequest:
       type: object
