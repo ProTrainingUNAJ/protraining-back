@@ -1,9 +1,10 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using Application.DTOs.AthleteRecords;
 using Application.DTOs.Exercise;
 using Application.DTOs.TrainingPlans;
 using Application.DTOs.TrainingSessions;
+using Domain.Entities;
 using Entrenamiento.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -234,5 +235,48 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var paged = await exResp.Content.ReadFromJsonAsync<PaginatedExerciseResponse>();
         paged!.Items.Should().Contain(e => e.Id == _dataB.CatalogExercise.Id);
         paged.Items.Should().Contain(e => e.Id == _dataB.CustomExercise.Id);
+    }
+
+    [Fact]
+    public async Task GetInternalAthletesWithSession_PfAConsultando_NoIncluyeDatosDePfB()
+    {
+        // arrange: buscar el día que tiene sesión (Lunes) y sembrar una asignación a atleta para PF B (#KAN-528)
+        var date = _dataB.Assignment.StartDate;
+        while (date.DayOfWeek != DayOfWeek.Monday)
+        {
+            date = date.AddDays(1);
+        }
+
+        var athleteAssignment = PlanAssignment.Create(
+            _dataB.Plan.Id,
+            _dataB.Assignment.StartDate,
+            athleteId: _dataB.AthleteId);
+
+        using (var pfContext = _factory.CreateDbContext(overridePfId: _pfBId))
+        {
+            pfContext.PlanAssignments.Add(athleteAssignment);
+            await pfContext.SaveChangesAsync();
+        }
+
+        // Act 1: cliente con rol Servicio consultando con el pfId de PF A sobre SQLite real
+        var serviceClient = _factory.CreateAuthenticatedClient(Guid.Empty, role: "Servicio");
+        var responsePfA = await serviceClient.GetAsync(
+            $"/api/v1/internal/training-sessions/athletes-with-session?date={date:yyyy-MM-dd}&pfId={_pfAId}");
+
+        // Assert 1: con el pfId de PF A no vienen ni los atletas ni las categorías de PF B
+        responsePfA.StatusCode.Should().Be(HttpStatusCode.OK);
+        var targetsPfA = await responsePfA.Content.ReadFromJsonAsync<ScheduledSessionTargetsResponse>();
+        targetsPfA.Should().NotBeNull();
+        targetsPfA!.AthleteIds.Should().NotContain(_dataB.AthleteId);
+        targetsPfA.CategoryIds.Should().NotContain(_dataB.CategoryId);
+
+        // Act 2: consultando con PF B sí vienen tanto el atleta como la categoría
+        var responsePfB = await serviceClient.GetAsync(
+            $"/api/v1/internal/training-sessions/athletes-with-session?date={date:yyyy-MM-dd}&pfId={_pfBId}");
+        responsePfB.StatusCode.Should().Be(HttpStatusCode.OK);
+        var targetsPfB = await responsePfB.Content.ReadFromJsonAsync<ScheduledSessionTargetsResponse>();
+        targetsPfB.Should().NotBeNull();
+        targetsPfB!.AthleteIds.Should().Contain(_dataB.AthleteId);
+        targetsPfB.CategoryIds.Should().Contain(_dataB.CategoryId);
     }
 }

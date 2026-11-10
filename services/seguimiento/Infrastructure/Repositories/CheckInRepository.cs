@@ -74,7 +74,7 @@ public sealed class CheckInRepository(AppDbContext context) : ICheckInRepository
             return await context.CheckIns
                 .IgnoreQueryFilters()
                 .AsNoTracking()
-                .Where(c => c.PfId == pfId && (c.Date == targetDate || c.Date == localDate) && athleteIds.Contains(c.AthleteId))
+                .Where(c => c.PfId == pfId && c.DeletedAt == null && (c.Date == targetDate || c.Date == localDate) && athleteIds.Contains(c.AthleteId))
                 .Select(c => c.AthleteId)
                 .Distinct()
                 .ToListAsync(cancellationToken);

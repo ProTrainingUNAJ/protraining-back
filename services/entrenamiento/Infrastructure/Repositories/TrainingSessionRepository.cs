@@ -78,7 +78,7 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-            .Where(a => a.PfId == pfId)
+            .Where(a => a.PfId == pfId && a.DeletedAt == null && a.Plan.DeletedAt == null)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);
     }

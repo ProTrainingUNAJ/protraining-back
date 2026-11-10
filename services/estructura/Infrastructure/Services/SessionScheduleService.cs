@@ -5,13 +5,14 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Application.DTOs.Reminders;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
 
 /// <summary>
-/// Cliente HTTP hacia Entrenamiento para consultar atletas con sesión programada
+/// Cliente HTTP hacia Entrenamiento para consultar atletas y categorías con sesión programada
 /// </summary>
 public sealed class SessionScheduleService(
     HttpClient httpClient,
@@ -19,21 +20,15 @@ public sealed class SessionScheduleService(
 {
     public const string ScheduledAthletesPath = "api/v1/internal/training-sessions/athletes-with-session";
 
-    public async Task<IReadOnlyList<Guid>> GetAthletesWithScheduledSessionAsync(
-        DateOnly date,
-        CancellationToken cancellationToken = default)
-    {
-        return await GetAthletesWithScheduledSessionAsync(date, null, cancellationToken);
-    }
+    private static readonly ScheduledSessionTargetsResponse EmptyResponse =
+        new(Array.Empty<Guid>(), Array.Empty<Guid>());
 
-    public async Task<IReadOnlyList<Guid>> GetAthletesWithScheduledSessionAsync(
+    public async Task<ScheduledSessionTargetsResponse> GetAthletesWithScheduledSessionAsync(
         DateOnly date,
-        Guid? pfId,
+        Guid pfId,
         CancellationToken cancellationToken = default)
     {
-        var url = pfId.HasValue
-            ? $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}&pfId={pfId.Value}"
-            : $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}";
+        var url = $"{ScheduledAthletesPath}?date={date:yyyy-MM-dd}&pfId={pfId}";
 
         try
         {
@@ -41,18 +36,18 @@ public sealed class SessionScheduleService(
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                var athleteIds = await response.Content.ReadFromJsonAsync<List<Guid>>(cancellationToken: cancellationToken);
-                return athleteIds ?? (IReadOnlyList<Guid>)Array.Empty<Guid>();
+                var targets = await response.Content.ReadFromJsonAsync<ScheduledSessionTargetsResponse>(cancellationToken: cancellationToken);
+                return targets ?? EmptyResponse;
             }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                logger.LogInformation("No se encontraron sesiones programadas en Entrenamiento para la fecha {Date}.", date);
-                return Array.Empty<Guid>();
+                logger.LogInformation("No se encontraron sesiones programadas en Entrenamiento para la fecha {Date} y PF {PfId}.", date, pfId);
+                return EmptyResponse;
             }
 
-            logger.LogWarning("Entrenamiento respondió {StatusCode} al consultar sesiones de la fecha {Date}.", response.StatusCode, date);
-            return Array.Empty<Guid>();
+            logger.LogWarning("Entrenamiento respondió {StatusCode} al consultar sesiones de la fecha {Date} y PF {PfId}.", response.StatusCode, date, pfId);
+            return EmptyResponse;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -61,8 +56,8 @@ public sealed class SessionScheduleService(
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             // Resiliencia: si Entrenamiento no responde, el worker no se cae, loguea y continúa
-            logger.LogWarning(ex, "Entrenamiento no responde o no está disponible al consultar sesiones para {Date}.", date);
-            return Array.Empty<Guid>();
+            logger.LogWarning(ex, "Entrenamiento no responde o no está disponible al consultar sesiones para {Date} y PF {PfId}.", date, pfId);
+            return EmptyResponse;
         }
     }
 }
