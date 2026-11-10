@@ -723,4 +723,68 @@ public class ListExercisesTests : IAsyncLifetime
             Assert.DoesNotContain(items, e => e.Name == "Sentadilla");
         }
     }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioCatalogoConImagenes_DevuelveImageSourceConLicencia()
+    {
+        // KAN-518: DADO un ejercicio del catálogo CUANDO se consulta la API ENTONCES devuelve sus dos imágenes y la fuente con su licencia.
+        var images = new List<string>
+        {
+            "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg",
+            "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/1.jpg"
+        };
+        var catalogExercise = Exercise.Create("Sentadilla Trasera", "Piernas", images: images, origin: Origin.Catalog);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([catalogExercise], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Equal(2, item.Images.Count);
+        Assert.NotNull(item.ImageSource);
+        Assert.Equal("free-exercise-db", item.ImageSource.Name);
+        Assert.Equal("https://github.com/yuhonas/free-exercise-db", item.ImageSource.Url);
+        Assert.Equal("The Unlicense", item.ImageSource.License);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioDePf_DevuelveImageSourceNull()
+    {
+        // KAN-518: Los ejercicios cargados por un PF no tienen la fuente fija del catálogo
+        var coachExercise = Exercise.Create("Sentadilla Personalizada PF", "Piernas", images: ["img1.jpg", "img2.jpg"], origin: Origin.Coach);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([coachExercise], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Null(item.ImageSource);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioCatalogoSinImagenes_DevuelveImageSourceNull()
+    {
+        // KAN-518: Si el ejercicio no tiene imágenes, imageSource es null
+        var exerciseWithoutImages = Exercise.Create("Ejercicio Sin Fotos", "Brazos", images: null, origin: Origin.Catalog);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([exerciseWithoutImages], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Empty(item.Images);
+        Assert.Null(item.ImageSource);
+    }
 }

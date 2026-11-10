@@ -1577,6 +1577,23 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+        imageSource:
+          type: object
+          nullable: true
+          description: Atribución de fuente y licencia de las imágenes técnicas (para ejercicios del catálogo global). Es null en ejercicios propios del preparador físico.
+          properties:
+            name:
+              type: string
+              description: Nombre del dataset o fuente de origen.
+              example: "free-exercise-db"
+            url:
+              type: string
+              description: URL del repositorio o fuente original.
+              example: "https://github.com/yuhonas/free-exercise-db"
+            license:
+              type: string
+              description: Tipo de licencia de las imágenes.
+              example: "The Unlicense"
         origin:
           type: string
           enum: [Catalog, Coach, Ai]

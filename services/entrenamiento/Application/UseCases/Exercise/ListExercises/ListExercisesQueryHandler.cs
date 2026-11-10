@@ -128,6 +128,9 @@ namespace Application.UseCases.Exercise.ListExercises
             VideoUrl = e.VideoUrl,
             Equipment = e.Equipment,
             Images = e.Images,
+            ImageSource = e.Origin == Domain.Entities.Origin.Catalog && e.PfId == Guid.Empty && e.Images.Count > 0
+                ? ExerciseImageSourceDto.CatalogDefault
+                : null,
             PrimaryMuscles = e.PrimaryMuscles,
             SecondaryMuscles = e.SecondaryMuscles,
             ParentExerciseId = e.ParentExerciseId,

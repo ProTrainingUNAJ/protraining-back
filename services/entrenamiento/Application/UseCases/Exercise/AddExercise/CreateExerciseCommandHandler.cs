@@ -50,6 +50,7 @@ namespace Application.UseCases.Exercise.AddExercise
                 VideoSource = string.IsNullOrEmpty(exercise.VideoUrl) ? null : (exercise.Origin == Origin.Coach ? "Pf" : "Catalog"),
                 Equipment = exercise.Equipment,
                 Images = exercise.Images,
+                ImageSource = null,
                 PrimaryMuscles = exercise.PrimaryMuscles,
                 SecondaryMuscles = exercise.SecondaryMuscles,
                 Origin = exercise.Origin,

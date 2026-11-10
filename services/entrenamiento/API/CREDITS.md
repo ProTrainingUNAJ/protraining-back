@@ -1,4 +1,4 @@
-﻿# Créditos y Licencias
+# Créditos y Licencias
 
 ## Catálogo de Ejercicios
 La base de datos de ejercicios utilizada en este proyecto proviene de **free-exercise-db**.
