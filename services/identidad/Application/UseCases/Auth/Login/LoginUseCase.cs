@@ -78,7 +78,8 @@ public class LoginUseCase(
                 user.FullName,
                 generatedToken.Role,
                 user.PfId ?? user.Id,
-                user.PhoneNumber
+                user.PhoneNumber,
+                user.MustChangePassword
             )
         );
 

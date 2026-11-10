@@ -37,6 +37,11 @@ public class JwtTokenGenerator(IConfiguration configuration) : IJwtTokenGenerato
             new("pf_id", pfId.ToString())
         };
 
+        if (user.MustChangePassword)
+        {
+            claims.Add(new Claim("must_change_password", "true"));
+        }
+
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
 

@@ -70,7 +70,15 @@ public class ChangePasswordUseCase(
         // 8. Reiniciar contador de intentos fallidos
         await userManager.ResetAccessFailedCountAsync(user);
 
-        // 9. Revocar todos los refresh tokens activos del usuario en todos sus dispositivos
+        // 9. Si el usuario debía cambiar su contraseña por reseteo previo (KAN-539), desactivar flag
+        if (user.MustChangePassword)
+        {
+            user.MustChangePassword = false;
+            user.UpdatedAt = DateTime.UtcNow;
+            await userManager.UpdateAsync(user);
+        }
+
+        // 10. Revocar todos los refresh tokens activos del usuario en todos sus dispositivos
         await refreshTokenRepository.RevokeAllActiveByUserAsync(user.Id, cancellationToken);
     }
 }
