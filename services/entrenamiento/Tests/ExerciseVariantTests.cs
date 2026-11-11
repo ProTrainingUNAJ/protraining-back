@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -413,7 +414,7 @@ public class ExerciseVariantTests
         videoRepoMock
             .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string>());
-        var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object, ExerciseMediaCatalog.Empty);
         var result = await handler.Handle(new ListExercisesQuery { Search = "press de banca", GroupVariants = true });
 
         var item = Assert.Single(result.Items);
@@ -440,7 +441,7 @@ public class ExerciseVariantTests
         videoRepoMock
             .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string>());
-        var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, videoRepoMock.Object, ExerciseMediaCatalog.Empty);
         var result = await handler.Handle(new ListExercisesQuery());
 
         Assert.Equal(2, result.Items.Count);

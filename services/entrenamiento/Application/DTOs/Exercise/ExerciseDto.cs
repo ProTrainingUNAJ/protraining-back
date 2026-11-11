@@ -15,6 +15,10 @@ namespace Application.DTOs.Exercise
         public string? Equipment { get; set; }
         public List<string> Images { get; set; } = [];
         public ExerciseImageSourceDto? ImageSource { get; set; }
+
+        // Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549).
+        // Vacía en los ejercicios propios del PF y en los del catálogo que no tienen par.
+        public List<ExerciseMediaDto> Media { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
         public Origin Origin { get; set; }

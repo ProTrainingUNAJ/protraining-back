@@ -1528,6 +1528,44 @@ components:
           description: URL del video de YouTube o null para quitarlo.
           example: "https://www.youtube.com/watch?v=aclHkVaku9U"
 
+    ExerciseMediaDto:
+      type: object
+      description: Una ilustración o animación de un ejercicio del catálogo, con su fuente y su crédito (KAN-549).
+      required: [source, kind, urls, credit, creditUrl, license]
+      properties:
+        source:
+          type: string
+          enum: [repdb, exercisedb, everkinetic]
+          description: Fuente de la ilustración.
+          example: "repdb"
+        kind:
+          type: string
+          enum: [frames, gif]
+          description: >
+            `frames`: imágenes fijas (posición inicial y final) que el front alterna para mostrar el movimiento.
+            `gif`: una animación que se mueve sola.
+          example: "frames"
+        urls:
+          type: array
+          items:
+            type: string
+          description: Las imágenes en orden (en `gif`, una sola).
+          example:
+            - "https://raw.githubusercontent.com/RepDB/exercise-dataset/main/images/flat/squat-start.webp"
+            - "https://raw.githubusercontent.com/RepDB/exercise-dataset/main/images/flat/squat-peak.webp"
+        credit:
+          type: string
+          description: Texto del crédito que hay que mostrar.
+          example: "Exercise data by RepDB (repdb.co)"
+        creditUrl:
+          type: string
+          description: Link del crédito.
+          example: "https://repdb.co"
+        license:
+          type: string
+          description: Licencia de la fuente.
+          example: "RepDB Free Tier"
+
     Exercise:
       type: object
       required:
@@ -1607,6 +1645,14 @@ components:
               type: string
               description: Tipo de licencia de las imágenes.
               example: "The Unlicense"
+        media:
+          type: array
+          description: >
+            Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549). El front muestra
+            la primera que cargue y, si ninguna carga, las fotos de `images`. Vacía en los ejercicios propios
+            del preparador físico y en los del catálogo que no tienen par en ninguna fuente.
+          items:
+            $ref: '#/components/schemas/ExerciseMediaDto'
         origin:
           type: string
           enum: [Catalog, Coach, Ai]

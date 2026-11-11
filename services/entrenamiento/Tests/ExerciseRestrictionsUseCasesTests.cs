@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using Application.Exceptions;
 using Application.Interfaces.Services;
 using Application.UseCases.Exercise.CheckRestrictions;
@@ -209,7 +210,7 @@ public class ExerciseRestrictionsUseCasesTests
             var restrictionRepo = new ExerciseRestrictionRepository(context);
             var checker = new ExerciseRestrictionChecker();
 
-            var listHandler = new Application.UseCases.Exercise.ListExercises.ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(context));
+            var listHandler = new Application.UseCases.Exercise.ListExercises.ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(context), ExerciseMediaCatalog.Empty);
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 

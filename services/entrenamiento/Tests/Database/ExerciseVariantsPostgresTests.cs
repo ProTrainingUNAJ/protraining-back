@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using Application.Interfaces.Services;
 using Application.UseCases.Exercise.ListExercises;
 using Domain.Entities;
@@ -51,7 +52,7 @@ public sealed class ExerciseVariantsPostgresTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _postgres.DisposeAsync();
 
-    private ListExercisesQueryHandler CreateHandler(AppDbContext context) => new(new ExerciseRepository(context), new ExerciseVideoRepository(context));
+    private ListExercisesQueryHandler CreateHandler(AppDbContext context) => new(new ExerciseRepository(context), new ExerciseVideoRepository(context), ExerciseMediaCatalog.Empty);
 
     [Fact]
     [Trait("Category", "RequiresDocker")]

@@ -1,5 +1,6 @@
 using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
 
 namespace Application.UseCases.Exercise.ListExercises
 {
@@ -10,11 +11,16 @@ namespace Application.UseCases.Exercise.ListExercises
 
         private readonly IExerciseRepository exerciseRepository;
         private readonly IExerciseVideoRepository exerciseVideoRepository;
+        private readonly IExerciseMediaCatalog exerciseMediaCatalog;
 
-        public ListExercisesQueryHandler(IExerciseRepository exerciseRepository, IExerciseVideoRepository exerciseVideoRepository)
+        public ListExercisesQueryHandler(
+            IExerciseRepository exerciseRepository,
+            IExerciseVideoRepository exerciseVideoRepository,
+            IExerciseMediaCatalog exerciseMediaCatalog)
         {
             this.exerciseRepository = exerciseRepository;
             this.exerciseVideoRepository = exerciseVideoRepository;
+            this.exerciseMediaCatalog = exerciseMediaCatalog;
         }
 
         public async Task<PaginatedExerciseResponse> Handle(ListExercisesQuery request, CancellationToken cancellationToken = default)
@@ -118,7 +124,7 @@ namespace Application.UseCases.Exercise.ListExercises
             return new PaginatedExerciseResponse(exercisesDto, page, pageSize, totalCount, totalPages);
         }
 
-        private static ExerciseDto ToDto(Domain.Entities.Exercise e) => new()
+        private ExerciseDto ToDto(Domain.Entities.Exercise e) => new()
         {
             Id = e.Id,
             Name = e.Name,
@@ -131,6 +137,10 @@ namespace Application.UseCases.Exercise.ListExercises
             ImageSource = e.Origin == Domain.Entities.Origin.Catalog && e.PfId == Guid.Empty && e.Images.Count > 0
                 ? ExerciseImageSourceDto.CatalogDefault
                 : null,
+            // Solo el catálogo global tiene par en las fuentes externas; los ejercicios del PF usan sus fotos.
+            Media = e.Origin == Domain.Entities.Origin.Catalog && e.PfId == Guid.Empty
+                ? exerciseMediaCatalog.GetForCatalogImages(e.Images).ToList()
+                : [],
             PrimaryMuscles = e.PrimaryMuscles,
             SecondaryMuscles = e.SecondaryMuscles,
             ParentExerciseId = e.ParentExerciseId,

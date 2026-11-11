@@ -383,3 +383,16 @@ Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. 
 2. Sumá al `docker-compose.yml` su base `db-<servicio>` con su volumen y el servicio con su `Database__Host`, `Database__Name`, su puerto y el `depends_on`.
 3. Sumá su ruta y su cluster en `gateway/appsettings.json`, y el servicio a la lista del CI (`.github/workflows/ci.yml`).
 4. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/health`.
+
+## Proyecto académico y créditos
+
+ProTraining es un proyecto académico sin fines de lucro, de la materia Proyecto de Software (UNAJ). Usa contenido de terceros con su licencia y su crédito:
+
+| Qué | Fuente | Licencia | Cómo se usa |
+|---|---|---|---|
+| Catálogo de ejercicios y fotos | [free-exercise-db](https://github.com/yuhonas/free-exercise-db) | The Unlicense | Datos copiados al seed; fotos enlazadas |
+| Ilustraciones de ejercicios | Exercise data by [RepDB (repdb.co)](https://repdb.co) | RepDB Free Tier: uso dentro de la app, con atribución | Enlazadas desde su repo; no se republican |
+| Animaciones (GIF) | [ExerciseDB](https://exercisedb.dev) | Uso académico, enlazado | Enlazadas; no se descargan ni se redistribuyen |
+| Dibujos de línea | [Everkinetic](https://github.com/everkinetic/data) | CC BY-SA 4.0 | Enlazados desde su repo |
+
+La tabla de cruce (`services/entrenamiento/API/Data/exercise-media.json`) guarda solo ids y URLs, no las imágenes ni los datos de esas fuentes. Si algún titular lo pide, su contenido se retira. El detalle está en [`services/entrenamiento/API/CREDITS.md`](services/entrenamiento/API/CREDITS.md).
