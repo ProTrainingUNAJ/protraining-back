@@ -41,9 +41,12 @@ public sealed class FieldTestEndpointIntegrationTests
     private static Task<Guid> ObtenerTestIdAsync(SeguimientoTestApplicationFactory factory) =>
         factory.ExecuteInDbContextAsync(db => db.CatalogTests.Select(test => test.Id).FirstAsync());
 
-    // Sesión propia: se crea por EF para que AppDbContext le asigne el pf_id del token.
+    // Sesión propia con el test del catálogo vinculado (KAN-568: la sesión siempre nace
+    // con sus pruebas y el POST de resultados exige que la prueba pertenezca a ella).
+    // Se crea por EF para que AppDbContext le asigne el pf_id del token.
     private static async Task<Guid> CrearSesionPropiaAsync(
         SeguimientoTestApplicationFactory factory,
+        Guid catalogTestId,
         FieldTestSessionStatus status = FieldTestSessionStatus.InProgress)
     {
         var session = new FieldTestSession
@@ -57,6 +60,12 @@ public sealed class FieldTestEndpointIntegrationTests
         await factory.ExecuteInDbContextAsync(async db =>
         {
             db.FieldTestSessions.Add(session);
+            db.FieldTestSessionTests.Add(new FieldTestSessionTest
+            {
+                SessionId = session.Id,
+                CatalogTestId = catalogTestId,
+                Order = 1
+            });
             await db.SaveChangesAsync();
         });
 
@@ -133,8 +142,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var response = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, _athleteId));
@@ -166,8 +175,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondWith(HttpStatusCode.NotFound, "{}");
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var response = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, Guid.NewGuid()));
@@ -191,8 +200,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var first = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, _athleteId));
@@ -218,8 +227,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.SimulateDown();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var response = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, _athleteId));
@@ -240,20 +249,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
-
-        // El test del catálogo entra a la sesión con su orden de evaluación.
-        await factory.ExecuteInDbContextAsync(async db =>
-        {
-            db.FieldTestSessionTests.Add(new FieldTestSessionTest
-            {
-                SessionId = sessionId,
-                CatalogTestId = testId,
-                Order = 1
-            });
-            await db.SaveChangesAsync();
-        });
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         // Dos intentos del mismo atleta.
         var first = await client.PostAsJsonAsync(
@@ -378,8 +375,8 @@ public sealed class FieldTestEndpointIntegrationTests
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
         var foreignResultId = await CrearResultadoAjenoEnSesionPropiaAsync(
             factory, sessionId, testId);
 
@@ -407,8 +404,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var created = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, _athleteId, 42.5m, 1));
@@ -440,8 +437,8 @@ public sealed class FieldTestEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
 
-        var sessionId = await CrearSesionPropiaAsync(factory);
         var testId = await ObtenerTestIdAsync(factory);
+        var sessionId = await CrearSesionPropiaAsync(factory, testId);
 
         var first = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testId, _athleteId, 42.5m, 1));

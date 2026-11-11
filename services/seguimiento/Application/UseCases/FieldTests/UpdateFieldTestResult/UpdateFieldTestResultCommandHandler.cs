@@ -33,6 +33,9 @@ public sealed class UpdateFieldTestResultCommandHandler(
 
         result.Value = command.Value;
         result.Attempt = command.Attempt;
+        // KAN-568: la corrección anula la confirmación enviada; el próximo confirmar
+        // vuelve a disparar el envío del valor corregido a Entrenamiento.
+        result.ConfirmedAt = null;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

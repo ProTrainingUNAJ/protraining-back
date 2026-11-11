@@ -143,10 +143,10 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
         Assert.Equal(exerciseId, cached.ExerciseId);
     }
 
-    // Con el GUID cacheado, la segunda confirmación va directo al guardado
-    // (sin volver a buscar el ejercicio) y vuelve a enviar el mismo valor.
+    // Con la confirmación persistida (ConfirmedAt), la segunda llamada es idempotente:
+    // responde 200 sin reenviar el 1RM a Entrenamiento ni volver a buscar el ejercicio.
     [Fact]
-    public async Task Given_CachedExercise_When_ConfirmAgain_Then_SkipsSearchAndResends()
+    public async Task Given_AlreadyConfirmedResult_When_ConfirmAgain_Then_Returns200WithoutResending()
     {
         await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
         var exerciseId = Guid.NewGuid();
@@ -161,11 +161,16 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
         var first = await client.PostAsync(ConfirmEndpoint(sessionId, resultId), null);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
 
+        // La primera confirmación quedó registrada en la fila del resultado.
+        var saved = await factory.ExecuteInDbContextAsync(db =>
+            db.FieldTestResults.IgnoreQueryFilters().SingleAsync(result => result.Id == resultId));
+        Assert.NotNull(saved.ConfirmedAt);
+
         var second = await client.PostAsync(ConfirmEndpoint(sessionId, resultId), null);
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
-        Assert.Equal(2, factory.Entrenamiento.SaveRecordCalls);
-        Assert.Equal(1, factory.Entrenamiento.ExerciseSearchCalls); // solo la primera vez
+        Assert.Equal(1, factory.Entrenamiento.SaveRecordCalls); // solo la primera vez
+        Assert.Equal(1, factory.Entrenamiento.ExerciseSearchCalls);
     }
 
     // ---------- Test sin mapeo → 400 ----------
@@ -338,5 +343,44 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
             .PostAsync(ConfirmEndpoint(Guid.NewGuid(), Guid.NewGuid()), null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // KAN-568 CA3: la corrección con PUT limpia ConfirmedAt, así que reconfirmar
+    // envía el 1RM corregido (segunda llamada a Entrenamiento, sin perder la primera).
+    [Fact]
+    public async Task Given_ConfirmedResult_When_CorrectedWithPut_Then_ConfirmSendsAgain()
+    {
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(_pfId);
+        var exerciseId = Guid.NewGuid();
+        factory.Entrenamiento.WithExercise("Sentadilla con barra", exerciseId);
+        factory.Entrenamiento.RespondOk();
+        var client = factory.CreateAuthenticatedClient(_pfId);
+
+        var sessionId = await CrearSesionPropiaAsync(factory);
+        var testId = await ObtenerTestIdMapeadoAsync(factory);
+        var resultId = await CrearResultadoAsync(factory, sessionId, testId);
+
+        var first = await client.PostAsync(ConfirmEndpoint(sessionId, resultId), null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(1, factory.Entrenamiento.SaveRecordCalls);
+
+        // La corrección con PUT limpia ConfirmedAt en la fila.
+        var put = await client.PutAsJsonAsync(
+            $"api/v1/field-test-sessions/{sessionId}/results/{resultId}",
+            new UpdateFieldTestResultRequest { Value = 115.0m, Attempt = 1 });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var saved = await factory.ExecuteInDbContextAsync(db =>
+            db.FieldTestResults.IgnoreQueryFilters().SingleAsync(result => result.Id == resultId));
+        Assert.Null(saved.ConfirmedAt);
+
+        // Reconfirmar vuelve a enviar el valor corregido.
+        var second = await client.PostAsync(ConfirmEndpoint(sessionId, resultId), null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        Assert.Equal(2, factory.Entrenamiento.SaveRecordCalls);
+        Assert.Equal(115.0m, factory.Entrenamiento.SavedRecords[^1].Weight);
+        // El GUID ya estaba cacheado: no se vuelve a buscar el ejercicio.
+        Assert.Equal(1, factory.Entrenamiento.ExerciseSearchCalls);
     }
 }

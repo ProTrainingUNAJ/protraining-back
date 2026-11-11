@@ -14,4 +14,9 @@ public class FieldTestResult : BaseEntity
     public decimal Value { get; set; }
     public int Attempt { get; set; }
     public DateTime RecordedAt { get; set; }
+
+    // KAN-568: instante en que la confirmación de 1RM se envió a Entrenamiento.
+    // Si ya está seteado, confirmar de nuevo no vuelve a llamar (idempotencia).
+    // El PUT de corrección lo limpia para permitir reconfirmar.
+    public DateTime? ConfirmedAt { get; set; }
 }

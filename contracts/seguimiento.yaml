@@ -791,7 +791,8 @@ paths:
       description: >
         Avanza el estado de la sesión en orden estricto Planned -> InProgress -> Closed.
         Un salto (Planned -> Closed), una reapertura o repetir el estado actual responde
-        400 "Transición de estado no válida". La sesión no exista o sea de otro PF → 404.
+        400 con el detalle de la transición no permitida (orden: Planificada -> En curso
+        -> Cerrada). La sesión no exista o sea de otro PF → 404.
       operationId: updateFieldTestSessionStatus
       parameters:
         - name: sessionId
@@ -863,7 +864,8 @@ paths:
         sesión no existe o es de otro PF, o si el atleta no existe o es de otro PF (en
         ese caso no se persiste nada). Responde 409 si el mismo (sesión, prueba, atleta
         e intento) ya fue cargado. Si la sesión está en estado Closed responde 400
-        "La sesión ya está cerrada." (KAN-427).
+        "La sesión ya está cerrada." (KAN-427). Si la prueba no forma parte de la sesión
+        responde 400 (KAN-568).
       operationId: createFieldTestResult
       parameters:
         - name: sessionId
@@ -957,9 +959,10 @@ paths:
         la prueba no existen o son de otro PF; 400 si el test no genera récord 1RM o si
         Entrenamiento no tiene un ejercicio con ese nombre; y 503 si Entrenamiento no
         responde tras los reintentos de Polly (la confirmación no quedó registrada allí).
-        Re-confirmar reenvía el mismo valor (idempotente del lado de Entrenamiento). Si
-        la sesión está en estado Closed responde 400 "La sesión ya está cerrada." y no se
-        envía ningún 1RM (KAN-427).
+        Re-confirmar una marca ya confirmada responde 200 sin volver a llamar a
+        Entrenamiento (idempotente, KAN-568); si la marca se corrige con PUT, queda
+        pendiente de reconfirmar. Si la sesión está en estado Closed responde 400
+        "La sesión ya está cerrada." y no se envía ningún 1RM (KAN-427).
       operationId: confirmFieldTestResult
       parameters:
         - name: sessionId

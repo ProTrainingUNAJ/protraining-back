@@ -11,6 +11,7 @@ namespace Seguimiento.Tests.Integration;
 // KAN-424: sesiones de test de campo con sus tests del catálogo y los resultados por atleta.
 // CA1: la sesión admite varios tests del catálogo y carga de resultados por atleta.
 // CA2: la base rechaza cargar dos veces el mismo (sesión, test, atleta, intento).
+// KAN-568 CA1: la base también rechaza dos veces el mismo (sesión, prueba del catálogo).
 public sealed class FieldTestPersistenceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -179,5 +180,47 @@ public sealed class FieldTestPersistenceTests : IDisposable
 
         Assert.Single(persisted);
         Assert.Equal(42.5m, persisted[0].Value);
+    }
+
+    // ---------- KAN-568 CA1: la base rechaza el test repetido en la misma sesión ----------
+
+    [Fact]
+    public async Task Given_SameCatalogTestTwice_When_LinkLoadedTwice_Then_DatabaseRejectsIt()
+    {
+        Guid sessionId;
+
+        using (var db = CreateDbContext())
+        {
+            var salto = await CrearTestCatalogoAsync(db, "Salto vertical", "cm");
+            var session = NuevaSesion(_categoryId, "Evaluación de pretemporada", FieldTestSessionStatus.Planned);
+            db.FieldTestSessions.Add(session);
+            db.FieldTestSessionTests.Add(
+                new FieldTestSessionTest { SessionId = session.Id, CatalogTestId = salto.Id, Order = 1 });
+            await db.SaveChangesAsync();
+            sessionId = session.Id;
+        }
+
+        // El mismo (sesión, prueba del catálogo): la base lo rechaza en el SaveChanges.
+        using (var db = CreateDbContext())
+        {
+            var testId = await db.FieldTestSessionTests
+                .Where(link => link.SessionId == sessionId)
+                .Select(link => link.CatalogTestId)
+                .SingleAsync();
+
+            db.FieldTestSessionTests.Add(
+                new FieldTestSessionTest { SessionId = sessionId, CatalogTestId = testId, Order = 2 });
+
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+
+        // Queda exactamente un vínculo para esa combinación.
+        using var read = CreateDbContext();
+        var persisted = await read.FieldTestSessionTests
+            .Where(link => link.SessionId == sessionId)
+            .ToListAsync();
+
+        Assert.Single(persisted);
+        Assert.Equal(1, persisted[0].Order);
     }
 }

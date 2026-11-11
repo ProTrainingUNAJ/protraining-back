@@ -74,7 +74,7 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
                 new UpdateFieldTestSessionStatusCommand(SessionId, FieldTestSessionStatus.Closed)));
 
         Assert.Equal(
-            $"Transición de estado no válida: {FieldTestSessionStatus.Planned} → {FieldTestSessionStatus.Closed}.",
+            "Transición de estado no permitida: de 'Planificada' a 'Cerrada'. Orden válido: 'Planificada' → 'En curso' → 'Cerrada'.",
             exception.Message);
         Assert.Equal(FieldTestSessionStatus.Planned, _session.Status);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -91,7 +91,7 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
                 new UpdateFieldTestSessionStatusCommand(SessionId, FieldTestSessionStatus.InProgress)));
 
         Assert.Equal(
-            $"Transición de estado no válida: {FieldTestSessionStatus.Closed} → {FieldTestSessionStatus.InProgress}.",
+            "La sesión está cerrada: no se puede cambiar su estado.",
             exception.Message);
         Assert.Equal(FieldTestSessionStatus.Closed, _session.Status);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -106,7 +106,7 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
                 new UpdateFieldTestSessionStatusCommand(SessionId, FieldTestSessionStatus.Planned)));
 
         Assert.Equal(
-            $"Transición de estado no válida: {FieldTestSessionStatus.Planned} → {FieldTestSessionStatus.Planned}.",
+            "La sesión ya está en el estado 'Planificada'.",
             exception.Message);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

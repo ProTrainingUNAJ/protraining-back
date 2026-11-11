@@ -15,6 +15,10 @@ namespace Application.UseCases.FieldTests.ConfirmFieldTestResult;
 // no responde tras los reintentos → EntrenamientoUnavailableException → 503: la
 // confirmación es síncrona y el PF debe ver que el 1RM no se sincronizó.
 //
+// KAN-568: si el resultado ya tiene ConfirmedAt, la llamada es idempotente y NO se
+// vuelve a tocar Entrenamiento; el PUT de corrección limpia ConfirmedAt para que el
+// próximo confirmar envíe el valor corregido.
+//
 // El mapeo test → ejercicio se resuelve por nombre exacto la primera vez (los ids de
 // Entrenamiento no son estables entre entornos) y se cachea en CatalogTest.ExerciseId;
 // las confirmaciones siguientes van directo con el GUID cacheado.
@@ -44,6 +48,11 @@ public sealed class ConfirmFieldTestResultCommandHandler(
         var result = await fieldTestRepository.GetResultAsync(command.SessionId, command.ResultId, cancellationToken)
             ?? throw new FieldTestResultNotFoundException();
 
+        // KAN-568: si ya se confirmó, respuesta idempotente: NO se vuelve a llamar
+        // a Entrenamiento (evita el doble registro del RM).
+        if (result.ConfirmedAt is not null)
+            return FieldTestMappings.ToDto(result);
+
         var catalogTest = await catalogTestRepository.GetByIdAsync(result.CatalogTestId, cancellationToken)
             ?? throw new CatalogTestNotFoundException();
 
@@ -71,6 +80,11 @@ public sealed class ConfirmFieldTestResultCommandHandler(
             result.Value,
             TestedOrigin,
             cancellationToken);
+
+        // KAN-568: recién acá queda confirmado; si el envío falló (503), ConfirmedAt
+        // sigue null y el PF puede reintentar.
+        result.ConfirmedAt = DateTime.UtcNow;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return FieldTestMappings.ToDto(result);
     }
