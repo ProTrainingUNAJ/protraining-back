@@ -9,6 +9,8 @@ public sealed class PrescribedExercise : BaseEntity
     public int Sets { get; private set; }
     public int Reps { get; private set; }
     public decimal? TargetPercentage { get; private set; }
+    public decimal? TargetDistanceMeters { get; private set; }
+    public decimal? TargetTimeSeconds { get; private set; }
 
     public Guid TrainingSessionId { get; private set; }
     public TrainingSession TrainingSession { get; private set; } = null!;

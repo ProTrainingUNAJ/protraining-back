@@ -111,48 +111,56 @@ public class RecordPerformedSetsCommandHandler
 
         foreach (var item in command.Sets)
         {
+            var weight = item.Weight ?? 0m;
+            var reps = item.Reps ?? 0;    
+
             var performedSet = PerformedSet.Create(
                 athleteId: athleteId,
                 sessionId: session.Id,
                 exerciseId: item.ExerciseId,
                 date: today,
-                weight: item.Weight,
-                reps: item.Reps);
+                weight: weight,
+                reps: reps,
+                timeSeconds: item.TimeSeconds,
+                setNumber: item.SetNumber);
 
             performedSets.Add(performedSet);
 
-            // Algoritmo Epley y evaluación de propuesta
-            var proposed1Rm = EpleyCalculator.CalculateConservative1Rm(item.Weight, item.Reps);
-            if (proposed1Rm.HasValue)
-            {
-                var activeRecord = await _athleteRecordRepository.GetActiveRecordAsync(athleteId, item.ExerciseId, cancellationToken);
-
-                // Si no tiene récord vigente, no se propone nada
-                if (activeRecord != null && proposed1Rm.Value > activeRecord.Weight)
+            // Epley solo aplica a ejercicios de sobrecarga/fuerza (no a carreras/tiempos)
+            if(!item.TimeSeconds.HasValue && weight > 0 && reps > 0){
+                // Algoritmo Epley y evaluación de propuesta
+                var proposed1Rm = EpleyCalculator.CalculateConservative1Rm(weight, reps);
+                if (proposed1Rm.HasValue)
                 {
-                    var existingPending = await _recordProposalRepository.GetPendingAsync(athleteId, item.ExerciseId, cancellationToken);
-                    if (existingPending != null)
+                    var activeRecord = await _athleteRecordRepository.GetActiveRecordAsync(athleteId, item.ExerciseId, cancellationToken);
+
+                    // Si no tiene récord vigente, no se propone nada
+                    if (activeRecord != null && proposed1Rm.Value > activeRecord.Weight)
                     {
-                        // Se reemplaza solo si la nueva es mayor
-                        if (proposed1Rm.Value > existingPending.ProposedWeight)
+                        var existingPending = await _recordProposalRepository.GetPendingAsync(athleteId, item.ExerciseId, cancellationToken);
+                        if (existingPending != null)
                         {
-                            existingPending.UpdateProposal(proposed1Rm.Value, item.Weight, item.Reps);
-                            await _recordProposalRepository.UpdateAsync(existingPending, cancellationToken);
+                            // Se reemplaza solo si la nueva es mayor
+                            if (proposed1Rm.Value > existingPending.ProposedWeight)
+                            {
+                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps);
+                                await _recordProposalRepository.UpdateAsync(existingPending, cancellationToken);
+                                proposalsCount++;
+                            }
+                        }
+                        else
+                        {
+                            var proposal = RecordProposal.Create(
+                                athleteId: athleteId,
+                                exerciseId: item.ExerciseId,
+                                currentWeight: activeRecord.Weight,
+                                proposedWeight: proposed1Rm.Value,
+                                performedWeight: weight,
+                                performedReps: reps);
+
+                            await _recordProposalRepository.AddAsync(proposal, cancellationToken);
                             proposalsCount++;
                         }
-                    }
-                    else
-                    {
-                        var proposal = RecordProposal.Create(
-                            athleteId: athleteId,
-                            exerciseId: item.ExerciseId,
-                            currentWeight: activeRecord.Weight,
-                            proposedWeight: proposed1Rm.Value,
-                            performedWeight: item.Weight,
-                            performedReps: item.Reps);
-
-                        await _recordProposalRepository.AddAsync(proposal, cancellationToken);
-                        proposalsCount++;
                     }
                 }
             }

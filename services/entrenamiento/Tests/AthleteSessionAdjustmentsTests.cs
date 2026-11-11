@@ -190,6 +190,7 @@ public sealed class AthleteSessionAdjustmentsTests
             new LoadCalculatorEngine(),
             structureMock.Object,
             videoRepoMock.Object,
+            Mock.Of<IPerformedSetRepository>(),
             adjustmentRepoMock.Object,
             exerciseRepoMock.Object);
 

@@ -11,13 +11,15 @@ public class PerformedSet : BaseEntity
     public DateOnly Date { get; private set; }
     public decimal Weight { get; private set; }
     public int Reps { get; private set; }
+    public decimal? TimeSeconds { get; private set; }
+    public int? SetNumber { get; private set; }
 
     public TrainingSession? Session { get; private set; }
     public Exercise? Exercise { get; private set; }
 
     private PerformedSet() { }
 
-    public static PerformedSet Create(Guid athleteId, Guid sessionId, Guid exerciseId, DateOnly date, decimal weight, int reps)
+    public static PerformedSet Create(Guid athleteId, Guid sessionId, Guid exerciseId, DateOnly date, decimal weight, int reps, decimal? timeSeconds, int? setNumber)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El atleta es obligatorio.");
@@ -28,11 +30,19 @@ public class PerformedSet : BaseEntity
         if (exerciseId == Guid.Empty)
             throw new DomainException("El ejercicio es obligatorio.");
 
-        if (weight <= 0)
-            throw new DomainException("El peso debe ser mayor a 0 kg.");
+        if (!timeSeconds.HasValue)
+        {
+            if (weight <= 0)
+                throw new DomainException("El peso debe ser mayor a 0 kg.");
 
-        if (reps <= 0)
-            throw new DomainException("Las repeticiones deben ser mayores a 0.");
+            if (reps <= 0)
+                throw new DomainException("Las repeticiones deben ser mayores a 0.");
+        }
+        else
+        {
+            if (timeSeconds.Value <= 0)
+                throw new DomainException("El tiempo debe ser mayor a 0 segundos.");
+        }
 
         return new PerformedSet
         {
@@ -41,7 +51,9 @@ public class PerformedSet : BaseEntity
             ExerciseId = exerciseId,
             Date = date,
             Weight = weight,
-            Reps = reps
+            Reps = reps,
+            TimeSeconds = timeSeconds,
+            SetNumber = setNumber
         };
     }
 }

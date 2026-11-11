@@ -2194,6 +2194,11 @@ components:
           nullable: true
           description: Meta de tiempo calculada en segundos (KAN-455). Null si no tiene test.
           example: 15.6
+        performedSets:
+          type: array
+          description: Series o pasadas ya registradas hoy para este ejercicio (KAN-457).
+          items:
+            $ref: '#/components/schemas/TodayRoutinePerformedSet'
 
     TodayRoutineResponse:
       type: object
@@ -2250,12 +2255,33 @@ components:
           description: Nota explicativa del ajuste aprobado por el preparador físico (KAN-452).
           example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
 
+    TodayRoutinePerformedSet:
+      type: object
+      properties:
+        setNumber:
+          type: integer
+          nullable: true
+          example: 1
+        weight:
+          type: number
+          format: double
+          nullable: true
+          example: 90.0
+        reps:
+          type: integer
+          nullable: true
+          example: 6
+        timeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Tiempo real registrado en segundos para la pasada (KAN-457).
+          example: 15.2
+
     PerformedSetInput:
       type: object
       required:
         - exerciseId
-        - weight
-        - reps
       properties:
         exerciseId:
           type: string
@@ -2264,10 +2290,23 @@ components:
         weight:
           type: number
           format: double
+          nullable: true
           example: 90.0
         reps:
           type: integer
+          nullable: true
           example: 6
+        timeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Tiempo real de la pasada cronometrada en segundos (KAN-457).
+          example: 15.2
+        setNumber:
+          type: integer
+          nullable: true
+          description: Número de pasada o serie (1-based) (KAN-457).
+          example: 1
 
     RecordPerformedSetsResponse:
       type: object
