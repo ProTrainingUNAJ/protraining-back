@@ -1516,7 +1516,6 @@ components:
       required:
         - firstName
         - lastName
-        - email
         - phone
         - birthDate
       properties:
@@ -1526,10 +1525,6 @@ components:
         lastName:
           type: string
           example: "Fernández"
-        email:
-          type: string
-          format: email
-          example: "mateo@ejemplo.com"
         phone:
           type: string
           example: "+5491112345678"

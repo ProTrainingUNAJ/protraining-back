@@ -1,4 +1,4 @@
-﻿using Application.DTOs.Athletes;
+using Application.DTOs.Athletes;
 using Application.DTOs.Categories;
 using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
 using Application.UseCases.Categories.Invitations.ValidateCategoryInvitationToken;
@@ -34,7 +34,6 @@ public sealed class InvitationsController(
             token,
             request?.FirstName,
             request?.LastName,
-            request?.Email,
             request?.Phone,
             request?.BirthDate ?? default,
             request?.GuardianName,

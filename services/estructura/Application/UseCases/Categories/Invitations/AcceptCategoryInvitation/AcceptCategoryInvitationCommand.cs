@@ -13,7 +13,6 @@ public sealed record AcceptCategoryInvitationCommand(
     string Token,
     string? FirstName,
     string? LastName,
-    string? Email,
     string? Phone,
     DateOnly BirthDate = default,
     string? GuardianName = null,
@@ -37,7 +36,9 @@ public sealed class AcceptCategoryInvitationCommandHandler(
     {
         var accountId = currentUser.UserId ?? throw new UnauthorizedAccessException();
         var userPfId = currentUser.PfId ?? throw new UnauthorizedAccessException();
-        var athleteEmail = !string.IsNullOrWhiteSpace(currentUser.Email) ? currentUser.Email : command.Email;
+        var athleteEmail = !string.IsNullOrWhiteSpace(currentUser.Email)
+            ? currentUser.Email
+            : throw new UnauthorizedAccessException();
 
         if (string.IsNullOrWhiteSpace(command.Token))
             throw new InvitationNotFoundException();

@@ -109,6 +109,23 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetCategoryTrafficLightToday_ComparacionCategoriaDeBVsIdInventado_MismoStatusYMismoCuerpo()
+    {
+        // Criterio KAN-429: DADO un id de B y un id inventado CUANDO el PF A los consulta ENTONCES las dos respuestas son iguales
+        var fakeCategoryId = Guid.NewGuid();
+
+        var responseDeB = await _clientPfA.GetAsync($"/api/v1/categories/{_categoryDeB}/traffic-light-today");
+        var responseFake = await _clientPfA.GetAsync($"/api/v1/categories/{fakeCategoryId}/traffic-light-today");
+
+        Assert.Equal(HttpStatusCode.NotFound, responseDeB.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, responseFake.StatusCode);
+
+        var bodyDeB = await responseDeB.Content.ReadAsStringAsync();
+        var bodyFake = await responseFake.Content.ReadAsStringAsync();
+        Assert.Equal(bodyFake, bodyDeB);
+    }
+
+    [Fact]
     public async Task GetCategoryTrafficLightToday_CheckInsDePfBNoAparecenEnSemaforoDePfA_InclusoConMismoAthleteId()
     {
         // Act: PF A consulta el semáforo de su propia categoría (donde está el atleta compartido)

@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using Application.DTOs.Athletes;
 using Application.DTOs.Categories;
@@ -114,7 +114,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act: Llamada sin header Authorization
         var response = await _unauthenticatedClient.PostAsJsonAsync(
             "/api/v1/invitations/algun-token/accept",
-            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -126,7 +126,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Arrange: Cliente autenticado como PreparadorFisico
         var response = await _clientPf.PostAsJsonAsync(
             "/api/v1/invitations/algun-token/accept",
-            new AcceptCategoryInvitationRequest("Juan", "Pérez", "juan@test.com", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
+            new AcceptCategoryInvitationRequest("Juan", "Pérez", "+5491111111111", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert: 403 Forbidden
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -147,7 +147,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act
         var response = await clientAthleteForeign.PostAsJsonAsync(
             $"/api/v1/invitations/{inv!.Token}/accept",
-            new AcceptCategoryInvitationRequest("Atleta", "Ajeno", "ajeno@test.com", "+5491122222222", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
+            new AcceptCategoryInvitationRequest("Atleta", "Ajeno", "+5491122222222", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert: 403 Forbidden
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -166,7 +166,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         var clientAthlete = _factory.CreateAuthenticatedClient(_pfId, role: "Atleta", userId: athleteAccountId);
 
         var request = new AcceptCategoryInvitationRequest(
-            "Lucas", "Gómez", "lucas@test.com", "+5491133333333",
+            "Lucas", "Gómez", "+5491133333333",
             DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20)));
 
         // Act 1: Primera llamada
@@ -216,7 +216,7 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         // Act
         var response = await clientAthlete.PostAsJsonAsync(
             $"/api/v1/invitations/{expiredToken}/accept",
-            new AcceptCategoryInvitationRequest("Pedro", "Gómez", "pedro@test.com", "+5491144444444", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
+            new AcceptCategoryInvitationRequest("Pedro", "Gómez", "+5491144444444", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-20))));
 
         // Assert
         Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
@@ -239,7 +239,6 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         var request = new AcceptCategoryInvitationRequest(
             FirstName: "Joaquín",
             LastName: "Menor",
-            Email: "joaquin.menor@test.com",
             Phone: "+5491100001111",
             BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)), // 16 años
             GuardianName: null);
@@ -271,7 +270,6 @@ public sealed class InvitationSecurityTests : IAsyncDisposable
         var request = new AcceptCategoryInvitationRequest(
             FirstName: "Joaquín",
             LastName: "Aprobado",
-            Email: "joaquin.aprobado@test.com",
             Phone: "+5491100002222",
             BirthDate: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-16)),
             GuardianName: "Esteban Aprobado",
