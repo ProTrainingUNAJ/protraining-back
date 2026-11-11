@@ -321,6 +321,15 @@ public sealed class GatewayPerimeterSecurityTests : IAsyncDisposable
 
         // Assert 2: Atraviesa el Gateway respondiendo 400 Bad Request desde Identidad (no 401 de autenticación de Gateway)
         Assert.Equal(HttpStatusCode.BadRequest, resetResponse.StatusCode);
+
+        // Act 3: POST a /identidad/api/v1/auth/google sin encabezado Authorization (#KAN-541)
+        var googleResponse = await _gatewayClient.PostAsJsonAsync("/identidad/api/v1/auth/google", new
+        {
+            idToken = "invalid_token_perimeter"
+        });
+
+        // Assert 3: Atraviesa el Gateway respondiendo 401 Unauthorized desde el controlador de Identidad (no 401 por falta de Bearer en Gateway)
+        Assert.Equal(HttpStatusCode.Unauthorized, googleResponse.StatusCode);
     }
 
     public async ValueTask DisposeAsync()

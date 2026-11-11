@@ -45,6 +45,7 @@ public sealed class PerimeterSecurityMiddleware(
             path.Equals("/health", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/health", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/api/v1/auth/login", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/identidad/api/v1/auth/google", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/api/v1/auth/refresh", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase))

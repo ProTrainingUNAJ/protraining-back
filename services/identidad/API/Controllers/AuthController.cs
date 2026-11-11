@@ -2,6 +2,7 @@ using Application.DTOs.Auth;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.ForgotPassword;
+using Application.UseCases.Auth.GoogleLogin;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
@@ -19,6 +20,7 @@ namespace API.Controllers;
 [Route("api/v1/auth")]
 public class AuthController(
     LoginUseCase loginUseCase,
+    GoogleLoginUseCase googleLoginUseCase,
     RefreshUseCase refreshTokenUseCase,
     RegisterByInvitationUseCase registerByInvitationUseCase,
     ChangePasswordUseCase changePasswordUseCase,
@@ -27,6 +29,26 @@ public class AuthController(
     ResetPasswordWithTokenUseCase resetPasswordWithTokenUseCase,
     ICurrentUser currentUser) : ControllerBase
 {
+    /// <summary>
+    /// Inicia sesión o vincula una cuenta existente mediante un ID Token de Google (#KAN-541).
+    /// No permite auto-registro de usuarios ni creación de organizaciones/relaciones.
+    /// </summary>
+    /// <param name="request">ID Token de Google y deviceId del cliente.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 200 con el JWT y datos del usuario, o HTTP 401 si no está habilitado/autorizado.</returns>
+    [HttpPost("google")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GoogleLogin(
+        [FromBody] GoogleLoginRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await googleLoginUseCase.ExecuteAsync(request, cancellationToken);
+        return Ok(response);
+    }
+
     /// <summary>
     /// Inicia sesión con email y contraseña, emitiendo un token JWT firmado
     /// </summary>
