@@ -17,7 +17,6 @@ public class ExerciseMediaTests
           {
             "exerciseId": "Barbell_Squat",
             "repdb": { "frames": ["https://repdb/squat-start.webp", "https://repdb/squat-peak.webp"] },
-            "exercisedb": { "gifUrl": "https://exercisedb/squat.gif" },
             "everkinetic": { "frames": ["https://ek/0001-relaxation.png", "https://ek/0001-tension.png"] }
           },
           {
@@ -31,22 +30,20 @@ public class ExerciseMediaTests
     private static List<string> CatalogImages(string catalogId) =>
         [$"{CatalogImagesBase}{catalogId}/0.jpg", $"{CatalogImagesBase}{catalogId}/1.jpg"];
 
-    // Arrange: un ejercicio con las tres fuentes. Act: se buscan sus ilustraciones por sus fotos.
-    // Assert: vienen en orden de preferencia (RepDB → ExerciseDB → Everkinetic), con su crédito.
+    // Arrange: un ejercicio con las dos fuentes. Act: se buscan sus ilustraciones por sus fotos.
+    // Assert: vienen en orden de preferencia (RepDB → Everkinetic), con su crédito.
     [Fact]
-    public void GetForCatalogImages_ConLasTresFuentes_LasDevuelveEnOrdenDePreferencia()
+    public void GetForCatalogImages_ConLasDosFuentes_LasDevuelveEnOrdenDePreferencia()
     {
         var catalog = ExerciseMediaCatalog.FromJson(MediaJson);
 
         var media = catalog.GetForCatalogImages(CatalogImages("Barbell_Squat"));
 
-        Assert.Equal(["repdb", "exercisedb", "everkinetic"], media.Select(m => m.Source));
-        Assert.Equal("frames", media[0].Kind);
+        Assert.Equal(["repdb", "everkinetic"], media.Select(m => m.Source));
+        Assert.All(media, m => Assert.Equal("frames", m.Kind));
         Assert.Equal(["https://repdb/squat-start.webp", "https://repdb/squat-peak.webp"], media[0].Urls);
         Assert.Equal("Exercise data by RepDB (repdb.co)", media[0].Credit);
-        Assert.Equal("gif", media[1].Kind);
-        Assert.Equal(["https://exercisedb/squat.gif"], media[1].Urls);
-        Assert.Equal("CC BY-SA 4.0", media[2].License);
+        Assert.Equal("CC BY-SA 4.0", media[1].License);
     }
 
     [Fact]
@@ -122,7 +119,7 @@ public class ExerciseMediaTests
 
         var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
-        Assert.Equal(3, result.Items.Single(e => e.Id == catalogExercise.Id).Media.Count);
+        Assert.Equal(2, result.Items.Single(e => e.Id == catalogExercise.Id).Media.Count);
         Assert.Empty(result.Items.Single(e => e.Id == coachExercise.Id).Media);
     }
 }

@@ -7,7 +7,8 @@ namespace Infrastructure.Services;
 // Lee la tabla de cruce API/Data/exercise-media.json una sola vez (KAN-549).
 // La tabla guarda solo ids y URLs: las imágenes y los datos siguen en los repos de cada fuente,
 // así no republicamos el dataset de RepDB (su licencia lo prohíbe y este repo es público).
-// Orden de preferencia: RepDB (dibujo, dos poses) → ExerciseDB (GIF) → Everkinetic (dibujo de línea).
+// Orden de preferencia: RepDB (dibujo plano, dos poses) → Everkinetic (dibujo de línea, dos poses).
+// Solo dibujos, para que todo el catálogo tenga un estilo parecido (decisión de Enzo, 11/11).
 public sealed class ExerciseMediaCatalog : IExerciseMediaCatalog
 {
     public static readonly ExerciseMediaCatalog Empty = new(new Dictionary<string, IReadOnlyList<ExerciseMediaDto>>());
@@ -51,13 +52,6 @@ public sealed class ExerciseMediaCatalog : IExerciseMediaCatalog
                     "Exercise data by RepDB (repdb.co)", "https://repdb.co", "RepDB Free Tier"));
             }
 
-            if (!string.IsNullOrWhiteSpace(entry.ExerciseDb?.GifUrl))
-            {
-                options.Add(new ExerciseMediaDto(
-                    "exercisedb", "gif", [entry.ExerciseDb.GifUrl],
-                    "ExerciseDB", "https://exercisedb.dev", "Uso académico, enlazado sin redistribuir"));
-            }
-
             if (entry.Everkinetic?.Frames is { Count: > 0 } everkineticFrames)
             {
                 options.Add(new ExerciseMediaDto(
@@ -99,17 +93,11 @@ public sealed class ExerciseMediaCatalog : IExerciseMediaCatalog
     {
         public string ExerciseId { get; set; } = string.Empty;
         public FramesSource? RepDb { get; set; }
-        public GifSource? ExerciseDb { get; set; }
         public FramesSource? Everkinetic { get; set; }
     }
 
     private sealed class FramesSource
     {
         public List<string>? Frames { get; set; }
-    }
-
-    private sealed class GifSource
-    {
-        public string? GifUrl { get; set; }
     }
 }
