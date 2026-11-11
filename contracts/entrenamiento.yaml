@@ -1535,15 +1535,15 @@ components:
       properties:
         source:
           type: string
-          enum: [repdb, exercisedb, everkinetic]
-          description: Fuente de la ilustración.
+          enum: [repdb, everkinetic]
+          description: Fuente de la ilustración (solo dibujos).
           example: "repdb"
         kind:
           type: string
           enum: [frames, gif]
           description: >
             `frames`: imágenes fijas (posición inicial y final) que el front alterna para mostrar el movimiento.
-            `gif`: una animación que se mueve sola.
+            `gif`: una animación que se mueve sola (reservado para animaciones futuras; hoy no se usa).
           example: "frames"
         urls:
           type: array
