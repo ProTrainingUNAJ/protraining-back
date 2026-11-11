@@ -74,6 +74,9 @@ public static class DependencyInjection
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
+        services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
+        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+
         services.AddScoped<ForgotPasswordUseCase>();
         services.AddScoped<ResetPasswordWithTokenUseCase>();
 

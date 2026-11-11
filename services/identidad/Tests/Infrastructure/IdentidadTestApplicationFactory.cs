@@ -8,6 +8,7 @@ using Application.Interfaces.Services;
 using Application.UseCases.Auth.ChangePassword;
 using Application.UseCases.Auth.ForgotPassword;
 using Application.UseCases.Auth.GetPfContact;
+using Application.UseCases.Auth.GoogleLogin;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
@@ -38,6 +39,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
 
     public FakeStructureHandler Structure { get; }
     public FakeEmailSender EmailSender { get; } = new();
+    public FakeGoogleTokenValidator GoogleTokenValidator { get; } = new();
 
     public IdentidadTestApplicationFactory()
     {
@@ -84,6 +86,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
 
                 // Repositorios y Servicios
                 services.AddSingleton<IEmailSender>(EmailSender);
+                services.AddSingleton<IGoogleTokenValidator>(GoogleTokenValidator);
                 services.Configure<DataProtectionTokenProviderOptions>(options =>
                     options.TokenLifespan = TimeSpan.FromMinutes(30));
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
@@ -103,6 +106,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 // UseCases
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<LoginUseCase>();
+                services.AddScoped<GoogleLoginUseCase>();
                 services.AddScoped<RefreshUseCase>();
                 services.AddScoped<UpdateWhatsAppPhoneUseCase>();
                 services.AddScoped<GetPfContactUseCase>();

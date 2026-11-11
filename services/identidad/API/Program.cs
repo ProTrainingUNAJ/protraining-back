@@ -4,6 +4,7 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.GoogleLogin;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.UpdatePhone;
@@ -63,6 +64,7 @@ builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
 
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
+builder.Services.AddScoped<GoogleLoginUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();

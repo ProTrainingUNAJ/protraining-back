@@ -1,6 +1,11 @@
 namespace Application.Exceptions;
 
 /// <summary>
-/// excepcion lanzada cuando las credenciales enviadas son incorrectas o la cuenta está bloqueada.
+/// Excepción lanzada cuando las credenciales enviadas son incorrectas, inválidas o la cuenta no está autorizada.
 /// </summary>
-public sealed class InvalidCredentialsException() : Exception("Email o contraseña incorrectos.");
+public sealed class InvalidCredentialsException : Exception
+{
+    public InvalidCredentialsException() : base("Email o contraseña incorrectos.") { }
+
+    public InvalidCredentialsException(string message) : base(message) { }
+}
