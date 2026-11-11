@@ -6,8 +6,8 @@ using Application.DTOs.TrainingPlans;
 using Application.DTOs.TrainingSessions;
 using Domain.Entities;
 using Entrenamiento.Tests.Infrastructure;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 
 namespace Entrenamiento.Tests.Integration;
 
@@ -44,10 +44,10 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync("/api/v1/training-plans");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var plans = await response.Content.ReadFromJsonAsync<List<TrainingPlanSummaryDto>>();
-        plans.Should().NotBeNull();
-        plans!.Should().NotContain(p => p.Id == _dataB.Plan.Id);
+        Assert.NotNull(plans);
+        Assert.DoesNotContain(plans!, p => p.Id == _dataB.Plan.Id);
     }
 
     [Fact]
@@ -57,7 +57,25 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync($"/api/v1/training-plans/{_dataB.Plan.Id}");
 
         // Assert: Regla de oro KAN-429: siempre 404 para no filtrar existencia
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTrainingPlanById_ComparacionIdDeBVsIdInventado_MismoStatusYMismoCuerpo()
+    {
+        // Criterio KAN-429: DADO un id de B y un id inventado CUANDO el PF A los consulta ENTONCES las dos respuestas son iguales
+        var fakeId = Guid.NewGuid();
+
+        var responseDeB = await _clientPfA.GetAsync($"/api/v1/training-plans/{_dataB.Plan.Id}");
+        var responseFake = await _clientPfA.GetAsync($"/api/v1/training-plans/{fakeId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, responseDeB.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, responseFake.StatusCode);
+
+        var bodyDeB = await responseDeB.Content.ReadAsStringAsync();
+        var bodyFake = await responseFake.Content.ReadAsStringAsync();
+        // Mismo ProblemDetails (normalizando el echo del ID en el título)
+        Assert.Equal(bodyFake, bodyDeB.Replace(_dataB.Plan.Id.ToString(), fakeId.ToString()));
     }
 
     [Fact]
@@ -74,15 +92,38 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.PutAsJsonAsync($"/api/v1/training-plans/{_dataB.Plan.Id}", request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         using var dbContext = _factory.CreateDbContext(overridePfId: null);
         var planEnBase = await dbContext.TrainingPlans
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == _dataB.Plan.Id);
 
-        planEnBase.Should().NotBeNull();
-        planEnBase!.Name.Should().Be(_dataB.Plan.Name);
+        Assert.NotNull(planEnBase);
+        Assert.Equal(_dataB.Plan.Name, planEnBase!.Name);
+    }
+
+    [Fact]
+    public async Task UpdateTrainingPlan_ComparacionIdDeBVsIdInventado_MismoStatusYMismoCuerpo()
+    {
+        // Criterio KAN-429: DADO un id de B y un id inventado CUANDO el PF A los modifica ENTONCES las dos respuestas son iguales
+        var fakeId = Guid.NewGuid();
+        var request = new SaveTrainingPlanRequest(
+            Name: "Plan Intento de Modificación",
+            Objective: "Intento Objetivo",
+            Weeks: new List<TrainingWeekRequest>()
+        );
+
+        var responseDeB = await _clientPfA.PutAsJsonAsync($"/api/v1/training-plans/{_dataB.Plan.Id}", request);
+        var responseFake = await _clientPfA.PutAsJsonAsync($"/api/v1/training-plans/{fakeId}", request);
+
+        Assert.Equal(HttpStatusCode.NotFound, responseDeB.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, responseFake.StatusCode);
+
+        var bodyDeB = await responseDeB.Content.ReadAsStringAsync();
+        var bodyFake = await responseFake.Content.ReadAsStringAsync();
+        // Mismo ProblemDetails (normalizando el echo del ID en el título)
+        Assert.Equal(bodyFake, bodyDeB.Replace(_dataB.Plan.Id.ToString(), fakeId.ToString()));
     }
 
     [Fact]
@@ -93,10 +134,10 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync($"/api/v1/training-plans/schedule?date={queryDate:yyyy-MM-dd}");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var schedule = await response.Content.ReadFromJsonAsync<List<ScheduledSessionDto>>();
-        schedule.Should().NotBeNull();
-        schedule!.Should().NotContain(s => s.SessionId == _dataB.Session.Id);
+        Assert.NotNull(schedule);
+        Assert.DoesNotContain(schedule!, s => s.SessionId == _dataB.Session.Id);
     }
 
     [Fact]
@@ -115,14 +156,14 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.PostAsJsonAsync("/api/v1/training-plans/assignments", request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         using var dbContext = _factory.CreateDbContext(overridePfId: null);
         var asignacionEnBase = await dbContext.PlanAssignments
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(a => a.TrainingPlanId == _dataB.Plan.Id && a.CategoryId == categoryDeA);
 
-        asignacionEnBase.Should().BeNull();
+        Assert.Null(asignacionEnBase);
     }
 
     [Fact]
@@ -132,7 +173,7 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync($"/api/v1/training-sessions/{_dataB.Session.Id}");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -145,15 +186,15 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.PutAsJsonAsync($"/api/v1/training-sessions/{_dataB.Session.Id}/notes", request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         using var dbContext = _factory.CreateDbContext(overridePfId: null);
         var sesionEnBase = await dbContext.TrainingSessions
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(s => s.Id == _dataB.Session.Id);
 
-        sesionEnBase.Should().NotBeNull();
-        sesionEnBase!.CoachNotes.Should().Be(_dataB.Session.CoachNotes);
+        Assert.NotNull(sesionEnBase);
+        Assert.Equal(_dataB.Session.CoachNotes, sesionEnBase!.CoachNotes);
     }
 
     [Fact]
@@ -163,7 +204,7 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync($"/api/v1/athletes/{_dataB.AthleteId}/today-routine");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -173,7 +214,7 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync($"/api/v1/athletes/{_dataB.AthleteId}/records");
 
         // Assert: El atleta es de una categoría no perteneciente a PF A, el guard debe responder 404
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -190,14 +231,14 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.PostAsJsonAsync($"/api/v1/athletes/{_dataB.AthleteId}/records", request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         using var dbContext = _factory.CreateDbContext(overridePfId: null);
         var recordEnBase = await dbContext.AthleteRecords
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(r => r.AthleteId == _dataB.AthleteId && r.Weight == 120m);
 
-        recordEnBase.Should().BeNull();
+        Assert.Null(recordEnBase);
     }
 
     [Fact]
@@ -207,15 +248,15 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
         var response = await _clientPfA.GetAsync("/api/v1/exercises");
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var pagedResponse = await response.Content.ReadFromJsonAsync<PaginatedExerciseResponse>();
-        pagedResponse.Should().NotBeNull();
+        Assert.NotNull(pagedResponse);
 
         // Debe ver el catálogo (PfId == Guid.Empty)
-        pagedResponse!.Items.Should().Contain(e => e.Id == _dataB.CatalogExercise.Id);
+        Assert.Contains(pagedResponse!.Items, e => e.Id == _dataB.CatalogExercise.Id);
 
         // NO debe ver el ejercicio personalizado creado por PF B
-        pagedResponse.Items.Should().NotContain(e => e.Id == _dataB.CustomExercise.Id);
+        Assert.DoesNotContain(pagedResponse.Items, e => e.Id == _dataB.CustomExercise.Id);
     }
 
     [Fact]
@@ -223,18 +264,19 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
     {
         // Act & Assert para Plan
         var planResp = await _clientPfB.GetAsync($"/api/v1/training-plans/{_dataB.Plan.Id}");
-        planResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, planResp.StatusCode);
 
         // Act & Assert para Sesión
         var sessionResp = await _clientPfB.GetAsync($"/api/v1/training-sessions/{_dataB.Session.Id}");
-        sessionResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, sessionResp.StatusCode);
 
         // Act & Assert para Ejercicios: PF B ve tanto el de catálogo como el suyo custom
         var exResp = await _clientPfB.GetAsync("/api/v1/exercises");
-        exResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, exResp.StatusCode);
         var paged = await exResp.Content.ReadFromJsonAsync<PaginatedExerciseResponse>();
-        paged!.Items.Should().Contain(e => e.Id == _dataB.CatalogExercise.Id);
-        paged.Items.Should().Contain(e => e.Id == _dataB.CustomExercise.Id);
+        Assert.NotNull(paged);
+        Assert.Contains(paged!.Items, e => e.Id == _dataB.CatalogExercise.Id);
+        Assert.Contains(paged.Items, e => e.Id == _dataB.CustomExercise.Id);
     }
 
     [Fact]
@@ -264,19 +306,19 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
             $"/api/v1/internal/training-sessions/athletes-with-session?date={date:yyyy-MM-dd}&pfId={_pfAId}");
 
         // Assert 1: con el pfId de PF A no vienen ni los atletas ni las categorías de PF B
-        responsePfA.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, responsePfA.StatusCode);
         var targetsPfA = await responsePfA.Content.ReadFromJsonAsync<ScheduledSessionTargetsResponse>();
-        targetsPfA.Should().NotBeNull();
-        targetsPfA!.AthleteIds.Should().NotContain(_dataB.AthleteId);
-        targetsPfA.CategoryIds.Should().NotContain(_dataB.CategoryId);
+        Assert.NotNull(targetsPfA);
+        Assert.DoesNotContain(_dataB.AthleteId, targetsPfA!.AthleteIds);
+        Assert.DoesNotContain(_dataB.CategoryId, targetsPfA.CategoryIds);
 
         // Act 2: consultando con PF B sí vienen tanto el atleta como la categoría
         var responsePfB = await serviceClient.GetAsync(
             $"/api/v1/internal/training-sessions/athletes-with-session?date={date:yyyy-MM-dd}&pfId={_pfBId}");
-        responsePfB.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, responsePfB.StatusCode);
         var targetsPfB = await responsePfB.Content.ReadFromJsonAsync<ScheduledSessionTargetsResponse>();
-        targetsPfB.Should().NotBeNull();
-        targetsPfB!.AthleteIds.Should().Contain(_dataB.AthleteId);
-        targetsPfB.CategoryIds.Should().Contain(_dataB.CategoryId);
+        Assert.NotNull(targetsPfB);
+        Assert.Contains(_dataB.AthleteId, targetsPfB!.AthleteIds);
+        Assert.Contains(_dataB.CategoryId, targetsPfB.CategoryIds);
     }
 }

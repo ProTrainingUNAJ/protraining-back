@@ -1,9 +1,8 @@
-﻿namespace Application.DTOs.Categories;
+namespace Application.DTOs.Categories;
 
 public sealed record AcceptCategoryInvitationRequest(
     string? FirstName,
     string? LastName,
-    string? Email,
     string? Phone,
     DateOnly BirthDate,
     string? GuardianName = null,

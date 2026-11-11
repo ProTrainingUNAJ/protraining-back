@@ -5,7 +5,6 @@ using Application.DTOs.Mcp;
 using Application.Interfaces.Persistence;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Domain.Entities;
-using FluentAssertions;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -43,20 +42,20 @@ public sealed class ExerciseLibraryMcpIntegrationTests
 
         // Apretón de manos (handshake): el servidor expone las tools registradas.
         var tools = await mcpClient.ListToolsAsync();
-        tools.Select(t => t.Name).Should().Contain("ObtenerSustitutos");
+        Assert.Contains("ObtenerSustitutos", tools.Select(t => t.Name));
 
         // Llamada directa al proveedor (handler/tool logic) para contrastar ejecución.
         var restriction = BuildRodillaRestriction();
         var directHandler = new GetSubstitutesByZoneQueryHandler(new FakeRestrictionRepository([restriction]));
         var directResult = await directHandler.Handle(new GetSubstitutesByZoneQuery("rodilla"));
-        directResult.Substitutes.Should().NotBeEmpty();
+        Assert.NotEmpty(directResult.Substitutes);
 
         // Ejecución de la tool vía MCP (JSON-RPC) contra el servidor.
         var callResult = await mcpClient.CallToolAsync(
             "ObtenerSustitutos",
             new Dictionary<string, object?> { ["zona"] = "rodilla" });
 
-        callResult.IsError.Should().NotBeTrue();
+        Assert.True(callResult.IsError != true);
 
         ZoneSubstitutesResultDto? response = null;
         if (callResult.StructuredContent is { } structured)
@@ -70,11 +69,16 @@ public sealed class ExerciseLibraryMcpIntegrationTests
             response = JsonSerializer.Deserialize<ZoneSubstitutesResultDto>(contentJson, JsonOptions);
         }
 
-        response.Should().NotBeNull();
-        response!.Zone.Should().Be("rodilla");
-        response.Substitutes.Should().NotBeEmpty();
-        response.Substitutes.Select(s => s.Name).Should().Contain(directResult.Substitutes.Select(s => s.Name));
-        response.Substitutes.Should().OnlyContain(s => s.ExerciseId != Guid.Empty && !string.IsNullOrWhiteSpace(s.Name));
+        Assert.NotNull(response);
+        Assert.Equal("rodilla", response!.Zone);
+        Assert.NotEmpty(response.Substitutes);
+        var directNames = directResult.Substitutes.Select(s => s.Name).ToHashSet();
+        Assert.Contains(response.Substitutes, s => directNames.Contains(s.Name));
+        Assert.All(response.Substitutes, s =>
+        {
+            Assert.NotEqual(Guid.Empty, s.ExerciseId);
+            Assert.False(string.IsNullOrWhiteSpace(s.Name));
+        });
     }
 
     [Fact]
@@ -94,13 +98,13 @@ public sealed class ExerciseLibraryMcpIntegrationTests
             "ObtenerSustitutos",
             new Dictionary<string, object?> { ["zona"] = "knee" });
 
-        callResult.IsError.Should().NotBeTrue();
+        Assert.True(callResult.IsError != true);
         var structuredJson = JsonSerializer.Serialize(callResult.StructuredContent, JsonOptions);
         var response = JsonSerializer.Deserialize<ZoneSubstitutesResultDto>(structuredJson, JsonOptions);
 
-        response.Should().NotBeNull();
-        response!.Zone.Should().Be("knee");
-        response.Substitutes.Should().NotBeEmpty();
+        Assert.NotNull(response);
+        Assert.Equal("knee", response!.Zone);
+        Assert.NotEmpty(response.Substitutes);
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

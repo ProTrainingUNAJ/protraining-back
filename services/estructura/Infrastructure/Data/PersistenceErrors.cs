@@ -1,11 +1,14 @@
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using Application.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
+[assembly: InternalsVisibleTo("Estructura.Tests")]
+
 namespace Infrastructure.Data;
 
-public static class PersistenceErrors
+internal static class PersistenceErrors
 {
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)
     {
