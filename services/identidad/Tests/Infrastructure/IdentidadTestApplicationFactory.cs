@@ -6,11 +6,13 @@ using Application.Common.Security;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.ChangePassword;
+using Application.UseCases.Auth.ForgotPassword;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
 using Application.UseCases.Auth.ResetAthletePassword;
+using Application.UseCases.Auth.ResetPasswordWithToken;
 using Application.UseCases.Auth.UpdatePhone;
 using Application.UseCases.Health.GetHealth;
 using Domain.Entities;
@@ -35,6 +37,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
     private readonly TestServer _server;
 
     public FakeStructureHandler Structure { get; }
+    public FakeEmailSender EmailSender { get; } = new();
 
     public IdentidadTestApplicationFactory()
     {
@@ -80,6 +83,9 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
                 // Repositorios y Servicios
+                services.AddSingleton<IEmailSender>(EmailSender);
+                services.Configure<DataProtectionTokenProviderOptions>(options =>
+                    options.TokenLifespan = TimeSpan.FromMinutes(30));
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
                 services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -104,6 +110,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<ChangePasswordUseCase>();
                 services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
                 services.AddScoped<ResetAthletePasswordUseCase>();
+                services.AddScoped<ForgotPasswordUseCase>();
+                services.AddScoped<ResetPasswordWithTokenUseCase>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);

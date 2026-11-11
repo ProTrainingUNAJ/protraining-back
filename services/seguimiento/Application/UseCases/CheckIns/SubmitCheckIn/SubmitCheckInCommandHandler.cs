@@ -23,6 +23,12 @@ public sealed class SubmitCheckInCommandHandler(
     {
         Validate(command);
 
+        // Normalización de sueño (KAN-560): el front ofrece hasta 12 h y "Más de 12";
+        // cualquier valor > 12 se guarda como 13 (marca de "más de 12"). De 0 a 12 se guarda tal cual.
+        double sleepHours = command.SleepHours > MaxSelectableSleepHours
+            ? OverLimitSleepHours
+            : command.SleepHours;
+
         // La fecha puede venir del front (sincronización de un check-in guardado sin conexión):
         // se conserva el día en que se hizo, no el de la sincronización. Si no viene, es hoy (Argentina).
         var today = ArgentinaTime.Today;
@@ -41,7 +47,7 @@ public sealed class SubmitCheckInCommandHandler(
             {
                 AthleteId = command.AthleteId,
                 Date = date,
-                SleepHours = command.SleepHours,
+                SleepHours = sleepHours,
                 SleepQuality = command.SleepQuality,
                 MuscleSoreness = command.MuscleSoreness,
                 FatigueLevel = command.FatigueLevel,
@@ -57,7 +63,7 @@ public sealed class SubmitCheckInCommandHandler(
         }
         else
         {
-            checkIn!.SleepHours = command.SleepHours;
+            checkIn!.SleepHours = sleepHours;
             checkIn.SleepQuality = command.SleepQuality;
             checkIn.MuscleSoreness = command.MuscleSoreness;
             checkIn.FatigueLevel = command.FatigueLevel;
@@ -69,8 +75,22 @@ public sealed class SubmitCheckInCommandHandler(
             checkIn.HasActiveInjury = command.HasActiveInjury;
         }
 
+        // Ventana de 7 días de sueño (KAN-560): anclada a la fecha del check-in (no a "hoy"),
+        // para que también funcione con sincronizaciones offline con fechas pasadas. Los días
+        // previos salen del repositorio local; el día de hoy se toma del check-in recién armado,
+        // porque su fila todavía no está guardada en la base.
+        var windowStart = checkInDate.AddDays(-(TrafficLightEngine.ProlongedSleepWindowDays - 1))
+            .ToDateTime(TimeOnly.MinValue);
+        var previousCheckIns = await repository.GetByAthleteAndDateRangeAsync(
+            command.AthleteId, windowStart, date.AddDays(-1), limit: null, cancellationToken);
+
+        var sleepWindow = previousCheckIns
+            .Select(c => new SleepWindowEntry { SleepHours = c.SleepHours, IsSick = c.IsSick })
+            .ToList();
+        sleepWindow.Add(new SleepWindowEntry { SleepHours = checkIn.SleepHours, IsSick = checkIn.IsSick });
+
         // Semáforo: motor puro con los datos recién cargados, sin ninguna llamada externa.
-        // has_active_injury obliga Rojo ("Lesión activa"); enfermedad y demás señales → Amarillo.
+        // has_active_injury o muy poco sueño (< 4 h) obligan Rojo; el resto de señales → Amarillo.
         var evaluation = trafficLightEngine.Evaluate(
             new CheckInData
             {
@@ -80,7 +100,7 @@ public sealed class SubmitCheckInCommandHandler(
                 PainZones = checkIn.PainZones,
                 HasActiveInjury = checkIn.HasActiveInjury
             },
-            context: null);
+            new ContextData { SleepWindow = sleepWindow });
 
         checkIn.TrafficLight = evaluation.TriggeredLight;
         checkIn.TrafficLightReason = evaluation.Reason;
@@ -95,6 +115,10 @@ public sealed class SubmitCheckInCommandHandler(
 
         return new SubmitCheckInResult(response, created);
     }
+
+    // Normalización de sueño (KAN-560): constantes nombradas para validarlas con el PF.
+    private const double MaxSelectableSleepHours = 12.0;
+    private const double OverLimitSleepHours = 13.0;
 
     // Validación de rangos según el contrato: DomainException → 400 con ProblemDetails (ExceptionMiddleware).
     private static void Validate(SubmitCheckInCommand command)

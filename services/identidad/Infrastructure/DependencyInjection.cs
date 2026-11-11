@@ -1,7 +1,10 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.ForgotPassword;
+using Application.UseCases.Auth.ResetPasswordWithToken;
 using Domain.Entities;
 using Infrastructure.Data;
+using Infrastructure.Options;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -61,8 +64,18 @@ public static class DependencyInjection
         })
         .AddRoles<IdentityRole<Guid>>()
         .AddEntityFrameworkStores<AppDbContext>()
+        .AddDefaultTokenProviders()
         .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
+        // Vigencia de 30 minutos para tokens de recuperación (#KAN-540)
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+            options.TokenLifespan = TimeSpan.FromMinutes(30));
+
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+        services.AddScoped<ForgotPasswordUseCase>();
+        services.AddScoped<ResetPasswordWithTokenUseCase>();
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();

@@ -26,6 +26,17 @@ public class CheckInsControllerTests
     private readonly Mock<IStructureClient> _estructura = new();
     private readonly TrafficLightEngine _engine = new();
 
+    public CheckInsControllerTests()
+    {
+        // KAN-560: el handler consulta la ventana de 7 días de sueño en cada envío;
+        // por defecto, sin historial (los tests de listado re-configuran este método).
+        _checkIns
+            .Setup(r => r.GetByAthleteAndDateRangeAsync(
+                It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<CheckIn>());
+    }
+
     private CheckInsController CreateController(string? role = null)
     {
         var currentUserMock = new Mock<ICurrentUser>();

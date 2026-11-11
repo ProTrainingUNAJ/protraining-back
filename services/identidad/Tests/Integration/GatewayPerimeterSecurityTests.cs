@@ -299,6 +299,30 @@ public sealed class GatewayPerimeterSecurityTests : IAsyncDisposable
         Assert.Contains(missingKey, ex.ToString());
     }
 
+    [Fact]
+    public async Task Gateway_PublicEndpoints_ForgotPasswordAndResetPassword_AllowedWithoutToken()
+    {
+        // Act 1: POST a /identidad/api/v1/auth/forgot-password sin encabezado Authorization
+        var forgotResponse = await _gatewayClient.PostAsJsonAsync("/identidad/api/v1/auth/forgot-password", new
+        {
+            email = "usuario.public@protraining.app"
+        });
+
+        // Assert 1: Debe atravesar el Gateway hacia Identidad respondiendo 202 Accepted (no 401 ni 404)
+        Assert.Equal(HttpStatusCode.Accepted, forgotResponse.StatusCode);
+
+        // Act 2: POST a /identidad/api/v1/auth/reset-password con token inválido sin Authorization
+        var resetResponse = await _gatewayClient.PostAsJsonAsync("/identidad/api/v1/auth/reset-password", new
+        {
+            email = "usuario.public@protraining.app",
+            token = "token_invalido",
+            newPassword = "PasswordNueva123"
+        });
+
+        // Assert 2: Atraviesa el Gateway respondiendo 400 Bad Request desde Identidad (no 401 de autenticación de Gateway)
+        Assert.Equal(HttpStatusCode.BadRequest, resetResponse.StatusCode);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _gatewayFactory.Dispose();
