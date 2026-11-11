@@ -1,10 +1,12 @@
 using Application.DTOs.Auth;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.ChangePassword;
+using Application.UseCases.Auth.ForgotPassword;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
 using Application.UseCases.Auth.ResetAthletePassword;
+using Application.UseCases.Auth.ResetPasswordWithToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,6 +23,8 @@ public class AuthController(
     RegisterByInvitationUseCase registerByInvitationUseCase,
     ChangePasswordUseCase changePasswordUseCase,
     ResetAthletePasswordUseCase resetAthletePasswordUseCase,
+    ForgotPasswordUseCase forgotPasswordUseCase,
+    ResetPasswordWithTokenUseCase resetPasswordWithTokenUseCase,
     ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>
@@ -119,6 +123,43 @@ public class AuthController(
         Response.Headers.Pragma = "no-cache";
 
         var response = await resetAthletePasswordUseCase.ExecuteAsync(athleteId, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Solicita un enlace de recuperación de contraseña por correo electrónico (#KAN-540).
+    /// Siempre responde HTTP 202 Accepted para prevenir la enumeración de usuarios.
+    /// </summary>
+    /// <param name="request">Correo electrónico del usuario.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 202 con mensaje genérico de confirmación.</returns>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ForgotPasswordResponseDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await forgotPasswordUseCase.ExecuteAsync(request, cancellationToken);
+        return Accepted(response);
+    }
+
+    /// <summary>
+    /// Restablece la contraseña de una cuenta utilizando el token recibido por correo (#KAN-540).
+    /// </summary>
+    /// <param name="request">Correo, token y nueva contraseña.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 200 con confirmación de éxito o HTTP 400 si el token o la contraseña son inválidos.</returns>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ResetPasswordWithTokenResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordWithTokenRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await resetPasswordWithTokenUseCase.ExecuteAsync(request, cancellationToken);
         return Ok(response);
     }
 }

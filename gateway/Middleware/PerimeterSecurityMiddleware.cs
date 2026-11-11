@@ -45,7 +45,9 @@ public sealed class PerimeterSecurityMiddleware(
             path.Equals("/health", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/health", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/identidad/api/v1/auth/login", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/identidad/api/v1/auth/refresh", StringComparison.OrdinalIgnoreCase))
+            path.Equals("/identidad/api/v1/auth/refresh", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/identidad/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/identidad/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;
@@ -160,6 +162,8 @@ public sealed class PerimeterSecurityMiddleware(
                         path.Equals("/identidad/api/v1/auth/change-password", StringComparison.OrdinalIgnoreCase) ||
                         path.Equals("/identidad/api/v1/auth/refresh", StringComparison.OrdinalIgnoreCase) ||
                         path.Equals("/identidad/api/v1/auth/logout", StringComparison.OrdinalIgnoreCase) ||
+                        path.Equals("/identidad/api/v1/auth/forgot-password", StringComparison.OrdinalIgnoreCase) ||
+                        path.Equals("/identidad/api/v1/auth/reset-password", StringComparison.OrdinalIgnoreCase) ||
                         path.Equals("/identidad/health", StringComparison.OrdinalIgnoreCase) ||
                         path.Equals("/health", StringComparison.OrdinalIgnoreCase);
 
