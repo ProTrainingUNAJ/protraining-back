@@ -25,6 +25,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
         private readonly IExerciseRepository? exerciseRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
+        private readonly IExerciseMediaCatalog? exerciseMediaCatalog;
 
         public GetTodayRoutineQueryHandler(
             IAthleteRecordRepository athleteRecordRepository,
@@ -33,7 +34,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             IStructureClient structureClient,
             IExerciseVideoRepository exerciseVideoRepository,
             IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
-            IExerciseRepository? exerciseRepository = null)
+            IExerciseRepository? exerciseRepository = null,
+            IExerciseMediaCatalog? exerciseMediaCatalog = null)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
@@ -42,6 +44,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             this.exerciseVideoRepository = exerciseVideoRepository;
             this.adjustmentRepository = adjustmentRepository;
             this.exerciseRepository = exerciseRepository;
+            // Sin catálogo de ilustraciones (KAN-549), la rutina se ve con las fotos de siempre.
+            this.exerciseMediaCatalog = exerciseMediaCatalog;
         }
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
@@ -203,6 +207,10 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     MuscleGroup = effectiveExercise?.MuscleGroup ?? string.Empty,
                     VideoUrl = effectiveVideoUrl,
                     Images = effectiveExercise?.Images.ToList() ?? [],
+                    // Ilustraciones del catálogo (KAN-549): solo para ejercicios del catálogo global.
+                    Media = effectiveExercise is { Origin: Origin.Catalog } && effectiveExercise.PfId == Guid.Empty && exerciseMediaCatalog is not null
+                        ? exerciseMediaCatalog.GetForCatalogImages(effectiveExercise.Images).ToList()
+                        : [],
                     PrimaryMuscles = effectiveExercise?.PrimaryMuscles.ToList() ?? [],
                     SecondaryMuscles = effectiveExercise?.SecondaryMuscles.ToList() ?? [],
                     ExerciseType = exerciseType,

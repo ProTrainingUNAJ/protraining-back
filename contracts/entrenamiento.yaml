@@ -2129,6 +2129,11 @@ components:
           items:
             type: string
           example: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"]
+        media:
+          type: array
+          description: Ilustraciones o animaciones de terceros, en orden de preferencia, las mismas que la biblioteca (KAN-549).
+          items:
+            $ref: '#/components/schemas/ExerciseMediaDto'
         primaryMuscles:
           type: array
           items:
