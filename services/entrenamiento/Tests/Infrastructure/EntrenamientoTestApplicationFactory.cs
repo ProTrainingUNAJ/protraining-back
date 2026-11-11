@@ -102,6 +102,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
                 services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
                 services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+                services.AddSingleton<IExerciseMediaCatalog>(ExerciseMediaCatalog.Empty);
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();

@@ -55,6 +55,10 @@ public static class DependencyInjection
         services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
         services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
 
+        // Ilustraciones de los ejercicios del catálogo (KAN-549): tabla fija, se lee una vez.
+        services.AddSingleton<IExerciseMediaCatalog>(_ =>
+            ExerciseMediaCatalog.FromFile(Path.Combine(AppContext.BaseDirectory, "Data", "exercise-media.json")));
+
         return services;
     }
 
