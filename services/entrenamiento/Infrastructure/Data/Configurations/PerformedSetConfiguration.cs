@@ -35,6 +35,12 @@ public sealed class PerformedSetConfiguration : IEntityTypeConfiguration<Perform
             .HasColumnName("reps")
             .IsRequired();
 
+        builder.Property(p => p.TimeSeconds)
+            .HasColumnName("time_seconds");
+
+        builder.Property(p => p.SetNumber)
+            .HasColumnName("set_number");
+
         builder.HasOne(p => p.Session)
             .WithMany()
             .HasForeignKey(p => p.SessionId)

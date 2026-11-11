@@ -256,5 +256,38 @@ public class RecordPerformedSetsCommandHandlerTests
         var ex = await Assert.ThrowsAsync<DomainException>(() => handler.Handle(command));
         Assert.Equal("El atleta no tiene una sesión programada para el día de hoy.", ex.Message);
     }
+
+    [Fact]
+    public async Task Given_TimedPass_When_RecordingTimeSeconds_Then_PersistsPerformedSetWithTimeAndSetNumber()
+    {
+        // KAN-457: Registrar el tiempo real de la pasada cronometrada
+        IEnumerable<PerformedSet>? capturedSets = null;
+        _performedSetRepoMock
+            .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PerformedSet>, CancellationToken>((sets, _) => capturedSets = sets);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                TimeSeconds = 15.2m
+            }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(0, result.ProposalsGeneratedCount);
+        Assert.NotNull(capturedSets);
+        var set = Assert.Single(capturedSets);
+        Assert.Equal(1, set.SetNumber);
+        Assert.Equal(15.2m, set.TimeSeconds);
+        Assert.Equal(0m, set.Weight);
+        Assert.Equal(0, set.Reps);
+        _performedSetRepoMock.Verify(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
 

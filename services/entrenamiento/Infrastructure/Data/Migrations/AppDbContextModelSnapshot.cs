@@ -383,6 +383,14 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("session_id");
 
+                    b.Property<int?>("SetNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("set_number");
+
+                    b.Property<decimal?>("TimeSeconds")
+                        .HasColumnType("numeric")
+                        .HasColumnName("time_seconds");
+
                     b.Property<decimal>("Weight")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
@@ -482,10 +490,19 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sets");
 
+                    b.Property<decimal?>("TargetDistanceMeters")
+                        .HasColumnType("numeric")
+                        .HasColumnName("target_distance_meters");
+
                     b.Property<decimal?>("TargetPercentage")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("target_percentage");
+
+                    b.Property<decimal?>("TargetTimeSeconds")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("target_time_seconds");
 
                     b.Property<Guid>("TrainingSessionId")
                         .HasColumnType("uuid")

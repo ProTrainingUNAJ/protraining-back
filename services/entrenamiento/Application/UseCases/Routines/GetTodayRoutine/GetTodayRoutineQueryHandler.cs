@@ -23,6 +23,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
         private readonly IExerciseVideoRepository exerciseVideoRepository;
         private readonly IAthleteSessionAdjustmentRepository? adjustmentRepository;
         private readonly IExerciseRepository? exerciseRepository;
+        private readonly IPerformedSetRepository performedSetRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
         private readonly IExerciseMediaCatalog? exerciseMediaCatalog;
@@ -33,6 +34,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             ILoadCalculatorEngine calculator,
             IStructureClient structureClient,
             IExerciseVideoRepository exerciseVideoRepository,
+            IPerformedSetRepository performedSetRepository,
             IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
             IExerciseRepository? exerciseRepository = null,
             IExerciseMediaCatalog? exerciseMediaCatalog = null)
@@ -44,6 +46,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             this.exerciseVideoRepository = exerciseVideoRepository;
             this.adjustmentRepository = adjustmentRepository;
             this.exerciseRepository = exerciseRepository;
+            this.performedSetRepository = performedSetRepository;
             // Sin catálogo de ilustraciones (KAN-549), la rutina se ve con las fotos de siempre.
             this.exerciseMediaCatalog = exerciseMediaCatalog;
         }
@@ -148,6 +151,10 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
             var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(effectiveExerciseIds, cancellationToken);
 
+            var performedSets = performedSetRepository != null
+                ? (await performedSetRepository.GetByAthleteAndDateAsync(athleteId, date, cancellationToken) ?? [])
+                : [];
+
             // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)
             {
@@ -223,7 +230,16 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
                     IsReference = loadResult.IsReference,
                     TargetTimeSeconds = targetTime,
-                    BestMarkSeconds = bestMark
+                    BestMarkSeconds = bestMark,
+                    PerformedSets = performedSets.Where(p => p.ExerciseId == effectiveExerciseId).OrderBy(p => p.SetNumber ?? 0)
+                    .Select(p => new TodayRoutinePerformedSetDto
+                    {
+                        SetNumber = p.SetNumber,
+                        Weight = p.Weight,
+                        Reps = p.Reps,
+                        TimeSeconds = p.TimeSeconds
+                    })
+                    .ToList()
                 });
             }
 

@@ -27,5 +27,14 @@ namespace Application.DTOs.Routines
         public bool IsReference { get; set; }
         public double? TargetTimeSeconds { get; set; }
         public double? BestMarkSeconds { get; set; }
+        public List<TodayRoutinePerformedSetDto> PerformedSets { get; set; } = [];
+    }
+
+    public class TodayRoutinePerformedSetDto
+    {
+        public int? SetNumber { get; set; }
+        public decimal? Weight { get; set; }
+        public int? Reps { get; set; }
+        public decimal? TimeSeconds { get; set; }
     }
 }
