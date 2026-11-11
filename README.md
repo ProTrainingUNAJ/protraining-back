@@ -56,7 +56,7 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
-### Usuarios y datos de prueba (Demo 1)
+### Usuarios y datos de prueba (Demo 1 y Demo 2)
 
 En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas están en Confluence:** [🔑 Usuarios de demo](https://protraining.atlassian.net/wiki/spaces/KAN/pages/13238300/Usuarios+de+demo).
 
@@ -68,6 +68,7 @@ En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas est
 | `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
 | `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
 | `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
+| `sofia@`, `bruno@`, `diego@protraining.com` | Atletas (Demo 2) | No los crea Identidad: se registran por **invitación** al correr `demo-data.sh`, con la misma contraseña |
 
 Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
 
@@ -78,7 +79,20 @@ docker compose down -v && docker compose up -d --build   # base de cero
 ./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
 
-El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes.
+El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División.
+
+Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
+
+| Color | Atleta | Por qué |
+|---|---|---|
+| 🔴 | Lucas, Camila | Lesión activa |
+| 🔴 | Sofía | Muy poco sueño (3,5 h) |
+| 🟡 | Joaquín | Sueño moderado (6 h) |
+| 🟡 | Valentina | Dolor nuevo en el cuádriceps |
+| 🟡 | Bruno | Durmió más de 12 h en 3 de los últimos 7 días (el script carga también las noches de hace 2 y 4 días) |
+| 🟡 | Diego | Dolor en el cuádriceps con sentadilla en la rutina de hoy → botón "Ver ajuste sugerido" (KAN-452) |
+| 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
+| ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
 ### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
 
