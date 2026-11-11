@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Datos de prueba de la Demo 1 (KAN-524). Solo para desarrollo local.
+# Datos de prueba de las demos (KAN-524, Demo 1; KAN-561, Demo 2). Solo para desarrollo local.
 #
 # Carga, con la API real y el token del PF de prueba, lo que la demo necesita ya armado:
-# organizaciones, categorías, atletas vinculados a sus cuentas, récords, la planificación
-# "Fuerza base" (sin asignar) y los check-ins de hoy de los atletas que no se muestran en vivo.
+# organizaciones, categorías, atletas vinculados a sus cuentas, 3 atletas más registrados por
+# invitación (Sofía, Bruno y Diego), récords, la planificación "Fuerza base" (sin asignar),
+# videos de YouTube del PF, el partido del sábado y los check-ins que no se muestran en vivo.
+#
+# Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con "completo":
+#   🔴 Lucas (lesión activa, isquiotibial) · Camila (lesión activa, hombro) · Sofía (muy poco sueño: 3,5 h)
+#   🟡 Joaquín (sueño moderado: 6 h) · Valentina (dolor nuevo, cuádriceps)
+#      Bruno (más de 12 h en 3 de los últimos 7 días) · Diego (dolor en cuádriceps → "Ver ajuste sugerido")
+#   🟢 Martín y Facundo (8 h o más, sin otras señales)
+#   ⚪ Nicolás y Agustina sin cuenta: quedan "Sin check-in"
 #
 # Uso (desde la raíz del repo, con el compose levantado):
 #   ./scripts/demo-data.sh            carga todo lo de arriba (una vez, con la base de cero)
@@ -81,13 +89,45 @@ athlete_id_of() {
   api GET "/estructura/api/v1/me" "$token" | jq -r .athleteId
 }
 
-# check_in <email> <json> → check-in de hoy con el token del atleta (si ya hizo uno hoy, lo pisa)
+# check_in <email> <json> [días atrás] → check-in con el token del atleta (si ya hizo uno ese día, lo pisa).
+# Sin días atrás es el de hoy; con días atrás manda la fecha, como el front al sincronizar sin conexión.
 check_in() {
-  local token athlete_id
+  local token athlete_id body="$2" days_ago="${3:-0}" label="hoy"
   token=$(login "$1" | jq -r .accessToken)
   athlete_id=$(api GET "/estructura/api/v1/me" "$token" | jq -r .athleteId)
-  api POST "/seguimiento/api/v1/athletes/$athlete_id/check-in" "$token" "$2" \
-    | jq -r --arg who "$1" '"  check-in de \($who): \(.trafficLight) (\(.trafficLightReason // "-"))"'
+  if [[ "$days_ago" != 0 ]]; then
+    body=$(jq -c --arg d "$(day_ago "$days_ago")" '. + {date: $d}' <<<"$body")
+    label="hace $days_ago días"
+  fi
+  api POST "/seguimiento/api/v1/athletes/$athlete_id/check-in" "$token" "$body" \
+    | jq -r --arg who "$1" --arg when "$label" '"  check-in de \($who) (\($when)): \(.trafficLight) (\(.trafficLightReason // "-"))"'
+}
+
+# day_ago <n> → fecha de hace n días, en hora Argentina (UTC-3)
+day_ago() {
+  jq -nr --argjson n "$1" '(now - 10800 - $n * 86400) | strftime("%Y-%m-%d")'
+}
+
+# next_saturday → el próximo sábado (o el de hoy, si es sábado), en hora Argentina
+next_saturday() {
+  jq -nr '(now - 10800) as $t
+    | ($t | strftime("%u") | tonumber) as $dow
+    | ($t + ((6 - $dow + 7) % 7) * 86400) | strftime("%Y-%m-%d")'
+}
+
+# invite_athlete <nombre> <apellido> <email> <teléfono> <categoría> → registra la cuenta por invitación
+# (KAN-397/398/401) como lo hace la landing del QR, e imprime el id del atleta
+invite_athlete() {
+  local first="$1" last="$2" email="$3" phone="$4" category="$5" token session
+  token=$(api POST "/estructura/api/v1/categories/$category/invitation-token" "$PF_TOKEN" | jq -r .token)
+  session=$(curl -sf -X POST "$GATEWAY/identidad/api/v1/auth/register-by-invitation" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg e "$email" --arg p "$PASSWORD" --arg n "$first $last" --arg t "$token" \
+      '{email:$e,password:$p,fullName:$n,token:$t,deviceId:"demo-data"}')" | jq -r .accessToken) \
+    || { echo "No se pudo registrar a $email por invitación." >&2; exit 1; }
+  api POST "/estructura/api/v1/invitations/$token/accept" "$session" \
+    "$(jq -nc --arg f "$first" --arg l "$last" --arg p "$phone" '{firstName:$f,lastName:$l,phone:$p,birthDate:"2000-03-15"}')" \
+    | jq -r .id
 }
 
 PF_TOKEN=$(login pf@protraining.com | jq -r .accessToken)
@@ -95,15 +135,24 @@ PF_TOKEN=$(login pf@protraining.com | jq -r .accessToken)
 # --- check-ins de hoy (los que no se hacen en vivo) ------------------------
 
 load_check_ins() {
-  echo "Check-ins de hoy:"
-  # Joaquín durmió poco → amarillo
-  check_in joaquin@protraining.com '{"sleepHours":4.5,"sleepQuality":2,"muscleSoreness":2,"fatigueLevel":3,"moodRate":3,"stressLevel":3,"effortRate":6,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  echo "Check-ins:"
+  # Joaquín durmió 6 h → amarillo "Sueño moderado" (de 4 a menos de 8 h, KAN-560)
+  check_in joaquin@protraining.com '{"sleepHours":6,"sleepQuality":3,"muscleSoreness":2,"fatigueLevel":3,"moodRate":3,"stressLevel":3,"effortRate":6,"isSick":false,"painZones":null,"hasActiveInjury":false}'
   # Facundo, todo bien → verde
-  check_in facundo@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  check_in facundo@protraining.com '{"sleepHours":8.5,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
   # Valentina con dolor nuevo en el cuádriceps → amarillo
-  check_in valentina@protraining.com '{"sleepHours":7.5,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
+  check_in valentina@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
   # Camila con lesión activa en el hombro → rojo (está en Alumnos particulares y en Musculación)
-  check_in camila@protraining.com '{"sleepHours":7.5,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":3,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"hombros:4","hasActiveInjury":true}'
+  check_in camila@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":3,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"hombros:4","hasActiveInjury":true}'
+  # Sofía durmió 3,5 h → rojo "Muy poco sueño" (menos de 4 h, KAN-560)
+  check_in sofia@protraining.com '{"sleepHours":3.5,"sleepQuality":1,"muscleSoreness":2,"fatigueLevel":4,"moodRate":2,"stressLevel":3,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  # Bruno durmió más de 12 h hace 4 días, hace 2 días y hoy → amarillo "Durmió más de 12 horas en 3 de los últimos 7 días…"
+  local long_sleep='{"sleepHours":13,"sleepQuality":3,"muscleSoreness":1,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":4,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  check_in bruno@protraining.com "$long_sleep" 4
+  check_in bruno@protraining.com "$long_sleep" 2
+  check_in bruno@protraining.com "$long_sleep"
+  # Diego con dolor en el cuádriceps y sentadilla en la rutina de hoy → amarillo y "Ver ajuste sugerido" (KAN-451/452)
+  check_in diego@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
 }
 
 load_live_parts() {
@@ -123,7 +172,7 @@ load_live_parts() {
   echo "  plan \"Fuerza base\" asignado a Primera División desde el $start"
 
   # Lucas con lesión activa en el isquiotibial → rojo (la zona se ve pintada en la ficha del PF); Martín bien → verde
-  check_in atleta@protraining.com '{"sleepHours":7,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
+  check_in atleta@protraining.com '{"sleepHours":8,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
 }
 
@@ -180,6 +229,14 @@ VALENTINA_ID=$(new_athlete "Valentina" "Ruiz" "valentina@protraining.com" "11500
 CAMILA_ID=$(new_athlete "Camila" "Torres" "camila@protraining.com" "1150000008" "$PARTICULARES_ID" "$MUSCULACION_ID")
 echo "  8 atletas (Nicolás y Agustina sin cuenta: en el semáforo quedan sin check-in)"
 
+# Sofía, Bruno y Diego se registran solos por la invitación de Primera División (KAN-397/398),
+# como lo haría un atleta que escanea el QR: no hace falta vincular su cuenta a mano.
+echo "Atletas registrados por invitación:"
+SOFIA_ID=$(invite_athlete "Sofía" "Méndez" "sofia@protraining.com" "1150000009" "$PRIMERA_ID")
+BRUNO_ID=$(invite_athlete "Bruno" "Castro" "bruno@protraining.com" "1150000010" "$PRIMERA_ID")
+DIEGO_ID=$(invite_athlete "Diego" "Funes" "diego@protraining.com" "1150000011" "$PRIMERA_ID")
+echo "  Sofía, Bruno y Diego en Primera División"
+
 # Vincular cada atleta a su cuenta de Identidad. Lo hace la invitación por QR (Sprint 2);
 # mientras tanto, directo en la base de Estructura (solo desarrollo).
 echo "Vínculo de las cuentas:"
@@ -222,7 +279,11 @@ record "$FACUNDO_ID" "$SQUAT_ID" 140 TestedInSession
 record "$FACUNDO_ID" "$RDL_ID" 150 TestedInSession
 record "$VALENTINA_ID" "$SQUAT_ID" 70 Reported
 record "$CAMILA_ID" "$SQUAT_ID" 80 TestedInSession
-echo "  11 récords (falta a propósito la sentadilla de Lucas)"
+record "$SOFIA_ID" "$SQUAT_ID" 75 Reported
+record "$BRUNO_ID" "$SQUAT_ID" 110 TestedInSession
+record "$DIEGO_ID" "$SQUAT_ID" 105 TestedInSession
+record "$DIEGO_ID" "$BENCH_ID" 80 Reported
+echo "  15 récords (falta a propósito la sentadilla de Lucas)"
 
 # Sesiones el miércoles, jueves y viernes: así hay rutina hoy, en el ensayo y en la demo.
 # DayOfWeek va como número (3 = miércoles, 4 = jueves, 5 = viernes).
@@ -250,10 +311,27 @@ PLAN_JSON=$(jq -nc --arg squat "$SQUAT_ID" --arg bench "$BENCH_ID" --arg rdl "$R
 api POST "/entrenamiento/api/v1/training-plans" "$PF_TOKEN" "$PLAN_JSON" >/dev/null
 echo "  \"Fuerza base\": semana 1, miércoles, jueves y viernes (sin asignar)"
 
+# Videos de técnica del PF (KAN-380): se pueden embeber (verificado con oEmbed el 11/11).
+# El peso muerto rumano queda sin video a propósito: sin link, no aparece el botón "Ver video".
+echo "Videos de YouTube del PF:"
+video() {
+  api PUT "/entrenamiento/api/v1/exercises/$1/video" "$PF_TOKEN" "$(jq -nc --arg u "$2" '{videoUrl:$u}')" >/dev/null
+}
+video "$SQUAT_ID" "https://www.youtube.com/watch?v=bEv6CCg2BC8"
+video "$BENCH_ID" "https://www.youtube.com/watch?v=rT7DgCr-3pg"
+echo "  sentadilla y press de banca (peso muerto rumano sin video)"
+
+# Partido del sábado de Primera División (KAN-403/404): se ve en el calendario de la temporada.
+echo "Calendario:"
+MATCH_DATE=$(next_saturday)
+api POST "/estructura/api/v1/categories/$PRIMERA_ID/events" "$PF_TOKEN" \
+  "$(jq -nc --arg d "$MATCH_DATE" '{date:$d,startTime:"15:30:00",opponent:"Los Pumitas RC",venue:"Home",type:"Official",notes:"Fecha del torneo"}')" >/dev/null
+echo "  Primera División vs. Los Pumitas RC, el $MATCH_DATE a las 15:30"
+
 load_check_ins
 
 if [[ "$MODE" == "completo" ]]; then
   load_live_parts
 fi
 
-echo "Listo. PF: pf@protraining.com · atletas: atleta@ (Lucas), martin@, joaquin@, facundo@, valentina@, camila@protraining.com · contraseña: $PASSWORD"
+echo "Listo. PF: pf@protraining.com · atletas: atleta@ (Lucas), martin@, joaquin@, facundo@, valentina@, camila@, sofia@, bruno@, diego@protraining.com · contraseña: $PASSWORD"
