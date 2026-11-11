@@ -11,6 +11,9 @@ namespace Application.DTOs.Routines
         public string? VideoUrl { get; set; }
         // Fotos del ejercicio (inicio y fin del movimiento), las mismas que la biblioteca
         public List<string> Images { get; set; } = [];
+
+        // Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549).
+        public List<Application.DTOs.Exercise.ExerciseMediaDto> Media { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
         public ExerciseType ExerciseType { get; set; } = ExerciseType.Weight;

@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -67,7 +68,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((dummyExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 20 };
@@ -99,7 +100,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync("sentadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((sentadillas, 5));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Search = "sentadilla", Page = 1, PageSize = 20 };
@@ -125,7 +126,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 44, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((lastPageExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 44, PageSize = 20 };
@@ -152,7 +153,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync((exercises100, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 500 };
@@ -179,7 +180,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((defaultExercises, 100));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 0, PageSize = -5 };
@@ -202,7 +203,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync("inexistente", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Search = "inexistente" };
@@ -228,7 +229,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((pfExercises, 2));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { UsedByPf = true, Page = 1, PageSize = 20 };
@@ -255,7 +256,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync("setnadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((sentadillas, 2));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Search = "setnadilla", Page = 1, PageSize = 20 };
@@ -601,7 +602,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([rdl], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
         var query = new ListExercisesQuery { Search = "rumano", MuscleGroup = "Piernas", Muscle = "isquiotibiales", Page = 1, PageSize = 20 };
         var result = await handler.Handle(query);
 
@@ -661,7 +662,7 @@ public class ListExercisesTests : IAsyncLifetime
         videoRepoMockPFA.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string> { { exercise.Id, "https://www.youtube.com/watch?v=pfAVideo" } });
 
-        var handlerPFA = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFA.Object);
+        var handlerPFA = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFA.Object, ExerciseMediaCatalog.Empty);
         var resultPFA = await handlerPFA.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
         Assert.Equal("https://www.youtube.com/watch?v=pfAVideo", resultPFA.Items[0].VideoUrl);
@@ -672,7 +673,7 @@ public class ListExercisesTests : IAsyncLifetime
         videoRepoMockPFB.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, string>());
 
-        var handlerPFB = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFB.Object);
+        var handlerPFB = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFB.Object, ExerciseMediaCatalog.Empty);
         var resultPFB = await handlerPFB.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
         Assert.Equal("https://www.youtube.com/watch?v=catalogVid", resultPFB.Items[0].VideoUrl);
@@ -688,7 +689,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([sprint], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
         var query = new ListExercisesQuery { ExerciseType = ExerciseType.Distance, Page = 1, PageSize = 20 };
         var result = await handler.Handle(query);
 
@@ -739,7 +740,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([catalogExercise], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
         var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
         Assert.Single(result.Items);
@@ -761,7 +762,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([coachExercise], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
         var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
         Assert.Single(result.Items);
@@ -779,7 +780,7 @@ public class ListExercisesTests : IAsyncLifetime
         repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(([exerciseWithoutImages], 1));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo());
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
         var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
 
         Assert.Single(result.Items);

@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using API.Controllers;
 using Application.DTOs.Exercise;
 using Application.Interfaces.Services;
@@ -66,7 +67,7 @@ public sealed class ExerciseRestrictionsEndpointPostgresTests
             var restrictionRepo = new ExerciseRestrictionRepository(queryContext);
             var checker = new ExerciseRestrictionChecker();
 
-            var listHandler = new ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(queryContext));
+            var listHandler = new ListExercisesQueryHandler(exerciseRepo, new ExerciseVideoRepository(queryContext), ExerciseMediaCatalog.Empty);
             var checkHandler = new CheckExerciseRestrictionsQueryHandler(restrictionRepo, checker);
             var getSubstitutesHandler = new GetExerciseSubstitutesQueryHandler(exerciseRepo, restrictionRepo, checker);
 

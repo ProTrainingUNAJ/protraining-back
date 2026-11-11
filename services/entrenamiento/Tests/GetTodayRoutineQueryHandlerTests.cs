@@ -407,5 +407,33 @@ public class GetTodayRoutineQueryHandlerTests
         var item = Assert.Single(result.Exercises);
         Assert.Equal("https://www.youtube.com/watch?v=catalogVid", item.VideoUrl);
     }
-}
 
+    [Fact]
+    public async Task Given_RoutineWithCatalogExercise_When_MediaCatalogHasIt_Then_ReturnsItsIllustrations()
+    {
+        // KAN-549: el atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 12);
+        var exercise = Exercise.Create("Sentadilla con barra", "Piernas",
+            images: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"],
+            origin: Origin.Catalog);
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var mediaCatalog = global::Infrastructure.Services.ExerciseMediaCatalog.FromJson("""
+            [{ "exerciseId": "Barbell_Squat", "repdb": { "frames": ["https://repdb/squat-start.webp", "https://repdb/squat-peak.webp"] } }]
+            """);
+        var handler = new GetTodayRoutineQueryHandler(
+            _athleteRecordRepoMock.Object, _sessionRepoMock.Object, _loadCalculatorEngine,
+            _structureClientMock.Object, _videoRepoMock.Object, exerciseMediaCatalog: mediaCatalog);
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var media = Assert.Single(Assert.Single(result.Exercises).Media);
+        Assert.Equal("repdb", media.Source);
+        Assert.Equal(2, media.Urls.Count);
+    }
+}
