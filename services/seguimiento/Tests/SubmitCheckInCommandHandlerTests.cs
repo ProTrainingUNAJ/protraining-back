@@ -18,11 +18,34 @@ public class SubmitCheckInCommandHandlerTests
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly TrafficLightEngine _engine = new();
 
+    public SubmitCheckInCommandHandlerTests()
+    {
+        // KAN-560: el handler consulta la ventana de 7 días de sueño en cada envío.
+        // Por defecto, sin historial (los tests que lo necesiten lo re-configuran).
+        _checkIns
+            .Setup(repo => repo.GetByAthleteAndDateRangeAsync(
+                It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<CheckIn>());
+        _unitOfWork
+            .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+    }
+
     private SubmitCheckInCommandHandler CreateHandler() =>
         new(_checkIns.Object, _unitOfWork.Object, _engine);
 
     private static SubmitCheckInCommand CommandValido(bool hasActiveInjury = false, double sleepHours = 8) =>
         new(AthleteId, sleepHours, 4, 1, 2, 4, 2, false, 4, null, hasActiveInjury);
+
+    private void ConfigurarVentanaDeSueno(params CheckIn[] historial)
+    {
+        _checkIns
+            .Setup(repo => repo.GetByAthleteAndDateRangeAsync(
+                AthleteId, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(historial);
+    }
 
     private void ConfigurarSinCheckInPrevio()
     {
@@ -89,7 +112,7 @@ public class SubmitCheckInCommandHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_WithLittleSleep_ReturnsYellowWithLocalReason()
+    public async Task HandleAsync_WithVeryLittleSleep_ReturnsRedWithLocalReason()
     {
         ConfigurarSinCheckInPrevio();
         _checkIns
@@ -99,8 +122,154 @@ public class SubmitCheckInCommandHandlerTests
         var (response, _) = await CreateHandler().HandleAsync(
             CommandValido(sleepHours: 3));
 
+        // KAN-560: dormir menos de 4 h es señal Roja, no Amarilla.
+        Assert.Equal("Red", response.TrafficLight);
+        Assert.Equal("Muy poco sueño", response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithModerateSleep_ReturnsYellowWithLocalReason()
+    {
+        ConfigurarSinCheckInPrevio();
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var (response, _) = await CreateHandler().HandleAsync(
+            CommandValido(sleepHours: 6));
+
         Assert.Equal("Yellow", response.TrafficLight);
-        Assert.Equal("Señales de alerta: poco sueño", response.TrafficLightReason);
+        Assert.Equal("Sueño moderado", response.TrafficLightReason);
+    }
+
+    // ---------- Normalización de sueño (KAN-560): > 12 se guarda como 13 ----------
+
+    [Theory]
+    [InlineData(13, 13)] // "Más de 12" del front
+    [InlineData(16, 13)]
+    [InlineData(24, 13)] // el máximo del contrato se guarda como 13
+    [InlineData(12, 12)] // hasta 12, tal cual
+    [InlineData(4.5, 4.5)] // decimales dentro de rango, sin tocar
+    public async Task HandleAsync_NormalizesSleepHoursAbove12_To13(double recibido, double esperado)
+    {
+        ConfigurarSinCheckInPrevio();
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        await CreateHandler().HandleAsync(CommandValido(sleepHours: recibido));
+
+        Assert.NotNull(guardado);
+        Assert.Equal(esperado, guardado!.SleepHours);
+    }
+
+    // ---------- Sueño prolongado: la ventana de 7 días llega desde el repositorio (KAN-560) ----------
+
+    [Fact]
+    public async Task HandleAsync_WithProlongedSleepInThreeOfSevenDays_PersistsYellowWithFixedReason()
+    {
+        ConfigurarSinCheckInPrevio();
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var historial = Enumerable.Range(1, 3)
+            .Select(i => new CheckIn
+            {
+                AthleteId = AthleteId,
+                Date = ArgentinaTime.Today.AddDays(-i).ToDateTime(TimeOnly.MinValue),
+                SleepHours = 13,
+                IsSick = false
+            })
+            .ToArray();
+        ConfigurarVentanaDeSueno(historial);
+
+        var (response, _) = await CreateHandler().HandleAsync(CommandValido(sleepHours: 8));
+
+        Assert.Equal("Yellow", response.TrafficLight);
+        Assert.Equal(TrafficLightEngine.ProlongedSleepReason, response.TrafficLightReason);
+        Assert.NotNull(guardado);
+        Assert.Equal(TrafficLight.Yellow, guardado!.TrafficLight);
+        Assert.Equal(TrafficLightEngine.ProlongedSleepReason, guardado.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithProlongedSleepInTwoOfSevenDays_DoesNotAlert()
+    {
+        ConfigurarSinCheckInPrevio();
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var historial = Enumerable.Range(1, 2)
+            .Select(i => new CheckIn
+            {
+                AthleteId = AthleteId,
+                Date = ArgentinaTime.Today.AddDays(-i).ToDateTime(TimeOnly.MinValue),
+                SleepHours = 13,
+                IsSick = false
+            })
+            .ToArray();
+        ConfigurarVentanaDeSueno(historial);
+
+        var (response, _) = await CreateHandler().HandleAsync(CommandValido(sleepHours: 8));
+
+        Assert.Equal("Green", response.TrafficLight);
+        Assert.Equal("Estado óptimo", response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_TodayCountsInWindow_ThirdProlongedDayComesFromToday()
+    {
+        // Hoy se evalúa con el check-in recién armado (su fila todavía no está en la base):
+        // 2 días prolongados previos + las 13 h de hoy completan los 3 de 7.
+        ConfigurarSinCheckInPrevio();
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var historial = Enumerable.Range(1, 2)
+            .Select(i => new CheckIn
+            {
+                AthleteId = AthleteId,
+                Date = ArgentinaTime.Today.AddDays(-i).ToDateTime(TimeOnly.MinValue),
+                SleepHours = 13,
+                IsSick = false
+            })
+            .ToArray();
+        ConfigurarVentanaDeSueno(historial);
+
+        var (response, _) = await CreateHandler().HandleAsync(CommandValido(sleepHours: 20));
+
+        Assert.Equal("Yellow", response.TrafficLight);
+        Assert.Equal(TrafficLightEngine.ProlongedSleepReason, response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SickProlongedDays_DoNotCount()
+    {
+        ConfigurarSinCheckInPrevio();
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // 2 días prolongados sanos + 1 día prolongado enfermo → no llega a 3.
+        var historial = new[]
+        {
+            new CheckIn { AthleteId = AthleteId, Date = ArgentinaTime.Today.AddDays(-1).ToDateTime(TimeOnly.MinValue), SleepHours = 13, IsSick = false },
+            new CheckIn { AthleteId = AthleteId, Date = ArgentinaTime.Today.AddDays(-2).ToDateTime(TimeOnly.MinValue), SleepHours = 13, IsSick = false },
+            new CheckIn { AthleteId = AthleteId, Date = ArgentinaTime.Today.AddDays(-3).ToDateTime(TimeOnly.MinValue), SleepHours = 13, IsSick = true },
+        };
+        ConfigurarVentanaDeSueno(historial);
+
+        var (response, _) = await CreateHandler().HandleAsync(CommandValido(sleepHours: 8));
+
+        Assert.Equal("Green", response.TrafficLight);
+        Assert.Equal("Estado óptimo", response.TrafficLightReason);
     }
 
     [Fact]

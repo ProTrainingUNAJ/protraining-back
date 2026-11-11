@@ -83,7 +83,7 @@ public sealed class GetCategoryTrafficLightTodayQueryHandler(
             }
             else
             {
-                // Sin check-in: el motor con entrada null produce Amarillo "sin check-in",
+                // Sin check-in: el motor con entrada null produce Amarillo "Sin check-in",
                 // y los indicadores quedan null para que el front pinte gris "pendiente".
                 var evaluation = trafficLightEngine.Evaluate(checkInData: null, context: null);
 

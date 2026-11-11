@@ -1074,6 +1074,9 @@ components:
           format: double
           minimum: 0
           maximum: 24
+          description: >
+            Horas de sueño de 0 a 12 (decimales permitidos); 13 significa "más de 12 horas".
+            Cualquier valor mayor a 12 se guarda como 13.
           example: 7.5
         sleepQuality:
           type: integer
@@ -1443,6 +1446,9 @@ components:
           format: double
           minimum: 0
           maximum: 24
+          description: >
+            Horas de sueño guardadas: de 0 a 12 (decimales permitidos);
+            13 significa "más de 12 horas" (valores mayores se guardan como 13).
           example: 6.5
         sleepQuality:
           type: integer

@@ -15,7 +15,7 @@ public class TrafficLightEngineTests
     [Fact]
     public void Evaluate_WithActiveInjury_ReturnsRedWithLiteralReason()
     {
-        var result = _engine.Evaluate("""{"hasInjury": true, "sleepHours": 7}""", "{}");
+        var result = _engine.Evaluate("""{"hasInjury": true, "sleepHours": 8}""", "{}");
 
         Assert.Equal(TrafficLight.Red, result.TriggeredLight);
         Assert.Equal("Lesión activa", result.Reason);
@@ -30,6 +30,18 @@ public class TrafficLightEngineTests
 
         Assert.Equal(TrafficLight.Red, result.TriggeredLight);
         Assert.Equal("Lesión activa", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_WithActiveInjuryAndModerateSleep_UnifiesAllReasonsInRedList()
+    {
+        // KAN-560: los motivos de Rojo y Amarillo se unifican en una sola lista por comas,
+        // sin prefijo, nombrando todas las señales (el color más grave manda).
+        var result = _engine.Evaluate("""{"hasInjury": true, "sleepHours": 7}""", "{}");
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal("Lesión activa, Sueño moderado", result.Reason);
+        Assert.Equal(20, result.ResultValue);
     }
 
     [Fact]
@@ -57,11 +69,12 @@ public class TrafficLightEngineTests
     [Fact]
     public void Evaluate_WithInjuryAndLittleSleep_PrioritizesRedOverYellow()
     {
-        // Una lesión activa anula cualquier otra señal: el orden de prioridad es Rojo → Amarillo → Verde.
+        // Una lesión activa anula cualquier otra señal: el orden de prioridad es Rojo → Amarillo → Verde,
+        // y el motivo unificado nombra todas las señales (KAN-560).
         var result = _engine.Evaluate("""{"hasActiveInjury": true, "sleepHours": 3, "effortRate": 9}""", "{}");
 
         Assert.Equal(TrafficLight.Red, result.TriggeredLight);
-        Assert.Equal("Lesión activa", result.Reason);
+        Assert.Equal("Lesión activa, Esfuerzo alto, Muy poco sueño", result.Reason);
     }
 
     [Fact]
@@ -91,12 +104,12 @@ public class TrafficLightEngineTests
     // ---------- Amarillo: señales de alerta ----------
 
     [Fact]
-    public void Evaluate_WithLittleSleepAndHighEffort_ReturnsYellowWithAllSignals()
+    public void Evaluate_WithModerateSleepAndHighEffort_ReturnsYellowWithAllSignals()
     {
-        var result = _engine.Evaluate("""{"sleepHours": 3, "effortRate": 9}""", "{}");
+        var result = _engine.Evaluate("""{"sleepHours": 6, "effortRate": 9}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: esfuerzo alto, poco sueño", result.Reason);
+        Assert.Equal("Esfuerzo alto, Sueño moderado", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
 
@@ -106,7 +119,7 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate("", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: sin check-in", result.Reason);
+        Assert.Equal("Sin check-in", result.Reason);
     }
 
     [Fact]
@@ -115,7 +128,7 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate("""{"sleepHours": 8, "painZones": "Isquiotibial derecho"}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Contains("dolor nuevo", result.Reason, StringComparison.Ordinal);
+        Assert.Contains("Dolor nuevo", result.Reason, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -147,7 +160,7 @@ public class TrafficLightEngineTests
             context: null);
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Contains("dolor nuevo", result.Reason, StringComparison.Ordinal);
+        Assert.Contains("Dolor nuevo", result.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -166,7 +179,7 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate("""{"sleepHours": 8}""", """{"isSick": true}""");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Contains("enfermedad", result.Reason, StringComparison.Ordinal);
+        Assert.Contains("Enfermedad", result.Reason, StringComparison.Ordinal);
     }
 
     // ---------- Verde: estado óptimo ----------
@@ -184,8 +197,8 @@ public class TrafficLightEngineTests
     // ---------- Bordes y resiliencia a datos de entrada ----------
 
     [Theory]
-    [InlineData(5.0, 7)] // en el umbral exacto: no es "poco sueño" ni "esfuerzo alto" (los umbrales son estrictos)
-    [InlineData(8.0, 4)]
+    [InlineData(8.0, 7)] // en los umbrales exactos: ni sueño moderado (≥ 8) ni esfuerzo alto (no > 7)
+    [InlineData(12.0, 4)]
     public void Evaluate_AtThresholdValues_ReturnsGreen(double sleepHours, int effortRate)
     {
         var result = _engine.Evaluate($$"""{"sleepHours": {{sleepHours}}, "effortRate": {{effortRate}}}""", "{}");
@@ -202,7 +215,7 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate(jsonInvalido, "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Contains("sin check-in", result.Reason, StringComparison.Ordinal);
+        Assert.Contains("Sin check-in", result.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -236,18 +249,30 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate("""{"sleepHours": 8, "effortRate": 9}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: esfuerzo alto", result.Reason);
+        Assert.Equal("Esfuerzo alto", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
 
     [Fact]
-    public void Evaluate_WithLittleSleepOnly_ReturnsYellowWithSingleReason()
+    public void Evaluate_WithModerateSleepOnly_ReturnsYellowWithSingleReason()
     {
+        // Sueño moderado (4 a < 8 h): amarillo con su motivo propio (KAN-560).
         var result = _engine.Evaluate("""{"sleepHours": 4, "effortRate": 4}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: poco sueño", result.Reason);
+        Assert.Equal("Sueño moderado", result.Reason);
         Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithVeryLittleSleepOnly_ReturnsRedWithSingleReason()
+    {
+        // Muy poco sueño (< 4 h): ahora es señal Roja (KAN-560).
+        var result = _engine.Evaluate("""{"sleepHours": 3, "effortRate": 4}""", "{}");
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal("Muy poco sueño", result.Reason);
+        Assert.Equal(20, result.ResultValue);
     }
 
     [Fact]
@@ -259,20 +284,20 @@ public class TrafficLightEngineTests
             context: null);
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: enfermedad", result.Reason);
+        Assert.Equal("Enfermedad", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
 
     [Fact]
     public void Evaluate_WithHasNewPainFlagOnly_ReturnsYellow()
     {
-        // hasNewPain explícito dispara "dolor nuevo" aunque painZones venga vacío.
+        // hasNewPain explícito dispara "Dolor nuevo" aunque painZones venga vacío.
         var result = _engine.Evaluate(
             new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false, HasNewPain = true },
             context: null);
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: dolor nuevo", result.Reason);
+        Assert.Equal("Dolor nuevo", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
 
@@ -283,7 +308,7 @@ public class TrafficLightEngineTests
         var result = _engine.Evaluate(
             new CheckInData
             {
-                SleepHours = 3,
+                SleepHours = 6,
                 EffortRate = 9,
                 PainZones = "cuadriceps_derecho:3",
                 IsSick = true,
@@ -291,17 +316,18 @@ public class TrafficLightEngineTests
             context: null);
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: esfuerzo alto, poco sueño, dolor nuevo, enfermedad", result.Reason);
+        Assert.Equal("Esfuerzo alto, Sueño moderado, Dolor nuevo, Enfermedad", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
 
     // ---------- Rojo: prioridad máxima exhaustiva (KAN-367) ----------
 
     [Fact]
-    public void Evaluate_WithEveryInjuryKeyAndEveryAlert_KeepsOnlyInjuryReasonAndLowestValue()
+    public void Evaluate_WithEveryInjuryKeyAndEveryAlert_KeepsRedColorAndUnifiesEveryReason()
     {
         // Las tres claves de lesión (canónica y heredadas) + TODAS las alertas y contexto enfermo:
-        // el motivo debe ser solo "Lesión activa" y el ResultValue el de Rojo (20), nunca 50.
+        // el color es Rojo con ResultValue 20 (nunca 50) y el motivo unificado nombra todas las
+        // señales, en orden de severidad (KAN-560).
         var result = _engine.Evaluate(
             new CheckInData
             {
@@ -316,7 +342,7 @@ public class TrafficLightEngineTests
             new ContextData { IsSick = true });
 
         Assert.Equal(TrafficLight.Red, result.TriggeredLight);
-        Assert.Equal("Lesión activa", result.Reason);
+        Assert.Equal("Lesión activa, Esfuerzo alto, Muy poco sueño, Dolor nuevo, Enfermedad", result.Reason);
         Assert.Equal(20, result.ResultValue);
     }
 
@@ -351,10 +377,10 @@ public class TrafficLightEngineTests
     public void Evaluate_WithUppercaseJsonKeys_IgnoresCasingAndReturnsYellow()
     {
         // PropertyNameCaseInsensitive: claves en mayúsculas siguen mapeando a los campos.
-        var result = _engine.Evaluate("""{"SLEEPHOURS": 3, "EFFORTRATE": 9}""", "{}");
+        var result = _engine.Evaluate("""{"SLEEPHOURS": 6, "EFFORTRATE": 9}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
-        Assert.Equal("Señales de alerta: esfuerzo alto, poco sueño", result.Reason);
+        Assert.Equal("Esfuerzo alto, Sueño moderado", result.Reason);
     }
 
     [Fact]
@@ -368,13 +394,105 @@ public class TrafficLightEngineTests
     }
 
     [Theory]
-    [InlineData(4, 8)] // justo pasando los umbrales: poco sueño (<5) y esfuerzo alto (>7)
-    [InlineData(0, 10)] // extremos de la escala
+    [InlineData(4, 8)] // justo pasando los umbrales: sueño moderado (≥ 4) y esfuerzo alto (> 7)
+    [InlineData(7, 10)] // extremos de la escala sin cruzar el umbral rojo de sueño (< 4)
     public void Evaluate_JustBeyondThresholds_ReturnsYellow(int sleepHours, int effortRate)
     {
         var result = _engine.Evaluate($$"""{"sleepHours": {{sleepHours}}, "effortRate": {{effortRate}}}""", "{}");
 
         Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
         Assert.Equal(50, result.ResultValue);
+    }
+
+    // ---------- Reglas de sueño (KAN-560): rojo < 4 h, amarillo 4 a < 8 h, verde ≥ 8 h ----------
+
+    [Theory]
+    [InlineData(3.9, TrafficLight.Red, "Muy poco sueño")]
+    [InlineData(4.0, TrafficLight.Yellow, "Sueño moderado")]
+    [InlineData(7.9, TrafficLight.Yellow, "Sueño moderado")]
+    [InlineData(8.0, TrafficLight.Green, "Estado óptimo")]
+    public void Evaluate_AtSleepBoundaries_ReturnsExpectedLightAndReason(
+        double sleepHours, TrafficLight expectedLight, string expectedReason)
+    {
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = sleepHours, EffortRate = 4, IsSick = false },
+            context: null);
+
+        Assert.Equal(expectedLight, result.TriggeredLight);
+        Assert.Equal(expectedReason, result.Reason);
+    }
+
+    // ---------- Sueño prolongado: > 12 h en 3 de los últimos 7 días (KAN-560) ----------
+
+    private static ContextData WindowWithProlongedDays(int prolongedDays, int sickProlongedDays = 0)
+    {
+        var window = new List<SleepWindowEntry>();
+        for (int i = 0; i < prolongedDays; i++)
+            window.Add(new SleepWindowEntry { SleepHours = 13, IsSick = false });
+        for (int i = 0; i < sickProlongedDays; i++)
+            window.Add(new SleepWindowEntry { SleepHours = 13, IsSick = true });
+        while (window.Count < TrafficLightEngine.ProlongedSleepWindowDays)
+            window.Add(new SleepWindowEntry { SleepHours = 7, IsSick = false });
+
+        return new ContextData { SleepWindow = window };
+    }
+
+    [Fact]
+    public void Evaluate_WithProlongedSleepInThreeOfSevenDays_ReturnsYellowWithFixedReason()
+    {
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false },
+            WindowWithProlongedDays(prolongedDays: 3));
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal(TrafficLightEngine.ProlongedSleepReason, result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithProlongedSleepInTwoOfSevenDays_DoesNotAlert()
+    {
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false },
+            WindowWithProlongedDays(prolongedDays: 2));
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_WithSickProlongedDays_DoesNotCountThem()
+    {
+        // 2 días prolongados sanos + 1 día prolongado enfermo: el día enfermo no cuenta → sin alerta.
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false },
+            WindowWithProlongedDays(prolongedDays: 2, sickProlongedDays: 1));
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_WithProlongedSleepCombinedWithOtherSignal_UnifiesReasons()
+    {
+        // Si la alerta de sueño prolongado va junto a otra señal, se une con comas al resto (KAN-560).
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 9, IsSick = false },
+            WindowWithProlongedDays(prolongedDays: 3));
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal($"Esfuerzo alto, {TrafficLightEngine.ProlongedSleepReason}", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_WithoutSleepWindow_DoesNotEvaluateProlongedSleep()
+    {
+        // La vista "sin check-in" no trae ventana: la regla de prolongado no se evalúa.
+        var result = _engine.Evaluate(
+            new CheckInData { SleepHours = 8, EffortRate = 4, IsSick = false },
+            new ContextData());
+
+        Assert.Equal(TrafficLight.Green, result.TriggeredLight);
+        Assert.Equal("Estado óptimo", result.Reason);
     }
 }
