@@ -79,7 +79,7 @@ docker compose down -v && docker compose up -d --build   # base de cero
 ./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
 
-El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División.
+El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División. Además deja el WhatsApp del PF (para que el atleta vea "Contactar a mi preparador"; con `DEMO_PF_PHONE=+549…` se usa un número real), las lesiones activas de Lucas y Camila y una sesión de tests de campo en curso ("Evaluación de pretemporada", con el salto CMJ y los 30 m cargados y la sentadilla 1RM para cargar en vivo). Con `completo`, Martín registra 115 kg × 5 en sentadilla y queda una propuesta de récord para aprobar en el inicio del PF (solo los días con sesión: miércoles a viernes).
 
 Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 
