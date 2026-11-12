@@ -12,6 +12,11 @@
 #      Bruno (más de 12 h en 3 de los últimos 7 días) · Diego (dolor en cuádriceps → "Ver ajuste sugerido")
 #   🟢 Martín y Facundo (8 h o más, sin otras señales)
 #   ⚪ Nicolás y Agustina sin cuenta: quedan "Sin check-in"
+#   (Valentina y Camila están en Alumnos particulares y Musculación, no en Primera División)
+#
+# Además deja listo: el WhatsApp del PF (botón "Contactar a mi preparador"), las lesiones de Lucas y Camila,
+# una sesión de tests de campo en curso ("Evaluación de pretemporada") y, con "completo", una propuesta de
+# récord de Martín para aprobar en el inicio del PF.
 #
 # Uso (desde la raíz del repo, con el compose levantado):
 #   ./scripts/demo-data.sh            carga todo lo de arriba (una vez, con la base de cero)
@@ -171,6 +176,18 @@ load_live_parts() {
     "{\"trainingPlanId\":\"$plan_id\",\"startDate\":\"$start\",\"categoryId\":\"$PRIMERA_ID\"}" >/dev/null
   echo "  plan \"Fuerza base\" asignado a Primera División desde el $start"
 
+  # Martín registra 115 kg × 5 en sentadilla: Epley estima ~132,5 kg > su récord de 120 kg, así que queda una
+  # propuesta de récord pendiente en el inicio del PF (KAN-392/394). Solo hay rutina de miércoles a viernes.
+  local martin_token
+  martin_token=$(login martin@protraining.com | jq -r .accessToken)
+  if curl -sf -X POST "$GATEWAY/entrenamiento/api/v1/me/today-routine/performed-sets" \
+    -H "Authorization: Bearer $martin_token" -H 'Content-Type: application/json' \
+    -d "[{\"exerciseId\":\"$squat_id\",\"weight\":115,\"reps\":5}]" >/dev/null; then
+    echo "  Martín registró sentadilla 115 kg × 5 → propuesta de récord para el PF"
+  else
+    echo "  (hoy no hay sesión en el plan: la propuesta de récord de Martín se genera de miércoles a viernes)" >&2
+  fi
+
   # Lucas con lesión activa en el isquiotibial → rojo (la zona se ve pintada en la ficha del PF); Martín bien → verde
   check_in atleta@protraining.com '{"sleepHours":8,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
@@ -327,6 +344,49 @@ MATCH_DATE=$(next_saturday)
 api POST "/estructura/api/v1/categories/$PRIMERA_ID/events" "$PF_TOKEN" \
   "$(jq -nc --arg d "$MATCH_DATE" '{date:$d,startTime:"15:30:00",opponent:"Los Pumitas RC",venue:"Home",type:"Official",notes:"Fecha del torneo"}')" >/dev/null
 echo "  Primera División vs. Los Pumitas RC, el $MATCH_DATE a las 15:30"
+
+# WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
+# Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh
+echo "WhatsApp del PF:"
+api PUT "/identidad/api/v1/users/me/phone" "$PF_TOKEN" \
+  "$(jq -nc --arg p "${DEMO_PF_PHONE:-+5491150000000}" '{phoneNumber:$p}')" >/dev/null
+echo "  ${DEMO_PF_PHONE:-+5491150000000}"
+
+# Lesiones con estado y fecha de retorno (KAN-419/421): se ven en el panel de lesiones de la ficha del atleta.
+echo "Lesiones:"
+injury() {
+  api POST "/seguimiento/api/v1/athletes/$1/injuries" "$PF_TOKEN" \
+    "$(jq -nc --arg z "$2" --arg d "$3" --arg from "$(day_ago 6)" --arg to "$(day_ago -10)" \
+      '{zone:$z,description:$d,injuryDate:$from,estimatedReturnDate:$to}')" >/dev/null
+}
+injury "$LUCAS_ID" "isquiotibiales" "Distensión grado 1 en un sprint del entrenamiento."
+injury "$CAMILA_ID" "hombros" "Sobrecarga del manguito rotador."
+echo "  Lucas (isquiotibiales) y Camila (hombro), activas, con retorno estimado en 10 días"
+
+# Sesión de tests de campo de hoy, ya en curso (KAN-425/427): la pantalla táctil arranca con marcas cargadas.
+# La sentadilla 1RM queda sin cargar: en la demo se carga y se confirma en vivo (manda el 1RM a Entrenamiento).
+echo "Tests de campo:"
+test_id() {
+  api GET "/seguimiento/api/v1/fitness-tests" "$PF_TOKEN" | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -1
+}
+SQUAT_TEST=$(test_id "Sentadilla 1RM")
+CMJ_TEST=$(test_id "Salto Vertical CMJ")
+SPRINT_TEST=$(test_id "Carrera 30 m")
+FIELD_SESSION=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \
+  "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago 0)" --arg s "$SQUAT_TEST" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" \
+    '{categoryId:$c,date:$d,name:"Evaluación de pretemporada",tests:[{catalogTestId:$s,order:1},{catalogTestId:$j,order:2},{catalogTestId:$r,order:3}]}')" \
+  | jq -r .id)
+api PATCH "/seguimiento/api/v1/field-test-sessions/$FIELD_SESSION/status" "$PF_TOKEN" '{"status":"InProgress"}' >/dev/null
+field_result() {
+  api POST "/seguimiento/api/v1/field-test-sessions/$FIELD_SESSION/results" "$PF_TOKEN" \
+    "$(jq -nc --arg t "$1" --arg a "$2" --argjson v "$3" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
+}
+field_result "$CMJ_TEST" "$MARTIN_ID" 42.5
+field_result "$CMJ_TEST" "$JOAQUIN_ID" 38
+field_result "$CMJ_TEST" "$FACUNDO_ID" 45
+field_result "$SPRINT_TEST" "$MARTIN_ID" 4.31
+field_result "$SPRINT_TEST" "$FACUNDO_ID" 4.18
+echo "  \"Evaluación de pretemporada\" (Primera División), en curso: salto CMJ y 30 m cargados, sentadilla 1RM para cargar en vivo"
 
 load_check_ins
 
