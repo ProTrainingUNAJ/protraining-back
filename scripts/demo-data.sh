@@ -18,7 +18,7 @@
 # una sesión de tests de campo en curso ("Evaluación de pretemporada") y, con "completo", una propuesta de
 # récord de Martín para aprobar en el inicio del PF.
 # Para la evolución: 3 récords anteriores por atleta (Martín, Facundo, Joaquín, Lucas y Diego) y 3 evaluaciones de
-# campo cerradas con salto CMJ y 30 m (las fechas de esas marcas se ajustan en la base de Seguimiento).
+# campo cerradas con salto CMJ, 30 m y Cooper (las fechas de esas marcas se ajustan en la base de Seguimiento).
 #
 # Uso (desde la raíz del repo, con el compose levantado):
 #   ./scripts/demo-data.sh            carga todo lo de arriba (una vez, con la base de cero)
@@ -403,40 +403,44 @@ test_id() {
 SQUAT_TEST=$(test_id "Sentadilla 1RM")
 CMJ_TEST=$(test_id "Salto Vertical CMJ")
 SPRINT_TEST=$(test_id "Carrera 30 m")
-# Tres evaluaciones anteriores, ya cerradas (hace 10, 6 y 2 semanas), con salto CMJ y 30 m: así la evolución
-# (salto contra carga, velocidad) muestra una curva. La API registra cada marca con la hora del momento, así que
+COOPER_TEST=$(test_id "Test de Cooper (12 min)")
+# Tres evaluaciones anteriores, ya cerradas (hace 10, 6 y 2 semanas), con salto CMJ, 30 m y Cooper: así la
+# evolución (salto, velocidad y resistencia) muestra una curva. La API registra cada marca con la hora del momento, así que
 # después se le pone la fecha de su sesión directo en la base de Seguimiento (solo datos de demo).
 past_session() {  # past_session <nombre> <días atrás> → imprime el id de la sesión, en curso
   local id
   id=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \
-    "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago "$2")" --arg n "$1" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" \
-      '{categoryId:$c,date:$d,name:$n,tests:[{catalogTestId:$j,order:1},{catalogTestId:$r,order:2}]}')" | jq -r .id)
+    "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago "$2")" --arg n "$1" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" --arg k "$COOPER_TEST" \
+      '{categoryId:$c,date:$d,name:$n,tests:[{catalogTestId:$j,order:1},{catalogTestId:$r,order:2},{catalogTestId:$k,order:3}]}')" | jq -r .id)
   api PATCH "/seguimiento/api/v1/field-test-sessions/$id/status" "$PF_TOKEN" '{"status":"InProgress"}' >/dev/null
   echo "$id"
 }
-past_results() {  # past_results <sesión> <atleta> <CMJ en cm> <30 m en s>
+past_results() {  # past_results <sesión> <atleta> <CMJ en cm> <30 m en s> <Cooper en m>
   api POST "/seguimiento/api/v1/field-test-sessions/$1/results" "$PF_TOKEN" \
     "$(jq -nc --arg t "$CMJ_TEST" --arg a "$2" --argjson v "$3" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
   api POST "/seguimiento/api/v1/field-test-sessions/$1/results" "$PF_TOKEN" \
     "$(jq -nc --arg t "$SPRINT_TEST" --arg a "$2" --argjson v "$4" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
+  api POST "/seguimiento/api/v1/field-test-sessions/$1/results" "$PF_TOKEN" \
+    "$(jq -nc --arg t "$COOPER_TEST" --arg a "$2" --argjson v "$5" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
 }
 i=0
 for s in "Evaluación inicial|70" "Control de mitad de bloque|42" "Control pre torneo|14"; do
   sid=$(past_session "${s%|*}" "${s#*|}")
   cmj_martin=(38 39.5 41) cmj_joaquin=(34 35.5 36.5) cmj_facundo=(41 42.5 44) cmj_lucas=(36 37.5 39) cmj_diego=(35 36 37.5)
   t30_martin=(4.52 4.45 4.38) t30_joaquin=(4.60 4.55 4.49) t30_facundo=(4.35 4.29 4.22) t30_lucas=(4.48 4.41 4.36) t30_diego=(4.55 4.50 4.44)
-  past_results "$sid" "$MARTIN_ID" "${cmj_martin[$i]}" "${t30_martin[$i]}"
-  past_results "$sid" "$JOAQUIN_ID" "${cmj_joaquin[$i]}" "${t30_joaquin[$i]}"
-  past_results "$sid" "$FACUNDO_ID" "${cmj_facundo[$i]}" "${t30_facundo[$i]}"
-  past_results "$sid" "$LUCAS_ID" "${cmj_lucas[$i]}" "${t30_lucas[$i]}"
-  past_results "$sid" "$DIEGO_ID" "${cmj_diego[$i]}" "${t30_diego[$i]}"
+  cooper_martin=(2650 2720 2800) cooper_joaquin=(2500 2560 2610) cooper_facundo=(2780 2840 2900) cooper_lucas=(2600 2680 2750) cooper_diego=(2550 2600 2660)
+  past_results "$sid" "$MARTIN_ID" "${cmj_martin[$i]}" "${t30_martin[$i]}" "${cooper_martin[$i]}"
+  past_results "$sid" "$JOAQUIN_ID" "${cmj_joaquin[$i]}" "${t30_joaquin[$i]}" "${cooper_joaquin[$i]}"
+  past_results "$sid" "$FACUNDO_ID" "${cmj_facundo[$i]}" "${t30_facundo[$i]}" "${cooper_facundo[$i]}"
+  past_results "$sid" "$LUCAS_ID" "${cmj_lucas[$i]}" "${t30_lucas[$i]}" "${cooper_lucas[$i]}"
+  past_results "$sid" "$DIEGO_ID" "${cmj_diego[$i]}" "${t30_diego[$i]}" "${cooper_diego[$i]}"
   api PATCH "/seguimiento/api/v1/field-test-sessions/$sid/status" "$PF_TOKEN" '{"status":"Closed"}' >/dev/null
   i=$((i + 1))
 done
 docker compose exec -T db-seguimiento sh -c 'psql -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
   UPDATE field_test_results r SET recorded_at = (s.date + time '\''15:00'\'') AT TIME ZONE '\''UTC'\''
   FROM field_test_sessions s WHERE r.session_id = s.id AND s.date < CURRENT_DATE"' >/dev/null
-echo "  3 evaluaciones cerradas (hace 10, 6 y 2 semanas): salto CMJ y 30 m de Martín, Joaquín, Facundo, Lucas y Diego"
+echo "  3 evaluaciones cerradas (hace 10, 6 y 2 semanas): salto CMJ, 30 m y Cooper de Martín, Joaquín, Facundo, Lucas y Diego"
 
 FIELD_SESSION=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \
   "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago 0)" --arg s "$SQUAT_TEST" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" \
