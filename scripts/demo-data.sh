@@ -17,6 +17,8 @@
 # Además deja listo: el WhatsApp del PF (botón "Contactar a mi preparador"), las lesiones de Lucas y Camila,
 # una sesión de tests de campo en curso ("Evaluación de pretemporada") y, con "completo", una propuesta de
 # récord de Martín para aprobar en el inicio del PF.
+# Para la evolución: 3 récords anteriores por atleta (Martín, Facundo, Joaquín, Lucas y Diego) y 3 evaluaciones de
+# campo cerradas con salto CMJ y 30 m (las fechas de esas marcas se ajustan en la base de Seguimiento).
 #
 # Uso (desde la raíz del repo, con el compose levantado):
 #   ./scripts/demo-data.sh            carga todo lo de arriba (una vez, con la base de cero)
@@ -279,6 +281,35 @@ SQUAT_ID=$(exercise_id "Sentadilla con barra")
 BENCH_ID=$(exercise_id "Press de banca con barra - Agarre medio")
 RDL_ID=$(exercise_id "Peso muerto rumano")
 
+# Historia de récords (KAN-434/435): tres marcas viejas, cada 4 semanas, para que la evolución del 1RM muestre una
+# curva real. Van por la importación (la única entrada que acepta fecha) y en orden cronológico: cada fila desactiva
+# la anterior. Los récords de hoy (abajo) quedan como los vigentes, así que la confiabilidad y la propuesta de
+# Martín no cambian.
+echo "Historia de récords (hace 12, 8 y 4 semanas):"
+history_rows=""
+history() {  # history <atleta> <ejercicio> <origen> <kg hace 12 sem> <kg hace 8> <kg hace 4>
+  local weeks=(84 56 28) i
+  for i in 0 1 2; do
+    history_rows+=$(jq -nc --arg a "$1" --arg e "$2" --arg o "$3" --argjson w "${@:4+i:1}" \
+      --arg d "$(day_ago "${weeks[$i]}")T15:00:00Z" \
+      '{athleteId:$a,exerciseId:$e,weightOneRepMaxKg:$w,achievedAt:$d,origin:$o}')$'\n'
+  done
+}
+history "$MARTIN_ID" "$SQUAT_ID" TestedInSession 100 107.5 112.5
+history "$MARTIN_ID" "$BENCH_ID" TestedInSession 75 77.5 82.5
+history "$MARTIN_ID" "$RDL_ID" Reported 115 120 125
+history "$FACUNDO_ID" "$SQUAT_ID" TestedInSession 125 130 135
+history "$FACUNDO_ID" "$RDL_ID" TestedInSession 135 140 145
+history "$JOAQUIN_ID" "$SQUAT_ID" Reported 82.5 87.5 90
+history "$JOAQUIN_ID" "$BENCH_ID" Reported 57.5 60 62.5
+history "$LUCAS_ID" "$BENCH_ID" Reported 60 62.5 67.5
+history "$LUCAS_ID" "$RDL_ID" TestedInSession 95 100 105
+history "$DIEGO_ID" "$SQUAT_ID" TestedInSession 90 95 100
+# Se ordena por fecha para que, por atleta y ejercicio, la última fila importada sea la más nueva.
+api POST "/entrenamiento/api/v1/records/import/confirm" "$PF_TOKEN" \
+  "$(jq -sc 'sort_by(.achievedAt) | {rows: .}' <<<"$history_rows")" >/dev/null
+echo "  Martín, Facundo, Joaquín, Lucas y Diego: 3 marcas cada uno, de menos a más"
+
 echo "Récords (1RM):"
 record() {
   api POST "/entrenamiento/api/v1/athletes/$1/records" "$PF_TOKEN" \
@@ -372,6 +403,41 @@ test_id() {
 SQUAT_TEST=$(test_id "Sentadilla 1RM")
 CMJ_TEST=$(test_id "Salto Vertical CMJ")
 SPRINT_TEST=$(test_id "Carrera 30 m")
+# Tres evaluaciones anteriores, ya cerradas (hace 10, 6 y 2 semanas), con salto CMJ y 30 m: así la evolución
+# (salto contra carga, velocidad) muestra una curva. La API registra cada marca con la hora del momento, así que
+# después se le pone la fecha de su sesión directo en la base de Seguimiento (solo datos de demo).
+past_session() {  # past_session <nombre> <días atrás> → imprime el id de la sesión, en curso
+  local id
+  id=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \
+    "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago "$2")" --arg n "$1" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" \
+      '{categoryId:$c,date:$d,name:$n,tests:[{catalogTestId:$j,order:1},{catalogTestId:$r,order:2}]}')" | jq -r .id)
+  api PATCH "/seguimiento/api/v1/field-test-sessions/$id/status" "$PF_TOKEN" '{"status":"InProgress"}' >/dev/null
+  echo "$id"
+}
+past_results() {  # past_results <sesión> <atleta> <CMJ en cm> <30 m en s>
+  api POST "/seguimiento/api/v1/field-test-sessions/$1/results" "$PF_TOKEN" \
+    "$(jq -nc --arg t "$CMJ_TEST" --arg a "$2" --argjson v "$3" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
+  api POST "/seguimiento/api/v1/field-test-sessions/$1/results" "$PF_TOKEN" \
+    "$(jq -nc --arg t "$SPRINT_TEST" --arg a "$2" --argjson v "$4" '{catalogTestId:$t,athleteId:$a,value:$v,attempt:1}')" >/dev/null
+}
+i=0
+for s in "Evaluación inicial|70" "Control de mitad de bloque|42" "Control pre torneo|14"; do
+  sid=$(past_session "${s%|*}" "${s#*|}")
+  cmj_martin=(38 39.5 41) cmj_joaquin=(34 35.5 36.5) cmj_facundo=(41 42.5 44) cmj_lucas=(36 37.5 39) cmj_diego=(35 36 37.5)
+  t30_martin=(4.52 4.45 4.38) t30_joaquin=(4.60 4.55 4.49) t30_facundo=(4.35 4.29 4.22) t30_lucas=(4.48 4.41 4.36) t30_diego=(4.55 4.50 4.44)
+  past_results "$sid" "$MARTIN_ID" "${cmj_martin[$i]}" "${t30_martin[$i]}"
+  past_results "$sid" "$JOAQUIN_ID" "${cmj_joaquin[$i]}" "${t30_joaquin[$i]}"
+  past_results "$sid" "$FACUNDO_ID" "${cmj_facundo[$i]}" "${t30_facundo[$i]}"
+  past_results "$sid" "$LUCAS_ID" "${cmj_lucas[$i]}" "${t30_lucas[$i]}"
+  past_results "$sid" "$DIEGO_ID" "${cmj_diego[$i]}" "${t30_diego[$i]}"
+  api PATCH "/seguimiento/api/v1/field-test-sessions/$sid/status" "$PF_TOKEN" '{"status":"Closed"}' >/dev/null
+  i=$((i + 1))
+done
+docker compose exec -T db-seguimiento sh -c 'psql -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+  UPDATE field_test_results r SET recorded_at = (s.date + time '\''15:00'\'') AT TIME ZONE '\''UTC'\''
+  FROM field_test_sessions s WHERE r.session_id = s.id AND s.date < CURRENT_DATE"' >/dev/null
+echo "  3 evaluaciones cerradas (hace 10, 6 y 2 semanas): salto CMJ y 30 m de Martín, Joaquín, Facundo, Lucas y Diego"
+
 FIELD_SESSION=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \
   "$(jq -nc --arg c "$PRIMERA_ID" --arg d "$(day_ago 0)" --arg s "$SQUAT_TEST" --arg j "$CMJ_TEST" --arg r "$SPRINT_TEST" \
     '{categoryId:$c,date:$d,name:"Evaluación de pretemporada",tests:[{catalogTestId:$s,order:1},{catalogTestId:$j,order:2},{catalogTestId:$r,order:3}]}')" \
