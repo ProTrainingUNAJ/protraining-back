@@ -10,7 +10,8 @@ namespace Seguimiento.Tests;
 
 // La confirmación resuelve el ejercicio de Entrenamiento por nombre exacto la
 // primera vez (y cachea el GUID), envía el 1RM con origen TestedInSession, y degrada a
-// 404/400/503 según el fallo. No persiste estado de confirmación.
+// 404/400/503 según el fallo. Persiste ConfirmedAt (KAN-568): la reconfirmación
+// posterior no vuelve a llamar a Entrenamiento.
 public class ConfirmFieldTestResultCommandHandlerTests
 {
     private static readonly Guid SessionId = Guid.NewGuid();
@@ -78,7 +79,7 @@ public class ConfirmFieldTestResultCommandHandlerTests
             .ReturnsAsync(test);
 
     [Fact]
-    public async Task HandleAsync_WithCachedExerciseId_SendsRecordWithoutResolvingOrSaving()
+    public async Task HandleAsync_WithCachedExerciseId_SendsRecordAndPersistsConfirmedAt()
     {
         var test = TestConCache();
         test.CacheExerciseId(CachedExerciseId);
@@ -90,11 +91,11 @@ public class ConfirmFieldTestResultCommandHandlerTests
         Assert.Equal(_result.Id, dto.Id);
         Assert.Equal(120.0m, dto.Value);
 
-        // Va directo al guardado: ni búsqueda de ejercicio ni escritura en la base.
+        // Va directo al envío (sin buscar el ejercicio) y persiste ConfirmedAt.
         _entrenamiento.Verify(
             client => client.FindExerciseIdByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
-        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _entrenamiento.Verify(
             client => client.SaveRecordAsync(AthleteId, CachedExerciseId, 120.0m, "TestedInSession",
                 It.IsAny<CancellationToken>()),
@@ -118,7 +119,9 @@ public class ConfirmFieldTestResultCommandHandlerTests
             client => client.FindExerciseIdByNameAsync("Sentadilla con barra", It.IsAny<CancellationToken>()),
             Times.Once);
         Assert.Equal(CachedExerciseId, test.ExerciseId);
-        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        // Dos escrituras en la base: el cache del GUID y la confirmación (ConfirmedAt).
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
         _entrenamiento.Verify(
             client => client.SaveRecordAsync(AthleteId, CachedExerciseId, 120.0m, "TestedInSession",
                 It.IsAny<CancellationToken>()),
@@ -250,6 +253,30 @@ public class ConfirmFieldTestResultCommandHandlerTests
         Assert.Equal("La sesión ya está cerrada.", error.Message);
         _fieldTests.Verify(
             repo => repo.GetResultAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _entrenamiento.Verify(
+            client => client.SaveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // KAN-568 CA3: si ConfirmedAt ya está persistido, la reconfirmación es idempotente:
+    // responde con la fila sin llamar a Entrenamiento ni escribir en la base.
+    [Fact]
+    public async Task HandleAsync_WhenAlreadyConfirmed_DoesNotCallEntrenamientoAgain()
+    {
+        _result.ConfirmedAt = DateTime.UtcNow.AddMinutes(-5);
+        var test = TestConCache();
+        test.CacheExerciseId(CachedExerciseId);
+        SetupTest(test);
+
+        var dto = await CreateHandler().HandleAsync(Command());
+
+        Assert.Equal(_result.Id, dto.Id);
+        Assert.Equal(120.0m, dto.Value);
+        _entrenamiento.Verify(
+            client => client.FindExerciseIdByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _entrenamiento.Verify(
             client => client.SaveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(),

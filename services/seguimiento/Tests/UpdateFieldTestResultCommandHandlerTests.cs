@@ -119,4 +119,19 @@ public class UpdateFieldTestResultCommandHandlerTests
             Times.Never);
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    // KAN-568 CA3: corregir con PUT limpia ConfirmedAt para que la marca
+    // corregida se pueda reconfirmar.
+    [Fact]
+    public async Task HandleAsync_WithConfirmedResult_ClearsConfirmedAt()
+    {
+        _result.ConfirmedAt = DateTime.UtcNow.AddMinutes(-5);
+
+        var dto = await CreateHandler().HandleAsync(
+            new UpdateFieldTestResultCommand(SessionId, ResultId, 41.8m, 1));
+
+        Assert.Null(_result.ConfirmedAt);
+        Assert.Equal(41.8m, dto.Value);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

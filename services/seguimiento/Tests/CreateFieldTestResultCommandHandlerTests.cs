@@ -42,6 +42,14 @@ public class CreateFieldTestResultCommandHandlerTests
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
+
+        // KAN-568: por defecto la prueba del comando forma parte de la sesión.
+        _fieldTests
+            .Setup(repo => repo.ListSessionTestsAsync(SessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<FieldTestSessionTest>
+            {
+                new() { SessionId = SessionId, CatalogTestId = CatalogTestId, Order = 1 }
+            });
     }
 
     private CreateFieldTestResultCommandHandler CreateHandler() =>
@@ -144,6 +152,31 @@ public class CreateFieldTestResultCommandHandlerTests
             () => CreateHandler().HandleAsync(CommandValido()));
 
         Assert.Equal("La sesión ya está cerrada.", exception.Message);
+        _structure.Verify(
+            client => client.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _fieldTests.Verify(
+            repo => repo.AddResultAsync(It.IsAny<FieldTestResult>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // KAN-568 CA2: una prueba que no forma parte de la sesión → 400 sin escribir nada.
+    [Fact]
+    public async Task HandleAsync_WithCatalogTestNotInSession_ThrowsDomainExceptionWithoutSaving()
+    {
+        _fieldTests
+            .Setup(repo => repo.ListSessionTestsAsync(SessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<FieldTestSessionTest>
+            {
+                new() { SessionId = SessionId, CatalogTestId = Guid.NewGuid(), Order = 1 }
+            });
+
+        var exception = await Assert.ThrowsAsync<Domain.Exceptions.DomainException>(
+            () => CreateHandler().HandleAsync(CommandValido()));
+
+        Assert.Equal("La prueba del catálogo no pertenece a esta sesión.", exception.Message);
+        // El orden de validación (sesión → cerrada → pertenencia → atleta) corta antes de Estructura.
         _structure.Verify(
             client => client.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);

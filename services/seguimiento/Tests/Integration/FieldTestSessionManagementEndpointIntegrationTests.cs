@@ -252,7 +252,7 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
 
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
         Assert.Equal(
-            $"Transición de estado no válida: {FieldTestSessionStatus.Planned} → {FieldTestSessionStatus.Closed}.",
+            "Transición de estado no permitida: de 'Planificada' a 'Cerrada'. Orden válido: 'Planificada' → 'En curso' → 'Cerrada'.",
             problem!.Title);
 
         var saved = await factory.ExecuteInDbContextAsync(db =>
@@ -271,7 +271,7 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
         var testIds = await ObtenerTestIdsAsync(factory);
 
         // Sesión propia que ya se cerró.
-        var sessionId = await CrearSesionPropiaAsync(factory, FieldTestSessionStatus.Closed);
+        var sessionId = await CrearSesionPropiaAsync(factory, FieldTestSessionStatus.Closed, testIds[0]);
 
         // POST de carga → 400 "La sesión ya está cerrada." y nada se escribe.
         var post = await client.PostAsJsonAsync(
@@ -312,7 +312,7 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
         factory.Structure.RespondAllAthletesAreOwn();
         var client = factory.CreateAuthenticatedClient(_pfId);
         var testIds = await ObtenerTestIdsAsync(factory);
-        var sessionId = await CrearSesionPropiaAsync(factory, FieldTestSessionStatus.Planned);
+        var sessionId = await CrearSesionPropiaAsync(factory, FieldTestSessionStatus.Planned, testIds[0]);
 
         var response = await client.PostAsJsonAsync(
             ResultsEndpoint(sessionId), ResultadoValido(testIds[0]), Json);
@@ -394,9 +394,12 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
     // ---------- Helpers ----------
 
     // Sesión propia: se crea por EF para que AppDbContext le asigne el pf_id del token.
+    // El test del catálogo se vincula a la sesión: el alta de resultados valida que el
+    // resultado pertenezca a un test de esa sesión (CA2, KAN-568).
     private static async Task<Guid> CrearSesionPropiaAsync(
         SeguimientoTestApplicationFactory factory,
-        FieldTestSessionStatus status)
+        FieldTestSessionStatus status,
+        Guid catalogTestId)
     {
         var session = new FieldTestSession
         {
@@ -409,6 +412,14 @@ public sealed class FieldTestSessionManagementEndpointIntegrationTests
         await factory.ExecuteInDbContextAsync(async db =>
         {
             db.FieldTestSessions.Add(session);
+            await db.SaveChangesAsync();
+
+            db.FieldTestSessionTests.Add(new FieldTestSessionTest
+            {
+                SessionId = session.Id,
+                CatalogTestId = catalogTestId,
+                Order = 1
+            });
             await db.SaveChangesAsync();
         });
 

@@ -420,6 +420,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("catalog_test_id");
 
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -538,6 +542,10 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("PfId");
 
                     b.HasIndex("SessionId");
+
+                    b.HasIndex("SessionId", "CatalogTestId")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("field_test_session_tests", (string)null);
                 });

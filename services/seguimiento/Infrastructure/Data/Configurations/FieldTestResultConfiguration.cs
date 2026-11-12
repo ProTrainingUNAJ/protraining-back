@@ -15,6 +15,8 @@ public sealed class FieldTestResultConfiguration : IEntityTypeConfiguration<Fiel
         builder.Property(result => result.Value).HasColumnName("value").HasPrecision(10, 3).IsRequired();
         builder.Property(result => result.Attempt).HasColumnName("attempt").IsRequired();
         builder.Property(result => result.RecordedAt).HasColumnName("recorded_at").IsRequired();
+        // KAN-568: nullable; no participa de ningún índice.
+        builder.Property(result => result.ConfirmedAt).HasColumnName("confirmed_at");
 
         // CA2 de KAN-424: la base rechaza cargar dos veces el mismo (sesión, test, atleta,
         // intento). El filtro por deleted_at sigue el patrón de attendances.
