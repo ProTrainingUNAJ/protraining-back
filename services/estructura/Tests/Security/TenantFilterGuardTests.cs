@@ -24,6 +24,7 @@ public sealed class TenantFilterGuardTests
         ["AthleteRepository.cs"] = "Consulta los PFs distintos para el worker de recordatorios de wellness.",
         ["CategoryInvitationRepository.cs"] = "Permite a un usuario anónimo o atleta validar el token de invitación antes de iniciar sesión o registrarse.",
         ["CompetitiveEventRepository.cs"] = "El worker de sobrecarga (rol Servicio) consulta partidos por categoría sin PF logueado (#178 · KAN-473).",
+        ["AthleteCategoryRepository.cs"] = "Seguimiento (rol Servicio) lista los atletas de una categoría para la comparación anónima del atleta con su grupo (KAN-578).",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.
