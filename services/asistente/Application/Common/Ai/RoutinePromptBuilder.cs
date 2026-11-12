@@ -186,21 +186,23 @@ public static class RoutinePromptBuilder
         sb.AppendLine("3. Sets must be an integer between 1 and 10.");
         sb.AppendLine("4. Reps must be an integer between 1 and 30.");
         sb.AppendLine("5. Target percentage must be a number between 0 and 100 or null.");
-        sb.AppendLine("6. Output ONLY valid JSON in English, matching this EXACT schema with NO markdown fences, NO extra text:");
+        sb.AppendLine("6. Output ONLY valid JSON matching this EXACT schema with NO markdown fences, NO extra text. Keep the JSON keys and 'dayOfWeek' in English.");
+        // El PF lee el nombre, el objetivo, la justificación y las notas: van en español (KAN-578)
+        sb.AppendLine("7. Write every text value the coach reads ('name', 'objective', 'justificationSummary', session 'name' and 'coachNotes') in Spanish from Argentina, using 'vos' (e.g. 'Fuerza de piernas', 'Activá glúteos antes de sentadilla'). Never write those values in English.");
         sb.AppendLine("""
             {
-              "name": "Mesocycle Name",
-              "objective": "Training cycle objective",
-              "justificationSummary": "Scientific rationale and periodization explanation",
+              "name": "Nombre del mesociclo",
+              "objective": "Objetivo del ciclo de entrenamiento",
+              "justificationSummary": "Fundamento de la periodización",
               "weeks": [
                 {
                   "weekNumber": 1,
                   "sessions": [
                     {
-                      "name": "Lower Body Strength",
+                      "name": "Fuerza de tren inferior",
                       "dayOfWeek": "Monday",
                       "order": 1,
-                      "coachNotes": "Focus on explosive drive",
+                      "coachNotes": "Priorizá la potencia en la subida",
                       "exercises": [
                         {
                           "exerciseId": "exact-catalog-guid-here",
