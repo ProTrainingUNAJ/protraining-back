@@ -66,6 +66,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddTransient<ServiceAuthorizationHandler>();
 
 var trainingBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"];
 if (!Uri.TryCreate(trainingBaseUrl, UriKind.Absolute, out var trainingUri))
@@ -103,7 +104,8 @@ builder.Services.AddHttpClient<IStructureCalendarClient, Infrastructure.Services
     client.BaseAddress = new Uri(uriString);
     // Timeout manejado por Polly (KAN-433)
 })
-.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+// El calendario es un endpoint interno de Estructura: exige rol 'Servicio', no el token del PF (KAN-578)
+.AddHttpMessageHandler<ServiceAuthorizationHandler>()
 .AddProTrainingResilience();
 
 builder.Services.AddHttpClient<IStructureAthleteClient, Infrastructure.Services.Structure.StructureAthleteClient>(client =>
