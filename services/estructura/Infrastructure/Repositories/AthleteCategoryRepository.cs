@@ -27,6 +27,20 @@ public sealed class AthleteCategoryRepository(AppDbContext context) : IAthleteCa
                 .ThenBy(a => a.FirstName)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<Athlete>> ListAthletesByCategoryInternalAsync(Guid categoryId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteCategories
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(ac => ac.CategoryId == categoryId && ac.DeletedAt == null)
+                .Join(context.Athletes.IgnoreQueryFilters().Where(a => a.DeletedAt == null),
+                    ac => ac.AthleteId,
+                    a => a.Id,
+                    (ac, a) => a)
+                .OrderBy(a => a.LastName)
+                .ThenBy(a => a.FirstName)
+                .ToListAsync(cancellationToken));
+
     public async Task<IReadOnlyList<Category>> ListCategoriesByAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.AthleteCategories

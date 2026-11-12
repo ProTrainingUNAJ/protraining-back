@@ -56,8 +56,10 @@ public sealed class GetAthleteGroupBenchmarkQueryHandler(
             targetCategoryName = defaultCategory.Name;
         }
 
-        // 3. Obtener los atletas activos de la categoría desde Estructura
-        var categoryAthletes = await structureClient.GetCategoryAthletesAsync(targetCategoryId, cancellationToken);
+        // 3. Obtener los atletas de la categoría desde Estructura. Va por el endpoint interno con token
+        // de servicio: el atleta no puede listar su categoría con su propio token (KAN-578). Ya se validó
+        // arriba que la categoría es suya, y solo se devuelven promedios anónimos.
+        var categoryAthletes = await structureClient.GetCategoryAthletesInternalAsync(targetCategoryId, cancellationToken);
         var athleteIds = categoryAthletes
             .Select(a => a.Id)
             .Distinct()

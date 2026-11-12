@@ -129,6 +129,7 @@ var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
     throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 // Entrenamiento por HTTP (confirmación del 1RM y consulta de récords de evolución): misma cadena

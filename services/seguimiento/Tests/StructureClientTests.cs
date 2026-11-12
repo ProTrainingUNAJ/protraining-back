@@ -24,8 +24,15 @@ public class StructureClientTests
         }
     }
 
-    private static StructureClient CreateClient(HttpMessageHandler handler) =>
-        new(new HttpClient(handler) { BaseAddress = new Uri("http://estructura:8080/") }, NullLogger<StructureClient>.Instance);
+    private static StructureClient CreateClient(HttpMessageHandler handler)
+    {
+        var tokenFactory = new Mock<Application.Interfaces.Services.IServiceTokenFactory>();
+        tokenFactory.Setup(f => f.CreateToken()).Returns("token-de-servicio");
+        return new(
+            new HttpClient(handler) { BaseAddress = new Uri("http://estructura:8080/") },
+            NullLogger<StructureClient>.Instance,
+            tokenFactory.Object);
+    }
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -240,5 +247,21 @@ public class StructureClientTests
         var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused.")));
 
         await Assert.ThrowsAsync<StructureUnavailableException>(() => client.IsOwnAthleteAsync(Guid.NewGuid()));
+    }
+
+    // KAN-578: la lista interna va al endpoint /internal con el token de servicio, no con el del usuario
+    [Fact]
+    public async Task GetCategoryAthletesInternalAsync_UsesInternalPathAndServiceToken()
+    {
+        var categoryId = Guid.NewGuid();
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK, "[{\"id\":\"" + Guid.NewGuid() + "\",\"fullName\":\"Joaquín Díaz\"}]"));
+        var client = CreateClient(handler);
+
+        var athletes = await client.GetCategoryAthletesInternalAsync(categoryId);
+
+        Assert.Single(athletes);
+        Assert.Equal($"/api/v1/internal/categories/{categoryId}/athletes", handler.LastRequest!.RequestUri!.AbsolutePath);
+        Assert.Equal("Bearer", handler.LastRequest.Headers.Authorization?.Scheme);
+        Assert.Equal("token-de-servicio", handler.LastRequest.Headers.Authorization?.Parameter);
     }
 }

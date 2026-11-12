@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Application.DTOs.Structure;
 using Application.Exceptions;
@@ -8,8 +9,12 @@ using Polly;
 
 namespace Infrastructure.Services.Structure;
 
-// Cliente HTTP hacia Estructura. El token de la petición lo agrega ForwardAuthorizationHandler (en la API).
-public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClient> logger) : IStructureClient
+// Cliente HTTP hacia Estructura. El token de la petición lo agrega ForwardAuthorizationHandler (en la API);
+// los endpoints internos usan un token de servicio propio.
+public sealed class StructureClient(
+    HttpClient httpClient,
+    ILogger<StructureClient> logger,
+    IServiceTokenFactory serviceTokenFactory) : IStructureClient
 {
     public const string MePath = "api/v1/me";
 
@@ -106,6 +111,39 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
                         (int)response.StatusCode, categoryId);
                     throw new StructureUnavailableException();
             }
+        }
+    }
+
+    public async Task<IReadOnlyList<CategoryAthleteDto>> GetCategoryAthletesInternalAsync(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        // Con el header ya puesto, ForwardAuthorizationHandler no reenvía el token del usuario
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/internal/categories/{categoryId}/athletes");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", serviceTokenFactory.CreateToken());
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or ExecutionRejectedException)
+        {
+            throw new StructureUnavailableException(exception);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.OK)
+                return await response.Content.ReadFromJsonAsync<List<CategoryAthleteDto>>(cancellationToken) ?? [];
+
+            logger.LogError("Estructura respondió {Status} al consultar internamente los atletas de la categoría {CategoryId}.",
+                (int)response.StatusCode, categoryId);
+            throw new StructureUnavailableException();
         }
     }
 

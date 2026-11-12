@@ -180,6 +180,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.
                 services.AddTransient<ForwardAuthorizationHandler>();
+                services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
                 services.AddHttpClient<IStructureClient, StructureClient>(client =>
                         client.BaseAddress = new Uri("http://estructura.test/"))
                     .ConfigurePrimaryHttpMessageHandler(() => structureHandler)
