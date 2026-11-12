@@ -68,8 +68,19 @@ public sealed class GroupBenchmarkEndpointTests
 
             foreach (var (catId, members) in memberships)
             {
-                if (path.Contains($"categories/{catId}/athletes", StringComparison.OrdinalIgnoreCase))
+                // Como en Estructura real: la lista pública es solo del PF (403 al atleta) y la interna
+                // exige un token con rol 'Servicio' (KAN-578)
+                if (path.Contains($"categories/{catId}/athletes", StringComparison.OrdinalIgnoreCase)
+                    && !path.Contains("/internal/", StringComparison.OrdinalIgnoreCase))
                 {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+                }
+
+                if (path.Contains($"internal/categories/{catId}/athletes", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!HasServiceRole(request))
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+
                     var athletesJson = JsonSerializer.Serialize(
                         members.Select(id => new { id, fullName = $"Atleta {id}" }));
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -81,6 +92,17 @@ public sealed class GroupBenchmarkEndpointTests
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         };
+    }
+
+    // Lee el rol del JWT del pedido sin validar la firma (alcanza para el falso de Estructura)
+    private static bool HasServiceRole(HttpRequestMessage request)
+    {
+        var token = request.Headers.Authorization?.Parameter;
+        if (string.IsNullOrEmpty(token)) return false;
+        var payload = token.Split('.')[1].Replace('-', '+').Replace('_', '/');
+        payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+        using var doc = JsonDocument.Parse(Convert.FromBase64String(payload));
+        return doc.RootElement.TryGetProperty("role", out var role) && role.GetString() == "Servicio";
     }
 
     [Fact]
