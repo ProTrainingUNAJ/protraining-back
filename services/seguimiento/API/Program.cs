@@ -116,7 +116,7 @@ builder.Services.AddScoped<UpdateFieldTestSessionStatusCommandHandler>();
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
 builder.Services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
 builder.Services.AddScoped<SetAttendanceCommandHandler>();
-builder.Services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
+builder.Services.AddScoped<IFitnessTestMeasurementService, FieldTestMeasurementService>();
 builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
 builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
 builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();

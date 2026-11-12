@@ -141,7 +141,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 }
                 else
                 {
-                    services.AddScoped<IFitnessTestMeasurementService, DefaultFitnessTestMeasurementService>();
+                    services.AddScoped<IFitnessTestMeasurementService, FieldTestMeasurementService>();
                 }
                 services.AddScoped<GetCategoryAveragesQueryHandler>();
                 services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
