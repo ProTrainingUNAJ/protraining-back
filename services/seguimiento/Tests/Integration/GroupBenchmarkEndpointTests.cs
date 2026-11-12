@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Application.DTOs.Benchmark;
 using Application.Interfaces.Services;
+using Domain.Entities;
 using Seguimiento.Tests.Infrastructure;
 
 namespace Seguimiento.Tests.Integration;
@@ -147,6 +148,69 @@ public sealed class GroupBenchmarkEndpointTests
         Assert.Equal("BelowAverage", metric.Status);
         Assert.True(metric.IsWeakestPoint);
         Assert.Contains("Por debajo del promedio", metric.Trend);
+    }
+
+    // Con el servicio real: las mediciones salen de las marcas de los tests de campo guardadas en la base,
+    // y una marca de otro PF no entra en el promedio aunque sea del mismo atleta.
+    [Fact]
+    public async Task KAN449_FieldTests_Given_ResultsInDatabase_When_QueriesOwnBenchmark_Then_UsesOwnPfFieldTestResults()
+    {
+        var pfId = Guid.NewGuid();
+        var peer1 = Guid.NewGuid();
+        var peer2 = Guid.NewGuid();
+        var peer3 = Guid.NewGuid();
+
+        await using var factory = await SeguimientoTestApplicationFactory.CreateAsync(pfId);
+        SetupFakeStructure(factory, _athleteId,
+            categoryMemberships: new Dictionary<Guid, IReadOnlyList<Guid>>
+            {
+                [_categoryId] = new[] { _athleteId, peer1, peer2, peer3 }
+            });
+
+        var cmjId = await factory.ExecuteInDbContextAsync(async context =>
+        {
+            var cmj = context.CatalogTests.First(test => test.Name == "Salto Vertical CMJ");
+            var sessionId = Guid.NewGuid();
+            foreach (var (athleteId, value) in new[] { (_athleteId, 30m), (peer1, 34m), (peer2, 36m), (peer3, 40m) })
+            {
+                context.FieldTestResults.Add(new FieldTestResult
+                {
+                    SessionId = sessionId,
+                    AthleteId = athleteId,
+                    CatalogTestId = cmj.Id,
+                    Value = value,
+                    Attempt = 1,
+                    RecordedAt = DateTime.UtcNow.AddDays(-1)
+                });
+            }
+            await context.SaveChangesAsync();
+            return cmj.Id;
+        });
+
+        // Marca más nueva de peer1, pero de otro PF: si el filtro global fallara, pisaría su 34 cm
+        using (var foreign = factory.CreateDbContext(Guid.NewGuid()))
+        {
+            foreign.FieldTestResults.Add(new FieldTestResult
+            {
+                SessionId = Guid.NewGuid(),
+                AthleteId = peer1,
+                CatalogTestId = cmjId,
+                Value = 99m,
+                Attempt = 1,
+                RecordedAt = DateTime.UtcNow
+            });
+            await foreign.SaveChangesAsync();
+        }
+
+        var client = factory.CreateAuthenticatedClient(pfId, "Atleta");
+        var response = await client.GetAsync($"api/v1/athletes/{_athleteId}/group-benchmark");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = await response.Content.ReadFromJsonAsync<GroupBenchmarkResponseDto>();
+        var metric = Assert.Single(data!.Metrics);
+        Assert.Equal("Salto Vertical CMJ (cm)", metric.Dimension);
+        Assert.Equal(30.0, metric.AthleteValue);
+        Assert.Equal(35.0, metric.GroupAverage);
     }
 
     [Fact]
