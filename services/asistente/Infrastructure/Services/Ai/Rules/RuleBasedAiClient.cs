@@ -19,6 +19,11 @@ public sealed class RuleBasedAiClient(
 {
     public string ProviderName => "Reglas";
 
+    private const int ExercisesPerSession = 5;
+
+    private const string WarmUpNote =
+        "Entrada en calor (10 min): movilidad articular de los músculos del día y series de aproximación al 40-60% antes del primer ejercicio pesado.";
+
     public async Task<RoutineSuggestionResponseDto?> TrySuggestRoutineAsync(
         RoutineSuggestionRequestDto request,
         CancellationToken cancellationToken = default)
@@ -152,10 +157,12 @@ public sealed class RuleBasedAiClient(
                     _ => ("Tracción", pull)
                 };
 
+                // Una sesión real tiene 5 ejercicios distintos (menos solo si el grupo no tiene tantos en el catálogo)
+                var exercisesInSession = Math.Min(ExercisesPerSession, targetGroupExercises.Count);
                 var sessionExercises = new List<PlanDraftExerciseDto>();
-                for (var e = 1; e <= 2; e++)
+                for (var e = 1; e <= exercisesInSession; e++)
                 {
-                    var exerciseOffset = ((w - 1) * 2) + (e - 1);
+                    var exerciseOffset = ((w - 1) * exercisesInSession) + (e - 1);
                     var catEx = targetGroupExercises[exerciseOffset % targetGroupExercises.Count];
 
                     sessionExercises.Add(new PlanDraftExerciseDto(
@@ -172,7 +179,7 @@ public sealed class RuleBasedAiClient(
                     Name: $"Sesión {sessionOrder} - {sessionGroupName}",
                     DayOfWeek: dayOfWeek,
                     Order: sessionOrder,
-                    CoachNotes: notes,
+                    CoachNotes: $"{WarmUpNote} {notes}",
                     Exercises: sessionExercises
                 ));
             }

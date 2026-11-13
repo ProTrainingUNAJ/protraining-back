@@ -189,6 +189,12 @@ public static class RoutinePromptBuilder
         sb.AppendLine("6. Output ONLY valid JSON matching this EXACT schema with NO markdown fences, NO extra text. Keep the JSON keys and 'dayOfWeek' in English.");
         // El PF lee el nombre, el objetivo, la justificación y las notas: van en español (KAN-578)
         sb.AppendLine("7. Write every text value the coach reads ('name', 'objective', 'justificationSummary', session 'name' and 'coachNotes') in Spanish from Argentina, using 'vos' (e.g. 'Fuerza de piernas', 'Activá glúteos antes de sentadilla'). Never write those values in English.");
+        // Sin esta regla los modelos chicos copian el ejemplo (un ejercicio) y arman sesiones de 1 o 2 ejercicios
+        sb.AppendLine("8. Every session MUST include between 5 and 6 different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        // El catálogo no tiene ejercicios de entrada en calor: va como texto al principio de la nota de la sesión
+        sb.AppendLine("9. Start every session's 'coachNotes' with a concrete warm-up of about 10 minutes, in Spanish ('Entrada en calor (10 min): ...'): joint mobility for the muscles of the day and ramp-up sets at 40-60% before the first heavy lift. Then add the technical note for the session.");
+        // El ejemplo de abajo tiene una sola semana y los modelos chicos lo copian: hay que pedir la cantidad exacta
+        sb.AppendLine($"10. The 'weeks' array MUST contain exactly {request.Weeks} week objects, with 'weekNumber' from 1 to {request.Weeks}, and each week MUST contain exactly {request.DaysPerWeek} sessions.");
         sb.AppendLine("""
             {
               "name": "Nombre del mesociclo",
@@ -276,6 +282,16 @@ public static class RoutinePromptBuilder
             groups.Add("Brazos");
         }
 
+        // Tren superior: sin esto "fuerza de tren superior" no matcheaba ningún grupo y se mandaba la mezcla
+        // general, con mayoría de ejercicios de piernas
+        if (text.Contains("tren superior") || text.Contains("upper body") || text.Contains("torso"))
+        {
+            groups.Add("Pecho");
+            groups.Add("Espalda");
+            groups.Add("Hombros");
+            groups.Add("Brazos");
+        }
+
         // Core / Abdomen
         if (text.Contains("core") || text.Contains("abdominal") ||
             text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
@@ -354,6 +370,29 @@ public static class RoutinePromptBuilder
         return selected;
     }
 
+    // Intercala los ejercicios por grupo muscular manteniendo el orden del catálogo dentro de cada grupo
+    private static List<CatalogExerciseDto> InterleaveByMuscleGroup(List<CatalogExerciseDto> exercises)
+    {
+        var buckets = exercises
+            .GroupBy(e => TextNormalizer.Normalize(e.MuscleGroup))
+            .Select(g => new Queue<CatalogExerciseDto>(g))
+            .ToList();
+
+        if (buckets.Count <= 1)
+            return exercises;
+
+        var result = new List<CatalogExerciseDto>(exercises.Count);
+        while (result.Count < exercises.Count)
+        {
+            foreach (var bucket in buckets)
+            {
+                if (bucket.Count > 0)
+                    result.Add(bucket.Dequeue());
+            }
+        }
+        return result;
+    }
+
     /// <summary>
     /// Filtra y prioriza los ejercicios del catálogo más relevantes según el énfasis muscular solicitado.
     /// Limita el total (por defecto 20) para mantener el prompt ágil y conciso para modelos compactos como Llama 3.2 1B.
@@ -409,6 +448,10 @@ public static class RoutinePromptBuilder
                 remaining.Add(exercise);
             }
         }
+
+        // Con varios grupos (ej. tren superior: pecho, espalda, hombros, brazos) se reparten por turnos, para que
+        // el primer grupo del catálogo no llene todo el cupo y el modelo pueda armar una sesión equilibrada
+        matching = InterleaveByMuscleGroup(matching);
 
         if (matching.Count >= maxExercises)
         {

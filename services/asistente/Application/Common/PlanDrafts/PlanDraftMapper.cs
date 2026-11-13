@@ -47,9 +47,24 @@ public static class PlanDraftMapper
             Objective: content.Objective,
             JustificationSummary: content.JustificationSummary,
             Weeks: content.Weeks,
-            Warnings: warnings ?? []
+            Warnings: [.. ProviderWarnings(draft.Provider), .. warnings ?? []]
         );
     }
+
+    // El PF tiene que saber por qué el borrador no lo armó el modelo local. Se arma a partir del proveedor
+    // guardado, así el aviso aparece también al volver a abrir el borrador (los demás avisos no se guardan).
+    public static IReadOnlyList<string> ProviderWarnings(string? provider) => provider switch
+    {
+        "Gemini" =>
+        [
+            "El modelo local (Ollama) no devolvió un borrador válido a tiempo, así que lo armó el respaldo externo (Gemini), sin nombres ni datos personales de los atletas."
+        ],
+        "Reglas" =>
+        [
+            "Ni el modelo local (Ollama) ni el respaldo externo (Gemini) devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
+        ],
+        _ => []
+    };
 
     public static SaveTrainingPlanRequestDto ToSaveTrainingPlanRequest(
         PlanDraft draft,

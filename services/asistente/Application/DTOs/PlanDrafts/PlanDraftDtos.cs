@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Application.Common.PlanDrafts;
 
 namespace Application.DTOs.PlanDrafts;
 
@@ -12,7 +13,7 @@ public sealed record PlanDraftExerciseDto(
 
 public sealed record PlanDraftSessionDto(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("dayOfWeek"), JsonConverter(typeof(JsonStringEnumConverter))] DayOfWeek DayOfWeek,
+    [property: JsonPropertyName("dayOfWeek"), JsonConverter(typeof(FlexibleDayOfWeekConverter))] DayOfWeek DayOfWeek,
     [property: JsonPropertyName("order")] int Order,
     [property: JsonPropertyName("coachNotes")] string? CoachNotes,
     [property: JsonPropertyName("exercises")] List<PlanDraftExerciseDto> Exercises

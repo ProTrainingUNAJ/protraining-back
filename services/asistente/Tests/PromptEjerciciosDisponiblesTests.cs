@@ -167,6 +167,25 @@ public sealed class PromptEjerciciosDisponiblesTests
         Assert.Contains(filtered, ex => ex.Name == "Dominadas" || ex.Name == "Sentadilla"); // Remaining padded
     }
 
+    // Tren superior: antes el cupo se llenaba solo con el primer grupo del catálogo (todo pecho)
+    [Fact]
+    public void FilterRelevantExercises_WithSeveralGroups_InterleavesThem()
+    {
+        var catalog = new List<CatalogExerciseDto>
+        {
+            new(Guid.NewGuid(), "Press de banca", "Pecho", "Barra"),
+            new(Guid.NewGuid(), "Press inclinado", "Pecho", "Barra"),
+            new(Guid.NewGuid(), "Flexiones", "Pecho", null),
+            new(Guid.NewGuid(), "Dominadas", "Espalda", "Barra"),
+            new(Guid.NewGuid(), "Remo con barra", "Espalda", "Barra"),
+            new(Guid.NewGuid(), "Press militar", "Hombros", "Barra"),
+        };
+
+        var filtered = RoutinePromptBuilder.FilterRelevantExercises(catalog, ["Pecho", "Espalda", "Hombros"], maxExercises: 3);
+
+        Assert.Equal(new[] { "Press de banca", "Dominadas", "Press militar" }, filtered.Select(e => e.Name));
+    }
+
     [Fact]
     public void FilterRelevantExercises_WhenEmphasisIsEmpty_ReturnsTopExercisesUpToMax()
     {
