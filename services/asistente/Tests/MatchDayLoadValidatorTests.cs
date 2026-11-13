@@ -492,8 +492,8 @@ public sealed class MatchDayLoadValidatorTests
 
         // Response Warnings debe incluir el aviso de remoción
         Assert.NotNull(response.Warnings);
-        Assert.Single(response.Warnings);
-        Assert.Contains("Se quitó la sesión 'Sesión Sábado (Match Day)'", response.Warnings[0]);
+        // Además del aviso del proveedor (respondió Gemini), tiene que estar el de la sesión quitada
+        Assert.Contains(response.Warnings, w => w.Contains("Se quitó la sesión 'Sesión Sábado (Match Day)'"));
 
         // La entidad persistida no tiene la sesión de sábado
         Assert.NotNull(savedDraft);
