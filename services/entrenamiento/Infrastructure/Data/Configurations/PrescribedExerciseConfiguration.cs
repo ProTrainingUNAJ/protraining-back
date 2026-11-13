@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -24,7 +24,14 @@ public class PrescribedExerciseConfiguration : IEntityTypeConfiguration<Prescrib
 
         builder.Property(x => x.TargetPercentage)
             .HasColumnName("target_percentage")
-            .HasPrecision(5, 2); 
+            .HasPrecision(5, 2);
+
+        builder.Property(x => x.TargetDistanceMeters)
+            .HasColumnName("target_distance_meters");
+
+        builder.Property(x => x.TargetTimeSeconds)
+            .HasColumnName("target_time_seconds")
+            .HasPrecision(6, 2);
 
         builder.Property(x => x.TrainingSessionId)
             .HasColumnName("training_session_id")

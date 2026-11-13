@@ -22,6 +22,156 @@ namespace Infrastructure.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.AthleteInjury", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime?>("ClearedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cleared_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime>("EstimatedReturnDate")
+                        .HasColumnType("date")
+                        .HasColumnName("estimated_return_date");
+
+                    b.Property<DateTime>("InjuryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("injury_date");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "Status");
+
+                    b.ToTable("athlete_injuries", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.AthleteInjuryStatusChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int?>("FromStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_status");
+
+                    b.Property<Guid>("InjuryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("injury_id");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("ToStatus")
+                        .HasColumnType("integer")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InjuryId");
+
+                    b.HasIndex("PfId");
+
+                    b.ToTable("athlete_injury_status_changes", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.Attendance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsPresent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_present");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "Date")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("attendances", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.CatalogTest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -48,6 +198,10 @@ namespace Infrastructure.Data.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("difficulty_level");
 
+                    b.Property<Guid?>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
                     b.Property<string>("MeasurementUnit")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -69,6 +223,11 @@ namespace Infrastructure.Data.Migrations
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
+
+                    b.Property<string>("TargetExerciseName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("target_exercise_name");
 
                     b.HasKey("Id");
 
@@ -164,6 +323,231 @@ namespace Infrastructure.Data.Migrations
                         .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("check_ins", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.DailyLoad", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("GymMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("gym_minutes");
+
+                    b.Property<int?>("GymRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("gym_rpe");
+
+                    b.Property<int>("IndividualWorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("individual_work_minutes");
+
+                    b.Property<int?>("IndividualWorkRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("individual_work_rpe");
+
+                    b.Property<int>("Match1Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("match1_minutes");
+
+                    b.Property<int?>("Match1Rpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("match1_rpe");
+
+                    b.Property<int>("Match2Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("match2_minutes");
+
+                    b.Property<int?>("Match2Rpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("match2_rpe");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("SportTrainingMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("sport_training_minutes");
+
+                    b.Property<int?>("SportTrainingRpe")
+                        .HasColumnType("integer")
+                        .HasColumnName("sport_training_rpe");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "Date")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("daily_loads", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.FieldTestResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt");
+
+                    b.Property<Guid>("CatalogTestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_test_id");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("SessionId", "CatalogTestId", "AthleteId", "Attempt")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("field_test_results", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.FieldTestSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("PfId");
+
+                    b.ToTable("field_test_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.FieldTestSessionTest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CatalogTestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_test_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("SessionId", "CatalogTestId")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("field_test_session_tests", (string)null);
                 });
 #pragma warning restore 612, 618
         }

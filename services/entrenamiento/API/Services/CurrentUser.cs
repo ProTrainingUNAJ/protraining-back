@@ -11,4 +11,13 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
         Guid.TryParse(httpContextAccessor.HttpContext?.User.FindFirst(PfIdClaim)?.Value, out var pfId)
             ? pfId
             : null;
+
+    public bool IsInRole(string role)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+            return false;
+
+        return user.IsInRole(role) || user.HasClaim("role", role);
+    }
 }

@@ -1,3 +1,4 @@
+using Infrastructure.Services;
 using Application.DTOs.Exercise;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -18,9 +19,17 @@ public class ListExercisesTests : IAsyncLifetime
     private readonly DbContextOptions<AppDbContext> _contextOptions;
     private readonly Guid _pfId = Guid.NewGuid();
 
-    private sealed class TestCurrentUser(Guid pfId) : ICurrentUser
+    private sealed class TestCurrentUser(Guid? pfId) : ICurrentUser
     {
         public Guid? PfId => pfId;
+    }
+
+    private static IExerciseVideoRepository EmptyVideoRepo()
+    {
+        var mock = new Mock<IExerciseVideoRepository>();
+        mock.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+        return mock.Object;
     }
 
     public ListExercisesTests()
@@ -43,25 +52,23 @@ public class ListExercisesTests : IAsyncLifetime
         await _connection.DisposeAsync();
     }
 
-    private AppDbContext CreateContext() => new(_contextOptions, new TestCurrentUser(_pfId));
+    private AppDbContext CreateContext(Guid? customPfId = null) => new(_contextOptions, new TestCurrentUser(customPfId ?? _pfId));
+    private AppDbContext CreateCatalogContext() => new(_contextOptions, new TestCurrentUser(null));
 
-    // ==========================================
-    // 1. Criterios de Aceptación y UseCase Tests
-    // ==========================================
 
     [Fact]
-    public async Task Dado876Ejercicios_CuandoPidePagina1ConPageSize20_EntoncesRecibe20ItemsTotalCount876YTotalPages44()
+    public async Task Listar_ConPaginacion_CalculaTotalYPaginas()
     {
-        // ARRANGE: Criterio de aceptación 1
+        // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
         var dummyExercises = Enumerable.Range(1, 20)
             .Select(i => Exercise.Create($"Ejercicio {i}", "Pecho"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((dummyExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 20 };
@@ -77,9 +84,9 @@ public class ListExercisesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DadoCatalogoCon876Ejercicios_CuandoBuscaSentadilla_EntoncesTotalCountEsElDeResultadosFiltradosYNoDelCatalogo()
+    public async Task Listar_ConBusquedaPorTexto_FiltraPorNombre()
     {
-        // ARRANGE: Criterio de aceptación 2 (Filtro por búsqueda)
+        // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
         var sentadillas = new List<Exercise>
         {
@@ -90,10 +97,10 @@ public class ListExercisesTests : IAsyncLifetime
             Exercise.Create("Sentadilla Goblet", "Piernas")
         };
 
-        repoMock.Setup(r => r.ListAsync("sentadilla", null, null, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("sentadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((sentadillas, 5));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Search = "sentadilla", Page = 1, PageSize = 20 };
@@ -102,24 +109,24 @@ public class ListExercisesTests : IAsyncLifetime
         // ASSERT
         Assert.NotNull(result);
         Assert.Equal(5, result.Items.Count);
-        Assert.Equal(5, result.TotalCount); // Total filtrado, no 876
+        Assert.Equal(5, result.TotalCount);
         Assert.Equal(1, result.TotalPages);
         Assert.All(result.Items, item => Assert.Contains("Sentadilla", item.Name));
     }
 
     [Fact]
-    public async Task DadoCatalogoCon876Ejercicios_CuandoPideUltimaPagina44ConPageSize20_EntoncesRecibe16ItemsIncompletosYTotalPages44()
+    public async Task Listar_UltimaPagina_RetornaItemsRestantes()
     {
-        // ARRANGE: Última página incompleta (876 total - 43 * 20 = 16 restantes)
+        // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
         var lastPageExercises = Enumerable.Range(861, 16)
             .Select(i => Exercise.Create($"Ejercicio {i}", "Espalda"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, 44, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 44, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((lastPageExercises, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 44, PageSize = 20 };
@@ -135,18 +142,18 @@ public class ListExercisesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DadoCatalogo_CuandoPidePageSizeMayorA100_EntoncesAplicaTopeDe100()
+    public async Task Listar_ConPageSizeMayorA100_AplicaTopeMaximo()
     {
-        // ARRANGE: Solicitar pageSize = 500 (debe toparse a 100)
+        // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
         var exercises100 = Enumerable.Range(1, 100)
             .Select(i => Exercise.Create($"Ejercicio {i}", "Piernas"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, 1, 100, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync((exercises100, 876));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 1, PageSize = 500 };
@@ -157,23 +164,23 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.Equal(100, result.PageSize);
         Assert.Equal(100, result.Items.Count);
         Assert.Equal(876, result.TotalCount);
-        Assert.Equal(9, result.TotalPages); // ceil(876 / 100) = 9
-        repoMock.Verify(r => r.ListAsync(null, null, null, 1, 100, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(9, result.TotalPages);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, false, 1, 100, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task DadoParametrosMenoresAUno_CuandoConsulta_EntoncesNormalizaAPagina1YPageSize20()
+    public async Task Listar_ConParametrosInvalidos_NormalizaValoresPorDefecto()
     {
-        // ARRANGE: Parámetros inválidos o menores a 1 (ej. page = 0, pageSize = -5)
+        // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
         var defaultExercises = Enumerable.Range(1, 20)
             .Select(i => Exercise.Create($"Ejercicio {i}", "Brazos"))
             .ToList();
 
-        repoMock.Setup(r => r.ListAsync(null, null, null, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((defaultExercises, 100));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Page = 0, PageSize = -5 };
@@ -185,18 +192,18 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.Equal(20, result.Items.Count);
         Assert.Equal(100, result.TotalCount);
         Assert.Equal(5, result.TotalPages);
-        repoMock.Verify(r => r.ListAsync(null, null, null, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task DadoCatalogoVacioOFiltroSinCoincidencias_CuandoConsulta_EntoncesDevuelveTotalCount0YTotalPages0()
+    public async Task Listar_SinCoincidencias_RetornaListaVacia()
     {
         // ARRANGE
         var repoMock = new Mock<IExerciseRepository>();
-        repoMock.Setup(r => r.ListAsync("inexistente", null, null, 1, 20, It.IsAny<CancellationToken>()))
+        repoMock.Setup(r => r.ListAsync("inexistente", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Exercise>(), 0));
 
-        var handler = new ListExercisesQueryHandler(repoMock.Object);
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
 
         // ACT
         var query = new ListExercisesQuery { Search = "inexistente" };
@@ -208,12 +215,60 @@ public class ListExercisesTests : IAsyncLifetime
         Assert.Equal(0, result.TotalPages);
     }
 
-    // ==========================================
-    // 2. Integration Tests de ExerciseRepository
-    // ==========================================
+    [Fact]
+    public async Task Listar_ConUsedByPfTrue_PasaFiltroAlRepositorio()
+    {
+        // ARRANGE
+        var repoMock = new Mock<IExerciseRepository>();
+        var pfExercises = new List<Exercise>
+        {
+            Exercise.Create("Sentadilla", "Piernas"),
+            Exercise.Create("Press de banca", "Pecho")
+        };
+
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((pfExercises, 2));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+
+        // ACT
+        var query = new ListExercisesQuery { UsedByPf = true, Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Items.Count);
+        Assert.Equal(2, result.TotalCount);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, null, true, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+    }
 
     [Fact]
-    public async Task Repository_ListAsync_DadoEjerciciosEnBase_CuandoConsultaSinFiltro_EntoncesRetornaPaginaYTotalCountExacto()
+    public async Task Listar_ConErrorDeTipeo_RetornaPorSimilitud()
+    {
+        // ARRANGE
+        var repoMock = new Mock<IExerciseRepository>();
+        var sentadillas = new List<Exercise>
+        {
+            Exercise.Create("Sentadilla completa con barra", "Piernas"),
+            Exercise.Create("Sentadilla frontal", "Piernas")
+        };
+
+        repoMock.Setup(r => r.ListAsync("setnadilla", null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((sentadillas, 2));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+
+        // ACT
+        var query = new ListExercisesQuery { Search = "setnadilla", Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        // ASSERT
+        Assert.Equal(2, result.Items.Count);
+        Assert.Contains(result.Items, e => e.Name.Contains("Sentadilla"));
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_SinFiltros_RetornaPaginaYTotal()
     {
         // ARRANGE: Sembrar 25 ejercicios en SQLite
         await using (var seedContext = CreateContext())
@@ -229,7 +284,7 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, 1, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 1, 10);
 
             // ASSERT
             Assert.Equal(10, items.Count);
@@ -238,7 +293,7 @@ public class ListExercisesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Repository_ListAsync_DadoEjerciciosDeVariosGrupos_CuandoFiltraPorMuscleGroup_EntoncesTotalCountCorrespondeSoloAlGrupoFiltrado()
+    public async Task Repository_ListAsync_ConGrupoMuscular_FiltraPorGrupo()
     {
         // ARRANGE: 15 de Piernas y 10 de Pecho (total 25)
         await using (var seedContext = CreateContext())
@@ -258,17 +313,17 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", 1, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", null, null, false, 1, 10);
 
             // ASSERT
             Assert.Equal(10, items.Count);
-            Assert.Equal(15, totalCount); // Solo los 15 de piernas
+            Assert.Equal(15, totalCount);
             Assert.All(items, e => Assert.Equal("Piernas", e.MuscleGroup));
         }
     }
 
     [Fact]
-    public async Task Repository_ListAsync_DadaUltimaPaginaIncompleta_CuandoConsulta_EntoncesRetornaSoloRestantesYTotalCountCompleto()
+    public async Task Repository_ListAsync_UltimaPagina_RetornaRestantes()
     {
         // ARRANGE: 25 ejercicios, página 3 con pageSize = 10 -> debe traer 5
         await using (var seedContext = CreateContext())
@@ -284,11 +339,453 @@ public class ListExercisesTests : IAsyncLifetime
         await using (var actContext = CreateContext())
         {
             var repo = new ExerciseRepository(actContext);
-            var (items, totalCount) = await repo.ListAsync(null, null, null, 3, 10);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 3, 10);
 
             // ASSERT
             Assert.Equal(5, items.Count);
             Assert.Equal(25, totalCount);
         }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConUsedByPf_RetornaSoloEjerciciosDelPlan()
+    {
+        var sentadilla = Exercise.Create("Sentadilla", "Piernas");
+        var pressBanca = Exercise.Create("Press de banca", "Pecho");
+        var pesoMuerto = Exercise.Create("Peso muerto rumano", "Piernas");
+        var curlBiceps = Exercise.Create("Curl de bíceps", "Brazos");
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(sentadilla, pressBanca, pesoMuerto, curlBiceps);
+
+            var plan = TrainingPlan.Create("Fuerza base");
+            var week = TrainingWeek.Create(1, plan.Id);
+            var session = TrainingSession.Create(week.Id, "Día 1", 1, DayOfWeek.Monday);
+
+            session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 8, 80m, session.Id, sentadilla.Id));
+            session.AddPrescribedExercise(PrescribedExercise.Create(2, 4, 8, 75m, session.Id, pressBanca.Id));
+            session.AddPrescribedExercise(PrescribedExercise.Create(3, 4, 10, 70m, session.Id, pesoMuerto.Id));
+
+            week.AddSession(session);
+            plan.AddWeek(week);
+
+            await seedContext.TrainingPlans.AddAsync(plan);
+            await seedContext.SaveChangesAsync();
+        }
+
+        // ACT: Consulta con usedByPf = true
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
+
+            // ASSERT: Solo los 3 ejercicios del plan
+            Assert.Equal(3, totalCount);
+            Assert.Equal(3, items.Count);
+            Assert.Contains(items, e => e.Id == sentadilla.Id);
+            Assert.Contains(items, e => e.Id == pressBanca.Id);
+            Assert.Contains(items, e => e.Id == pesoMuerto.Id);
+            Assert.DoesNotContain(items, e => e.Id == curlBiceps.Id);
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConUsedByPf_UneEjerciciosDePlanesYRecords()
+    {
+        var sentadilla = Exercise.Create("Sentadilla", "Piernas");
+        var pressBanca = Exercise.Create("Press de banca", "Pecho");
+        var dominadas = Exercise.Create("Dominadas", "Espalda");
+        var fondos = Exercise.Create("Fondos", "Pecho");
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(sentadilla, pressBanca, dominadas, fondos);
+
+            var plan = TrainingPlan.Create("Fuerza 1");
+            var week = TrainingWeek.Create(1, plan.Id);
+            var session = TrainingSession.Create(week.Id, "Sesión A", 1, DayOfWeek.Wednesday);
+            session.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 5, 85m, session.Id, sentadilla.Id));
+            session.AddPrescribedExercise(PrescribedExercise.Create(2, 3, 5, 80m, session.Id, pressBanca.Id));
+            week.AddSession(session);
+            plan.AddWeek(week);
+            await seedContext.TrainingPlans.AddAsync(plan);
+
+            var record = AthleteRecord.Create(Guid.NewGuid(), dominadas.Id, 25m, RecordSource.Tested, DateTime.UtcNow);
+            await seedContext.AthleteRecords.AddAsync(record);
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        // ACT
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
+
+            // ASSERT: 3 ejercicios (2 del plan + 1 del récord)
+            Assert.Equal(3, totalCount);
+            Assert.Contains(items, e => e.Id == sentadilla.Id);
+            Assert.Contains(items, e => e.Id == pressBanca.Id);
+            Assert.Contains(items, e => e.Id == dominadas.Id);
+            Assert.DoesNotContain(items, e => e.Id == fondos.Id);
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConUsedByPf_NoMuestraEjerciciosDeOtroPf()
+    {
+        var pf1Id = _pfId;
+        var pf2Id = Guid.NewGuid();
+
+        var ejercicioPf1 = Exercise.Create("Sentadilla Frontal", "Piernas");
+        var ejercicioPf2 = Exercise.Create("Remo con Barra", "Espalda");
+
+        // Sembrar ejercicios en el catálogo general
+        await using (var catalogContext = CreateCatalogContext())
+        {
+            await catalogContext.Exercises.AddRangeAsync(ejercicioPf1, ejercicioPf2);
+            await catalogContext.SaveChangesAsync();
+        }
+
+        // PF 1 crea su plan
+        await using (var seedContext1 = CreateContext(pf1Id))
+        {
+            var plan1 = TrainingPlan.Create("Plan PF 1");
+            var week1 = TrainingWeek.Create(1, plan1.Id);
+            var session1 = TrainingSession.Create(week1.Id, "S1", 1, DayOfWeek.Monday);
+            session1.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, null, session1.Id, ejercicioPf1.Id));
+            week1.AddSession(session1);
+            plan1.AddWeek(week1);
+            await seedContext1.TrainingPlans.AddAsync(plan1);
+            await seedContext1.SaveChangesAsync();
+        }
+
+        // PF 2 crea su plan
+        await using (var seedContext2 = CreateContext(pf2Id))
+        {
+            var plan2 = TrainingPlan.Create("Plan PF 2");
+            var week2 = TrainingWeek.Create(1, plan2.Id);
+            var session2 = TrainingSession.Create(week2.Id, "S2", 1, DayOfWeek.Tuesday);
+            session2.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, null, session2.Id, ejercicioPf2.Id));
+            week2.AddSession(session2);
+            plan2.AddWeek(week2);
+            await seedContext2.TrainingPlans.AddAsync(plan2);
+            await seedContext2.SaveChangesAsync();
+        }
+
+        // ACT: PF 2 consulta con usedByPf = true
+        await using (var actContext2 = CreateContext(pf2Id))
+        {
+            var repo = new ExerciseRepository(actContext2);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
+
+            // ASSERT: PF 2 solo ve su propio ejercicio, NO el de PF 1
+            Assert.Equal(1, totalCount);
+            Assert.Single(items);
+            Assert.Equal(ejercicioPf2.Id, items[0].Id);
+            Assert.DoesNotContain(items, e => e.Id == ejercicioPf1.Id);
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_PfSinActividad_RetornaListaVacia()
+    {
+        var pfNuevo = Guid.NewGuid();
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddAsync(Exercise.Create("Press Militar", "Hombros"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        // ACT
+        await using (var actContext = CreateContext(pfNuevo))
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, true, 1, 20);
+
+            // ASSERT
+            Assert.Empty(items);
+            Assert.Equal(0, totalCount);
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConUsedByPfFalse_RetornaTodoElCatalogo()
+    {
+        var ex1 = Exercise.Create("Sentadilla", "Piernas");
+        var ex2 = Exercise.Create("Press Francés", "Brazos");
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(ex1, ex2);
+
+            var plan = TrainingPlan.Create("Plan Simple");
+            var week = TrainingWeek.Create(1, plan.Id);
+            var session = TrainingSession.Create(week.Id, "S1", 1, DayOfWeek.Friday);
+            session.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, null, session.Id, ex1.Id));
+            week.AddSession(session);
+            plan.AddWeek(week);
+            await seedContext.TrainingPlans.AddAsync(plan);
+            await seedContext.SaveChangesAsync();
+        }
+
+        // ACT: Consulta con usedByPf = false (todo el catálogo)
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, null, false, 1, 20);
+
+            // ASSERT: Retorna todos los ejercicios del catálogo
+            Assert.True(totalCount >= 2);
+            Assert.Contains(items, e => e.Id == ex1.Id);
+            Assert.Contains(items, e => e.Id == ex2.Id);
+        }
+    }
+
+    // ==========================================
+    // 3. Test de Entidad (Domain)
+    // ==========================================
+
+    [Fact]
+    public void Create_SinImagenesNiAnimacion_CreaEjercicioCorrectamente()
+    {
+        // Arrange & Act
+        var exercise = Exercise.Create(
+            name: "Press de Banca",
+            muscleGroup: "Pecho",
+            description: null,
+            animationUrl: null,
+            videoUrl: null,
+            equipment: null,
+            images: null
+        );
+
+        // Assert
+        Assert.NotNull(exercise);
+        Assert.Null(exercise.AnimationUrl);
+        Assert.Empty(exercise.Images);
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConFiltroMuscle_RetornaSoloEjerciciosConEseMusculoPrincipal()
+    {
+        var rdl = Exercise.Create("Peso muerto rumano", "Piernas", primaryMuscles: ["isquiotibiales"]);
+        var curlFemoral = Exercise.Create("Curl femoral", "Piernas", primaryMuscles: ["isquiotibiales"]);
+        var sentadilla = Exercise.Create("Sentadilla trasera", "Piernas", primaryMuscles: ["cuadríceps"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(rdl, curlFemoral, sentadilla);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "isquiotibiales", null, false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Peso muerto rumano");
+            Assert.Contains(items, e => e.Name == "Curl femoral");
+            Assert.DoesNotContain(items, e => e.Name == "Sentadilla trasera");
+        }
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_ConFiltroMuscleYBusquedaTexto_PasaParametrosAlRepositorio()
+    {
+        var repoMock = new Mock<IExerciseRepository>();
+        var rdl = Exercise.Create("Peso muerto rumano", "Piernas", primaryMuscles: ["isquiotibiales"]);
+
+        repoMock.Setup(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([rdl], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+        var query = new ListExercisesQuery { Search = "rumano", MuscleGroup = "Piernas", Muscle = "isquiotibiales", Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        Assert.Single(result.Items);
+        Assert.Equal("Peso muerto rumano", result.Items[0].Name);
+        repoMock.Verify(r => r.ListAsync("rumano", null, "Piernas", "isquiotibiales", null, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConMusculoSinEjercicios_RetornaVacioSinError()
+    {
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "musculo_sin_ejercicios", null, false, 1, 20);
+
+            Assert.Empty(items);
+            Assert.Equal(0, totalCount);
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConMusculoCuadricepsConTildeEnA_EncuentraSentadillaConCuadricepsEnBase()
+    {
+        // El front manda "cuádriceps" (tilde en la 'a'), pero la base tiene "cuadríceps" (tilde en la 'i')
+        var sentadilla = Exercise.Create("Sentadilla trasera", "Piernas", primaryMuscles: ["cuadríceps"]);
+        var rdl = Exercise.Create("Peso muerto rumano", "Piernas", primaryMuscles: ["isquiotibiales"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(sentadilla, rdl);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Piernas", "cuádriceps", null, false, 1, 20);
+
+            Assert.Equal(1, totalCount);
+            Assert.Single(items);
+            Assert.Equal("Sentadilla trasera", items[0].Name);
+        }
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_Isolation_PFA_SetsVideo_PFB_SeesCatalogVideo()
+    {
+        // KAN-380: PF A tiene video propio, PF B ve el video del catálogo (o ninguno)
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var exerciseRepoMock = new Mock<IExerciseRepository>();
+        exerciseRepoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([exercise], 1));
+
+        // Para PF A, el repositorio devuelve su video propio
+        var videoRepoMockPFA = new Mock<IExerciseVideoRepository>();
+        videoRepoMockPFA.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { { exercise.Id, "https://www.youtube.com/watch?v=pfAVideo" } });
+
+        var handlerPFA = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFA.Object, ExerciseMediaCatalog.Empty);
+        var resultPFA = await handlerPFA.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Equal("https://www.youtube.com/watch?v=pfAVideo", resultPFA.Items[0].VideoUrl);
+        Assert.Equal("Pf", resultPFA.Items[0].VideoSource);
+
+        // Para PF B, el repositorio no tiene video para este ejercicio
+        var videoRepoMockPFB = new Mock<IExerciseVideoRepository>();
+        videoRepoMockPFB.Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var handlerPFB = new ListExercisesQueryHandler(exerciseRepoMock.Object, videoRepoMockPFB.Object, ExerciseMediaCatalog.Empty);
+        var resultPFB = await handlerPFB.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Equal("https://www.youtube.com/watch?v=catalogVid", resultPFB.Items[0].VideoUrl);
+        Assert.Equal("Catalog", resultPFB.Items[0].VideoSource);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_ConFiltroExerciseType_PasaParametroAlRepositorio()
+    {
+        var repoMock = new Mock<IExerciseRepository>();
+        var sprint = Exercise.Create("Sprints", "Piernas", exerciseType: ExerciseType.Distance);
+
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([sprint], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+        var query = new ListExercisesQuery { ExerciseType = ExerciseType.Distance, Page = 1, PageSize = 20 };
+        var result = await handler.Handle(query);
+
+        Assert.Single(result.Items);
+        Assert.Equal("Sprints", result.Items[0].Name);
+        Assert.Equal(ExerciseType.Distance, result.Items[0].ExerciseType);
+        repoMock.Verify(r => r.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Repository_ListAsync_ConFiltroExerciseType_Distancia_RetornaPasadasYSprints()
+    {
+        // KAN-453: Criterio de aceptación: DADO la biblioteca CUANDO se filtra por «distancia» ENTONCES aparecen pasadas y sprints
+        var pasadas = Exercise.Create("Pasadas", "Piernas", exerciseType: ExerciseType.Distance);
+        var sprints = Exercise.Create("Sprints", "Piernas", exerciseType: ExerciseType.Distance);
+        var sentadilla = Exercise.Create("Sentadilla", "Piernas", exerciseType: ExerciseType.Weight);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(pasadas, sprints, sentadilla);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, null, null, ExerciseType.Distance, false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Pasadas");
+            Assert.Contains(items, e => e.Name == "Sprints");
+            Assert.DoesNotContain(items, e => e.Name == "Sentadilla");
+        }
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioCatalogoConImagenes_DevuelveImageSourceConLicencia()
+    {
+        // KAN-518: DADO un ejercicio del catálogo CUANDO se consulta la API ENTONCES devuelve sus dos imágenes y la fuente con su licencia.
+        var images = new List<string>
+        {
+            "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg",
+            "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/1.jpg"
+        };
+        var catalogExercise = Exercise.Create("Sentadilla Trasera", "Piernas", images: images, origin: Origin.Catalog);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([catalogExercise], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Equal(2, item.Images.Count);
+        Assert.NotNull(item.ImageSource);
+        Assert.Equal("free-exercise-db", item.ImageSource.Name);
+        Assert.Equal("https://github.com/yuhonas/free-exercise-db", item.ImageSource.Url);
+        Assert.Equal("The Unlicense", item.ImageSource.License);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioDePf_DevuelveImageSourceNull()
+    {
+        // KAN-518: Los ejercicios cargados por un PF no tienen la fuente fija del catálogo
+        var coachExercise = Exercise.Create("Sentadilla Personalizada PF", "Piernas", images: ["img1.jpg", "img2.jpg"], origin: Origin.Coach);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([coachExercise], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Null(item.ImageSource);
+    }
+
+    [Fact]
+    public async Task Handler_ListExercises_EjercicioCatalogoSinImagenes_DevuelveImageSourceNull()
+    {
+        // KAN-518: Si el ejercicio no tiene imágenes, imageSource es null
+        var exerciseWithoutImages = Exercise.Create("Ejercicio Sin Fotos", "Brazos", images: null, origin: Origin.Catalog);
+
+        var repoMock = new Mock<IExerciseRepository>();
+        repoMock.Setup(r => r.ListAsync(null, null, null, null, null, false, 1, 20, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([exerciseWithoutImages], 1));
+
+        var handler = new ListExercisesQueryHandler(repoMock.Object, EmptyVideoRepo(), ExerciseMediaCatalog.Empty);
+        var result = await handler.Handle(new ListExercisesQuery { Page = 1, PageSize = 20 });
+
+        Assert.Single(result.Items);
+        var item = result.Items[0];
+        Assert.Empty(item.Images);
+        Assert.Null(item.ImageSource);
     }
 }

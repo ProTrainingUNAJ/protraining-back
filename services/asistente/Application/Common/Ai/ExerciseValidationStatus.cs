@@ -16,6 +16,8 @@ public enum ExerciseValidationStatus
     /// </summary>
     IdCorrected,
 
+    AdaptedToAuthorizedSubstitute,
+
     /// <summary>
     /// El ejercicio no existe en el catálogo oficial; de acuerdo al requerimiento de ajuste (N2),
     /// se preserva con la bandera 'esReferencia = true' y 'ejercicioId = null' para revisión del preparador físico.

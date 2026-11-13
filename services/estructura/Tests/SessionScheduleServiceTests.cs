@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -30,47 +30,51 @@ public class SessionScheduleServiceTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     [Fact]
-    public async Task Given_AthletesWithSession_When_GetAthletesWithScheduledSession_Then_Returns_Ids()
+    public async Task Given_AthletesAndCategoriesWithSession_When_GetAthletesWithScheduledSession_Then_Returns_Targets()
     {
         // arrange
         var athleteId1 = Guid.NewGuid();
-        var athleteId2 = Guid.NewGuid();
+        var categoryId1 = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
         var date = new DateOnly(2026, 10, 20);
 
         var handler = new FakeHttpMessageHandler(_ => Json(HttpStatusCode.OK,
-            $$"""["{{athleteId1}}", "{{athleteId2}}"]"""));
+            $$"""{"athleteIds":["{{athleteId1}}"],"categoryIds":["{{categoryId1}}"]}"""));
         var service = CreateService(handler);
 
         // act
-        var result = await service.GetAthletesWithScheduledSessionAsync(date);
+        var result = await service.GetAthletesWithScheduledSessionAsync(date, pfId);
 
         // assert
-        Assert.Equal(2, result.Count);
-        Assert.Contains(athleteId1, result);
-        Assert.Contains(athleteId2, result);
-        Assert.Equal("http://entrenamiento:8080/api/v1/training-sessions/scheduled-athletes?date=2026-10-20", handler.LastRequest!.RequestUri!.ToString());
+        Assert.Single(result.AthleteIds, athleteId1);
+        Assert.Single(result.CategoryIds, categoryId1);
+        Assert.Equal($"http://entrenamiento:8080/api/v1/internal/training-sessions/athletes-with-session?date=2026-10-20&pfId={pfId}", handler.LastRequest!.RequestUri!.ToString());
     }
 
     [Fact]
-    public async Task Given_NoSessionsFound_When_GetAthletesWithScheduledSession_Then_Returns_EmptyList()
+    public async Task Given_NoSessionsFound_When_GetAthletesWithScheduledSession_Then_Returns_EmptyTargets()
     {
-        var handler = new FakeHttpMessageHandler(_ => Json(HttpStatusCode.NotFound, "[]"));
+        var pfId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(_ => Json(HttpStatusCode.NotFound, "{}"));
         var service = CreateService(handler);
 
-        var result = await service.GetAthletesWithScheduledSessionAsync(new DateOnly(2026, 10, 20));
+        var result = await service.GetAthletesWithScheduledSessionAsync(new DateOnly(2026, 10, 20), pfId);
 
-        Assert.Empty(result);
+        Assert.Empty(result.AthleteIds);
+        Assert.Empty(result.CategoryIds);
     }
 
     [Fact]
     public async Task Given_EntrenamientoDownOrTimeout_When_GetAthletesWithScheduledSession_Then_DoesNotThrow_AndReturns_Empty()
     {
-        // criterio de aceptacion: si Entrenamiento se cae o no responde, el worker no se interrumpe
+        // Criterio de aceptacion: si Entrenamiento se cae o no responde, el worker no se interrumpe
+        var pfId = Guid.NewGuid();
         var handler = new FakeHttpMessageHandler(_ => throw new HttpRequestException("Connection refused"));
         var service = CreateService(handler);
 
-        var result = await service.GetAthletesWithScheduledSessionAsync(new DateOnly(2026, 10, 20));
+        var result = await service.GetAthletesWithScheduledSessionAsync(new DateOnly(2026, 10, 20), pfId);
 
-        Assert.Empty(result);
+        Assert.Empty(result.AthleteIds);
+        Assert.Empty(result.CategoryIds);
     }
 }

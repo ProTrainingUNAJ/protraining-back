@@ -23,6 +23,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<TrainingWeek> TrainingWeeks => Set<TrainingWeek>();
     public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
     public DbSet<PrescribedExercise> PrescribedExercises => Set<PrescribedExercise>();
+    public DbSet<ExerciseRestriction> ExerciseRestrictions => Set<ExerciseRestriction>();
+    public DbSet<ExerciseSubstitute> ExerciseSubstitutes => Set<ExerciseSubstitute>();
+    public DbSet<PerformedSet> PerformedSets => Set<PerformedSet>();
+    public DbSet<RecordProposal> RecordProposals => Set<RecordProposal>();
+    public DbSet<ExerciseVideo> ExerciseVideos => Set<ExerciseVideo>();
+    public DbSet<AthleteSessionAdjustment> AthleteSessionAdjustments => Set<AthleteSessionAdjustment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

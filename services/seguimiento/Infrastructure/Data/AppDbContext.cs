@@ -16,6 +16,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<CatalogTest> CatalogTests { get; set; }
     public DbSet<CheckIn> CheckIns { get; set; }
+    public DbSet<AthleteInjury> AthleteInjuries { get; set; }
+    public DbSet<AthleteInjuryStatusChange> AthleteInjuryStatusChanges { get; set; }
+    public DbSet<DailyLoad> DailyLoads { get; set; }
+    public DbSet<Attendance> Attendances { get; set; }
+    public DbSet<FieldTestSession> FieldTestSessions { get; set; }
+    public DbSet<FieldTestSessionTest> FieldTestSessionTests { get; set; }
+    public DbSet<FieldTestResult> FieldTestResults { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

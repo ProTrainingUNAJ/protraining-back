@@ -46,9 +46,18 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IExerciseRepository, ExerciseRepository>();
+        services.AddScoped<IExerciseRestrictionRepository, ExerciseRestrictionRepository>();
         services.AddScoped<IAthleteRecordRepository, AthleteRecordRepository>();
         services.AddScoped<ITrainingPlanRepository, TrainingPlanRepository>();
         services.AddScoped<ITrainingSessionRepository, TrainingSessionRepository>();
+        services.AddScoped<IPerformedSetRepository, PerformedSetRepository>();
+        services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
+        services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
+        services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+
+        // Ilustraciones de los ejercicios del catálogo (KAN-549): tabla fija, se lee una vez.
+        services.AddSingleton<IExerciseMediaCatalog>(_ =>
+            ExerciseMediaCatalog.FromFile(Path.Combine(AppContext.BaseDirectory, "Data", "exercise-media.json")));
 
         return services;
     }
@@ -58,11 +67,25 @@ public static class DependencyInjection
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (context.Database.GetMigrations().Any())
-            await context.Database.MigrateAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
-        var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
 
-        await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
+        if (context.Database.IsRelational())
+        {
+            if (context.Database.GetMigrations().Any())
+                await context.Database.MigrateAsync();
+
+            var dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+            await ExerciseCatalogSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseRestrictionSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseNameSyncSeeder.SeedAsync(context, dataDirectory, logger);
+            await ExerciseVariantSeeder.SeedAsync(context, dataDirectory, logger);
+            await EnduranceExerciseSeeder.SeedAsync(context, logger);
+            await ExerciseTypeClassificationSeeder.SeedAsync(context, dataDirectory, logger);
+        }
+        else
+        {
+            // En proveedores no relacionales (p.ej. InMemory en tests) se omiten migraciones/seeders físicos.
+            logger.LogInformation("Se omitieron migraciones y seeders porque el proveedor de base de datos no es relacional.");
+        }
     }
 }

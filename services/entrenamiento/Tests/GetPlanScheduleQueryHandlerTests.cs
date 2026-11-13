@@ -90,6 +90,7 @@ public class GetPlanScheduleQueryHandlerTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Handle_DadoOtroPf_EntoncesNoVeSusAsignaciones()
     {
         var pfId = Guid.NewGuid();

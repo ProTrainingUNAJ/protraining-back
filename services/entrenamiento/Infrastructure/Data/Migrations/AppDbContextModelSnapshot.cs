@@ -80,6 +80,67 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("athlete_records", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.AthleteSessionAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Items")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("items");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("TrainingPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_plan_id");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_session_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingPlanId", "AthleteId")
+                        .HasDatabaseName("IX_athlete_session_adjustments_plan_athlete");
+
+                    b.HasIndex("TrainingSessionId", "AthleteId", "Date")
+                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date");
+
+                    b.ToTable("athlete_session_adjustments", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Exercise", b =>
                 {
                     b.Property<Guid>("Id")
@@ -106,6 +167,14 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("equipment");
 
+                    b.Property<string>("ExerciseType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Weight")
+                        .HasColumnName("exercise_type");
+
                     b.Property<List<string>>("Images")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -121,6 +190,18 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Catalog")
+                        .HasColumnName("origin");
+
+                    b.Property<Guid?>("ParentExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_exercise_id");
+
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
@@ -135,6 +216,11 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("secondary_muscles");
 
+                    b.Property<string>("VariantLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("variant_label");
+
                     b.Property<string>("VideoUrl")
                         .HasColumnType("text")
                         .HasColumnName("video_url");
@@ -148,9 +234,179 @@ namespace Infrastructure.Data.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
 
+                    b.HasIndex("ParentExerciseId");
+
                     b.HasIndex("PfId");
 
                     b.ToTable("exercises", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<int>("MinPainLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_pain_level");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("Zone");
+
+                    b.HasIndex("Zone", "ExerciseId")
+                        .IsUnique();
+
+                    b.ToTable("exercise_restrictions", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseSubstitute", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<Guid>("RestrictionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("restriction_id");
+
+                    b.Property<Guid>("SubstituteExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("substitute_exercise_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubstituteExerciseId");
+
+                    b.HasIndex("RestrictionId", "SubstituteExerciseId")
+                        .IsUnique();
+
+                    b.ToTable("exercise_substitutes", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseVideo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<string>("VideoUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("video_url");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("PfId", "ExerciseId")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("exercise_videos", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.PerformedSet", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<int>("Reps")
+                        .HasColumnType("integer")
+                        .HasColumnName("reps");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<int?>("SetNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("set_number");
+
+                    b.Property<decimal?>("TimeSeconds")
+                        .HasColumnType("numeric")
+                        .HasColumnName("time_seconds");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("weight");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("AthleteId", "Date");
+
+                    b.ToTable("performed_sets", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
@@ -234,10 +490,19 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sets");
 
+                    b.Property<decimal?>("TargetDistanceMeters")
+                        .HasColumnType("numeric")
+                        .HasColumnName("target_distance_meters");
+
                     b.Property<decimal?>("TargetPercentage")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("target_percentage");
+
+                    b.Property<decimal?>("TargetTimeSeconds")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("target_time_seconds");
 
                     b.Property<Guid>("TrainingSessionId")
                         .HasColumnType("uuid")
@@ -254,6 +519,68 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("prescribed_exercises", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.RecordProposal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("CurrentWeight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("current_weight");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exercise_id");
+
+                    b.Property<int>("PerformedReps")
+                        .HasColumnType("integer")
+                        .HasColumnName("performed_reps");
+
+                    b.Property<decimal>("PerformedWeight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("performed_weight");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<decimal>("ProposedWeight")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("proposed_weight");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "ExerciseId", "Status");
+
+                    b.ToTable("record_proposals", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
                 {
                     b.Property<Guid>("Id")
@@ -267,6 +594,12 @@ namespace Infrastructure.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsTemplate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_template");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -326,6 +659,10 @@ namespace Infrastructure.Data.Migrations
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("start_time");
 
                     b.Property<Guid>("TrainingWeekId")
                         .HasColumnType("uuid")
@@ -390,6 +727,63 @@ namespace Infrastructure.Data.Migrations
                     b.Navigation("Exercise");
                 });
 
+            modelBuilder.Entity("Domain.Entities.Exercise", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", null)
+                        .WithMany()
+                        .HasForeignKey("ParentExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseSubstitute", b =>
+                {
+                    b.HasOne("Domain.Entities.ExerciseRestriction", "Restriction")
+                        .WithMany("Substitutes")
+                        .HasForeignKey("RestrictionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Exercise", "SubstituteExercise")
+                        .WithMany()
+                        .HasForeignKey("SubstituteExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restriction");
+
+                    b.Navigation("SubstituteExercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PerformedSet", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.TrainingSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("Domain.Entities.PlanAssignment", b =>
                 {
                     b.HasOne("Domain.Entities.TrainingPlan", "Plan")
@@ -420,6 +814,17 @@ namespace Infrastructure.Data.Migrations
                     b.Navigation("TrainingSession");
                 });
 
+            modelBuilder.Entity("Domain.Entities.RecordProposal", b =>
+                {
+                    b.HasOne("Domain.Entities.Exercise", "Exercise")
+                        .WithMany()
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
+                });
+
             modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
                 {
                     b.HasOne("Domain.Entities.TrainingWeek", "Week")
@@ -440,6 +845,11 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("TrainingPlan");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ExerciseRestriction", b =>
+                {
+                    b.Navigation("Substitutes");
                 });
 
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>

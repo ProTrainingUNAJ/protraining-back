@@ -10,4 +10,6 @@ public sealed record MeDto(
     string LastName,
     string FullName,
     bool Active,
-    IReadOnlyList<CategoryDto> Categories);
+    IReadOnlyList<CategoryDto> Categories,
+    bool HasSignedConsent = false,
+    bool IsMinor = false);

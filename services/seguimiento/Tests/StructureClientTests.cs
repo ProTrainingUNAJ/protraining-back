@@ -24,8 +24,15 @@ public class StructureClientTests
         }
     }
 
-    private static StructureClient CreateClient(HttpMessageHandler handler) =>
-        new(new HttpClient(handler) { BaseAddress = new Uri("http://estructura:8080/") }, NullLogger<StructureClient>.Instance);
+    private static StructureClient CreateClient(HttpMessageHandler handler)
+    {
+        var tokenFactory = new Mock<Application.Interfaces.Services.IServiceTokenFactory>();
+        tokenFactory.Setup(f => f.CreateToken()).Returns("token-de-servicio");
+        return new(
+            new HttpClient(handler) { BaseAddress = new Uri("http://estructura:8080/") },
+            NullLogger<StructureClient>.Instance,
+            tokenFactory.Object);
+    }
 
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -209,5 +216,52 @@ public class StructureClientTests
         var client = CreateClient(new FakeStructureHandler(_ => throw new TaskCanceledException()));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetMeAsync(cancellation.Token));
+    }
+
+    // ---------- IsOwnAthleteAsync (KAN-431) ----------
+
+    [Fact]
+    public async Task Given_AthleteOfThePf_When_IsOwnAthlete_Then_ReturnsTrueAndCallsAthleteById()
+    {
+        var athleteId = Guid.NewGuid();
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK, "{}"));
+        var client = CreateClient(handler);
+
+        var isOwn = await client.IsOwnAthleteAsync(athleteId);
+
+        Assert.True(isOwn);
+        Assert.Equal($"http://estructura:8080/api/v1/athletes/{athleteId}", handler.LastRequest!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task Given_AthleteOfAnotherPfOrMissing_When_IsOwnAthlete_Then_ReturnsFalse()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => Json(HttpStatusCode.NotFound, "{}")));
+
+        Assert.False(await client.IsOwnAthleteAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Given_StructureDown_When_IsOwnAthlete_Then_Throws_StructureUnavailable()
+    {
+        var client = CreateClient(new FakeStructureHandler(_ => throw new HttpRequestException("Connection refused.")));
+
+        await Assert.ThrowsAsync<StructureUnavailableException>(() => client.IsOwnAthleteAsync(Guid.NewGuid()));
+    }
+
+    // KAN-578: la lista interna va al endpoint /internal con el token de servicio, no con el del usuario
+    [Fact]
+    public async Task GetCategoryAthletesInternalAsync_UsesInternalPathAndServiceToken()
+    {
+        var categoryId = Guid.NewGuid();
+        var handler = new FakeStructureHandler(_ => Json(HttpStatusCode.OK, "[{\"id\":\"" + Guid.NewGuid() + "\",\"fullName\":\"Joaquín Díaz\"}]"));
+        var client = CreateClient(handler);
+
+        var athletes = await client.GetCategoryAthletesInternalAsync(categoryId);
+
+        Assert.Single(athletes);
+        Assert.Equal($"/api/v1/internal/categories/{categoryId}/athletes", handler.LastRequest!.RequestUri!.AbsolutePath);
+        Assert.Equal("Bearer", handler.LastRequest.Headers.Authorization?.Scheme);
+        Assert.Equal("token-de-servicio", handler.LastRequest.Headers.Authorization?.Parameter);
     }
 }

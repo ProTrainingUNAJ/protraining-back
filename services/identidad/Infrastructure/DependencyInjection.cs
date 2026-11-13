@@ -1,7 +1,10 @@
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.ForgotPassword;
+using Application.UseCases.Auth.ResetPasswordWithToken;
 using Domain.Entities;
 using Infrastructure.Data;
+using Infrastructure.Options;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -46,22 +49,36 @@ public static class DependencyInjection
                // configuracion de ASP.NET Core Identity (PBKDF2)
         services.AddIdentityCore<User>(options =>
         {
-                       // reglas de contraseña
+            // reglas de contraseña unificadas (#KAN-539 / decisión Enzo)
+            options.Password.RequiredLength = 8;
             options.Password.RequireDigit = true;
-            options.Password.RequiredLength = 6;
             options.Password.RequireNonAlphanumeric = false;
             options.Password.RequireUppercase = false;
             options.Password.RequireLowercase = false;
             
-                       // reglas de usuario y bloqueo por intentos fallidos
+            // reglas de usuario y bloqueo por intentos fallidos
             options.User.RequireUniqueEmail = true;
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             options.Lockout.MaxFailedAccessAttempts = 5;
             options.Lockout.AllowedForNewUsers = true;
         })
         .AddRoles<IdentityRole<Guid>>()
-        .AddEntityFrameworkStores<AppDbContext>();
+        .AddEntityFrameworkStores<AppDbContext>()
+        .AddDefaultTokenProviders()
+        .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
+        // Vigencia de 30 minutos para tokens de recuperación (#KAN-540)
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+            options.TokenLifespan = TimeSpan.FromMinutes(30));
+
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+        services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
+        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+
+        services.AddScoped<ForgotPasswordUseCase>();
+        services.AddScoped<ResetPasswordWithTokenUseCase>();
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();

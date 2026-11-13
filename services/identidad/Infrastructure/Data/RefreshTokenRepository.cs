@@ -1,4 +1,4 @@
-﻿using Application.Interfaces.Persistence;
+using Application.Interfaces.Persistence;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,5 +39,19 @@ public class RefreshTokenRepository(AppDbContext context) : IRefreshTokenReposit
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task RevokeAllActiveByUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var activeTokens = await context.RefreshTokens
+            .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+            .ToListAsync(cancellationToken);
 
+        var utcNow = DateTime.UtcNow;
+        foreach (var token in activeTokens)
+        {
+            token.IsRevoked = true;
+            token.RevokedAt = utcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
 }

@@ -1,0 +1,3 @@
+namespace Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
+
+public record GetAthletesWithScheduledSessionQuery(DateOnly Date, Guid PfId);

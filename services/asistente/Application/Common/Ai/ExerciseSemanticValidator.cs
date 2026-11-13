@@ -1,6 +1,7 @@
 namespace Application.Common.Ai;
 
 using Application.DTOs.Ai;
+using Application.DTOs.Adaptation;
 using Application.Interfaces.Services;
 
 /// <summary>
@@ -14,6 +15,7 @@ public sealed class ExerciseSemanticValidator(
     public async Task<RoutineSemanticValidationResult> ValidateDraftAsync(
         RoutineSuggestionResponseDto draft,
         SemanticValidationPolicy? policy = null,
+        AthleteAdaptationContextDto? adaptationContext = null,
         CancellationToken cancellationToken = default)
     {
         policy ??= SemanticValidationPolicy.Default;
@@ -78,6 +80,13 @@ public sealed class ExerciseSemanticValidator(
             Exercises = sanitizedExercises
         };
 
+        if (adaptationContext is not null)
+        {
+            var adaptation = ApplyAuthorizedAdaptations(sanitizedRoutine, adaptationContext, messages, itemResults);
+            sanitizedRoutine = adaptation.Routine;
+            hasCorrections |= adaptation.HasCorrections;
+        }
+
         return new RoutineSemanticValidationResult(
             IsValid: !requiresFallback,
             RequiresDeterministicFallback: requiresFallback,
@@ -88,13 +97,141 @@ public sealed class ExerciseSemanticValidator(
         );
     }
 
+    private static AdaptationValidationResult ApplyAuthorizedAdaptations(
+        RoutineSuggestionResponseDto routine,
+        AthleteAdaptationContextDto context,
+        ICollection<string> messages,
+        ICollection<ExerciseSemanticValidationItemResult> itemResults)
+    {
+        if (context.Restrictions.Count == 0)
+            return new(routine, false);
+
+        var restrictionsByExercise = context.Restrictions
+            .Where(r => r.Substitutes.Count > 0)
+            .GroupBy(r => r.ExerciseId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var exercises = new List<SuggestedExerciseDto>(routine.Exercises.Count);
+        var changes = new List<AdaptationChangeDto>();
+        var adaptedAny = false;
+        foreach (var exercise in routine.Exercises)
+        {
+            if (exercise.ExerciseId is not { } exerciseId ||
+                !restrictionsByExercise.TryGetValue(exerciseId, out var restriction))
+            {
+                exercises.Add(exercise);
+                continue;
+            }
+
+            var substitute = restriction.Substitutes[0];
+            var adapted = exercise with
+            {
+                ExerciseId = substitute.ExerciseId,
+                ExerciseName = substitute.Name,
+                IsReference = false
+            };
+            exercises.Add(adapted);
+            adaptedAny = true;
+            var message =
+                BuildAdaptationReason(restriction, substitute.Name);
+            messages.Add(message);
+            changes.Add(new(
+                exercise.ExerciseId,
+                exercise.ExerciseName,
+                substitute.ExerciseId,
+                substitute.Name,
+                restriction.Zone ?? string.Empty,
+                message));
+            itemResults.Add(new ExerciseSemanticValidationItemResult(
+                exercise,
+                adapted,
+                ExerciseValidationStatus.AdaptedToAuthorizedSubstitute,
+                message));
+        }
+
+        if (!adaptedAny && restrictionsByExercise.Count == 1 && routine.Exercises.Count == 1)
+        {
+            var restriction = restrictionsByExercise.Values.Single();
+            var proposed = routine.Exercises[0];
+            var authorizedIds = restriction.Substitutes.Select(substitute => substitute.ExerciseId).ToHashSet();
+            if (proposed.ExerciseId is not { } proposedId || !authorizedIds.Contains(proposedId))
+            {
+                var substitute = restriction.Substitutes[0];
+                var adapted = proposed with
+                {
+                    ExerciseId = substitute.ExerciseId,
+                    ExerciseName = substitute.Name,
+                    IsReference = false
+                };
+                var message =
+                    BuildUnauthorizedSubstituteReason(restriction, proposed.ExerciseName, substitute.Name);
+                messages.Add(message);
+                changes.Add(new(
+                    proposed.ExerciseId,
+                    proposed.ExerciseName,
+                    substitute.ExerciseId,
+                    substitute.Name,
+                    restriction.Zone ?? string.Empty,
+                    message));
+                itemResults.Add(new ExerciseSemanticValidationItemResult(
+                    proposed,
+                    adapted,
+                    ExerciseValidationStatus.AdaptedToAuthorizedSubstitute,
+                    message));
+                exercises[0] = adapted;
+                adaptedAny = true;
+            }
+        }
+
+        return new(
+            routine with
+        {
+            Exercises = exercises,
+            WasAdapted = adaptedAny,
+            AdaptationWarnings = messages.Where(message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase)).ToList(),
+            AdaptationChanges = changes
+        },
+            adaptedAny);
+    }
+
+    private static string BuildAdaptationReason(
+        ExerciseRestrictionContextDto restriction,
+        string substituteName) =>
+        $"Sustitución biomecánica por lesión de {restriction.Zone ?? "zona afectada"} para {NormalizeReason(restriction.Zone, restriction.Reason)}. Sustituto autorizado: {substituteName}.";
+
+    private static string BuildUnauthorizedSubstituteReason(
+        ExerciseRestrictionContextDto restriction,
+        string proposedName,
+        string substituteName) =>
+        $"El sustituto propuesto '{proposedName}' no estaba autorizado. " +
+        $"{BuildAdaptationReason(restriction, substituteName)}";
+
+    private static string NormalizeReason(string? zone, string? reason)
+    {
+        if (string.Equals(zone?.Trim(), "rodilla", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(reason) &&
+            reason.Contains("rotul", StringComparison.OrdinalIgnoreCase))
+        {
+            return "reducir estrés en tendón rotuliano";
+        }
+
+        var normalized = string.IsNullOrWhiteSpace(reason)
+            ? "reducir el estrés de la zona lesionada"
+            : reason.Trim().TrimEnd('.');
+        return char.ToLowerInvariant(normalized[0]) + normalized[1..];
+    }
+
+    private sealed record AdaptationValidationResult(
+        RoutineSuggestionResponseDto Routine,
+        bool HasCorrections);
+
     public async Task<RoutineSuggestionResponseDto> ValidateOrFallbackAsync(
         RoutineSuggestionResponseDto draft,
         RoutineSuggestionRequestDto originalRequest,
         SemanticValidationPolicy? policy = null,
         CancellationToken cancellationToken = default)
     {
-        var validation = await ValidateDraftAsync(draft, policy, cancellationToken);
+        var validation = await ValidateDraftAsync(draft, policy, cancellationToken: cancellationToken);
 
         if (!validation.RequiresDeterministicFallback)
         {

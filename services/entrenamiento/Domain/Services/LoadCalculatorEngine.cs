@@ -24,6 +24,7 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
             RecordSource.Tested => baseLoad,
             RecordSource.Reported => baseLoad,
             RecordSource.Estimated => baseLoad * EstimatedConservativeFactor,
+            RecordSource.Epley => baseLoad,
             _ => baseLoad
         };
 
@@ -35,5 +36,27 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
     public decimal RoundToNearestPlate(decimal weight)
     {
         return Math.Round(weight / PlateStep, MidpointRounding.AwayFromZero) * PlateStep;
+    }
+
+    public double? CalculateWeightPerSide(double? totalWeightKg, double barWeightKg = 20.0)
+    {
+        if (!totalWeightKg.HasValue)
+            return null;
+
+        if (totalWeightKg.Value <= barWeightKg)
+            return 0.0;
+
+        return (totalWeightKg.Value - barWeightKg) / 2.0;
+    }
+
+    public decimal? CalculateTimeTarget(decimal? bestTimeSeconds, decimal? targetPercentage)
+    {
+        if (!bestTimeSeconds.HasValue || !targetPercentage.HasValue || targetPercentage.Value <= 0)
+            return null;
+
+        decimal target = bestTimeSeconds.Value / (targetPercentage.Value / 100m);
+
+        // Redondeo a 1 decimal
+        return Math.Round(target, 1, MidpointRounding.AwayFromZero);
     }
 }

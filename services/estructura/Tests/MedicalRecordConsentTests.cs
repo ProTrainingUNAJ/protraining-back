@@ -49,7 +49,7 @@ public sealed class MedicalRecordConsentTests : IAsyncDisposable
     [Fact]
     public void Given_MinorAthleteWithoutGuardianConsent_When_ReadingOrCompletingMedicalRecord_Then_ThrowsDomainException()
     {
-        // arrange: atleta menor de edad sin consentimiento firmado por el tutor (Ajuste N3)
+        // arrange: atleta menor de edad sin consentimiento firmado por el tutor (regla tutor menores KAN-401)
         var minorAthlete = Athlete.CreateMinorPendingConsent(
             firstName: "Mateo",
             lastName: "Gomez",
@@ -117,7 +117,7 @@ public sealed class MedicalRecordConsentTests : IAsyncDisposable
     [Fact]
     public void Given_MinorAthleteWithSignedGuardianConsent_When_CompletingAndReadingMedicalRecord_Then_Succeeds()
     {
-        // arrange: menor que recibe la firma del tutor legal (Ajuste N3)
+        // arrange: menor que recibe la firma del tutor legal (regla tutor menores KAN-401)
         var minorAthlete = Athlete.CreateMinorPendingConsent(
             firstName: "Sofia",
             lastName: "Martinez",
@@ -185,6 +185,60 @@ public sealed class MedicalRecordConsentTests : IAsyncDisposable
                 guardianPhone: "+5491100001111",
                 allowsPhysicalTraining: true,
                 allowsHabitsRecommendations: true));
+    }
+
+    [Fact]
+    public void Given_MinorAthleteWithOnlyGuardianPhone_When_CreatedByPf_Then_SucceedsWithSignedConsent()
+    {
+        // arrange & act: alta de menor por el PF con solo teléfono del tutor (sin email, KAN-401)
+        var athlete = Athlete.CreateMinor(
+            firstName: "Lucas",
+            lastName: "Perez",
+            email: "lucas.perez@club.com",
+            phone: "+5491122223333",
+            guardianName: "Marcos Perez",
+            guardianEmail: null,
+            guardianPhone: "+5491177778888",
+            allowsPhysicalTraining: true,
+            allowsHabitsRecommendations: true);
+
+        // assert
+        Assert.True(athlete.IsMinor);
+        Assert.True(athlete.HasSignedConsent);
+        Assert.NotNull(athlete.DigitalConsent);
+        Assert.Equal("Marcos Perez", athlete.DigitalConsent.GuardianName);
+        Assert.Null(athlete.DigitalConsent.GuardianEmail);
+        Assert.Equal("+5491177778888", athlete.DigitalConsent.GuardianPhone);
+    }
+
+    [Fact]
+    public void Given_MinorAthleteWithOnlyGuardianPhone_When_ReadingMedicalRecord_Then_Succeeds()
+    {
+        // arrange: menor con tutor que solo proveyó teléfono (sin email, KAN-401)
+        var athlete = Athlete.CreateMinor(
+            firstName: "Thiago",
+            lastName: "Silva",
+            email: "thiago@club.com",
+            phone: "+5491133334444",
+            guardianName: "Paulo Silva",
+            guardianEmail: null,
+            guardianPhone: "+5491155556666",
+            allowsPhysicalTraining: true,
+            allowsHabitsRecommendations: false);
+
+        athlete.CompleteOrUpdateMedicalRecord(
+            medicalHistory: "Sin antecedentes",
+            surgeries: null,
+            pathologies: null,
+            hasPhysicalFitnessCertificate: true);
+
+        // act: la ficha médica se puede leer porque el consentimiento con solo teléfono es válido
+        var record = athlete.ReadMedicalRecord();
+
+        // assert
+        Assert.NotNull(record);
+        Assert.Equal(athlete.Id, record.AthleteId);
+        Assert.True(record.HasPhysicalFitnessCertificate);
     }
 
     [Fact]

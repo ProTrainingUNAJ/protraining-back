@@ -45,7 +45,12 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ICheckInRepository, CheckInRepository>();
+        services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
+        services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
+        services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<ICatalogTestRepository, CatalogTestRepository>();
+        services.AddScoped<IFieldTestRepository, FieldTestRepository>();
+        services.AddScoped<IFieldTestResultRepository, FieldTestResultRepository>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
         return services;

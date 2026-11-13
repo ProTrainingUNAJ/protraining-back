@@ -1,4 +1,4 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: ProTraining - Microservicio de Entrenamiento
   description: >
@@ -51,12 +51,56 @@ paths:
           schema:
             type: string
           description: Filtrar por grupo muscular principal (ej. Piernas, Pecho, Espalda, Core).
+        - name: muscle
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtrar por músculo puntual en español (ej. Isquiotibiales, Cuádriceps, Glúteos, Pecho).
         - name: equipment
           in: query
           required: false
           schema:
             type: string
           description: Filtrar por equipamiento requerido (ej. Barra Olímpica, Mancuerna, Máquina).
+        - name: exerciseType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Weight, Time, Distance, Reps]
+          description: Filtrar por tipo de ejercicio (Weight, Time, Distance, Reps).
+        - name: usedByPf
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Si es true, filtra únicamente los ejercicios utilizados por el PF en sus planificaciones o con récords (1RM) cargados.
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+          description: >
+            Ejercicios puntuales por id (`?ids=a&ids=b`, hasta 100), por ejemplo para que el Asistente verifique
+            que los ejercicios de un borrador existen en el catálogo (KAN-414). Si viene, se ignoran los demás filtros.
+        - name: groupVariants
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >
+            Si es true, devuelve solo los ejercicios base, cada uno con sus variantes en `variants` (KAN-554).
+            Un ejercicio base aparece si él o alguna de sus variantes cumple los filtros. Si es false, la lista
+            es plana: base y variantes como ejercicios sueltos, cada variante con `parentExerciseId` y `variantLabel`.
         - name: page
           in: query
           required: false
@@ -85,6 +129,149 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Exercises
+      summary: Crear ejercicio personalizado o propuesto por la IA
+      description: Permite al preparador físico agregar un ejercicio a su catálogo privado. Requiere rol PreparadorFisico.
+      operationId: createExercise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        "201":
+          description: Ejercicio creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "409":
+          description: Ya existe un ejercicio con ese nombre para este preparador físico o en el catálogo global.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    description: Identificador del ejercicio existente.
+                    example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+
+  /api/v1/exercises/{id}/video:
+    put:
+      tags:
+        - Exercises
+      summary: Actualizar video de referencia de un ejercicio
+      description: Permite al preparador físico asociar o actualizar el link de video de YouTube para la técnica de un ejercicio.
+      operationId: updateExerciseVideo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único del ejercicio
+          schema:
+            type: string
+            format: uuid
+            example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExerciseVideoRequest'
+      responses:
+        "200":
+          description: Video actualizado exitosamente. Devuelve el ejercicio actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/exercises/restrictions/check:
+    post:
+      tags:
+        - Exercises
+      summary: Chequear restricciones de una lista de ejercicios por zonas de dolor
+      description: >
+        Evalúa una lista de ejercicios contra las zonas de dolor reportadas (formato "zona:nivel").
+        Devuelve por cada ejercicio si está restringido y, en su caso, la zona, nivel de dolor,
+        motivo y lista ordenada de sustitutos biomecánicos.
+      operationId: checkExerciseRestrictions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckExerciseRestrictionsRequest'
+      responses:
+        "200":
+          description: Chequeo de restricciones realizado exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseRestrictionCheckResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/exercises/{id}/substitutes:
+    get:
+      tags:
+        - Exercises
+      summary: Obtener ejercicios sustitutos para una zona de dolor
+      description: Devuelve la lista ordenada de ejercicios sustitutos recomendados para un ejercicio y una zona anatómica de dolor específica.
+      operationId: getExerciseSubstitutes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del ejercicio restringido.
+        - name: zone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Zona anatómica de dolor (ej. cuadriceps, espalda_baja).
+          example: "cuadriceps"
+      responses:
+        "200":
+          description: Lista ordenada de sustitutos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseSubstitute'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/records:
     get:
@@ -107,6 +294,29 @@ paths:
             type: boolean
             default: true
           description: Filtrar solo marcas vigentes activas.
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por un ejercicio específico para ver su evolución histórica.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de evolución (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de evolución (inclusive).
       responses:
         "200":
           description: Lista de récords personales obtenida con éxito.
@@ -152,6 +362,175 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/records/reliability:
+    get:
+      tags:
+        - Records
+      summary: Resumen de confiabilidad de los récords de una categoría
+      description: >
+        Devuelve, por grupo de confiabilidad, la cantidad de récords, la cantidad de
+        atletas y la lista de atletas de la categoría. Un atleta puede aparecer en más
+        de un grupo si tiene récords vigentes de distintos orígenes. Los grupos salen
+        del origen de cada récord vigente (Testeado, Reportado, Estimado); quienes no
+        tienen ningún récord quedan en Sin dato. Un récord con origen Epley cuenta como
+        Testeado. Opcionalmente se puede filtrar por un solo ejercicio con exerciseId.
+      operationId: getRecordsReliability
+      parameters:
+        - name: categoryId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la categoría.
+        - name: exerciseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar la confiabilidad a un solo ejercicio.
+      responses:
+        "200":
+          description: Resumen de confiabilidad obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordReliabilitySummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/onboarding:
+    post:
+      tags:
+        - Records
+      summary: Onboarding inicial de marcas físicas del atleta
+      description: >
+        Permite al atleta declarar sus antecedentes de fuerza durante la bienvenida.
+        Solo se registran con origen estimado las marcas de ejercicios que no tienen un récord vigente;
+        las marcas existentes (por ejemplo, las registradas por el PF) no se modifican ni se desactivan.
+        La respuesta puede ser un arreglo vacío si todos los ejercicios declarados ya tenían récord vigente.
+      operationId: completeOnboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/OnboardingRecordRequest'
+      responses:
+        "201":
+          description: >
+            Marcas nuevas registradas como estimadas. Puede devolver un arreglo vacío si todos los
+            ejercicios declarados ya tenían un récord vigente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteOnboardingResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/record-proposals:
+    get:
+      tags:
+        - Records
+      summary: Listar propuestas de récord
+      description: >
+        Devuelve las propuestas de récord de Epley de los atletas del PF autenticado (filtro por pf_id),
+        con el atleta, el ejercicio, el récord vigente, el propuesto, la serie que lo originó y la fecha.
+      operationId: listRecordProposals
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Pending, Approved, Discarded]
+            default: Pending
+          description: Filtrar por estado de la propuesta. Por defecto Pending.
+      responses:
+        "200":
+          description: Lista de propuestas de récord obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordProposal'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/record-proposals/{id}/approve:
+    post:
+      tags:
+        - Records
+      summary: Aprobar propuesta de récord Epley
+      description: >
+        Desactiva el récord vigente del atleta y crea uno nuevo con el peso propuesto y origen Epley.
+        Si el récord vigente cambió desde que se creó la propuesta, o si la propuesta ya no está pendiente, responde 409.
+      operationId: approveRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "200":
+          description: Propuesta aprobada y récord actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/record-proposals/{id}/discard:
+    post:
+      tags:
+        - Records
+      summary: Descartar propuesta de récord Epley
+      description: >
+        Deja la propuesta en estado Discarded sin modificar el récord vigente.
+        Aprobar o descartar una propuesta que ya no está pendiente responde 409.
+      operationId: discardRecordProposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la propuesta de récord.
+      responses:
+        "204":
+          description: Propuesta descartada exitosamente.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
   /api/v1/routines:
     post:
       tags:
@@ -187,91 +566,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/routine-templates:
-    get:
-      tags:
-        - Routines and Templates
-      summary: Listar plantillas de rutinas del preparador físico
-      description: Obtiene las planificaciones guardadas como plantillas maestras para reutilizar en otros grupos o temporadas.
-      operationId: listRoutineTemplates
-      responses:
-        "200":
-          description: Lista de plantillas recuperadas.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoutineTemplate'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
-
-    post:
-      tags:
-        - Routines and Templates
-      summary: Guardar una rutina como plantilla reutilizable
-      description: Permite guardar una estructura de entrenamiento como plantilla maestra.
-      operationId: createRoutineTemplate
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateRoutineTemplateRequest'
-      responses:
-        "201":
-          description: Plantilla creada exitosamente.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoutineTemplate'
-        "400":
-          $ref: '#/components/responses/BadRequest'
-
-  /api/v1/routine-templates/{templateId}/apply:
-    post:
-      tags:
-        - Routines and Templates
-      summary: Aplicar plantilla a una categoría o atleta
-      description: Clona y asigna la planificación de la plantilla a la categoría o deportista indicado.
-      operationId: applyRoutineTemplate
-      parameters:
-        - name: templateId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - dayOfWeek
-              properties:
-                categoryId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
-                athleteId:
-                  type: string
-                  format: uuid
-                  nullable: true
-                  description: Opcional si se aplica a toda una categoría.
-                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                dayOfWeek:
-                  type: string
-                  enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
-                  example: "Monday"
-      responses:
-        "201":
-          description: Rutina asignada desde la plantilla con éxito.
-        "404":
-          $ref: '#/components/responses/NotFound'
 
   /api/v1/me/today-routine:
     get:
@@ -312,6 +606,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/me/today-routine/performed-sets:
+    post:
+      tags:
+        - Execution and Loads
+      summary: Registrar series ejecutadas de la rutina de hoy
+      description: >
+        Permite al atleta registrar lo levantado en su sesión de hoy (una entrada por ejercicio con su mejor serie).
+        Calcula el 1RM estimado con la fórmula de Epley (1 a 10 repeticiones) y redondeo hacia abajo a múltiplo de 2.5 kg.
+        Si la estimación supera el récord vigente, genera una propuesta de récord pendiente sin modificar el récord actual.
+        Si algún ejercicio no pertenece a la rutina de hoy, responde 400.
+      operationId: recordPerformedSets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerformedSetInput'
+      responses:
+        "200":
+          description: Series registradas correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPerformedSetsResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/today-routine:
     get:
@@ -542,11 +871,38 @@ paths:
           $ref: '#/components/responses/Forbidden'
 
   /api/v1/training-plans/assignments:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar mis asignaciones con su fin y su estado
+      description: Devuelve las asignaciones del PF del token, primero las activas y después las terminadas. La fecha de fin se calcula (inicio + semanas del plan × 7 − 1) y el estado se compara con la fecha de hoy en Argentina. Requiere rol PreparadorFisico.
+      operationId: listPlanAssignments
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filtra por estado. Sin filtro devuelve todas.
+          schema:
+            type: string
+            enum: [Active, Finished]
+      responses:
+        "200":
+          description: Asignaciones del PF.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAssignmentSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - Routines and Templates
       summary: Asignar planificacion a categoria o atleta
-      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico.
+      description: Registra una asignacion formal de planificacion a una categoria o atleta con su fecha de inicio. Requiere rol PreparadorFisico. Responde 404 si la planificacion, la categoria o el atleta no existen o son de otro PF.
       operationId: assignTrainingPlan
       requestBody:
         required: true
@@ -570,12 +926,118 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans/{id}/save-as-template:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Guardar una planificacion como plantilla
+      description: Copia profundamente una planificacion existente (con sus semanas y sesiones) y la guarda como plantilla. Requiere rol PreparadorFisico.
+      operationId: savePlanAsTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Plantilla Pretemporada"
+      responses:
+        "201":
+          description: Plantilla guardada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingPlanDetail'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/training-plans/templates:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Listar plantillas de planificacion
+      description: Obtiene las plantillas creadas por el preparador fisico autenticado. Requiere rol PreparadorFisico.
+      operationId: listPlanTemplates
+      responses:
+        "200":
+          description: Lista de plantillas recuperadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingPlanSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/training-plans/templates/{id}/apply:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Aplicar plantilla a una categoria o atleta
+      description: Clona profundamente la plantilla a una planificacion nueva y la asigna a la categoria o atleta indicado desde la fecha especificada. Requiere rol PreparadorFisico.
+      operationId: applyPlanTemplate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+              properties:
+                startDate:
+                  type: string
+                  format: date
+                  example: "2026-11-02"
+                categoryId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                athleteId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: Plantilla aplicada y asignada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignPlanResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/training-sessions/{id}:
     get:
       tags:
         - Routines and Templates
       summary: Obtener sesion de entrenamiento
-      description: Obtiene los detalles de una sesion de entrenamiento por su identificador.
+      description: Obtiene los detalles de una sesion de entrenamiento por su identificador. Requiere rol PreparadorFisico (el atleta ve su sesion del dia en /api/v1/me/today-routine).
       operationId: getTrainingSession
       parameters:
         - name: id
@@ -594,6 +1056,8 @@ paths:
                 $ref: '#/components/schemas/TrainingSession'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -630,13 +1094,100 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/training-sessions/scheduled-athletes:
+  /api/v1/training-sessions/{sessionId}/athlete-adjustments:
     get:
       tags:
         - Routines and Templates
-      summary: Obtener atletas con sesion programada para una fecha
-      description: Devuelve los IDs de los atletas que tienen al menos una sesion de entrenamiento programada para la fecha indicada (KAN-528).
+      summary: Obtener ajuste o variante de sesión por atleta y fecha
+      description: >
+        Devuelve el ajuste o variante individual de sesión registrado para un atleta y fecha (#168 · KAN-463).
+        Requiere rol PreparadorFisico.
+      operationId: getAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+        - name: athleteId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Fecha de la sesión (por defecto hoy en hora de Argentina).
+      responses:
+        "200":
+          description: Ajuste o variante de sesión recuperado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Routines and Templates
+      summary: Aplicar ajuste de sesión por atleta y fecha
+      description: >
+        Guarda o reemplaza el ajuste del día de una sesión de entrenamiento para un atleta y fecha específicos
+        al aprobar una propuesta en el Asistente (#157 · KAN-452). Requiere rol PreparadorFisico.
+      operationId: applyAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentRequest'
+      responses:
+        "200":
+          description: Ajuste aplicado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/internal/training-sessions/athletes-with-session:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Obtener atletas con sesión programada para una fecha
+      description: Endpoint interno para microservicios con rol Servicio (worker de recordatorios). Devuelve los IDs de los atletas que tienen sesión ese día.
       operationId: getScheduledAthletes
+      security:
+        - BearerAuth: []
       parameters:
         - name: date
           in: query
@@ -644,20 +1195,27 @@ paths:
           schema:
             type: string
             format: date
-            example: "2026-10-20"
-          description: Fecha de la sesion a consultar (YYYY-MM-DD).
+            example: "2026-10-26"
+          description: Fecha de la sesión a consultar (YYYY-MM-DD).
+        - name: pfId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          description: Identificador del preparador físico para aislar datos.
       responses:
         "200":
-          description: Lista de IDs de atletas con sesion programada.
+          description: Atletas y categorías con sesión programada para la fecha.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-                  format: uuid
+                $ref: '#/components/schemas/ScheduledSessionTargetsResponse'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
 
   /api/health:
     get:
@@ -678,6 +1236,81 @@ paths:
                     type: string
                     example: "Healthy"
 
+  /api/v1/records/import/preview:
+    post:
+      tags:
+        - Records
+      summary: Vista previa de importación de récords desde CSV
+      operationId: previewRecordsImport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - athleteColumn
+                - exerciseColumn
+                - weightColumn
+              properties:
+                file:
+                  type: string
+                  format: binary
+                athleteColumn:
+                  type: string
+                exerciseColumn:
+                  type: string
+                weightColumn:
+                  type: string
+                dateColumn:
+                  type: string
+                sourceColumn:
+                  type: string
+      responses:
+        "200":
+          description: Vista previa generada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportRecordPreviewRow'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/records/import/confirm:
+    post:
+      tags:
+        - Records
+      summary: Confirmar importación de récords
+      operationId: confirmRecordsImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmImportRecordsRequest'
+      responses:
+        "200":
+          description: Récords importados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -686,6 +1319,12 @@ components:
       bearerFormat: JWT
 
   responses:
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     BadRequest:
       description: Solicitud con datos inválidos o reglas de negocio incumplidas.
       content:
@@ -713,6 +1352,220 @@ components:
             $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    ScheduledSessionTargetsResponse:
+      type: object
+      required:
+        - athleteIds
+        - categoryIds
+      properties:
+        athleteIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        categoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ImportRecordPreviewRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+        athleteName:
+          type: string
+        exerciseName:
+          type: string
+        weightText:
+          type: string
+        dateText:
+          type: string
+          nullable: true
+        sourceText:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [Ok, AthleteNotFound, ExerciseNotFound, ExerciseApproximate, InvalidWeight]
+        message:
+          type: string
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        matchedExerciseName:
+          type: string
+          nullable: true
+          description: Nombre del ejercicio del catálogo con el que se resolvió la fila. En ExerciseApproximate es la coincidencia parcial sugerida.
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          nullable: true
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordRow:
+      type: object
+      required:
+        - athleteId
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+        achievedAt:
+          type: string
+          format: date-time
+          nullable: true
+        origin:
+          type: string
+          nullable: true
+
+    ConfirmImportRecordsRequest:
+      type: object
+      required:
+        - rows
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfirmImportRecordRow'
+
+    CheckExerciseRestrictionsRequest:
+      type: object
+      required:
+        - exerciseIds
+      properties:
+        painZones:
+          type: string
+          nullable: true
+          description: Zonas de dolor reportadas en el check-in (formato "zona:nivel" separadas por comas).
+          example: "cuadriceps:2,espalda_baja:1"
+        exerciseIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Lista de IDs de ejercicios a verificar.
+          example: ["b501d51c-4b53-4dc9-985f-8646f9037cfa", "c8a14358-bf87-41a4-94e0-7ee429d7c679"]
+
+    ExerciseSubstitute:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio sustituto.
+          example: "7e3b97f0-2581-4ebc-b3b0-642cf38a0f02"
+        name:
+          type: string
+          description: Nombre del ejercicio sustituto.
+          example: "Prensa de piernas"
+
+    ExerciseRestrictionCheckResult:
+      type: object
+      required:
+        - exerciseId
+        - restricted
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          description: Identificador del ejercicio evaluado.
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        restricted:
+          type: boolean
+          description: Indica si el ejercicio debe ser restringido/reemplazado por dolor.
+          example: true
+        zone:
+          type: string
+          nullable: true
+          description: Zona de dolor que disparó la restricción.
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          nullable: true
+          description: Nivel de dolor reportado para la zona (1 a 10).
+          example: 2
+        reason:
+          type: string
+          nullable: true
+          description: Motivo biomecánico de la contraindicación.
+          example: "Alta compresión femororrotuliana y tensión en el tendón rotuliano con sobrecarga axial."
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseSubstitute'
+          description: Lista ordenada de ejercicios sustitutos recomendados.
+
+    UpdateExerciseVideoRequest:
+      type: object
+      properties:
+        videoUrl:
+          type: string
+          nullable: true
+          description: URL del video de YouTube o null para quitarlo.
+          example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+
+    ExerciseMediaDto:
+      type: object
+      description: Una ilustración o animación de un ejercicio del catálogo, con su fuente y su crédito (KAN-549).
+      required: [source, kind, urls, credit, creditUrl, license]
+      properties:
+        source:
+          type: string
+          enum: [repdb, everkinetic]
+          description: Fuente de la ilustración (solo dibujos).
+          example: "repdb"
+        kind:
+          type: string
+          enum: [frames, gif]
+          description: >
+            `frames`: imágenes fijas (posición inicial y final) que el front alterna para mostrar el movimiento.
+            `gif`: una animación que se mueve sola (reservado para animaciones futuras; hoy no se usa).
+          example: "frames"
+        urls:
+          type: array
+          items:
+            type: string
+          description: Las imágenes en orden (en `gif`, una sola).
+          example:
+            - "https://raw.githubusercontent.com/RepDB/exercise-dataset/main/images/flat/squat-start.webp"
+            - "https://raw.githubusercontent.com/RepDB/exercise-dataset/main/images/flat/squat-peak.webp"
+        credit:
+          type: string
+          description: Texto del crédito que hay que mostrar.
+          example: "Exercise data by RepDB (repdb.co)"
+        creditUrl:
+          type: string
+          description: Link del crédito.
+          example: "https://repdb.co"
+        license:
+          type: string
+          description: Licencia de la fuente.
+          example: "RepDB Free Tier"
+
     Exercise:
       type: object
       required:
@@ -756,6 +1609,12 @@ components:
           nullable: true
           description: Enlace al video explicativo de YouTube (reproducible embebido o externo).
           example: "https://www.youtube.com/watch?v=aclHkVaku9U"
+        videoSource:
+          type: string
+          enum: [Pf, Catalog]
+          nullable: true
+          description: Origen del video de técnica ("Pf" si es video propio del preparador físico, "Catalog" si es sugerido por la plataforma).
+          example: "Pf"
         animationUrl:
           type: string
           nullable: true
@@ -769,6 +1628,101 @@ components:
           example:
             - "https://cdn.protraining.app/exercises/squat-0.jpg"
             - "https://cdn.protraining.app/exercises/squat-1.jpg"
+        imageSource:
+          type: object
+          nullable: true
+          description: Atribución de fuente y licencia de las imágenes técnicas (para ejercicios del catálogo global). Es null en ejercicios propios del preparador físico.
+          properties:
+            name:
+              type: string
+              description: Nombre del dataset o fuente de origen.
+              example: "free-exercise-db"
+            url:
+              type: string
+              description: URL del repositorio o fuente original.
+              example: "https://github.com/yuhonas/free-exercise-db"
+            license:
+              type: string
+              description: Tipo de licencia de las imágenes.
+              example: "The Unlicense"
+        media:
+          type: array
+          description: >
+            Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549). El front muestra
+            la primera que cargue y, si ninguna carga, las fotos de `images`. Vacía en los ejercicios propios
+            del preparador físico y en los del catálogo que no tienen par en ninguna fuente.
+          items:
+            $ref: '#/components/schemas/ExerciseMediaDto'
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          description: Origen del ejercicio (Catálogo inicial, cargado por el PF o propuesto por la IA).
+          example: "Ai"
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          description: Modalidad o tipo de ejercicio (con carga, tiempo, distancia, repeticiones).
+          example: "Distance"
+        parentExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Si el ejercicio es una variante, el id de su ejercicio base (KAN-554). Es null en los ejercicios base.
+          example: null
+        variantLabel:
+          type: string
+          nullable: true
+          description: Qué distingue a la variante de su ejercicio base. Es null en los ejercicios base.
+          example: "Agarre cerrado"
+        variants:
+          type: array
+          nullable: true
+          description: >
+            Variantes del ejercicio base. Solo viene con `groupVariants=true`; si no, es null.
+            Cada variante conserva su id: los récords (1RM) y las planificaciones apuntan a la variante exacta.
+          items:
+            $ref: '#/components/schemas/Exercise'
+
+    CreateExerciseRequest:
+      type: object
+      required:
+        - name
+        - muscleGroup
+      properties:
+        name:
+          type: string
+          example: "Sentadilla búlgara con banda"
+        muscleGroup:
+          type: string
+          example: "Piernas"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Cuádriceps", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["Isquiotibiales"]
+        equipment:
+          type: string
+          nullable: true
+          example: "Banda elástica"
+        instructions:
+          type: string
+          nullable: true
+          example: "Colocar el pie trasero en banco y banda bajo el pie delantero."
+        origin:
+          type: string
+          enum: [Catalog, Coach, Ai]
+          default: "Coach"
+          example: "Ai"
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          default: "Weight"
+          example: "Distance"
 
     PaginatedExerciseResponse:
       type: object
@@ -801,6 +1755,64 @@ components:
           type: integer
           description: Total de páginas disponibles según el tamaño de página.
           example: 6
+
+    RecordProposal:
+      type: object
+      description: Propuesta de actualización de récord 1RM basada en recálculo Epley.
+      required:
+        - id
+        - athleteId
+        - athleteName
+        - exerciseId
+        - exerciseName
+        - currentWeight
+        - proposedWeight
+        - performedWeight
+        - performedReps
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e6f491c7-7489-4b68-b765-a81e9f1a21e4"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          example: "Lucas Giménez"
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        exerciseName:
+          type: string
+          example: "Sentadilla Trasera"
+        currentWeight:
+          type: number
+          format: double
+          example: 100.0
+        proposedWeight:
+          type: number
+          format: double
+          example: 107.5
+        performedWeight:
+          type: number
+          format: double
+          example: 90.0
+        performedReps:
+          type: integer
+          example: 5
+        status:
+          type: string
+          enum: [Pending, Approved, Discarded]
+          example: "Pending"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-22T14:30:00Z"
 
     Record:
       type: object
@@ -836,7 +1848,7 @@ components:
           example: 140.0
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
         achievedAt:
           type: string
@@ -845,6 +1857,112 @@ components:
         isCurrent:
           type: boolean
           example: true
+
+    CompleteOnboardingResponse:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/Record'
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              exerciseId:
+                type: string
+                format: uuid
+              exerciseName:
+                type: string
+
+
+    RecordReliabilityAthlete:
+      type: object
+      required:
+        - athleteId
+        - name
+        - recordCount
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        recordCount:
+          type: integer
+          minimum: 0
+          description: Cantidad de récords vigentes del atleta en el grupo. En Sin dato siempre es 0.
+
+    RecordReliabilityGroup:
+      type: object
+      required:
+        - group
+        - athleteCount
+        - recordCount
+        - percentage
+        - athletes
+      properties:
+        group:
+          type: string
+          enum: [Tested, Reported, Estimated, NoData]
+        athleteCount:
+          type: integer
+          minimum: 0
+          description: Cantidad de atletas con al menos un récord del grupo. En Sin dato, atletas sin ningún récord.
+        recordCount:
+          type: integer
+          minimum: 0
+          description: Cantidad total de récords del grupo. En Sin dato siempre es 0.
+        percentage:
+          type: number
+          format: double
+          description: Porcentaje de récords del grupo sobre el total. En Sin dato, porcentaje de atletas sin récords sobre el total de atletas.
+        athletes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityAthlete'
+
+    RecordReliabilitySummary:
+      type: object
+      required:
+        - categoryId
+        - totalAthletes
+        - totalRecords
+        - groups
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+        totalAthletes:
+          type: integer
+        totalRecords:
+          type: integer
+          minimum: 0
+          description: Cantidad total de récords vigentes considerados en el resumen.
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordReliabilityGroup'
+
+    OnboardingRecordRequest:
+      type: object
+      required:
+        - exerciseId
+        - weightOneRepMaxKg
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        weightOneRepMaxKg:
+          type: number
+          format: double
+          minimum: 1
+          maximum: 500
 
     SaveRecordRequest:
       type: object
@@ -865,7 +1983,7 @@ components:
           example: 142.5
         origin:
           type: string
-          enum: [TestedInSession, Reported, EstimatedEpley]
+          enum: [TestedInSession, Reported, EstimatedEpley, Epley]
           example: "TestedInSession"
 
     RoutineItemRequest:
@@ -1011,6 +2129,27 @@ components:
           items:
             type: string
           example: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"]
+        media:
+          type: array
+          description: Ilustraciones o animaciones de terceros, en orden de preferencia, las mismas que la biblioteca (KAN-549).
+          items:
+            $ref: '#/components/schemas/ExerciseMediaDto'
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Grupos musculares principales involucrados en la ejecución.
+          example: ["Piernas", "Glúteos"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Músculos secundarios o estabilizadores involucrados.
+          example: ["Isquiotibiales", "Zona Lumbar"]
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          example: Distance
         sets:
           type: integer
           example: 4
@@ -1027,6 +2166,18 @@ components:
           nullable: true
           description: Peso prescrito resuelto en kg (redondeado a múltiplos de 2.5 kg). Es null en series de referencia sin récord previo.
           example: 112.5
+        barWeight:
+          type: number
+          format: double
+          nullable: true
+          description: Peso de la barra en kg (por defecto 20 kg en ejercicios con barra). Es null en ejercicios sin barra.
+          example: 20.0
+        weightPerSide:
+          type: number
+          format: double
+          nullable: true
+          description: Peso a colocar por cada lado de la barra en kg. Es 0 si el peso total es menor o igual a la barra ("solo la barra") y null si el ejercicio no es con barra.
+          example: 46.25
         current1RmKg:
           type: number
           format: double
@@ -1037,6 +2188,17 @@ components:
           type: boolean
           description: True si el ejercicio no tiene récord previo y la serie se prescribe como de referencia para probar y registrar.
           example: false
+        targetTimeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Meta de tiempo calculada en segundos (KAN-455). Null si no tiene test.
+          example: 15.6
+        performedSets:
+          type: array
+          description: Series o pasadas ya registradas hoy para este ejercicio (KAN-457).
+          items:
+            $ref: '#/components/schemas/TodayRoutinePerformedSet'
 
     TodayRoutineResponse:
       type: object
@@ -1067,10 +2229,97 @@ components:
           nullable: true
           description: Indicaciones o notas del preparador físico asociadas a la sesión.
           example: "Controlar técnica en descenso y mantener pausa de 1 segundo."
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la sesión de entrenamiento programada para la fecha.
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        adjustedByCoach:
+          type: boolean
+          description: Indica si el preparador físico aprobó un ajuste de la sesión para esta fecha (KAN-452).
+          example: true
+        adjustmentNote:
+          type: string
+          nullable: true
+          description: Nota explicativa del ajuste aprobado por el preparador físico (KAN-452).
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+
+    TodayRoutinePerformedSet:
+      type: object
+      properties:
+        setNumber:
+          type: integer
+          nullable: true
+          example: 1
+        weight:
+          type: number
+          format: double
+          nullable: true
+          example: 90.0
+        reps:
+          type: integer
+          nullable: true
+          example: 6
+        timeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Tiempo real registrado en segundos para la pasada (KAN-457).
+          example: 15.2
+
+    PerformedSetInput:
+      type: object
+      required:
+        - exerciseId
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        weight:
+          type: number
+          format: double
+          nullable: true
+          example: 90.0
+        reps:
+          type: integer
+          nullable: true
+          example: 6
+        timeSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Tiempo real de la pasada cronometrada en segundos (KAN-457).
+          example: 15.2
+        setNumber:
+          type: integer
+          nullable: true
+          description: Número de pasada o serie (1-based) (KAN-457).
+          example: 1
+
+    RecordPerformedSetsResponse:
+      type: object
+      required:
+        - recordedSetsCount
+        - proposalsGeneratedCount
+      properties:
+        recordedSetsCount:
+          type: integer
+          example: 1
+        proposalsGeneratedCount:
+          type: integer
+          example: 1
 
     LogExecutionRequest:
       type: object
@@ -1180,16 +2429,74 @@ components:
           nullable: true
           example: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f"
 
+    PlanAssignmentSummary:
+      type: object
+      description: Asignación del PF a una categoría o a un atleta, con su fin calculado y su estado.
+      required:
+        - assignmentId
+        - trainingPlanId
+        - planName
+        - startDate
+        - endDate
+        - status
+      properties:
+        assignmentId:
+          type: string
+          format: uuid
+        trainingPlanId:
+          type: string
+          format: uuid
+        planName:
+          type: string
+          example: "Fuerza base"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+        startDate:
+          type: string
+          format: date
+          example: "2026-12-01"
+        endDate:
+          type: string
+          format: date
+          example: "2026-12-28"
+        status:
+          type: string
+          enum: [Active, Finished]
+          example: "Active"
+
     AssignPlanResponse:
       type: object
       required:
         - assignmentId
+        - startDate
+        - endDate
+        - status
         - message
       properties:
         assignmentId:
           type: string
           format: uuid
           example: "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a"
+        startDate:
+          type: string
+          format: date
+          example: "2026-12-01"
+        endDate:
+          type: string
+          format: date
+          description: Último día de la asignación, calculado como inicio + semanas del plan × 7 − 1. No se guarda.
+          example: "2026-12-28"
+        status:
+          type: string
+          enum: [Active, Finished]
+          description: Active hasta el último día inclusive; Finished desde el día siguiente (fecha de Argentina).
+          example: "Active"
         message:
           type: string
           example: "Plan asignado exitosamente."
@@ -1225,6 +2532,96 @@ components:
           type: string
           nullable: true
           example: "Controlar tecnica en descenso"
+
+    ApplyAthleteSessionAdjustmentItem:
+      type: object
+      required:
+        - originalExerciseId
+        - substituteExerciseId
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "b501d51c-4b53-4dc9-985f-8646f9037cfa"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "7e3b97f0-2581-4ebc-b3b0-642cf38a0f02"
+
+    ApplyAthleteSessionAdjustmentRequest:
+      type: object
+      required:
+        - athleteId
+        - date
+        - items
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del plan de entrenamiento vigente vinculado (KAN-463).
+          example: "11111111-2222-3333-4444-555555555555"
+        note:
+          type: string
+          nullable: true
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
+
+    ApplyAthleteSessionAdjustmentResponse:
+      type: object
+      required:
+        - id
+        - athleteId
+        - sessionId
+        - date
+        - adjustedByCoach
+        - items
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del plan de entrenamiento vigente vinculado (KAN-463).
+          example: "11111111-2222-3333-4444-555555555555"
+        sessionId:
+          type: string
+          format: uuid
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        adjustedByCoach:
+          type: boolean
+          example: true
+        note:
+          type: string
+          nullable: true
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
     UpdateCoachNotesRequest:
       type: object
@@ -1294,6 +2691,11 @@ components:
           type: string
           nullable: true
           example: "Controlar técnica en descenso"
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
@@ -1398,6 +2800,11 @@ components:
           type: string
           nullable: true
           example: "Controlar técnica en descenso"
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
         exercises:
           type: array
           items:
@@ -1490,6 +2897,17 @@ components:
           type: string
           nullable: true
           example: "Controlar la técnica en el descenso."
+        startTime:
+          type: string
+          nullable: true
+          description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
+          example: "18:00:00"
+        assignmentEndDate:
+          type: string
+          format: date
+          nullable: true
+          description: Último día de la asignación (inicio + semanas del plan × 7 − 1).
+          example: "2026-12-28"
 
     TrainingPlanSummary:
       type: object

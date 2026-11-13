@@ -178,6 +178,431 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/assistant/plan-drafts:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Generar y persistir un nuevo borrador de planificación con IA
+      description: >
+        Genera un borrador de planificación multisesión a través de la cadena resiliente de IA
+        (Ollama -> Gemini -> Reglas), validando esquema e identificadores del catálogo oficial y
+        persistiéndolo en la base de datos bajo aislamiento multi-tenant.
+      operationId: createPlanDraftWithAi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanDraftRequest'
+      responses:
+        "201":
+          description: Borrador de planificación generado y persistido exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanDraftResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/plan-drafts/{id}:
+    get:
+      tags:
+        - Copilot and Planning
+      summary: Obtener un borrador de planificación por su identificador
+      description: Devuelve el borrador generado por la IA siempre que pertenezca al preparador físico autenticado.
+      operationId: getPlanDraftById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Borrador de planificación recuperado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanDraftResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Copilot and Planning
+      summary: Editar y reemplazar el contenido de un borrador de planificación
+      description: >
+        Permite al preparador físico modificar cualquier parte del borrador en estado Draft.
+        Ejecuta validaciones de esquema, existencia en el catálogo oficial, rangos deportivos y topes
+        pre-partido, guardando además las sustituciones o eliminaciones de ejercicios en la memoria del PF.
+      operationId: updatePlanDraft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanDraftRequest'
+      responses:
+        "200":
+          description: Borrador actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanDraftResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/assistant/plan-drafts/{id}/approve:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Aprobar borrador de planificación y crearlo en Entrenamiento
+      description: >
+        Transforma el borrador aprobado en un SaveTrainingPlanRequest, lo crea en el microservicio de
+        Entrenamiento reenviando el token del preparador físico y lo asigna a la categoría o atleta con la
+        fecha de inicio configurada. Si el borrador ya estaba aprobado, devuelve el planId existente sin
+        duplicar la planificación.
+      operationId: approvePlanDraft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Borrador aprobado y planificación creada en Entrenamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovePlanDraftResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/plan-drafts/{id}/discard:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Descartar un borrador de planificación generado por la IA
+      description: Pasa el borrador al estado Discarded impidiendo futuras ediciones o aprobaciones.
+      operationId: discardPlanDraft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Borrador descartado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanDraftResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/assistant/athletes/{athleteId}/day-conflicts:
+    get:
+      tags:
+        - Daily Adjustment
+      summary: Detectar dolor del check-in en zonas que trabaja la rutina de hoy
+      description: >
+        Cruza el dolor reportado hoy en el check-in del atleta (Seguimiento) con los ejercicios de
+        la rutina que le toca hoy (Entrenamiento) y consulta la matriz de restricciones anatómicas
+        para devolver los ejercicios en conflicto junto con sus sustitutos seguros. Si el atleta
+        todavía no completó el check-in de hoy, responde 200 con hasConflicts en false y el aviso
+        "Todavía no hizo el check-in". Si el atleta no existe o pertenece a otro PF, responde 404.
+        Si Seguimiento o Entrenamiento no están disponibles, responde 503 sin inventar conflictos.
+      operationId: getAthleteDayConflicts
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      responses:
+        "200":
+          description: Cruce de dolor del check-in con la rutina de hoy evaluado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayConflictsResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/athletes/{athleteId}/day-adjustments:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Generar propuesta de ajuste del día a partir de los conflictos de hoy
+      description: >
+        Genera y persiste la propuesta de ajuste del día (`day_adjustments`) a partir de los conflictos
+        de dolor de hoy (KAN-451). El ejercicio sustituto se elige por reglas (el primero de la lista de
+        sustitutos habilitados de KAN-387) y la IA solo redacta la justificación (con respaldo por reglas
+        si Ollama y Gemini fallan o están apagados). Si ya existe una propuesta `Pending` para hoy, devuelve
+        esa sin duplicarla.
+      operationId: createAthleteDayAdjustment
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      responses:
+        "200":
+          description: Propuesta de ajuste del día generada o recuperada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/day-adjustments/{id}/approve:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Aprobar propuesta de ajuste del día y aplicarla en Entrenamiento
+      description: >
+        Aprueba la propuesta de ajuste del día (permitiendo cambiar el sustituto por otro de la lista
+        de sustitutos habilitados de KAN-387), llama a Entrenamiento para aplicar el ajuste en la sesión
+        del atleta y guarda la decisión en la memoria del PF (`pf_decisions`) dentro de la misma transacción.
+      operationId: approveDayAdjustment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la propuesta de ajuste del día.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveDayAdjustmentRequest'
+      responses:
+        "200":
+          description: Propuesta aprobada y aplicada en la rutina del atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/day-adjustments/{id}/reject:
+    post:
+      tags:
+        - Daily Adjustment
+      summary: Rechazar propuesta de ajuste del día
+      description: >
+        Rechaza la propuesta dejando la sesión sin cambios y registra la decisión en la memoria del PF
+        (`pf_decisions`) dentro de la misma transacción.
+      operationId: rejectDayAdjustment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la propuesta de ajuste del día.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectDayAdjustmentRequest'
+      responses:
+        "200":
+          description: Propuesta rechazada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/assistant/athletes/{athleteId}/adaptation:
+    post:
+      tags:
+        - Copilot and Planning
+      summary: Generar rutina contextualizada con adaptación individual
+      description: >
+        Genera una propuesta de rutina para el atleta incorporando su contexto de adaptación
+        (lesiones activas, récords vigentes y sustitutos autorizados), validando ownership del PF.
+      operationId: generateAthleteAdaptation
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateAthleteAdaptationRequest'
+      responses:
+        "200":
+          description: Propuesta de rutina adaptada generada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineAdaptationResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/athletes/{athleteId}/adaptation-context:
+    get:
+      tags:
+        - Copilot and Planning
+      summary: Obtener contexto de adaptación individual del atleta
+      description: >
+        Reúne lesiones activas, récords vigentes y restricciones con sustitutos autorizados para
+        preparar una adaptación individual, validando ownership del PF.
+      operationId: getAthleteAdaptationContext
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+      responses:
+        "200":
+          description: Contexto de adaptación recuperado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteAdaptationContextResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/assistant/athletes/{athleteId}/decisions:
+    get:
+      tags:
+        - Copilot and Planning
+      summary: Consultar decisiones históricas del PF sobre propuestas del asistente
+      description: >
+        Devuelve el historial reciente de decisiones (aprobaciones, cambios o rechazos) tomadas por el preparador físico
+        autenticado sobre ejercicios sugeridos para el atleta especificado, con filtro opcional por zona anatómica y limitado
+        a las últimas 50 decisiones. Responde 404 si el atleta no existe o no pertenece al preparador físico.
+      operationId: getAthleteDecisions
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del atleta.
+        - name: zone
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtro opcional por zona anatómica o de molestia (ej. espalda_baja).
+      responses:
+        "200":
+          description: Lista de decisiones recuperadas (hasta 50).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PfDecisionResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/habits-recommendation:
     get:
       tags:
@@ -271,8 +696,26 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso denegado para el rol actual.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     NotFound:
       description: Recurso o alerta no encontrada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: El microservicio dependiente no está disponible.
       content:
         application/json:
           schema:
@@ -432,6 +875,520 @@ components:
           enum: [Ollama, Gemini, Rules]
           example: "Gemini"
 
+    GenerateAthleteAdaptationRequest:
+      type: object
+      required:
+        - goal
+      properties:
+        goal:
+          type: string
+          example: "Descarga activa y recuperación funcional"
+        muscleGroupEmphasis:
+          type: array
+          items:
+            type: string
+          example: ["Movilidad de cadera", "Core"]
+
+    SuggestedRoutineExercise:
+      type: object
+      required:
+        - exerciseName
+        - sets
+        - reps
+        - suggestedPercentage
+      properties:
+        exerciseName:
+          type: string
+          example: "Sentadilla Goblet con mancuerna"
+        sets:
+          type: integer
+          example: 3
+        reps:
+          type: integer
+          example: 10
+        suggestedPercentage:
+          type: number
+          example: 50.0
+        exerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "11111111-1111-1111-1111-111111111111"
+        isReference:
+          type: boolean
+          example: false
+
+    AdaptationChange:
+      type: object
+      required:
+        - originalExerciseName
+        - finalExerciseId
+        - finalExerciseName
+        - zone
+        - reason
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "11111111-1111-1111-1111-111111111111"
+        originalExerciseName:
+          type: string
+          example: "Sentadilla trasera con barra"
+        finalExerciseId:
+          type: string
+          format: uuid
+          example: "22222222-2222-2222-2222-222222222222"
+        finalExerciseName:
+          type: string
+          example: "Prensa de piernas"
+        zone:
+          type: string
+          example: "rodilla"
+        reason:
+          type: string
+          example: "Sustitución por restricción activa en la zona indicada"
+
+    RoutineAdaptationResponse:
+      type: object
+      required:
+        - athleteId
+        - proposedTitle
+        - justificationSummary
+        - exercises
+        - aiProvider
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        proposedTitle:
+          type: string
+          example: "Sesión de Descarga Adaptativa"
+        justificationSummary:
+          type: string
+          example: "Se adaptó la sesión para evitar ejercicios restringidos."
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuggestedRoutineExercise'
+        aiProvider:
+          type: string
+          example: "Ollama"
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+        wasAdapted:
+          type: boolean
+          example: true
+        adaptationWarnings:
+          type: array
+          items:
+            type: string
+          example: ["La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta."]
+        adaptationChanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdaptationChange'
+
+    ActiveInjuryContext:
+      type: object
+      required:
+        - id
+        - athleteId
+        - zone
+        - description
+        - injuryDate
+        - estimatedReturnDate
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        athleteId:
+          type: string
+          format: uuid
+        zone:
+          type: string
+          example: "rodilla"
+        description:
+          type: string
+          example: "Dolor rotuliano"
+        injuryDate:
+          type: string
+          format: date-time
+        estimatedReturnDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: "Active"
+        clearedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AthleteRecordContext:
+      type: object
+      required:
+        - id
+        - athleteId
+        - exerciseId
+        - exerciseName
+        - weightOneRepMaxKg
+        - origin
+        - achievedAt
+        - isCurrent
+      properties:
+        id:
+          type: string
+          format: uuid
+        athleteId:
+          type: string
+          format: uuid
+        exerciseId:
+          type: string
+          format: uuid
+        exerciseName:
+          type: string
+          example: "Sentadilla con barra"
+        weightOneRepMaxKg:
+          type: number
+          example: 120.0
+        origin:
+          type: string
+          example: "Estimated"
+        achievedAt:
+          type: string
+          format: date-time
+        isCurrent:
+          type: boolean
+          example: true
+
+    AuthorizedSubstituteContext:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Prensa de piernas"
+
+    ExerciseRestrictionContext:
+      type: object
+      required:
+        - exerciseId
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        zone:
+          type: string
+          nullable: true
+          example: "rodilla"
+        reason:
+          type: string
+          nullable: true
+          example: "Reduce estrés rotuliano"
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorizedSubstituteContext'
+
+    AthleteAdaptationContextResponse:
+      type: object
+      required:
+        - athleteId
+        - activeInjuries
+        - currentRecords
+        - restrictions
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        activeInjuries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveInjuryContext'
+        currentRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/AthleteRecordContext'
+        restrictions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExerciseRestrictionContext'
+
+    PlanDraftExercise:
+      type: object
+      required:
+        - exerciseId
+        - order
+        - sets
+        - reps
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "11111111-1111-1111-1111-111111111111"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+        sets:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 4
+        reps:
+          type: integer
+          minimum: 1
+          maximum: 30
+          example: 6
+        targetPercentage:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          example: 75.0
+
+    PlanDraftSession:
+      type: object
+      required:
+        - name
+        - dayOfWeek
+        - order
+        - exercises
+      properties:
+        name:
+          type: string
+          example: "Fuerza Tren Inferior"
+        dayOfWeek:
+          type: string
+          enum: [Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday]
+          example: "Monday"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+        coachNotes:
+          type: string
+          nullable: true
+          example: "Cuidar profundidad de sentadilla."
+        exercises:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PlanDraftExercise'
+
+    PlanDraftWeek:
+      type: object
+      required:
+        - weekNumber
+        - sessions
+      properties:
+        weekNumber:
+          type: integer
+          minimum: 1
+          maximum: 8
+          example: 1
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanDraftSession'
+
+    CreatePlanDraftRequest:
+      type: object
+      required:
+        - goal
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del atleta destinatario (mutuamente excluyente con categoryId).
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la categoría grupal destinataria (mutuamente excluyente con athleteId).
+          example: "11111111-1111-1111-1111-111111111111"
+        goal:
+          type: string
+          maxLength: 500
+          description: Objetivo deportivo o fisiológico del ciclo de entrenamiento.
+          example: "Desarrollar fuerza explosiva y potencia muscular para fase competitiva."
+        weeks:
+          type: integer
+          minimum: 1
+          maximum: 8
+          default: 4
+          description: Cantidad de semanas del plan (1 a 8).
+          example: 4
+        daysPerWeek:
+          type: integer
+          minimum: 1
+          maximum: 6
+          default: 3
+          description: Frecuencia semanal de sesiones (1 a 6).
+          example: 3
+        trainingDays:
+          type: array
+          items:
+            type: string
+          description: Días sugeridos de entrenamiento dentro de la semana.
+          example: ["Lunes", "Miércoles", "Viernes"]
+        startDate:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de inicio del plan (por defecto el próximo lunes en Argentina).
+          example: "2026-11-02"
+
+    UpdatePlanDraftRequest:
+      type: object
+      required:
+        - name
+        - objective
+        - justificationSummary
+        - weeks
+      properties:
+        name:
+          type: string
+          example: "Mesociclo de Fuerza Base"
+        objective:
+          type: string
+          example: "Incrementar fuerza en tren inferior sin comprometer el partido del sábado"
+        justificationSummary:
+          type: string
+          example: "Progresión lineal de 4 semanas con descarga pre-partido."
+        weeks:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/PlanDraftWeek'
+
+    PlanDraftResponse:
+      type: object
+      required:
+        - id
+        - goal
+        - startDate
+        - status
+        - provider
+        - name
+        - objective
+        - justificationSummary
+        - weeks
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "2fa85f64-5717-4562-b3fc-2c963f66afa1"
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        goal:
+          type: string
+          example: "Fuerza de piernas para pretemporada"
+        startDate:
+          type: string
+          format: date
+          example: "2026-11-02"
+        status:
+          type: string
+          enum: [Draft, Approved, Discarded]
+          example: "Draft"
+        provider:
+          type: string
+          example: "Ollama"
+        approvedPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        name:
+          type: string
+          example: "Mesociclo de Fuerza Base"
+        objective:
+          type: string
+          example: "Incrementar fuerza en tren inferior"
+        justificationSummary:
+          type: string
+          example: "Progresión lineal de 4 semanas."
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanDraftWeek'
+        warnings:
+          type: array
+          items:
+            type: string
+          example: ["Ajustado por el partido del sábado 7/11: Sentadilla trasera con barra 85 % → 60 %"]
+
+    ApprovePlanDraftResponse:
+      type: object
+      required:
+        - id
+        - planId
+        - approvedPlanId
+        - status
+        - assigned
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+        planId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        approvedPlanId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        status:
+          type: string
+          enum: [Approved]
+          example: "Approved"
+        assigned:
+          type: boolean
+          example: true
+        assignmentId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "f1e2d3c4-b5a6-4789-8012-3456789abcde"
+        warning:
+          type: string
+          nullable: true
+          example: null
+        warnings:
+          type: array
+          items:
+            type: string
+          example: []
+
     HabitsRecommendationResponse:
       type: object
       required:
@@ -472,6 +1429,280 @@ components:
         approvedByPf:
           type: boolean
           example: false
+
+    PfDecisionResponse:
+      type: object
+      required:
+        - id
+        - date
+        - source
+        - sourceId
+        - suggestedExerciseId
+        - decision
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        athleteId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-10-30"
+        source:
+          type: string
+          enum: [DayAdjustment, PlanDraft]
+          example: "DayAdjustment"
+        sourceId:
+          type: string
+          format: uuid
+          example: "8a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+        zone:
+          type: string
+          nullable: true
+          example: "espalda_baja"
+        suggestedExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000001"
+        decision:
+          type: string
+          enum: [Approved, Modified, Rejected]
+          example: "Modified"
+        finalExerciseId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "00000000-0000-0000-0000-000000000002"
+        finalPercentage:
+          type: number
+          format: double
+          nullable: true
+          example: 75.0
+        reason:
+          type: string
+          nullable: true
+          example: "Prefiero que descanse"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-30T02:40:00Z"
+
+    DayConflictsResponse:
+      type: object
+      required:
+        - hasConflicts
+        - conflicts
+      properties:
+        hasConflicts:
+          type: boolean
+          example: true
+        painZones:
+          type: string
+          nullable: true
+          example: "cuadriceps:2"
+        message:
+          type: string
+          nullable: true
+          description: Aviso informativo cuando todavía no hizo el check-in ("Todavía no hizo el check-in") o no tiene dolor/conflictos.
+          example: null
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictItem'
+
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+
+    DayAdjustmentItem:
+      type: object
+      required:
+        - originalExerciseId
+        - originalExerciseName
+        - suggestedSubstituteExerciseId
+        - suggestedSubstituteExerciseName
+        - substituteExerciseId
+        - substituteExerciseName
+        - zone
+        - painLevel
+        - reason
+        - availableSubstitutes
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        originalExerciseName:
+          type: string
+          example: "Salto al cajón"
+        suggestedSubstituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        suggestedSubstituteExerciseName:
+          type: string
+          example: "Prensa de piernas"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        substituteExerciseName:
+          type: string
+          example: "Prensa de piernas"
+        zone:
+          type: string
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        reason:
+          type: string
+          example: "Impacto y absorción excéntrica sobre cuádriceps con molestia reportada."
+        availableSubstitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictSubstitute'
+
+    DayAdjustmentResponse:
+      type: object
+      required:
+        - id
+        - athleteId
+        - date
+        - sessionId
+        - status
+        - items
+        - justification
+        - provider
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "12345678-1234-1234-1234-123456789012"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-06"
+        sessionId:
+          type: string
+          format: uuid
+          example: "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b"
+        status:
+          type: string
+          enum: [Pending, Approved, Rejected]
+          example: "Pending"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayAdjustmentItem'
+        justification:
+          type: string
+          example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        provider:
+          type: string
+          example: "Reglas"
+        rejectionReason:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-06T12:00:00Z"
+
+    ApproveDayAdjustmentItemInput:
+      type: object
+      required:
+        - originalExerciseId
+        - substituteExerciseId
+      properties:
+        originalExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        substituteExerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000012"
+
+    ApproveDayAdjustmentRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ApproveDayAdjustmentItemInput'
+
+    RejectDayAdjustmentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+          example: "Es molestia leve, que haga la sesión con menos carga."
+
+    DayConflictItem:
+      type: object
+      required:
+        - exerciseId
+        - name
+        - zone
+        - painLevel
+        - reason
+        - substitutes
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000010"
+        name:
+          type: string
+          example: "Saltos al cajón"
+        zone:
+          type: string
+          example: "cuadriceps"
+        painLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 2
+        reason:
+          type: string
+          example: "Impacto y absorción excéntrica sobre cuádriceps con molestia reportada."
+        substitutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayConflictSubstitute'
+
+    DayConflictSubstitute:
+      type: object
+      required:
+        - exerciseId
+        - name
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "00000000-0000-0000-0000-000000000011"
+        name:
+          type: string
+          example: "Puente de glúteos con barra"
 
     ProblemDetails:
       type: object

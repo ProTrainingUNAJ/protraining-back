@@ -1,4 +1,4 @@
-﻿using Domain.Entities;
+using Domain.Entities;
 
 namespace Application.Interfaces.Persistence;
 
@@ -11,5 +11,5 @@ public interface IRefreshTokenRepository
     Task AddAsync(RefreshToken refreshToken, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
     Task RevokeAllActiveByDeviceAsync(Guid userId, string deviceId, CancellationToken cancellationToken = default);
-
+    Task RevokeAllActiveByUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }

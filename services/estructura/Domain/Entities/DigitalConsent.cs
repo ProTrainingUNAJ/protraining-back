@@ -33,11 +33,17 @@ public sealed class DigitalConsent : BaseEntity
             throw new DomainException("El nombre del tutor es obligatorio y no puede superar los 150 caracteres.");
 
         var email = guardianEmail?.Trim();
-        if (string.IsNullOrWhiteSpace(email) || email.Length > 150 || !email.Contains('@'))
+        var phone = guardianPhone?.Trim();
+
+        var hasEmail = !string.IsNullOrWhiteSpace(email);
+        var hasPhone = !string.IsNullOrWhiteSpace(phone);
+        if (!hasEmail && !hasPhone)
+            throw new DomainException("Debe proporcionar al menos un medio de contacto del tutor (correo electrónico o teléfono).");
+
+        if (hasEmail && (email!.Length > 150 || !email.Contains('@')))
             throw new DomainException("El correo electrónico del tutor es obligatorio y debe tener un formato válido.");
 
-        var phone = guardianPhone?.Trim();
-        if (string.IsNullOrWhiteSpace(phone) || phone.Length > 50)
+        if (hasPhone && phone!.Length > 50)
             throw new DomainException("El teléfono del tutor es obligatorio y no puede superar los 50 caracteres.");
 
         if (!allowsPhysicalTraining)
@@ -60,7 +66,7 @@ public sealed class DigitalConsent : BaseEntity
     public static DigitalConsent RegisterForAdult(
         Guid athleteId,
         bool allowsPhysicalTraining = true,
-        bool allowsHabitsRecommendations = true)
+        bool allowsHabitsRecommendations = false)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -85,7 +91,8 @@ public sealed class DigitalConsent : BaseEntity
         AllowsHabitsRecommendations = allowsHabitsRecommendations;
     }
 
-    // Verifica que el consentimiento esté firmado y cumpla con el ajuste N3 si el atleta es menor.
+    // Verifica que el consentimiento esté firmado y cumpla con la regla de tutor para menores
+    // (nombre del tutor y al menos un medio de contacto: email o teléfono, KAN-401).
     public bool IsValidForAthlete(bool athleteIsMinor)
     {
         if (!IsSigned || !AllowsPhysicalTraining)
@@ -95,8 +102,7 @@ public sealed class DigitalConsent : BaseEntity
         {
             return IsMinor
                 && !string.IsNullOrWhiteSpace(GuardianName)
-                && !string.IsNullOrWhiteSpace(GuardianEmail)
-                && !string.IsNullOrWhiteSpace(GuardianPhone);
+                && (!string.IsNullOrWhiteSpace(GuardianEmail) || !string.IsNullOrWhiteSpace(GuardianPhone));
         }
 
         return true;

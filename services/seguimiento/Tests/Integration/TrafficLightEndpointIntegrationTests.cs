@@ -108,7 +108,7 @@ public sealed class TrafficLightEndpointIntegrationTests
         var pendingId = Guid.NewGuid();
 
         await SeedCheckInAsync(factory, redId, TrafficLight.Red, "Lesión activa", hasInjury: true);
-        await SeedCheckInAsync(factory, yellowId, TrafficLight.Yellow, "Señales de alerta: poco sueño");
+        await SeedCheckInAsync(factory, yellowId, TrafficLight.Yellow, "Sueño moderado");
         await SeedCheckInAsync(factory, greenId, TrafficLight.Green, "Estado óptimo");
 
         factory.Structure.RespondWithAthletes($$"""
@@ -143,13 +143,13 @@ public sealed class TrafficLightEndpointIntegrationTests
         var yellow = summaries[1];
         Assert.Equal("Bruno Alerta", yellow.AthleteName);
         Assert.Equal("Yellow", yellow.TrafficLight);
-        Assert.Equal("Señales de alerta: poco sueño", yellow.TrafficLightReason);
+        Assert.Equal("Sueño moderado", yellow.TrafficLightReason);
         Assert.Equal(50, yellow.ResultValue);
 
         var pending = summaries[2];
         Assert.Equal("Eze Pendiente", pending.AthleteName);
         Assert.Equal("Yellow", pending.TrafficLight);
-        Assert.Contains("sin check-in", pending.TrafficLightReason, StringComparison.Ordinal);
+        Assert.Contains("Sin check-in", pending.TrafficLightReason, StringComparison.Ordinal);
         Assert.Equal(50, pending.ResultValue);
         Assert.False(pending.HasReportedToday);
         Assert.Null(pending.ReportedAt);

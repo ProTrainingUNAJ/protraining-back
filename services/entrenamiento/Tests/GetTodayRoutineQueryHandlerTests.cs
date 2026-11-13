@@ -15,6 +15,8 @@ public class GetTodayRoutineQueryHandlerTests
     private readonly Mock<ITrainingSessionRepository> _sessionRepoMock = new();
     private readonly Mock<IAthleteRecordRepository> _athleteRecordRepoMock = new();
     private readonly Mock<IStructureClient> _structureClientMock = new();
+    private readonly Mock<IExerciseVideoRepository> _videoRepoMock = new();
+    private readonly Mock<IPerformedSetRepository> _performedSetRepoMock = new();
     private readonly LoadCalculatorEngine _loadCalculatorEngine = new();
 
     public GetTodayRoutineQueryHandlerTests()
@@ -23,11 +25,29 @@ public class GetTodayRoutineQueryHandlerTests
         _structureClientMock
             .Setup(c => c.GetAthleteByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => new StructureAthleteDto(id, "Lucas Gómez"));
+
+        _videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        _performedSetRepoMock
+            .Setup(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PerformedSet>());
     }
 
-    private GetTodayRoutineQueryHandler CreateHandler()
+    private GetTodayRoutineQueryHandler CreateHandler(
+        IExerciseVideoRepository? videoRepo = null,
+        IExerciseMediaCatalog? mediaCatalog = null)
     {
-        return new(_athleteRecordRepoMock.Object, _sessionRepoMock.Object, _loadCalculatorEngine, _structureClientMock.Object);
+        return new(
+            _athleteRecordRepoMock.Object,
+            _sessionRepoMock.Object,
+            _loadCalculatorEngine,
+            _structureClientMock.Object,
+            videoRepo ?? _videoRepoMock.Object,
+            _performedSetRepoMock.Object,
+            exerciseMediaCatalog: mediaCatalog
+        );
     }
 
     [Fact]
@@ -293,5 +313,165 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.Equal(friday, result.Date);
         var item = Assert.Single(result.Exercises);
         Assert.Equal(images, item.Images);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioConMusculos_When_ConsultaRutina_Then_DevuelvePrimaryYSecondaryMuscles()
+    {
+        // KAN-557: La rutina del día proyecta los músculos principales y secundarios para la silueta anatómica
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 31);
+        var primary = new List<string> { "quadriceps" };
+        var secondary = new List<string> { "glutes", "hamstrings" };
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", primaryMuscles: primary, secondaryMuscles: secondary);
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 75m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(primary, item.PrimaryMuscles);
+        Assert.Equal(secondary, item.SecondaryMuscles);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioSinMusculos_When_ConsultaRutina_Then_DevuelveListasVaciasSinErrores()
+    {
+        // KAN-557: Si el ejercicio no tiene músculos especificados, devuelve listas vacías y no falla
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 31);
+        var exercise = Exercise.Create("Movilidad General", "Core");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 50m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.NotNull(item.PrimaryMuscles);
+        Assert.Empty(item.PrimaryMuscles);
+        Assert.NotNull(item.SecondaryMuscles);
+        Assert.Empty(item.SecondaryMuscles);
+    }
+
+    [Fact]
+    public async Task Given_AthleteRoutine_When_PFHasCustomVideo_Then_ResolvesPFVideo()
+    {
+        // KAN-380: El atleta ve el video de su PF para el ejercicio prescrito
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 5);
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.Is<List<Guid>>(ids => ids.Contains(exercise.Id)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { { exercise.Id, "https://www.youtube.com/watch?v=pfCustomVid" } });
+
+        var handler = CreateHandler(videoRepo: videoRepoMock.Object);
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal("https://www.youtube.com/watch?v=pfCustomVid", item.VideoUrl);
+    }
+
+    [Fact]
+    public async Task Given_AthleteRoutine_When_PFHasNoCustomVideo_Then_FallsBackToCatalogVideo()
+    {
+        // KAN-380: Si el PF no cargó video propio, el atleta ve el del catálogo
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 5);
+        var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(r => r.GetVideosByExerciseIdsAsync(It.IsAny<List<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var handler = CreateHandler(videoRepo: videoRepoMock.Object);
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal("https://www.youtube.com/watch?v=catalogVid", item.VideoUrl);
+    }
+
+    [Fact]
+    public async Task Given_RoutineWithCatalogExercise_When_MediaCatalogHasIt_Then_ReturnsItsIllustrations()
+    {
+        // KAN-549: el atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 12);
+        var exercise = Exercise.Create("Sentadilla con barra", "Piernas",
+            images: ["https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Squat/0.jpg"],
+            origin: Origin.Catalog);
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var mediaCatalog = global::Infrastructure.Services.ExerciseMediaCatalog.FromJson("""
+            [{ "exerciseId": "Barbell_Squat", "repdb": { "frames": ["https://repdb/squat-start.webp", "https://repdb/squat-peak.webp"] } }]
+            """);
+        var handler = CreateHandler(mediaCatalog: mediaCatalog);
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var media = Assert.Single(Assert.Single(result.Exercises).Media);
+        Assert.Equal("repdb", media.Source);
+        Assert.Equal(2, media.Urls.Count);
+    }
+
+    [Fact]
+    public async Task Given_RoutineWithPerformedSets_When_Queried_Then_ReturnsPerformedSetsWithTimeSeconds()
+    {
+        // KAN-457: "Mi rutina" lee las series realizadas del back con time_seconds
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 11);
+        var exercise = Exercise.Create("Pasadas 100m", "Velocidad");
+        var session = CreateSessionWithExercise(exercise, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var performedSet = PerformedSet.Create(
+            athleteId: athleteId,
+            sessionId: session.Id,
+            exerciseId: exercise.Id,
+            date: date,
+            weight: 0m,
+            reps: 0,
+            timeSeconds: 15.2m,
+            setNumber: 1
+        );
+
+        _performedSetRepoMock
+            .Setup(r => r.GetByAthleteAndDateAsync(athleteId, date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([performedSet]);
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var exDto = Assert.Single(result.Exercises);
+        var setDto = Assert.Single(exDto.PerformedSets);
+        Assert.Equal(1, setDto.SetNumber);
+        Assert.Equal(15.2m, setDto.TimeSeconds);
     }
 }

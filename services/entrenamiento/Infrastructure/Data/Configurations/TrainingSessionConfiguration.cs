@@ -31,6 +31,9 @@ public class TrainingSessionConfiguration : IEntityTypeConfiguration<TrainingSes
             .HasColumnName("coach_notes")
             .HasMaxLength(1000);
 
+        builder.Property(ts => ts.StartTime)
+            .HasColumnName("start_time");
+
         builder.HasIndex(ts => new { ts.TrainingWeekId, ts.Order })
             .IsUnique()
             .HasFilter("deleted_at IS NULL");

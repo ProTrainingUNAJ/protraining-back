@@ -102,7 +102,7 @@ public class RoutineResolutionIntegrationTests
             var recordRepo = new AthleteRecordRepository(context);
             var loadCalculator = new LoadCalculatorEngine();
 
-            var handler = new GetTodayRoutineQueryHandler(recordRepo, sessionRepo, loadCalculator, structureClientMock.Object);
+            var handler = new GetTodayRoutineQueryHandler(recordRepo, sessionRepo, loadCalculator, structureClientMock.Object, new ExerciseVideoRepository(context), new PerformedSetRepository(context));
 
             // Consulta Atleta 1
             var routineAthlete1 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete1Id });
@@ -166,7 +166,9 @@ public class RoutineResolutionIntegrationTests
                 new AthleteRecordRepository(context),
                 new TrainingSessionRepository(context),
                 new LoadCalculatorEngine(),
-                structureClientMock.Object);
+                structureClientMock.Object,
+                new ExerciseVideoRepository(context),
+                new PerformedSetRepository(context));
 
             // 1. Tested: 100 * 0.75 = 75.0 kg
             var resTested = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteTestedId });
@@ -243,7 +245,9 @@ public class RoutineResolutionIntegrationTests
                 new AthleteRecordRepository(context),
                 new TrainingSessionRepository(context),
                 new LoadCalculatorEngine(),
-                structureClientMock.Object);
+                structureClientMock.Object,
+                new ExerciseVideoRepository(context),
+                new PerformedSetRepository(context));
 
             // Consulta como Atleta (/api/v1/me/today-routine -> AthleteId = null)
             var routine = await handler.Handle(new GetTodayRoutineQuery());

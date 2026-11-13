@@ -28,6 +28,7 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
                 .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
                     .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
+                        .ThenInclude(e => e.Exercise)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
@@ -35,6 +36,7 @@ public class TrainingPlanRepository : ITrainingPlanRepository
     {
         return await _context.TrainingPlans
             .AsNoTracking()
+            .Where(p => !p.IsTemplate)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -76,5 +78,14 @@ public class TrainingPlanRepository : ITrainingPlanRepository
     public async Task AddAssignmentAsync(PlanAssignment assignment, CancellationToken cancellationToken = default)
     {
         await _context.PlanAssignments.AddAsync(assignment, cancellationToken);
+    }
+
+    public async Task<List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.TrainingPlans
+            .AsNoTracking()
+            .Where(t => t.IsTemplate)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(cancellationToken);
     }
 }

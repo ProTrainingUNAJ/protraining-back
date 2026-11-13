@@ -1,3 +1,5 @@
+using Application.UseCases.Categories.Invitations.GenerateCategoryInvitationToken;
+using Application.UseCases.Categories.Invitations.ValidateCategoryInvitationToken;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using API.Extensions;
@@ -32,6 +34,15 @@ using Application.UseCases.Organizations.DeleteOrganization;
 using Application.UseCases.Organizations.GetOrganization;
 using Application.UseCases.Organizations.ListOrganizations;
 using Application.UseCases.Organizations.UpdateOrganization;
+using Application.Services;
+using Application.UseCases.Categories.Events.CreateCompetitiveEvent;
+using Application.UseCases.Categories.Events.DeleteCompetitiveEvent;
+using Application.UseCases.Categories.Events.ListCategoryEvents;
+using Application.UseCases.Categories.Events.UpdateCompetitiveEvent;
+using Application.UseCases.Categories.SeasonPhases.CreateSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.DeleteSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.ListCategorySeasonPhases;
+using Application.UseCases.Categories.SeasonPhases.UpdateSeasonPhase;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
@@ -44,6 +55,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
 
 namespace Estructura.Tests.Infrastructure;
 
@@ -52,10 +64,14 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
     private readonly SqliteConnection _sqliteConnection;
     private readonly TestServer _server;
     private readonly IWebPushClientWrapper? _customWebPushClient;
+    private readonly TimeProvider _timeProvider;
 
-    public EstructuraTestApplicationFactory(IWebPushClientWrapper? customWebPushClient = null)
+    public EstructuraTestApplicationFactory(
+        IWebPushClientWrapper? customWebPushClient = null,
+        TimeProvider? customTimeProvider = null)
     {
         _customWebPushClient = customWebPushClient;
+        _timeProvider = customTimeProvider ?? TimeProvider.System;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -89,6 +105,12 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
                 services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
                 services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
+                services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
+                services.AddScoped<ISeasonPhaseRepository, SeasonPhaseRepository>();
+                services.AddScoped<ICategoryInvitationRepository, CategoryInvitationRepository>();
+                services.AddScoped<ISeasonPhaseValidationService, SeasonPhaseValidationService>();
+                services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
+                services.AddSingleton<TimeProvider>(_timeProvider);
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
 
@@ -125,6 +147,8 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ListMedicalRecordAuditLogsQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetMe.GetMeQueryHandler>();
                 services.AddScoped<ListMyCategoriesQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
                 services.AddScoped<ListOrganizationsQueryHandler>();
                 services.AddScoped<GetOrganizationQueryHandler>();
                 services.AddScoped<CreateOrganizationCommandHandler>();
@@ -140,6 +164,17 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ExportStructureCsvQueryHandler>();
                 services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
                 services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+                services.AddScoped<ListCategoryEventsQueryHandler>();
+                services.AddScoped<CreateCompetitiveEventCommandHandler>();
+                services.AddScoped<UpdateCompetitiveEventCommandHandler>();
+                services.AddScoped<DeleteCompetitiveEventCommandHandler>();
+                services.AddScoped<ListCategorySeasonPhasesQueryHandler>();
+                services.AddScoped<CreateSeasonPhaseCommandHandler>();
+                services.AddScoped<UpdateSeasonPhaseCommandHandler>();
+                services.AddScoped<DeleteSeasonPhaseCommandHandler>();
+                services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
+                services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
+                services.AddScoped<AcceptCategoryInvitationCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
@@ -207,6 +242,16 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
 
     public AppDbContext CreateDbContext(Guid? overridePfId = null)
     {
+        if (overridePfId.HasValue)
+        {
+            var currentUserMock = new Moq.Mock<ICurrentUser>();
+            currentUserMock.Setup(u => u.PfId).Returns(overridePfId.Value);
+            var options = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(_sqliteConnection)
+                .Options;
+            return new AppDbContext(options, currentUserMock.Object);
+        }
+
         var scope = _server.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         return context;

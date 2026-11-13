@@ -21,6 +21,14 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
+    public async Task<Guid?> GetPlanIdBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        return await _context.TrainingSessions
+            .Where(s => s.Id == sessionId)
+            .Select(s => (Guid?)s.Week.TrainingPlanId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<TrainingSession?> GetByAthleteIdAsync(Guid athleteId, IReadOnlyList<Guid> categoryIds, DateOnly date, CancellationToken cancellationToken = default)
     {
         // 1. Obtenemos las asignaciones del atleta o sus categorías, incluyendo el plan completo con semanas y sesiones
@@ -59,5 +67,19 @@ public class TrainingSessionRepository : ITrainingSessionRepository
     {
         _context.TrainingSessions.Update(session);
         return Task.CompletedTask;
+    }
+
+    public async Task<List<PlanAssignment>> ListAssignmentsWithPlansByPfIdAsync(Guid pfId, CancellationToken cancellationToken = default)
+    {
+        // Apaga el filtro global porque el worker no tiene usuario logueado, y filtra explícitamente por el pfId del parámetro
+        return await _context.PlanAssignments
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Include(a => a.Plan)
+                .ThenInclude(p => p.Weeks)
+                    .ThenInclude(w => w.Sessions)
+            .Where(a => a.PfId == pfId && a.DeletedAt == null && a.Plan.DeletedAt == null)
+            .OrderBy(a => a.StartDate)
+            .ToListAsync(cancellationToken);
     }
 }

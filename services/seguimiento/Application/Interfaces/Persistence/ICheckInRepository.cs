@@ -6,11 +6,26 @@ public interface ICheckInRepository
 {
     Task<CheckIn?> GetByAthleteAndDateAsync(Guid athleteId, DateTime date, CancellationToken cancellationToken = default);
 
+    // Consulta de solo lectura (AsNoTracking) del check-in de un atleta en una fecha (KAN-451).
+    Task<CheckIn?> GetNoTrackingByAthleteAndDateAsync(Guid athleteId, DateTime date, CancellationToken cancellationToken = default);
+
     // Check-ins de varios atletas en una misma fecha, en una sola consulta (semáforo por categoría).
     Task<IReadOnlyList<CheckIn>> GetByAthletesAndDateAsync(IReadOnlyCollection<Guid> athleteIds, DateTime date, CancellationToken cancellationToken = default);
 
     // Check-ins de una fecha para el PF del token (filtro global de PfId): modo degradado del semáforo.
     Task<IReadOnlyList<CheckIn>> GetByDateAsync(DateTime date, CancellationToken cancellationToken = default);
+
+    // Check-ins de varios atletas dentro de un rango de fechas (promedios por categoría KAN-447).
+    Task<IReadOnlyList<CheckIn>> GetByAthletesAndDateRangeAsync(IReadOnlyCollection<Guid> athleteIds, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
+
+    // Consulta en lote que atletas de la lista ya hicieron check-in hoy para un PF (para el worker con rol Servicio)
+    Task<IReadOnlyList<Guid>> GetCompletedCheckInAthleteIdsAsync(DateOnly date, Guid pfId, IReadOnlyList<Guid> athleteIds, CancellationToken cancellationToken = default);
+
+    // Consulta interna sin filtro de sesión para workers nocturnos de análisis de fatiga y sobrecarga (#177 · KAN-472)
+    Task<IReadOnlyList<CheckIn>> GetHistoryByAthletesAndDateRangeAsync(IReadOnlyCollection<Guid> athleteIds, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
+
+    // Historial de check-ins de un atleta con rango de fechas o límite (evolución KAN-434).
+    Task<IReadOnlyList<CheckIn>> GetByAthleteAndDateRangeAsync(Guid athleteId, DateTime? startDate = null, DateTime? endDate = null, int? limit = null, CancellationToken cancellationToken = default);
 
     Task AddAsync(CheckIn checkIn, CancellationToken cancellationToken = default);
 }

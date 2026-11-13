@@ -1,0 +1,257 @@
+[
+  {
+    "zone": "cuadriceps",
+    "exercise": "Sentadilla con barra",
+    "minPainLevel": 1,
+    "reason": "Alta compresión femororrotuliana y tensión en el tendón rotuliano con sobrecarga axial.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas elásticas",
+      "Puente de glúteos con barra"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Sentadillas",
+    "minPainLevel": 1,
+    "reason": "Compresión articular en flexión profunda de rodilla con molestia activa en cuádriceps.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas elásticas"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Salto al cajón (respuesta múltiple)",
+    "minPainLevel": 1,
+    "reason": "Impacto reactivo y desaceleración brusca que sobrecargan el tendón rotuliano y los cuádriceps.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas elásticas"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Salto desde banco",
+    "minPainLevel": 1,
+    "reason": "Fase excéntrica de aterrizaje con fuerzas de impacto directo sobre la articulación de la rodilla.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas elásticas"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Sentadilla con salto sin apoyo",
+    "minPainLevel": 1,
+    "reason": "Impacto pliométrico repetitivo y sobrecarga excéntrica en el mecanismo extensor de rodilla.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas elásticas"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Sentadilla frontal con barra",
+    "minPainLevel": 1,
+    "reason": "Elevado torque en la articulación femororrotuliana por ángulo agudo de rodilla y tronco erguido.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Sentadillas con bandas"
+    ]
+  },
+  {
+    "zone": "cuadriceps",
+    "exercise": "Sentadilla Hack",
+    "minPainLevel": 1,
+    "reason": "Aislamiento de cuádriceps con gran estrés mecánico y cizallamiento en la rótula.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Puente de glúteos con barra"
+    ]
+  },
+
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Peso muerto rumano",
+    "minPainLevel": 1,
+    "reason": "Tensión excéntrica y elongación máxima bajo carga en el vientre muscular y tendón isquiosural.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Peso muerto con barra y piernas rígidas",
+    "minPainLevel": 1,
+    "reason": "Elongación severa bajo carga en la fosa poplítea e inserciones isquiotibiales.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Elevación de glúteos e isquiotibiales",
+    "minPainLevel": 1,
+    "reason": "Demanda excéntrica supramáxima en flexión de rodilla contra el peso corporal.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Buenos días con barra y piernas rígidas",
+    "minPainLevel": 1,
+    "reason": "Brazo de palanca prolongado que sobrecarga los isquiotibiales en flexión de cadera.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Curl de piernas con balón",
+    "minPainLevel": 1,
+    "reason": "Contracción activa concéntrica e isométrica que irrita los tendones de la corva.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "isquiotibiales",
+    "exercise": "Peso muerto rumano desde déficit",
+    "minPainLevel": 1,
+    "reason": "Rango de estiramiento forzado que agrava el dolor en inserciones posteriores de rodilla.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+
+  {
+    "zone": "hombros",
+    "exercise": "Press de hombros con barra",
+    "minPainLevel": 1,
+    "reason": "Pinzamiento subacromial y fricción del manguito rotador al empujar por encima de la cabeza.",
+    "substitutes": [
+      "Remo con dos mancuernas inclinado con las palmas hacia adentro",
+      "Press de suelo alterno"
+    ]
+  },
+  {
+    "zone": "hombros",
+    "exercise": "Press militar con barra sentado",
+    "minPainLevel": 1,
+    "reason": "Compresión glenohumeral vertical con movilidad escapular restringida por el respaldo.",
+    "substitutes": [
+      "Remo con barra inclinado",
+      "Press de suelo alterno"
+    ]
+  },
+  {
+    "zone": "hombros",
+    "exercise": "Prensa militar permanente",
+    "minPainLevel": 1,
+    "reason": "Sobrecarga en la porción anterior del deltoides y tendón largo del bíceps braquial.",
+    "substitutes": [
+      "Remo con dos mancuernas inclinado con las palmas hacia adentro",
+      "Press de suelo alterno"
+    ]
+  },
+  {
+    "zone": "hombros",
+    "exercise": "Prensa de hombro a máquina (militar)",
+    "minPainLevel": 1,
+    "reason": "Trayectoria guiada fija en abducción y rotación externa que estresa el hombro.",
+    "substitutes": [
+      "Press de suelo alterno",
+      "Remo con dos mancuernas inclinado con las palmas hacia adentro"
+    ]
+  },
+  {
+    "zone": "hombros",
+    "exercise": "Fondos - Versión de pecho",
+    "minPainLevel": 1,
+    "reason": "Hiperextensión y traslación anterior de la cabeza humeral bajo carga corporal.",
+    "substitutes": [
+      "Press de suelo alterno",
+      "Separación de la banda"
+    ]
+  },
+  {
+    "zone": "hombros",
+    "exercise": "Press de banca con barra - Agarre medio",
+    "minPainLevel": 1,
+    "reason": "Cizallamiento y estrés capsular anterior del hombro en la fase profunda del empuje.",
+    "substitutes": [
+      "Press de suelo alterno",
+      "Remo con dos mancuernas inclinado con las palmas hacia adentro"
+    ]
+  },
+
+  {
+    "zone": "espalda_baja",
+    "exercise": "Peso muerto con barra",
+    "minPainLevel": 1,
+    "reason": "Elevadas fuerzas de cizallamiento y compresión axial sobre las vértebras lumbares (L4-S1).",
+    "substitutes": [
+      "Prensa de piernas",
+      "Puente de glúteos con barra"
+    ]
+  },
+  {
+    "zone": "espalda_baja",
+    "exercise": "Sentadilla con barra",
+    "minPainLevel": 1,
+    "reason": "Compresión axial y momento flexor en la columna lumbar durante el recorrido bajo barra.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Puente de glúteos con barra"
+    ]
+  },
+  {
+    "zone": "espalda_baja",
+    "exercise": "Peso muerto rumano",
+    "minPainLevel": 1,
+    "reason": "Brazo de palanca prolongado que sobrecarga los erectores espinales lumbares.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "espalda_baja",
+    "exercise": "Sentadilla completa con barra",
+    "minPainLevel": 1,
+    "reason": "Retroversión pélvica bajo carga y pérdida de lordosis lumbar neutra en profundidad.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Puente de glúteos con barra"
+    ]
+  },
+  {
+    "zone": "espalda_baja",
+    "exercise": "Buenos días con barra y piernas rígidas",
+    "minPainLevel": 1,
+    "reason": "Momento flexor extremo sobre los discos intervertebrales de la columna lumbosacra.",
+    "substitutes": [
+      "Puente de glúteos con barra",
+      "Prensa de piernas"
+    ]
+  },
+  {
+    "zone": "espalda_baja",
+    "exercise": "Peso muerto sumo",
+    "minPainLevel": 1,
+    "reason": "Tensión compresiva lumbosacra durante el despegue inicial de la barra desde el suelo.",
+    "substitutes": [
+      "Prensa de piernas",
+      "Puente de glúteos con barra"
+    ]
+  }
+]
+

@@ -1,3 +1,9 @@
+using Application.Common.PlanDrafts;
+using Application.Common.DayAdjustments;
+using Application.DTOs.DayAdjustments;
+using Application.DTOs.PlanDrafts;
+using Application.Exceptions;
+using Domain.Exceptions;
 using System.Diagnostics;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
@@ -24,6 +30,7 @@ public sealed class ResilientAiService : IAiService
     private readonly IAiResponseCache? _responseCache;
     private readonly ICurrentUser? _currentUser;
     private readonly IAiAuditService? _auditService;
+    private readonly IExerciseCatalogService? _catalogService;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -31,7 +38,7 @@ public sealed class ResilientAiService : IAiService
         GeminiClient geminiClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, logger)
     {
     }
 
@@ -41,7 +48,7 @@ public sealed class ResilientAiService : IAiService
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, logger)
     {
     }
 
@@ -52,7 +59,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, logger)
     {
     }
 
@@ -65,7 +72,21 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        ILogger<ResilientAiService> logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, logger)
     {
     }
 
@@ -74,7 +95,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, null, null, logger)
+        : this(providers, semanticValidator, responseCache, null, null, null, logger)
     {
     }
 
@@ -84,6 +105,18 @@ public sealed class ResilientAiService : IAiService
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
+        ILogger<ResilientAiService> logger)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
     {
         _providers = providers;
@@ -91,6 +124,7 @@ public sealed class ResilientAiService : IAiService
         _responseCache = responseCache;
         _currentUser = currentUser;
         _auditService = auditService;
+        _catalogService = catalogService;
         _logger = logger;
     }
 
@@ -103,7 +137,7 @@ public sealed class ResilientAiService : IAiService
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
         string? promptHash = null;
-        if (_responseCache != null)
+        if (_responseCache != null && request.AdaptationContext is null)
         {
             var pfId = _currentUser?.PfId;
             promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis, pfId);
@@ -151,6 +185,33 @@ public sealed class ResilientAiService : IAiService
             }
         }
 
+        // 2. Enriquecer la solicitud con los ejercicios disponibles del catálogo oficial (#087 · KAN-382)
+        if (request.AvailableExercises == null && _catalogService != null)
+        {
+            try
+            {
+                var allExercises = await _catalogService.GetAllAsync(cancellationToken);
+                if (allExercises is { Count: > 0 })
+                {
+                    var filtered = RoutinePromptBuilder.FilterRelevantExercises(allExercises, request.MuscleGroupEmphasis);
+                    request = request with { AvailableExercises = filtered };
+                    _logger.LogInformation(
+                        "Se enriqueció la solicitud con {Count} ejercicios del catálogo oficial para armar el prompt de IA.",
+                        filtered.Count);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudieron obtener ejercicios del catálogo oficial desde el microservicio de Entrenamiento. Continuando con prompt general.");
+            }
+        }
+
         _logger.LogInformation("Iniciando cadena de proveedores de IA para el atleta '{AthleteId}'.", request.AthleteId);
 
         for (var i = 0; i < _providers.Count; i++)
@@ -195,7 +256,10 @@ public sealed class ResilientAiService : IAiService
                 // Validación semántica de ejercicios en caso de contar con el validador
                 if (_semanticValidator != null)
                 {
-                    var validationResult = await _semanticValidator.ValidateDraftAsync(response, cancellationToken: cancellationToken);
+                    var validationResult = await _semanticValidator.ValidateDraftAsync(
+                        response,
+                        adaptationContext: request.AdaptationContext,
+                        cancellationToken: cancellationToken);
                     if (validationResult.RequiresDeterministicFallback && !isLast)
                     {
                         _logger.LogWarning(
@@ -212,6 +276,7 @@ public sealed class ResilientAiService : IAiService
                 // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (Ollama o Gemini),
                 // excluyendo deliberadamente las reglas determinísticas para no degradar el servicio si la IA se recupera.
                 if (_responseCache != null &&
+                    request.AdaptationContext is null &&
                     !string.IsNullOrEmpty(promptHash) &&
                     provider is not RuleBasedAiClient &&
                     !response.ProviderUsed.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
@@ -239,5 +304,138 @@ public sealed class ResilientAiService : IAiService
 
         totalStopwatch.Stop();
         throw new InvalidOperationException("Ningún proveedor de la cadena resiliente pudo generar la rutina.");
+    }
+
+    public async Task<(PlanDraftContentDto Content, string Provider)> GeneratePlanDraftAsync(
+        CreatePlanDraftRequestDto request,
+        IReadOnlyList<DateOnly>? matchDates = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _logger.LogInformation("Iniciando generación de borrador de planificación multisesión para objetivo '{Goal}' ({Weeks} semanas, {Days} días/semana).",
+            request.Goal, request.Weeks, request.DaysPerWeek);
+
+        var totalStopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var content = await provider.TryGeneratePlanDraftAsync(request, matchDates, cancellationToken);
+                if (content == null)
+                {
+                    tierStopwatch.Stop();
+                    if (!isLast)
+                    {
+                        _logger.LogWarning(
+                            "El proveedor '{Provider}' no pudo generar el borrador tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                            provider.ProviderName,
+                            tierStopwatch.ElapsedMilliseconds);
+                    }
+                    continue;
+                }
+
+                if (_catalogService != null)
+                {
+                    try
+                    {
+                        await PlanDraftContentValidator.ValidateAsync(content, _catalogService, cancellationToken);
+                    }
+                    catch (DomainException ex)
+                    {
+                        tierStopwatch.Stop();
+                        _logger.LogWarning(
+                            "El borrador generado por '{Provider}' fue descartado por fallar validación de catálogo o esquema: {Message}. Pasando al siguiente proveedor.",
+                            provider.ProviderName,
+                            ex.Message);
+
+                        if (_auditService != null)
+                        {
+                            await _auditService.LogAsync(AiLog.Create(
+                                provider.ProviderName,
+                                request.Goal,
+                                tierStopwatch.ElapsedMilliseconds,
+                                isValid: false,
+                                validationResult: "DescartadoPorEsquemaOCatalogo",
+                                athleteId: request.AthleteId,
+                                errorMessage: ex.Message));
+                        }
+                        continue;
+                    }
+                }
+
+                tierStopwatch.Stop();
+                totalStopwatch.Stop();
+                _logger.LogInformation(
+                    "Borrador de planificación generado exitosamente por proveedor '{Provider}' en {ElapsedMs} ms (tiempo total: {TotalMs} ms).",
+                    provider.ProviderName,
+                    tierStopwatch.ElapsedMilliseconds,
+                    totalStopwatch.ElapsedMilliseconds);
+
+                return (content, provider.ProviderName);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(ex, "Excepción en proveedor '{Provider}' al generar borrador de planificación. Pasando al siguiente respaldo.", provider.ProviderName);
+            }
+        }
+
+        totalStopwatch.Stop();
+        _logger.LogError("Los tres proveedores de IA fallaron al generar el borrador de planificación tras {ElapsedMs} ms.", totalStopwatch.ElapsedMilliseconds);
+
+        throw new AiServiceUnavailableException("El servicio de generación de planificaciones con inteligencia artificial no se encuentra disponible. Por favor intente más tarde.");
+    }
+
+    public async Task<(string Justification, string Provider)> GenerateDayAdjustmentJustificationAsync(
+        IReadOnlyList<DayAdjustmentItemDto> items,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var justification = await provider.TryGenerateDayAdjustmentJustificationAsync(items, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (!string.IsNullOrWhiteSpace(justification))
+                {
+                    return (justification.Trim(), provider.ProviderName);
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la justificación del ajuste del día tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(ex, "Excepción en proveedor '{Provider}' al redactar justificación de ajuste del día. Pasando al siguiente respaldo.", provider.ProviderName);
+            }
+        }
+
+        return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas");
     }
 }

@@ -53,7 +53,8 @@ public class CreateTrainingPlanCommandHandler
                             sessionReq.Name,
                             sessionReq.Order,
                             sessionReq.DayOfWeek,
-                            sessionReq.CoachNotes
+                            sessionReq.CoachNotes,
+                            sessionReq.StartTime
                         );
 
                         if (sessionReq.Exercises != null)

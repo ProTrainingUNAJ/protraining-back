@@ -6,6 +6,7 @@ using Infrastructure.Services.Ai;
 using Infrastructure.Services.Ai.Gemini;
 using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
+using Infrastructure.Services.Adaptation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +48,12 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IAiAuditService, AiAuditService>();
+        services.AddScoped<IRoutineDraftRepository, Infrastructure.Data.Repositories.RoutineDraftRepository>();
+        services.AddScoped<IPlanDraftRepository, Infrastructure.Data.Repositories.PlanDraftRepository>();
+        services.AddScoped<IPfDecisionRepository, Infrastructure.Data.Repositories.PfDecisionRepository>();
+        services.AddScoped<IPreventiveAlertRepository, Infrastructure.Data.Repositories.PreventiveAlertRepository>();
+        services.AddScoped<IDayAdjustmentRepository, Infrastructure.Data.Repositories.DayAdjustmentRepository>();
+        services.AddScoped<IMatchDayLoadValidator, Application.Common.PlanDrafts.MatchDayLoadValidator>();
 
         services.AddMemoryCache();
         services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));
@@ -59,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<RuleBasedAiClient>();
         services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
         services.AddScoped<IAiService, ResilientAiService>();
+        services.AddScoped<IAthleteAdaptationContextService, AthleteAdaptationContextService>();
 
         return services;
     }

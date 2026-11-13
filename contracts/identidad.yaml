@@ -16,6 +16,9 @@ tags:
     description: Endpoints para inicio de sesión y renovación de tokens
   - name: Health
     description: Monitoreo de disponibilidad del servicio y base de datos
+  - name: Users
+    description: Gestión del perfil y datos de usuarios
+
 
 paths:
   /api/v1/auth/login:
@@ -48,6 +51,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/auth/google:
+    post:
+      tags:
+        - Authentication
+      summary: Iniciar sesión o vincular cuenta con Google (KAN-541)
+      description: Autentica mediante un ID Token verificado de Google para usuarios existentes en ProTraining. No realiza auto-registro.
+      operationId: googleLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleLoginRequest'
+      responses:
+        "200":
+          description: Autenticación exitosa. Devuelve el token JWT y los datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: Token de Google inválido, expirado o cuenta no autorizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/auth/refresh:
     post:
       tags:
@@ -73,6 +106,253 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           description: Refresh token inválido o expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/register-by-invitation:
+    post:
+      tags:
+        - Authentication
+      summary: Registro de atleta por invitación
+      description: Registra la cuenta de un nuevo atleta a partir de un token de invitación de categoría (KAN-397). Rechaza con 403 si el email ya existe con rol PreparadorFisico, responde 409 si ya existe como Atleta, y 410 o 400 si el token de invitación es inválido o venció.
+      operationId: registerByInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterByInvitationRequest'
+      responses:
+        "200":
+          description: Cuenta creada exitosamente. Devuelve el token JWT y los datos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "403":
+          description: No se permite el registro. El usuario ya existe con rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "409":
+          description: Ya existe una cuenta de atleta registrada con este correo electrónico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "410":
+          description: El enlace o código de invitación ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Solicitar recuperación de contraseña por correo electrónico
+      description: >
+        Envía un correo con un enlace y token de recuperación si el usuario existe.
+        Para prevenir la enumeración de cuentas, siempre devuelve HTTP 202 Accepted.
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        "202":
+          description: Solicitud aceptada. Mensaje genérico de confirmación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Restablecer contraseña mediante token de recuperación
+      description: >
+        Restablece la contraseña de la cuenta validando el token de recuperación recibido por correo.
+        Aplica la política unificada de contraseñas, revoca las sesiones activas anteriores e invalida los JWT emitidos.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        "200":
+          description: Contraseña restablecida exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponse'
+        "400":
+          description: Token inválido, vencido o contraseña que no cumple la política.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/change-password:
+    post:
+      tags:
+        - Authentication
+      summary: Cambiar contraseña de usuario autenticado
+      description: >
+        Permite a un usuario autenticado cambiar su contraseña validando la contraseña actual
+        y verificando las reglas de seguridad de la nueva contraseña. Revoca todos los refresh tokens
+        activos del usuario para cerrar las sesiones abiertas.
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        "204":
+          description: Contraseña actualizada correctamente y sesiones activas revocadas.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o credenciales inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/athletes/{athleteId}/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Resetear contraseña de un atleta (exclusivo para Preparador Físico)
+      description: >
+        Permite a un Preparador Físico restablecer la contraseña de un atleta a su cargo.
+        Genera una contraseña temporal segura, revoca todos los refresh tokens del atleta
+        y marca la cuenta para cambio obligatorio en el próximo inicio de sesión.
+      operationId: resetAthletePassword
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          description: Identificador único del atleta a resetear.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Contraseña temporal generada exitosamente.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "no-store, no-cache"
+            Pragma:
+              schema:
+                type: string
+                example: "no-cache"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetAthletePasswordResponse'
+        "401":
+          description: No autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Atleta no encontrado o no pertenece al Preparador Físico autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/users/me/phone:
+    put:
+      tags:
+        - Users
+      summary: Actualizar teléfono de WhatsApp del usuario
+      description: Solo para el rol PreparadorFisico. Actualiza y normaliza el número de WhatsApp de la cuenta del token (claim `sub`). Responde 400 con mensaje en español si el formato es inválido y 403 si el token es de un atleta.
+      operationId: updateWhatsAppPhone
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhoneRequest'
+      responses:
+        "200":
+          description: Teléfono de WhatsApp actualizado y normalizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatePhoneResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un preparador físico (por ejemplo, el de un atleta).
+
+  /api/v1/users/me/pf-contact:
+    get:
+      tags:
+        - Users
+      summary: Obtener el WhatsApp del preparador físico del atleta
+      description: Solo para el rol Atleta. Devuelve el número de WhatsApp de su preparador físico, tomado del claim `pf_id` del token, así que no se puede pedir el de otro PF. Responde 404 si el PF todavía no cargó su número.
+      operationId: getPfContact
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Número de WhatsApp del preparador físico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PfContact'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: El token no es de un atleta.
+        "404":
+          description: El preparador físico todavía no cargó su número de WhatsApp.
           content:
             application/json:
               schema:
@@ -109,6 +389,14 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
 
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT Bearer emitido por este microservicio.
+
   schemas:
     LoginRequest:
       type: object
@@ -129,6 +417,47 @@ components:
           type: string
           description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
           example: "device-web-pwa-01"
+    GoogleLoginRequest:
+      type: object
+      required:
+        - idToken
+      properties:
+        idToken:
+          type: string
+          description: ID Token criptográfico emitido por Google Identity Services.
+          example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1NiJ9..."
+        deviceId:
+          type: string
+          description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
+          example: "device-web-pwa-01"
+    RegisterByInvitationRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - token
+      properties:
+        email:
+          type: string
+          format: email
+          example: "atleta.nuevo@protraining.com"
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+        fullName:
+          type: string
+          example: "Mateo Fernández"
+        token:
+          type: string
+          description: Token de invitación de la categoría (emitido por Estructura).
+          example: "e3b0c44298fc1c149afbf4c8996fb924"
+        deviceId:
+          type: string
+          nullable: true
+          description: Identificador del dispositivo cliente (opcional).
+          example: "device-web-pwa-01"        
 
     User:
       type: object
@@ -161,6 +490,16 @@ components:
           nullable: true
           description: Identificador del preparador físico asignado (excepción de dominio en español).
           example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        phoneNumber:
+          type: string
+          nullable: true
+          description: Número de teléfono de WhatsApp normalizado (solo dígitos).
+          example: "5491123456789"
+        mustChangePassword:
+          type: boolean
+          description: Indica si el usuario debe cambiar obligatoriamente su contraseña antes de acceder a la aplicación.
+          example: false
+
 
     LoginResponse:
       type: object
@@ -190,6 +529,41 @@ components:
           example: 3600
         user:
           $ref: '#/components/schemas/User'
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+          description: Contraseña actual del usuario.
+          example: "ContraseñaActual123!"
+        newPassword:
+          type: string
+          description: Nueva contraseña (mínimo 8 caracteres, al menos una mayúscula y un carácter especial).
+          example: "ContraseñaNueva456!"
+
+    ResetAthletePasswordResponse:
+      type: object
+      required:
+        - athleteId
+        - temporaryPassword
+        - mustChangePassword
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+        temporaryPassword:
+          type: string
+          description: Contraseña temporal generada que debe ser entregada al atleta.
+          example: "Xk9#mP2$vL8q"
+        mustChangePassword:
+          type: boolean
+          description: Flag que indica que el atleta debe cambiar su contraseña al iniciar sesión.
+          example: true
 
     RefreshRequest:
       type: object
@@ -224,6 +598,87 @@ components:
         expiresIn:
           type: integer
           example: 3600
+
+    UpdatePhoneRequest:
+          type: object
+          required:
+            - phoneNumber
+          properties:
+            phoneNumber:
+              type: string
+              description: Número de teléfono de WhatsApp con código de país.
+              example: "+54 9 11 2345-6789"
+
+    UpdatePhoneResponse:
+      type: object
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          description: Número de teléfono normalizado en estándar E.164 (solo dígitos).
+          example: "5491123456789"
+          
+    PfContact:
+      type: object
+      required:
+        - phoneNumber
+      properties:
+        phoneNumber:
+          type: string
+          description: Número de WhatsApp del preparador físico (solo dígitos, con código de país).
+          example: "5491123456789"
+
+    
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "usuario@protraining.app"
+
+    ForgotPasswordResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Si el correo está registrado, recibirás un enlace para recuperar tu contraseña."
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+        - token
+        - newPassword
+      properties:
+        email:
+          type: string
+          format: email
+          example: "usuario@protraining.app"
+        token:
+          type: string
+          description: Token de recuperación generado por ASP.NET Core Identity.
+          example: "CfDJ8N3z...=="
+        newPassword:
+          type: string
+          format: password
+          description: Nueva contraseña (mínimo 8 caracteres y al menos un número).
+          example: "NuevaPassword123"
+
+    ResetPasswordResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Contraseña actualizada exitosamente."
 
     HealthStatus:
       type: object

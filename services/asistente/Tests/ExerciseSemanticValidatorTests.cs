@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using API.Services;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
+using Application.DTOs.Adaptation;
 using Application.Interfaces.Services;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Catalog;
@@ -109,6 +110,121 @@ public sealed class ExerciseSemanticValidatorTests
         Assert.NotEqual(uncatalogedId, sanitizedExercise.ExerciseId);
         Assert.Equal(SentadillaId, sanitizedExercise.ExerciseId);
         Assert.False(sanitizedExercise.IsReference);
+    }
+
+    [Fact]
+    public async Task Given_RestrictedExercise_When_AdaptationContextHasAuthorizedSubstitute_Then_ReplacesItBeforeResponse()
+    {
+        var athleteId = Guid.NewGuid();
+        var context = new AthleteAdaptationContextDto(
+            athleteId,
+            [
+                new ActiveInjuryRemoteDto(
+                    Guid.NewGuid(),
+                    athleteId,
+                    "rodilla",
+                    "Dolor rotuliano",
+                    DateTime.UtcNow.AddDays(-1),
+                    DateTime.UtcNow.AddDays(5),
+                    "Active",
+                    null,
+                    DateTime.UtcNow.AddDays(-1))
+            ],
+            [],
+            [
+                new ExerciseRestrictionContextDto(
+                    SentadillaId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [new AuthorizedSubstituteDto(PrensaPiernasId, "Prensa de piernas 45°")])
+            ]);
+        var draft = new RoutineSuggestionResponseDto(
+            athleteId,
+            "Adaptación",
+            "Se detectó una lesión.",
+            [new SuggestedExerciseDto("Sentadilla trasera con barra", 4, 6, 70m, SentadillaId)],
+            "Ollama");
+
+        var result = await _validator.ValidateDraftAsync(draft, adaptationContext: context);
+
+        var exercise = Assert.Single(result.SanitizedRoutine.Exercises);
+        Assert.Equal(PrensaPiernasId, exercise.ExerciseId);
+        Assert.Equal("Prensa de piernas 45°", exercise.ExerciseName);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+        Assert.True(result.HasCorrections);
+        var change = Assert.Single(result.SanitizedRoutine.AdaptationChanges!);
+        Assert.Equal(SentadillaId, change.OriginalExerciseId);
+        Assert.Equal(PrensaPiernasId, change.FinalExerciseId);
+        Assert.Equal(
+            "Sustitución biomecánica por lesión de rodilla para reducir estrés en tendón rotuliano. Sustituto autorizado: Prensa de piernas 45°.",
+            change.Reason);
+        Assert.Contains(result.ValidationMessages, message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Given_AdaptedExerciseAndOtherInvalidExercises_When_Validated_Then_KeepsFallbackRequired()
+    {
+        var athleteId = Guid.NewGuid();
+        var context = new AthleteAdaptationContextDto(
+            athleteId,
+            [],
+            [],
+            [
+                new ExerciseRestrictionContextDto(
+                    SentadillaId,
+                    "rodilla",
+                    "Dolor rotuliano",
+                    [new AuthorizedSubstituteDto(PrensaPiernasId, "Prensa de piernas 45°")])
+            ]);
+        var draft = new RoutineSuggestionResponseDto(
+            athleteId,
+            "Adaptación",
+            "Propuesta",
+            [
+                new SuggestedExerciseDto("Sentadilla trasera con barra", 4, 6, 70m, SentadillaId),
+                new SuggestedExerciseDto("Ejercicio inventado A", 3, 10, 60m, Guid.NewGuid()),
+                new SuggestedExerciseDto("Ejercicio inventado B", 3, 10, 60m, Guid.NewGuid())
+            ],
+            "Ollama");
+
+        var result = await _validator.ValidateDraftAsync(
+            draft,
+            SemanticValidationPolicy.Strict,
+            context);
+
+        Assert.Equal(PrensaPiernasId, result.SanitizedRoutine.Exercises[0].ExerciseId);
+        Assert.True(result.HasCorrections);
+        Assert.True(result.RequiresDeterministicFallback);
+    }
+
+    [Fact]
+    public async Task Given_UnauthorizedSubstitute_When_AdaptingSingleSession_Then_ReplacesItWithOfficialSubstitute()
+    {
+        var athleteId = Guid.NewGuid();
+        var context = new AthleteAdaptationContextDto(
+            athleteId,
+            [],
+            [],
+            [
+                new ExerciseRestrictionContextDto(
+                    SentadillaId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [new AuthorizedSubstituteDto(PrensaPiernasId, "Prensa de piernas 45°")])
+            ]);
+        var draft = new RoutineSuggestionResponseDto(
+            athleteId,
+            "Adaptación",
+            "Propuesta",
+            [new SuggestedExerciseDto("Plancha", 3, 10, 0m, PlanchaId)],
+            "Gemini");
+
+        var result = await _validator.ValidateDraftAsync(draft, adaptationContext: context);
+
+        var exercise = Assert.Single(result.SanitizedRoutine.Exercises);
+        Assert.Equal(PrensaPiernasId, exercise.ExerciseId);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+        Assert.Contains(result.ValidationMessages, message => message.Contains("no estaba autorizado", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -7,25 +7,30 @@ public class TrainingPlan : BaseEntity
 {
     public string Name { get; private set; }
     public string? Objective { get; private set; }
+    public bool IsTemplate { get; private set; }
 
     public IReadOnlyCollection<TrainingWeek> Weeks => _weeks.AsReadOnly();
     private readonly List<TrainingWeek> _weeks = new();
 
+    // Duración en semanas: el número de la última semana (las semanas se numeran desde 1).
+    public int WeekCount => _weeks.Count == 0 ? 0 : _weeks.Max(w => w.WeekNumber);
+
     public IReadOnlyCollection<PlanAssignment> Assignments => _assignments.AsReadOnly();
     private readonly List<PlanAssignment> _assignments = new();
 
-    private TrainingPlan(string name, string? objective)
+    private TrainingPlan(string name, string? objective, bool isTemplate)
     {
         Name = name;
         Objective = objective;
+        IsTemplate = isTemplate;
     }
 
-    public static TrainingPlan Create(string name, string? objective = null)
+    public static TrainingPlan Create(string name, string? objective = null, bool isTemplate = false)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("El nombre del plan no puede estar vacío.");
 
-        return new TrainingPlan(name, objective);
+        return new TrainingPlan(name, objective, isTemplate);
     }
 
     public void Update(string name, string? objective)
@@ -53,5 +58,40 @@ public class TrainingPlan : BaseEntity
     public void ClearWeeks()
     {
         _weeks.Clear();
+    }
+
+    public TrainingPlan CloneAs(string name, bool isTemplate)
+    {
+        var clone = Create(name, Objective, isTemplate);
+
+        foreach (var week in _weeks)
+        {
+            var newWeek = TrainingWeek.Create(week.WeekNumber, clone.Id);
+            foreach (var session in week.Sessions)
+            {
+                var newSession = TrainingSession.Create(
+                    newWeek.Id,
+                    session.Name,
+                    session.Order,
+                    session.DayOfWeek,
+                    session.CoachNotes,
+                    session.StartTime);
+                foreach (var ex in session.PrescribedExercises)
+                {
+                    var newEx = PrescribedExercise.Create(
+                        ex.Order,
+                        ex.Sets,
+                        ex.Reps,
+                        ex.TargetPercentage,
+                        newSession.Id,
+                        ex.ExerciseId);
+                    newSession.AddPrescribedExercise(newEx);
+                }
+                newWeek.AddSession(newSession);
+            }
+            clone.AddWeek(newWeek);
+        }
+
+        return clone;
     }
 }

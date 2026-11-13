@@ -25,7 +25,8 @@ x-api: &api
     start_period: 15s
 
 x-api-env: &api-env
-  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+  # Por defecto Production: Development (Swagger y cuentas de demo) solo si el .env lo pide.
+  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
   Database__Port: "5432"
   Database__User: ${POSTGRES_USER}
   Database__Password: ${POSTGRES_PASSWORD}
@@ -85,6 +86,16 @@ services:
       <<: *api-env
       Database__Host: db-identidad
       Database__Name: identidad
+      Services__Estructura__BaseUrl: http://estructura:8080
+      Services__Seguimiento__BaseUrl: http://seguimiento:8080
+      Smtp__Host: ${SMTP_HOST:-mailpit}
+      Smtp__Port: ${SMTP_PORT:-1025}
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-false}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL:-soporte@protraining.app}
+      Smtp__FromName: ${SMTP_FROM_NAME:-ProTraining}
+      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://localhost:5173}
     ports: ["8081:8080"]
     depends_on:
       db-identidad: { condition: service_healthy }
@@ -111,6 +122,7 @@ services:
       Database__Host: db-entrenamiento
       Database__Name: entrenamiento
       Services__Estructura__BaseUrl: http://estructura:8080
+      Services__Seguimiento__BaseUrl: http://seguimiento:8080
     ports: ["8083:8080"]
     depends_on:
       db-entrenamiento: { condition: service_healthy }
@@ -123,6 +135,8 @@ services:
       Database__Host: db-seguimiento
       Database__Name: seguimiento
       Services__Estructura__BaseUrl: http://estructura:8080
+      Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
+      Services__Seguimiento__BaseUrl: http://seguimiento:8080
     ports: ["8084:8080"]
     depends_on:
       db-seguimiento: { condition: service_healthy }
@@ -135,10 +149,14 @@ services:
       Database__Host: db-asistente
       Database__Name: asistente
       Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
+      Services__Estructura__BaseUrl: http://estructura:8080
+      Services__Seguimiento__BaseUrl: http://seguimiento:8080
       Ollama__BaseUrl: http://ollama:11434
       Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
       Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
+      Gemini__TimeoutSeconds: ${GEMINI_TIMEOUT_SECONDS:-10}
+      Worker__DailyOverloadAnalysis__Hour: 0
     ports: ["8085:8080"]
     depends_on:
       db-asistente: { condition: service_healthy }
@@ -169,6 +187,16 @@ services:
     entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.2:1b}"]
     restart: "no"
 
+  # ---------- Correo de desarrollo y demo (Mailpit) ----------
+  mailpit:
+    image: axllent/mailpit:v1.22
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+
   # ---------- Gateway ----------
   # Única entrada para el front: /identidad, /estructura, /entrenamiento, /seguimiento, /asistente.
   # No depende de los servicios: si uno está caído, sólo falla su ruta.
@@ -176,9 +204,13 @@ services:
     <<: *api
     build: gateway
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: http://localhost:3000
+      Jwt__Key: ${JWT_KEY:?Falta JWT_KEY en el .env}
+      Jwt__Issuer: ${JWT_ISSUER:?Falta JWT_ISSUER en el .env}
+      Jwt__Audience: ${JWT_AUDIENCE:?Falta JWT_AUDIENCE en el .env}
+      Services__Identidad__BaseUrl: http://identidad:8080
     ports: ["8000:8080"]
 
   # ---------- Front (opcional: docker compose --profile front up) ----------

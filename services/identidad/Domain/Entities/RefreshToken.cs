@@ -1,4 +1,4 @@
-﻿namespace Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// representa un token de refresco de larga duracion (30 días) asociado a un dispositivo de un usuario

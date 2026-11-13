@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Application.Common.Security;
 using Application.DTOs.Auth;
 using Application.Exceptions;

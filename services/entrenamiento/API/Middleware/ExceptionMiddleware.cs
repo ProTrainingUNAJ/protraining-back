@@ -24,8 +24,11 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             {
                 DomainException domain => (400, domain.Message, (string?)null),
                 NotFoundException notFound => (404, notFound.Message, (string?)null),
+                ConflictException conflict => (409, conflict.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
+                PersistenceConflictException conflict => (409, conflict.Message,
+                    "Ya existe un registro con estos datos. Revisa lo cargado e inténtalo de nuevo."),
                 PersistenceUnavailableException => (503, "Base de datos no disponible.",
                     "Comprueba el estado de la base de datos y su configuración. Inténtalo de nuevo."),
                 StructureUnavailableException => (503, "Estructura no disponible.",

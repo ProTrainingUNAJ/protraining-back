@@ -1,4 +1,4 @@
-﻿namespace Application.UseCases.TrainingSessions.UpdateCoachNotes;
+namespace Application.UseCases.TrainingSessions.UpdateCoachNotes;
 
 public record UpdateCoachNotesCommand(
     Guid SessionId,

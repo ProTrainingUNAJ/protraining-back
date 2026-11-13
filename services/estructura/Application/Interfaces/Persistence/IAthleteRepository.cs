@@ -1,3 +1,4 @@
+using Application.DTOs.Athletes;
 using Domain.Entities;
 
 namespace Application.Interfaces.Persistence;
@@ -10,4 +11,6 @@ public interface IAthleteRepository
     Task<Athlete?> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default);
     Task AddAsync(Athlete athlete, CancellationToken cancellationToken = default);
     Task DeleteAsync(Athlete athlete, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> GetDistinctPfIdsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<InternalAthleteSummaryDto>> GetActiveAthletesInternalAsync(CancellationToken cancellationToken = default);
 }

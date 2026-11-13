@@ -1,0 +1,157 @@
+[
+  {
+    "base": "Press de banca con barra - Agarre medio",
+    "variants": [
+      { "name": "Press de banca con barra con agarre cerrado", "label": "Agarre cerrado" },
+      { "name": "Press de banca con barra de agarre ancho", "label": "Agarre ancho" },
+      { "name": "Press de banca inclinado con barra - Agarre medio", "label": "Inclinado" },
+      { "name": "Press de banca con barra en banco declinado", "label": "Declinado" },
+      { "name": "Press de banca con barra en banco declinado con agarre ancho", "label": "Declinado, agarre ancho" },
+      { "name": "Press de banca - Levantamiento de pesas", "label": "Estilo powerlifting" },
+      { "name": "Press de banca con mancuernas", "label": "Con mancuernas" },
+      { "name": "Press de banca con mancuernas en el piso", "label": "Con mancuernas en el piso" },
+      { "name": "Press de banca con mancuernas y agarre neutro", "label": "Con mancuernas, agarre neutro" },
+      { "name": "Press de banca con mancuernas en banco declinado", "label": "Con mancuernas, declinado" },
+      { "name": "Press de banca inclinado con mancuernas y agarre de martillo", "label": "Inclinado con mancuernas, agarre martillo" },
+      { "name": "Press de banca con mancuerna a una mano", "label": "Con mancuerna, a una mano" },
+      { "name": "Press de banca en máquina Smith", "label": "En máquina Smith" },
+      { "name": "Press de banca inclinado en máquina Smith", "label": "Inclinado en máquina Smith" },
+      { "name": "Press de banca con máquina", "label": "En máquina" },
+      { "name": "Press de banca con bandas", "label": "Con bandas" },
+      { "name": "Press de banca con cadenas", "label": "Con cadenas" }
+    ]
+  },
+  {
+    "base": "Sentadilla con barra",
+    "variants": [
+      { "name": "Sentadilla completa con barra", "label": "Completa (profunda)" },
+      { "name": "Sentadilla olímpica", "label": "Olímpica" },
+      { "name": "Sentadilla con barra hasta el banco", "label": "Hasta el banco" },
+      { "name": "Sentadilla con cajón", "label": "Al cajón" },
+      { "name": "Sentadilla con barra y piernas separadas", "label": "Piernas separadas" },
+      { "name": "Sentadillas con postura estrecha", "label": "Postura estrecha" },
+      { "name": "Sentadilla frontal con barra", "label": "Frontal" },
+      { "name": "Sentadilla frontal (agarre de cargada)", "label": "Frontal, agarre de cargada" },
+      { "name": "Sentadilla frontal con barra hasta el banco", "label": "Frontal hasta el banco" },
+      { "name": "Sentadilla con barra por encima de la cabeza", "label": "Por encima de la cabeza" },
+      { "name": "Sentadillas Zercher", "label": "Zercher" },
+      { "name": "Sentadilla en máquina Smith", "label": "En máquina Smith" },
+      { "name": "Sentadilla con mancuernas", "label": "Con mancuernas" },
+      { "name": "Sentadilla con copa", "label": "Copa (goblet)" },
+      { "name": "Sentadillas con bandas", "label": "Con bandas" },
+      { "name": "Sentadillas con cadenas", "label": "Con cadenas" },
+      { "name": "Sentadilla Hack", "label": "Hack en máquina" },
+      { "name": "Sentadillas Hack con postura estrecha", "label": "Hack en máquina, postura estrecha" },
+      { "name": "Sentadilla Hack con barra", "label": "Hack con barra" }
+    ]
+  },
+  {
+    "base": "Peso muerto con barra",
+    "variants": [
+      { "name": "Peso muerto sumo", "label": "Sumo" },
+      { "name": "Peso muerto con déficit", "label": "Con déficit" },
+      { "name": "Peso muerto con barra hexagonal", "label": "Con barra hexagonal" },
+      { "name": "Peso muerto con bandas", "label": "Con bandas" },
+      { "name": "Peso muerto con cadenas", "label": "Con cadenas" },
+      { "name": "Peso muerto con banda invertida", "label": "Con banda invertida" },
+      { "name": "Peso muerto sumo con bandas", "label": "Sumo con bandas" },
+      { "name": "Peso muerto sumo con cadenas", "label": "Sumo con cadenas" },
+      { "name": "Peso muerto sumo con banda invertida", "label": "Sumo con banda invertida" }
+    ]
+  },
+  {
+    "base": "Peso muerto rumano",
+    "variants": [
+      { "name": "Peso muerto rumano desde déficit", "label": "Desde déficit" },
+      { "name": "Peso muerto con barra y piernas rígidas", "label": "Piernas rígidas" },
+      { "name": "Peso muerto con mancuernas con piernas rígidas", "label": "Piernas rígidas con mancuernas" },
+      { "name": "Peso muerto con piernas rígidas en máquina Smith", "label": "Piernas rígidas en máquina Smith" },
+      { "name": "Peso muerto con pesa rusa a una pierna", "label": "A una pierna con pesa rusa" }
+    ]
+  },
+  {
+    "base": "Remo con barra inclinado",
+    "variants": [
+      { "name": "Remo con barra en T y asa", "label": "Barra en T" },
+      { "name": "Remo con barra larga a una mano", "label": "Barra larga a una mano" },
+      { "name": "Remo con dos mancuernas inclinado", "label": "Con dos mancuernas" },
+      { "name": "Remo con barra arqueada tumbado", "label": "Tumbado en banco" }
+    ]
+  },
+  {
+    "base": "Dominadas",
+    "variants": [
+      { "name": "dominadas", "label": "Agarre prono (pull-up)" },
+      { "name": "Dominadas con peso", "label": "Con lastre" },
+      { "name": "Dominadas asistidas con banda", "label": "Asistidas con banda" },
+      { "name": "Dominadas con barra en V", "label": "Con barra en V" },
+      { "name": "Dominadas traseras con agarre ancho", "label": "Agarre ancho, por detrás" },
+      { "name": "Dominadas con un brazo", "label": "A un brazo" }
+    ]
+  },
+  {
+    "base": "Zancadas con mancuernas",
+    "variants": [
+      { "name": "Zancada con barra", "label": "Con barra" },
+      { "name": "Zancada caminando con barra", "label": "Caminando con barra" },
+      { "name": "Zancada trasera con mancuernas", "label": "Trasera con mancuernas" },
+      { "name": "Zancada caminando con el peso corporal", "label": "Caminando, peso corporal" }
+    ]
+  },
+  {
+    "base": "Press militar con barra sentado",
+    "variants": [
+      { "name": "Prensa militar permanente", "label": "De pie" },
+      { "name": "Prensa de hombro a máquina (militar)", "label": "En máquina" },
+      { "name": "Press militar con pesa rusa a dos brazos", "label": "Con pesas rusas" },
+      { "name": "Presión de empuje", "label": "Push press (con impulso de piernas)" },
+      { "name": "Press de banca con dos pesas rusas", "label": "Push press con dos pesas rusas" }
+    ]
+  },
+  {
+    "base": "Jalón al pecho con agarre ancho",
+    "variants": [
+      { "name": "Jalón al pecho frontal con agarre cerrado", "label": "Agarre cerrado" },
+      { "name": "Jalón con barra en V", "label": "Con barra en V" },
+      { "name": "Jalón al pecho con un brazo", "label": "A un brazo" },
+      { "name": "Jalón al pecho con rango completo de movimiento", "label": "Rango completo" },
+      { "name": "Jalón con agarre ancho detrás del cuello", "label": "Por detrás del cuello" }
+    ]
+  },
+  {
+    "base": "Prensa de piernas",
+    "variants": [
+      { "name": "Prensa de piernas con postura estrecha", "label": "Postura estrecha" },
+      { "name": "Prensa de piernas en máquina Smith", "label": "En máquina Smith" }
+    ]
+  },
+  {
+    "base": "Curl de bíceps con barra",
+    "variants": [
+      { "name": "Curl de bíceps con barra de pie con agarre ancho", "label": "Agarre ancho" },
+      { "name": "Curl de bíceps con barra de pie con agarre cerrado", "label": "Agarre cerrado" },
+      { "name": "Curl de bíceps con barra EZ de agarre cerrado", "label": "Barra EZ, agarre cerrado" },
+      { "name": "Curl de bíceps inverso con barra", "label": "Agarre inverso" },
+      { "name": "Curl de bíceps con mancuernas", "label": "Con mancuernas" },
+      { "name": "Curl de bíceps alterno con mancuernas", "label": "Alterno con mancuernas" },
+      { "name": "Curl de bíceps alterno con martillo", "label": "Martillo alterno" },
+      { "name": "Curl de bíceps con mancuernas sentado", "label": "Con mancuernas, sentado" },
+      { "name": "Curl de bíceps con mancuernas en banco inclinado", "label": "Con mancuernas, banco inclinado" },
+      { "name": "Curl de bíceps con cable de pie", "label": "En polea" },
+      { "name": "Curl de bíceps en máquina", "label": "En máquina" }
+    ]
+  },
+  {
+    "base": "Fondos - Versión para tríceps",
+    "variants": [
+      { "name": "Fondos - Versión de pecho", "label": "Versión de pecho" },
+      { "name": "fondos en banco", "label": "En banco" }
+    ]
+  },
+  {
+    "base": "Puente de glúteos con barra",
+    "variants": [
+      { "name": "Puente de glúteos con una sola pierna", "label": "A una pierna" }
+    ]
+  }
+]

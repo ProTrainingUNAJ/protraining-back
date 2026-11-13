@@ -5,6 +5,7 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.Services;
 using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
@@ -21,9 +22,20 @@ using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Athletes.UpdateMedicalRecord;
 using Application.UseCases.Categories.CreateCategory;
 using Application.UseCases.Categories.DeleteCategory;
+using Application.UseCases.Categories.Events.CreateCompetitiveEvent;
+using Application.UseCases.Categories.Events.DeleteCompetitiveEvent;
+using Application.UseCases.Categories.Events.ListCategoryEvents;
+using Application.UseCases.Categories.Events.UpdateCompetitiveEvent;
 using Application.UseCases.Categories.GetCategory;
+using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
+using Application.UseCases.Categories.Invitations.GenerateCategoryInvitationToken;
+using Application.UseCases.Categories.Invitations.ValidateCategoryInvitationToken;
 using Application.UseCases.Categories.ListAthletesByCategory;
 using Application.UseCases.Categories.ListCategories;
+using Application.UseCases.Categories.SeasonPhases.CreateSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.DeleteSeasonPhase;
+using Application.UseCases.Categories.SeasonPhases.ListCategorySeasonPhases;
+using Application.UseCases.Categories.SeasonPhases.UpdateSeasonPhase;
 using Application.UseCases.Categories.UpdateCategory;
 using Application.UseCases.Export.ExportStructureCsv;
 using Application.UseCases.Health.GetHealth;
@@ -59,12 +71,12 @@ builder.Services.AddControllers()
                     entry => JsonNamingPolicy.CamelCase.ConvertName(entry.Key),
                     entry => entry.Value!.Errors.Select(error =>
                         string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? "El valor no es valido. Comprueba el JSON y los tipos de los campos."
+                            ? "El valor no es válido. Comprueba el JSON y los tipos de los campos."
                             : error.ErrorMessage).ToArray());
             return new BadRequestObjectResult(new ValidationProblemDetails(errors)
             {
                 Status = 400,
-                Title = "Solicitud no valida."
+                Title = "Solicitud no válida."
             });
         };
     });
@@ -74,7 +86,7 @@ builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 
 // Retries, timeouts and circuit breaker for every registered HttpClient.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 
 builder.Services.AddScoped<ListAthletesQueryHandler>();
 builder.Services.AddScoped<GetAthleteQueryHandler>();
@@ -90,6 +102,8 @@ builder.Services.AddScoped<UpdateMedicalRecordCommandHandler>();
 builder.Services.AddScoped<ListMedicalRecordAuditLogsQueryHandler>();
 builder.Services.AddScoped<GetMeQueryHandler>();
 builder.Services.AddScoped<ListMyCategoriesQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
 builder.Services.AddScoped<ListOrganizationsQueryHandler>();
 builder.Services.AddScoped<GetOrganizationQueryHandler>();
 builder.Services.AddScoped<CreateOrganizationCommandHandler>();
@@ -101,11 +115,28 @@ builder.Services.AddScoped<ListAthletesByCategoryQueryHandler>();
 builder.Services.AddScoped<CreateCategoryCommandHandler>();
 builder.Services.AddScoped<UpdateCategoryCommandHandler>();
 builder.Services.AddScoped<DeleteCategoryCommandHandler>();
+builder.Services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
+builder.Services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
+builder.Services.AddScoped<AcceptCategoryInvitationCommandHandler>();
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
 builder.Services.AddScoped<SendDailyWellnessRemindersCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
+builder.Services.AddScoped<ISeasonPhaseValidationService, SeasonPhaseValidationService>();
+
+builder.Services.AddScoped<ListCategoryEventsQueryHandler>();
+builder.Services.AddScoped<CreateCompetitiveEventCommandHandler>();
+builder.Services.AddScoped<UpdateCompetitiveEventCommandHandler>();
+builder.Services.AddScoped<DeleteCompetitiveEventCommandHandler>();
+
+builder.Services.AddScoped<ListCategorySeasonPhasesQueryHandler>();
+builder.Services.AddScoped<CreateSeasonPhaseCommandHandler>();
+builder.Services.AddScoped<UpdateSeasonPhaseCommandHandler>();
+builder.Services.AddScoped<DeleteSeasonPhaseCommandHandler>();
 
 // Clientes HTTP hacia Entrenamiento y Seguimiento para el worker de recordatorios
 var entrenamientoUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"] ?? "http://entrenamiento:8080";
@@ -119,7 +150,7 @@ if (!Uri.TryCreate(seguimientoUrl, UriKind.Absolute, out var seguimientoUri))
 {
     throw new InvalidOperationException("Falta la variable de configuracion Services__Seguimiento__BaseUrl (URL absoluta).");
 }
-
+builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddTransient<ServiceAuthenticationHandler>();
 
 builder.Services.AddHttpClient<ISessionScheduleService, SessionScheduleService>(client => client.BaseAddress = entrenamientoUri)

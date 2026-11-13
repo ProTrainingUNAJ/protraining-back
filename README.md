@@ -56,9 +56,11 @@ docker compose down                      # bajar todo (los datos quedan en los v
 docker compose down -v                   # bajar todo y borrar las bases
 ```
 
-### Usuarios y datos de prueba (Demo 1)
+### Usuarios y datos de prueba (Demo 1 y Demo 2)
 
-En Development, Identidad crea estas cuentas al arrancar (todas con la contraseña `ProTraining2026!`):
+En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas están en Confluence:** [🔑 Usuarios de demo](https://protraining.atlassian.net/wiki/spaces/KAN/pages/13238300/Usuarios+de+demo).
+
+> **Nunca despliegues en un servidor con `ASPNETCORE_ENVIRONMENT=Development`:** crea estas cuentas con una contraseña conocida y deja Swagger abierto. El `docker-compose.yml` usa `Production` por defecto; Development se activa solo si el `.env` lo pide (como el `.env.example`).
 
 | Cuenta | Rol | Para qué |
 |---|---|---|
@@ -66,6 +68,7 @@ En Development, Identidad crea estas cuentas al arrancar (todas con la contrase�
 | `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
 | `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
 | `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
+| `sofia@`, `bruno@`, `diego@protraining.com` | Atletas (Demo 2) | No los crea Identidad: se registran por **invitación** al correr `demo-data.sh`, con la misma contraseña |
 
 Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
 
@@ -76,7 +79,20 @@ docker compose down -v && docker compose up -d --build   # base de cero
 ./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
 
-El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes.
+El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División. Además deja el WhatsApp del PF (para que el atleta vea "Contactar a mi preparador"; con `DEMO_PF_PHONE=+549…` se usa un número real), las lesiones activas de Lucas y Camila y una sesión de tests de campo en curso ("Evaluación de pretemporada", con el salto CMJ y los 30 m cargados y la sentadilla 1RM para cargar en vivo). Para que la evolución muestre curvas, carga historia: tres récords anteriores (hace 12, 8 y 4 semanas) de Martín, Facundo, Joaquín, Lucas y Diego, y tres evaluaciones de campo cerradas (hace 10, 6 y 2 semanas) con salto CMJ, 30 m y Test de Cooper. La API registra cada marca de campo con la hora del momento, así que el script les pone la fecha de su sesión directo en la base de Seguimiento (solo para la demo). Con `completo`, Martín registra 115 kg × 5 en sentadilla y queda una propuesta de récord para aprobar en el inicio del PF (solo los días con sesión: miércoles a viernes).
+
+Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
+
+| Color | Atleta | Por qué |
+|---|---|---|
+| 🔴 | Lucas, Camila | Lesión activa |
+| 🔴 | Sofía | Muy poco sueño (3,5 h) |
+| 🟡 | Joaquín | Sueño moderado (6 h) |
+| 🟡 | Valentina | Dolor nuevo en el cuádriceps |
+| 🟡 | Bruno | Durmió más de 12 h en 3 de los últimos 7 días (el script carga también las noches de hace 2 y 4 días) |
+| 🟡 | Diego | Dolor en el cuádriceps con sentadilla en la rutina de hoy → botón "Ver ajuste sugerido" (KAN-452) |
+| 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
+| ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
 ### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
 
@@ -134,6 +150,55 @@ Le saca el prefijo: `localhost:8000/estructura/api/athletes` llega a Estructura 
 - `GET /health` del gateway dice si el gateway está vivo.
 
 El front llama a `/api/<servicio>/...` y su nginx (o el Vite en desarrollo) le saca el `/api` y se lo pasa al gateway. Ejemplo: `/api/estructura/api/athletes` → gateway `/estructura/api/athletes` → Estructura `/api/athletes`.
+
+## Servidor MCP de la biblioteca de ejercicios
+
+Entrenamiento expone la biblioteca compartida de ejercicios por **MCP** (Model Context Protocol), para que clientes de IA puedan buscarla con una herramienta estándar. Usa el SDK oficial `ModelContextProtocol.AspNetCore` con transporte **Streamable HTTP sin estado**.
+
+| | |
+|---|---|
+| URL por el gateway | `http://localhost:8000/entrenamiento/mcp` |
+| URL directa al servicio | `http://localhost:8083/mcp` |
+| Autenticación | `Authorization: Bearer <JWT>` obligatorio |
+| Roles permitidos | `PreparadorFisico` y `Servicio` |
+| Alcance | Solo catálogo compartido, de solo lectura |
+
+La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
+
+| Parámetro | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| `name` | string | Uno de los tres filtros | Texto del nombre. Ejemplo: `"sentadilla"`. |
+| `muscle` | string | Uno de los tres filtros | Músculo específico. Ejemplos: `"cuádriceps"`, `"glúteos"`, `"dorsales"`. |
+| `equipment` | string | Uno de los tres filtros | Equipamiento. Ejemplo: `"barra con pesas"`. |
+| `limit` | int | No | Máximo de resultados. Por defecto 20, tope 100. |
+
+Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
+
+También se expone la herramienta MCP de solo lectura **`ObtenerSustitutos`**, que recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
+
+Esta ampliación es exclusiva de la superficie MCP: no modifica endpoints REST, esquemas OpenAPI ni contratos que consuma el frontend.
+
+Ejemplo con `curl` (el cuerpo debe ir en UTF-8 para que las tildes funcionen):
+
+```bash
+TOKEN="<pegar acá el JWT de un PF>"
+
+curl -s http://localhost:8000/entrenamiento/mcp \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"BuscarEjercicios","arguments":{"name":"sentadilla","limit":5}}}'
+```
+
+La respuesta llega como Server-Sent Events (`event: message` y una línea `data: {...}`). Para probarlo desde una interfaz, abrí `npx @modelcontextprotocol/inspector`, elegí el transporte **Streamable HTTP**, cargá la URL del gateway y agregá el header `Authorization: Bearer <JWT>`.
+
+### Seguridad y multi-tenancy
+
+- **Solo catálogo compartido:** la consulta fuerza `pf_id = Guid.Empty`. Aunque el token sea de un PF, la herramienta nunca devuelve ejercicios privados de ese PF ni de otro.
+- **Sin atajos de tenant:** no se usa `IgnoreQueryFilters`. El filtro global de `AppDbContext` sigue activo y la consulta lo refuerza con el filtro explícito de catálogo.
+- **Roles acotados:** un token válido sin rol `PreparadorFisico` o `Servicio` recibe **403**; sin token, **401**.
+- **Logs sin PII:** se registran solo el nombre de la herramienta y las cantidades devueltas. No se registran los términos de búsqueda, nombres de atletas ni otros datos personales.
+- **Sin migraciones ni cambios de contrato REST:** la tarjeta solo agrega superficie MCP de lectura; no toca tablas ni el OpenAPI.
 
 ## Correr un servicio con `dotnet run`
 
@@ -229,6 +294,7 @@ No necesita la base ni variables de entorno. Va a mostrar un aviso de que falta 
 Reglas:
 - Los cambios al modelo van por PR, **con una sola migración por PR**.
 - Si dos migraciones del mismo servicio chocan, el segundo en mergear borra la suya, hace pull de `develop` y la vuelve a generar.
+- Cada servicio tiene un test (`Tests/Database/PostgresDatabaseTests.cs`) que **falla si cambiaste una entidad y no creaste la migración**. Si te pasa, creá la migración con el comando de arriba.
 
 ## Convenciones
 
@@ -278,6 +344,24 @@ Application/
 
 Tests: **un solo proyecto por servicio**, en `services/<servicio>/Tests/<Servicio>.Tests.csproj` (por ejemplo `services/estructura/Tests/Estructura.Tests.csproj`), agregado al `<Servicio>.slnx` con una línea `<Project Path="Tests/<Servicio>.Tests.csproj" />`, **sin** carpeta de solución (`<Folder>`). El CI corre cualquier `*Tests.csproj` del servicio; la carpeta de solución es solo visual y no hace falta.
 
+Los tests corren contra SQLite en memoria, salvo los que necesitan **Postgres real**: esos lo levantan con Testcontainers (`postgres:16-alpine`, la misma imagen del compose) y llevan `[Trait("Category", "RequiresDocker")]`. Necesitan Docker corriendo; en el CI corren siempre. Para correr el resto sin Docker:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category!=RequiresDocker"
+```
+
+**Aislamiento entre PFs (KAN-432).** Los tests que prueban que un PF no ve datos de otro (y que un atleta no ve datos de un compañero) llevan `[Trait("Category", "Isolation")]`. El CI los corre primero, en el paso **"Aislamiento entre PFs"**: si alguno falla, el PR no se puede mergear. Para correrlos en local:
+
+```bash
+dotnet test services/<servicio>/Tests --filter "Category=Isolation"
+```
+
+Dos guardianes en `Tests/Security/` de cada servicio:
+- `TenantFilterGuardTests`: falla si una tabla nueva no tiene el filtro por PF (la entidad no hereda de `BaseEntity`) o si el código de producción usa `IgnoreQueryFilters()`. Las excepciones (catálogos compartidos, el worker de recordatorios, las tablas de login) están en una lista dentro del test, cada una con su motivo.
+- `AthletePrivacyTests` (Estructura, Entrenamiento y Seguimiento): falla si un endpoint que recibe un id en la ruta queda abierto al rol Atleta sin validar que el id sea el suyo.
+
+Si escribís un test de aislamiento nuevo, ponele el trait `Isolation`.
+
 ### Casos de uso (CQRS liviano)
 
 Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handler:
@@ -313,3 +397,15 @@ Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. 
 2. Sumá al `docker-compose.yml` su base `db-<servicio>` con su volumen y el servicio con su `Database__Host`, `Database__Name`, su puerto y el `depends_on`.
 3. Sumá su ruta y su cluster en `gateway/appsettings.json`, y el servicio a la lista del CI (`.github/workflows/ci.yml`).
 4. Compilá con `dotnet build services/<servicio>/API/API.csproj` y probá `/health`.
+
+## Proyecto académico y créditos
+
+ProTraining es un proyecto académico sin fines de lucro, de la materia Proyecto de Software (UNAJ). Usa contenido de terceros con su licencia y su crédito:
+
+| Qué | Fuente | Licencia | Cómo se usa |
+|---|---|---|---|
+| Catálogo de ejercicios y fotos | [free-exercise-db](https://github.com/yuhonas/free-exercise-db) | The Unlicense | Datos copiados al seed; fotos enlazadas |
+| Ilustraciones de ejercicios | Exercise data by [RepDB (repdb.co)](https://repdb.co) | RepDB Free Tier: uso dentro de la app, con atribución | Enlazadas desde su repo; no se republican |
+| Dibujos de línea | [Everkinetic](https://github.com/everkinetic/data) | CC BY-SA 4.0 | Enlazados desde su repo |
+
+La tabla de cruce (`services/entrenamiento/API/Data/exercise-media.json`) guarda solo ids y URLs, no las imágenes ni los datos de esas fuentes. Si algún titular lo pide, su contenido se retira. El detalle está en [`services/entrenamiento/API/CREDITS.md`](services/entrenamiento/API/CREDITS.md).

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Application.Common.Security;
 using Application.DTOs.Auth;
 using Application.Exceptions;
@@ -77,8 +77,11 @@ public class LoginUseCase(
                 user.Email!,
                 user.FullName,
                 generatedToken.Role,
-                user.PfId ?? user.Id
+                user.PfId ?? user.Id,
+                user.PhoneNumber,
+                user.MustChangePassword
             )
         );
+
     }
 }

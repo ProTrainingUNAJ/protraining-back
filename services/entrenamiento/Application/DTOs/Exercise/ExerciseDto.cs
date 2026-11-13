@@ -1,4 +1,6 @@
 
+using Domain.Entities;
+
 namespace Application.DTOs.Exercise
 {
     public class ExerciseDto
@@ -9,10 +11,24 @@ namespace Application.DTOs.Exercise
         public string? Description { get; set; }
         public string? AnimationUrl { get; set; }
         public string? VideoUrl { get; set; }
+        public string? VideoSource { get; set; }
         public string? Equipment { get; set; }
         public List<string> Images { get; set; } = [];
+        public ExerciseImageSourceDto? ImageSource { get; set; }
+
+        // Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549).
+        // Vacía en los ejercicios propios del PF y en los del catálogo que no tienen par.
+        public List<ExerciseMediaDto> Media { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
+        public Origin Origin { get; set; }
+        public ExerciseType ExerciseType { get; set; }
+
+        // Variantes (KAN-554). En una variante, el id de su ejercicio base y la etiqueta
+        // ("Agarre cerrado"). Variants solo viene con groupVariants=true, en los ejercicios base.
+        public Guid? ParentExerciseId { get; set; }
+        public string? VariantLabel { get; set; }
+        public List<ExerciseDto>? Variants { get; set; }
 
     }
 }

@@ -4,13 +4,21 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.Auth.GoogleLogin;
+using Application.UseCases.Auth.Login;
+using Application.UseCases.Auth.Refresh;
+using Application.UseCases.Auth.UpdatePhone;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
-using Application.UseCases.Auth.Login;
-using Application.UseCases.Auth.Refresh;
+using Application.UseCases.Auth.ChangePassword;
+using Application.UseCases.Auth.GetPfContact;
+using Infrastructure.Services.Structure;
+using Application.UseCases.Auth.RegisterByInvitation;
+using Application.UseCases.Auth.ResetAthletePassword;
+using Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -45,10 +53,26 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 // Retries, timeouts and circuit breaker for every registered HttpClient.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
+
+// Cliente HTTP hacia Estructura para validar invitaciones (KAN-397)
+var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"] ?? "http://localhost:8082";
+builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
+{
+    client.BaseAddress = new Uri(structureBaseUrl);
+});
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
+builder.Services.AddScoped<GoogleLoginUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
+builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
+builder.Services.AddScoped<GetPfContactUseCase>();
+builder.Services.AddScoped<RegisterByInvitationUseCase>();
+builder.Services.AddScoped<ChangePasswordUseCase>();
+builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
+builder.Services.AddScoped<ResetAthletePasswordUseCase>();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
@@ -81,6 +105,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<MustChangePasswordMiddleware>();
 
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();

@@ -27,12 +27,16 @@ public sealed class GetMeQueryHandler(
             ? await athleteCategoryRepository.ListCategoriesByAthleteAsync(athlete.Id, cancellationToken)
             : [];
 
+        var hasSignedConsent = athlete.DigitalConsent != null && athlete.DigitalConsent.IsSigned;
+
         return new MeDto(
             athlete.Id,
             athlete.FirstName,
             athlete.LastName,
             athlete.FullName,
             athlete.Active,
-            categories.Select(CategoryMappings.ToDto).ToList());
+            categories.Select(CategoryMappings.ToDto).ToList(),
+            hasSignedConsent,
+            athlete.IsMinor);
     }
 }

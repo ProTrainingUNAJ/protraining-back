@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 
 /// <summary>
 /// modelo de entrada para el inicio de sesion

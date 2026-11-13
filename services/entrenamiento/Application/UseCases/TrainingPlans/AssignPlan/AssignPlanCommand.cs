@@ -1,4 +1,4 @@
-﻿using Application.DTOs.TrainingPlans;
+using Application.DTOs.TrainingPlans;
 
 namespace Application.UseCases.TrainingPlans.AssignPlan;
 

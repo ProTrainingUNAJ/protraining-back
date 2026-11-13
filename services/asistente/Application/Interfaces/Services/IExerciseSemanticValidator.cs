@@ -2,6 +2,7 @@ namespace Application.Interfaces.Services;
 
 using Application.Common.Ai;
 using Application.DTOs.Ai;
+using Application.DTOs.Adaptation;
 
 /// <summary>
 /// Validador semántico en C# encargado de verificar la existencia real de los ejercicios y sus IDs,
@@ -17,6 +18,7 @@ public interface IExerciseSemanticValidator
     Task<RoutineSemanticValidationResult> ValidateDraftAsync(
         RoutineSuggestionResponseDto draft,
         SemanticValidationPolicy? policy = null,
+        AthleteAdaptationContextDto? adaptationContext = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

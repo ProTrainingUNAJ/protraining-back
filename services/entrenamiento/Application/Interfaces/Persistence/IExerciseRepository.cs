@@ -4,5 +4,27 @@ namespace Application.Interfaces.Persistence;
 
 public interface IExerciseRepository
 {
-    Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task AddExercise(Exercise exercise, CancellationToken cancellationToken = default);
+    Task<(List<Exercise> Items, int TotalCount)> ListAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, ExerciseType? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default);
+
+    // E51: solo el catálogo compartido (pf_id = Guid.Empty). Lo consume la herramienta MCP
+    // BuscarEjercicios; nunca devuelve ejercicios privados de un PF.
+    Task<(List<Exercise> Items, int TotalCount)> SearchCatalogAsync(string? searchTerm, string? equipment, string? muscle, int page, int pageSize, CancellationToken cancellationToken = default);
+
+    // Variantes (KAN-554): solo los ejercicios base, paginados. Un base entra si él o alguna de sus
+    // variantes cumple los filtros (por ejemplo, la búsqueda coincide con "Agarre cerrado").
+    Task<(List<Exercise> Items, int TotalCount)> ListBasesAsync(string? searchTerm, string? equipment, string? muscleGroup, string? muscle, ExerciseType? exerciseType, bool usedByPf, int page, int pageSize, CancellationToken cancellationToken = default);
+
+    // Ejercicios por id (KAN-414): el Asistente valida que los ejercicios de un borrador existan.
+    Task<List<Exercise>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
+
+    // Todas las variantes de los ejercicios base indicados.
+    Task<List<Exercise>> GetVariantsAsync(IReadOnlyCollection<Guid> baseExerciseIds, CancellationToken cancellationToken = default);
+
+    Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Exercise?> FindByNameAsync(string name, CancellationToken cancellationToken = default);
+
+    // Catálogo completo en una sola consulta (KAN-389: el preview no debe consultar por fila).
+    Task<List<Exercise>> ListAllAsync(CancellationToken cancellationToken = default);
+    Task<Exercise?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

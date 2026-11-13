@@ -1,16 +1,60 @@
 using Application.DTOs.CheckIns;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
+using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+
 namespace API.Controllers.CheckIns;
 
 [ApiController]
 [Route("api/v1/athletes/{athleteId:guid}/check-in")]
 [Authorize]
-public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStructureClient structureClient) : ControllerBase
+public sealed class CheckInsController(
+    SubmitCheckInCommandHandler handler,
+    ListAthleteCheckInsQueryHandler listHandler,
+    GetTodayCheckInQueryHandler getTodayHandler,
+    IStructureClient structureClient,
+    IAthleteAccessGuard athleteAccessGuard) : ControllerBase
 {
+    [HttpGet("~/api/v1/athletes/{athleteId:guid}/check-ins")]
+    [ProducesResponseType(typeof(IReadOnlyList<CheckInDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<CheckInDto>>> List(
+        Guid athleteId,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] int? limit = null,
+        CancellationToken cancellationToken = default)
+    {
+        await athleteAccessGuard.EnsureCanReadAsync(athleteId, cancellationToken);
+
+        var result = await listHandler.HandleAsync(
+            new ListAthleteCheckInsQuery(athleteId, from, to, limit),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpGet("today")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(CheckInDto), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 401)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    public async Task<ActionResult<CheckInDto>> GetToday(
+        Guid athleteId,
+        CancellationToken cancellationToken)
+    {
+        var result = await getTodayHandler.HandleAsync(new GetTodayCheckInQuery(athleteId), cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(CheckInResponseDto), 200)]
     [ProducesResponseType(typeof(CheckInResponseDto), 201)]
@@ -26,8 +70,9 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStr
         var me = await structureClient.GetMeAsync(cancellationToken);
         if (me is null)
             throw new NoAthleteLinkedException();
+        // Id de otro atleta → 404, no 403: no revela si ese id existe (KAN-431).
         if (me.AthleteId != athleteId)
-            throw new ForbiddenException();
+            throw new AthleteNotFoundException();
 
         var result = await handler.HandleAsync(
             new SubmitCheckInCommand(
@@ -41,7 +86,8 @@ public sealed class CheckInsController(SubmitCheckInCommandHandler handler, IStr
                 request.IsSick,
                 request.EffortRate,
                 request.PainZones,
-                request.HasActiveInjury),
+                request.HasActiveInjury,
+                request.Date),
             cancellationToken);
 
         return result.Created

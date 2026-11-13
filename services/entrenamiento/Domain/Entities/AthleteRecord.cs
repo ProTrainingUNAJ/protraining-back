@@ -1,4 +1,4 @@
-﻿using Domain.Common;
+using Domain.Common;
 using Domain.Exceptions;
 
 namespace Domain.Entities;
@@ -50,5 +50,6 @@ public enum RecordSource
     Tested,
     Reported,
     Estimated,
-    NoData
+    NoData,
+    Epley
 }

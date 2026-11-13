@@ -1,6 +1,5 @@
 using Domain.Entities;
 using Domain.Services;
-using Xunit;
 
 namespace Entrenamiento.Tests;
 
@@ -62,5 +61,56 @@ public class LoadCalculatorEngineTests
         var result = _engine.RoundToNearestPlate(theoreticalWeight);
 
         Assert.Equal(expectedWeight, result);
+    }
+
+    [Theory]
+    [InlineData(80.0, 30.0)]
+    [InlineData(20.0, 0.0)]
+    [InlineData(15.0, 0.0)]
+    [InlineData(102.5, 41.25)]
+    public void CalculateWeightPerSide_ConBarraEstandar_DeberiaCalcularPesoPorLado(double totalWeight, double expectedWeightPerSide)
+    {
+        var result = _engine.CalculateWeightPerSide(totalWeight);
+        Assert.Equal(expectedWeightPerSide, result);
+    }
+
+    [Fact]
+    public void CalculateWeightPerSide_SinPesoTotal_DeberiaDevolverNull()
+    {
+        var result = _engine.CalculateWeightPerSide(null);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void CalculateTimeTarget_CriterioAceptacion_AtletaCon100mEn14sYSerieAl90PorCiento_DeberiaDevolver15Punto6s()
+    {
+        // DADO un atleta con 100 m en 14 s y una serie al 90 %
+        decimal bestTime = 14m;
+        decimal percentage = 90m;
+
+        // CUANDO se calcula
+        var target = _engine.CalculateTimeTarget(bestTime, percentage);
+
+        // ENTONCES su meta es 15,6 s
+        Assert.Equal(15.6m, target);
+    }
+
+    [Fact]
+    public void CalculateTimeTarget_SinTest_DeberiaDevolverNullParaMostrarSerieSinMeta()
+    {
+        var target = _engine.CalculateTimeTarget(null, 90m);
+        Assert.Null(target);
+    }
+
+    [Theory]
+    [InlineData(14.0, 90.0, 15.6)]
+    [InlineData(14.0, 100.0, 14.0)]
+    [InlineData(14.0, 80.0, 17.5)]
+    [InlineData(12.0, 90.0, 13.3)]
+    public void CalculateTimeTarget_DiferentesMarcasEIntensidades_CalculaYRedondeaAUnDecimal(
+        decimal bestTime, decimal percentage, decimal expectedTarget)
+    {
+        var target = _engine.CalculateTimeTarget(bestTime, percentage);
+        Assert.Equal(expectedTarget, target);
     }
 }

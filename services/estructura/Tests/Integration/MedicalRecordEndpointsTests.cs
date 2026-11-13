@@ -28,6 +28,14 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         _clientPfB = _factory.CreateAuthenticatedClient(_pfBId, role: "PreparadorFisico");
     }
 
+    private async Task SignAdultConsentAsync(Guid athleteId, Guid pfId)
+    {
+        using var db = _factory.CreateDbContext(pfId);
+        var athlete = await db.Athletes.FindAsync(athleteId);
+        athlete!.RegisterAdultConsent();
+        await db.SaveChangesAsync();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -42,13 +50,12 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athlete);
+        await SignAdultConsentAsync(athlete.Id, _pfAId);
 
-        var url = invalidJustification is null
-            ? $"/api/v1/athletes/{athlete.Id}/medical-record"
-            : $"/api/v1/athletes/{athlete.Id}/medical-record?justification={Uri.EscapeDataString(invalidJustification)}";
-
-        // act
-        var response = await _clientPfA.GetAsync(url);
+        // act: enviar POST con motivo inválido en el body
+        var response = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record/access",
+            new AccessMedicalRecordRequest(invalidJustification));
 
         // assert: recibe HTTP 400 Bad Request indicando que la justificación es obligatoria
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -75,6 +82,7 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
         Assert.NotNull(athlete);
+        await SignAdultConsentAsync(athlete.Id, _pfAId);
 
         // act 1: cargar ficha médica con motivo válido (Create)
         var putRequest = new UpdateMedicalRecordRequest(
@@ -98,10 +106,11 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal("Reconstrucción LCA rodilla izquierda (2022)", updatedRecord.Surgeries);
         Assert.True(updatedRecord.HasPhysicalFitnessCertificate);
 
-        // act 2: consultar ficha médica con motivo válido (Read)
+        // act 2: consultar ficha médica mediante POST con motivo en el body (Read / Access)
         var justification = "Revisión médica previa al bloque de fuerza máxima";
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{athlete.Id}/medical-record?justification={Uri.EscapeDataString(justification)}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record/access",
+            new AccessMedicalRecordRequest(justification));
 
         // assert: recibe HTTP 200 OK con los datos médicos
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
@@ -135,6 +144,32 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
             log.AccessedByUserId == _pfAUserId &&
             log.Action == MedicalRecordAuditLog.ReadAction &&
             log.Justification == justification);
+
+        // assert: verificar en la base que las filas de auditoría tienen el pf_id del token, athlete_id, motivo y fecha dentro del último minuto
+        var nowUtc = DateTime.UtcNow;
+        using var verifyDbContext = _factory.CreateDbContext(_pfAId);
+        var persistedAuditLogs = await verifyDbContext.MedicalRecordAuditLogs
+            .AsNoTracking()
+            .Where(log => log.AthleteId == athlete.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, persistedAuditLogs.Count);
+        Assert.All(persistedAuditLogs, log =>
+        {
+            Assert.Equal(_pfAId, log.PfId);
+            Assert.Equal(athlete.Id, log.AthleteId);
+            Assert.Equal(_pfAUserId, log.AccessedByUserId);
+            Assert.Null(log.DeletedAt);
+            Assert.InRange(nowUtc - log.CreatedAt, TimeSpan.FromSeconds(-5), TimeSpan.FromMinutes(1));
+        });
+
+        Assert.Contains(persistedAuditLogs, log =>
+            log.Action == MedicalRecordAuditLog.CreateAction &&
+            log.Justification == "Carga inicial de apto físico y antecedentes deportivos");
+
+        Assert.Contains(persistedAuditLogs, log =>
+            log.Action == MedicalRecordAuditLog.ReadAction &&
+            log.Justification == justification);
     }
 
     [Fact]
@@ -165,8 +200,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         }
 
         // act: intentar leer ficha médica con justificación válida pero sin consentimiento válido
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{minor.Id}/medical-record?justification={Uri.EscapeDataString("Consulta rutinaria")}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{minor.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Consulta rutinaria"));
 
         // assert: bloqueado con 400 Bad Request y sin registro de auditoría
         Assert.Equal(HttpStatusCode.BadRequest, getResponse.StatusCode);
@@ -183,6 +219,55 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Given_AdultAthleteWithoutSignedConsent_When_PfAttemptsToReadOrUpdateMedicalRecord_Then_Returns400BadRequestAndDoesNotInsertAuditLog()
+    {
+        // arrange: dar de alta un atleta adulto que aún no ha firmado el consentimiento digital
+        var adult = Athlete.CreateAdult(
+            firstName: "Carlos",
+            lastName: "Tevez",
+            email: "carlos.tevez@club.com",
+            phone: "+5491144556677",
+            signsInitialConsent: false);
+
+        using (var seedContext = _factory.CreateDbContext(_pfAId))
+        {
+            seedContext.Athletes.Add(adult);
+            await seedContext.SaveChangesAsync();
+        }
+
+        // act: intentar leer y editar la ficha médica con motivo válido pero sin consentimiento firmado del adulto
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{adult.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Consulta rutinaria"));
+
+        var putResponse = await _clientPfA.PutAsJsonAsync(
+            $"/api/v1/athletes/{adult.Id}/medical-record",
+            new UpdateMedicalRecordRequest(
+                Justification: "Carga inicial de apto físico",
+                MedicalHistory: "Sin antecedentes",
+                Surgeries: null,
+                Pathologies: null,
+                HasPhysicalFitnessCertificate: true));
+
+        // assert: bloqueado con 400 Bad Request tanto en lectura como en edición, y sin registro de auditoría
+        Assert.Equal(HttpStatusCode.BadRequest, getResponse.StatusCode);
+        var getProblem = await getResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(getProblem);
+        Assert.Contains("consentimiento digital", getProblem.Title ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.BadRequest, putResponse.StatusCode);
+        var putProblem = await putResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(putProblem);
+        Assert.Contains("consentimiento digital", putProblem.Title ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        using var verifyContext = _factory.CreateDbContext(_pfAId);
+        var logsCount = await verifyContext.MedicalRecordAuditLogs
+            .CountAsync(log => log.AthleteId == adult.Id);
+        Assert.Equal(0, logsCount);
+    }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
     public async Task Given_AthleteOwnedByPfB_When_PfAAttemptsToReadOrUpdateMedicalRecord_Then_Returns404NotFound()
     {
         // arrange: PF-B crea un atleta
@@ -193,8 +278,9 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.NotNull(athleteB);
 
         // act: PF-A intenta leer y modificar la ficha médica del atleta de PF-B
-        var getResponse = await _clientPfA.GetAsync(
-            $"/api/v1/athletes/{athleteB.Id}/medical-record?justification={Uri.EscapeDataString("Motivo válido")}");
+        var getResponse = await _clientPfA.PostAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Motivo válido"));
         var putResponse = await _clientPfA.PutAsJsonAsync(
             $"/api/v1/athletes/{athleteB.Id}/medical-record",
             new UpdateMedicalRecordRequest("Motivo válido", "Historial", null, null, true));
@@ -205,6 +291,75 @@ public sealed class MedicalRecordEndpointsTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, putResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, logsResponse.StatusCode);
+    }
+
+    // KAN-430: además del 404, el intento del PF A no deja rastro: la ficha del PF B queda igual
+    // y no se registra ningún acceso del PF A en la auditoría del atleta del PF B.
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task Given_AthleteOwnedByPfB_When_PfAAttemptsToUpdateMedicalRecord_Then_PfBRecordIsUnchangedAndNoPfAAuditLogIsWritten()
+    {
+        // arrange: PF-B crea un atleta y carga su ficha médica
+        var createResponse = await _clientPfB.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("Gabriel", "Batistuta", "gabriel@club.com", "+5491155556666", IsMinor: false));
+        var athleteB = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athleteB);
+        await SignAdultConsentAsync(athleteB.Id, _pfBId);
+
+        var pfBPut = await _clientPfB.PutAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record",
+            new UpdateMedicalRecordRequest("Carga inicial", "Historial original de PF-B", null, null, true));
+        Assert.Equal(HttpStatusCode.OK, pfBPut.StatusCode);
+
+        // act: PF-A intenta pisar la ficha médica del atleta de PF-B
+        var pfAPut = await _clientPfA.PutAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record",
+            new UpdateMedicalRecordRequest("Motivo válido", "Historial adulterado por PF-A", null, null, false));
+
+        // assert: 404 y la ficha de PF-B sigue igual
+        Assert.Equal(HttpStatusCode.NotFound, pfAPut.StatusCode);
+
+        var pfBGet = await _clientPfB.PostAsJsonAsync(
+            $"/api/v1/athletes/{athleteB.Id}/medical-record/access",
+            new AccessMedicalRecordRequest("Control"));
+        Assert.Equal(HttpStatusCode.OK, pfBGet.StatusCode);
+        var record = await pfBGet.Content.ReadFromJsonAsync<MedicalRecordDto>();
+        Assert.NotNull(record);
+        Assert.Equal("Historial original de PF-B", record.MedicalHistory);
+        Assert.True(record.HasPhysicalFitnessCertificate);
+
+        // y en la auditoría solo hay accesos de PF-B (la carga y la lectura de control), ninguno de PF-A
+        using var dbContext = _factory.CreateDbContext();
+        var auditLogPfIds = await dbContext.MedicalRecordAuditLogs
+            .IgnoreQueryFilters()
+            .Where(log => log.AthleteId == athleteB.Id)
+            .Select(log => log.PfId)
+            .ToListAsync();
+        Assert.NotEmpty(auditLogPfIds);
+        Assert.All(auditLogPfIds, pfId => Assert.Equal(_pfBId, pfId));
+    }
+
+    [Fact]
+    public async Task Given_LegacyGetEndpoint_When_Invoked_Then_Returns404Or405IndicatingGetIsRemoved()
+    {
+        // arrange: crear un atleta con consentimiento firmado
+        var createResponse = await _clientPfA.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("Javier", "Zanetti", "javier.z@club.com", "+5491100001111", IsMinor: false));
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+
+        // act: intentar acceder mediante el viejo endpoint GET
+        var legacyGetResponse = await _clientPfA.GetAsync(
+            $"/api/v1/athletes/{athlete.Id}/medical-record?justification=Consulta");
+
+        // assert: el contrato GET fue completamente eliminado (MethodNotAllowed o NotFound)
+        Assert.True(
+            legacyGetResponse.StatusCode == HttpStatusCode.MethodNotAllowed ||
+            legacyGetResponse.StatusCode == HttpStatusCode.NotFound,
+            $"Se esperaba 404 o 405 para el endpoint GET legacy, pero respondió {legacyGetResponse.StatusCode}");
     }
 
     [Fact]

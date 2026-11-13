@@ -5,7 +5,7 @@ info:
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
     y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
-  version: 1.4.0
+  version: 1.8.0
 servers:
   - url: http://localhost:8084
     description: Entorno local / Docker Compose
@@ -72,11 +72,90 @@ paths:
         "403":
           $ref: '#/components/responses/Forbidden'
         "404":
-          description: La cuenta no tiene un atleta vinculado.
+          description: La cuenta no tiene un atleta vinculado, o el atleta de la ruta no es el del token (nunca 403, para no revelar si el id existe).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/internal/check-ins/done:
+    post:
+      tags:
+        - Check-in and Traffic Light
+      summary: Consultar atletas que completaron el check-in en una fecha
+      description: Endpoint interno para microservicios con rol Servicio (worker de recordatorios). Devuelve los IDs de los atletas que ya completaron el check-in.
+      operationId: getCompletedCheckIns
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - date
+                - pfId
+                - athleteIds
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2026-10-26"
+                pfId:
+                  type: string
+                  format: uuid
+                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                athleteIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Lista de IDs de atletas que ya completaron su check-in.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/athletes/{athleteId}/check-in/today:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Obtener el check-in del día del atleta
+      description: >
+        Devuelve el check-in registrado hoy (calculado en hora de Argentina) por el atleta,
+        incluyendo las zonas de dolor reportadas (painZones). Exclusivo para el preparador físico
+        autenticado; responde 404 si el atleta todavía no completó el check-in de hoy o no pertenece al PF.
+      operationId: getTodayCheckIn
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Check-in del día obtenido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckIn'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/athletes/{athleteId}/check-ins:
     get:
@@ -98,6 +177,22 @@ paths:
           schema:
             type: integer
             default: 14
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de consulta (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de consulta (inclusive).
       responses:
         "200":
           description: Historial de check-ins obtenido.
@@ -136,20 +231,112 @@ paths:
               $ref: '#/components/schemas/DailyLoadRequest'
       responses:
         "200":
-          description: Carga y asistencia registradas con éxito.
+          description: Carga del día actualizada.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Carga del día registrada. Asistencia confirmada automáticamente."
-                  totalMinutes:
-                    type: integer
-                    example: 105
+                $ref: '#/components/schemas/DailyLoadResponse'
+        "201":
+          description: Carga del día registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyLoadResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags:
+        - Loads and Attendance
+      summary: Obtener la carga del día del atleta
+      operationId: getDailyLoad
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Carga del día obtenida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyLoadResponse'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{athleteId}/daily-load/week:
+    get:
+      tags:
+        - Loads and Attendance
+      summary: Obtener la semana del atleta con los días completados
+      description: >
+        Devuelve los 7 días de la semana (lunes a domingo) del atleta, marcando
+        cuáles tienen carga del día registrada.
+      operationId: getAthleteWeek
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Semana del atleta obtenida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteWeek'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  # KAN-445: corrección manual de asistencia por el PF (agregado en esta rama).
+  /api/v1/athletes/{athleteId}/attendance:
+    patch:
+      tags:
+        - Loads and Attendance
+      summary: Corregir asistencia manualmente
+      description: >
+        El preparador físico marca presente o ausente a un atleta cuando figura
+        "sin registro" (no cargó su entrenamiento del día).
+      operationId: setAttendance
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAttendanceRequest'
+      responses:
+        "204":
+          description: Asistencia corregida.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -210,6 +397,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{categoryId}/averages:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar promedios de tests y wellness por categoría
+      description: >
+        Obtiene los promedios aritméticos agregados de tests de aptitud física y de métricas
+        semanales de bienestar (wellness) para los atletas de una categoría específica.
+        Garantía estricta de privacidad: no expone identificadores, nombres ni mediciones individuales.
+      operationId: getCategoryAverages
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: weekStart
+          in: query
+          required: false
+          description: Fecha de inicio de la semana de consulta (formato YYYY-MM-DD). Si no se especifica, se toma el lunes de la semana actual en hora de Argentina.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-26"
+      responses:
+        "200":
+          description: Promedios de la categoría obtenidos exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryAveragesResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/group-benchmark:
     get:
       tags:
@@ -226,6 +452,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Métricas comparativas obtenidas.
@@ -233,6 +465,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GroupBenchmarkResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -241,7 +477,7 @@ paths:
       tags:
         - Injuries
       summary: Listar lesiones de un atleta
-      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual.
+      description: Obtiene el historial de lesiones registradas para un atleta, permitiendo filtrar por su estado actual. Responde 404 si el atleta no existe o es de otro PF.
       operationId: listAthleteInjuries
       parameters:
         - name: athleteId
@@ -274,7 +510,7 @@ paths:
       tags:
         - Injuries
       summary: Registrar una nueva lesión
-      description: Da de alta una lesión para el atleta en estado inicial 'Active'.
+      description: Da de alta una lesión para el atleta en estado inicial 'Active'. Responde 404 si el atleta no existe o es de otro PF.
       operationId: createInjury
       parameters:
         - name: athleteId
@@ -371,6 +607,394 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/athletes/{athleteId}/fitness-tests:
+    get:
+      tags:
+        - Fitness Tests
+        - Evolution and Benchmark
+      summary: Historial de tests físicos de un atleta
+      description: >
+        Devuelve el historial de resultados de pruebas físicas del atleta, con opción
+        de filtrar por un test específico del catálogo y por rango de fechas.
+      operationId: listAthleteFitnessTests
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: testId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Identificador del test del catálogo para consultar su evolución.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-01-01"
+          description: Fecha inicial del rango de consulta (inclusive).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final del rango de consulta (inclusive).
+      responses:
+        "200":
+          description: Historial de tests obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteFitnessTest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{athleteId}/evolution:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar evolución temporal unificada de un atleta
+      description: >
+        Consolida en una vista temporal unificada día a día la progresión histórica de
+        fuerza (1RM), capacidades atléticas (salto/velocidad) y fatiga/wellness a lo
+        largo de las semanas (por defecto, los últimos 3 meses).
+      operationId: getAthleteEvolution
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: months
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 3
+          description: Cantidad de meses hacia atrás para la consulta histórica (por defecto 3 meses).
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-08-01"
+          description: Fecha inicial personalizada del rango (inclusive). Tiene prioridad sobre months.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+          description: Fecha final personalizada del rango (inclusive). Por defecto es hoy en hora de Argentina.
+      responses:
+        "200":
+          description: Curvas de evolución obtenidas con éxito y listas para graficar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteEvolutionResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Sesiones de test de campo de una categoría
+      description: >
+        Devuelve el resumen (id, categoría, fecha, nombre y estado) de las sesiones de la
+        categoría pedida, de la más reciente a la más antigua. Solo aparecen las sesiones
+        del PF autenticado: las de otro PF no se devuelven. Sin tests ni resultados, para
+        que la pantalla que elige la sesión sea liviana.
+      operationId: listFieldTestSessions
+      parameters:
+        - name: categoryId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+      responses:
+        "200":
+          description: Listado obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FieldTestSessionSummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+        - Fitness Tests
+      summary: Crear una sesión de test de campo
+      description: >
+        Crea la sesión con sus pruebas del catálogo en el orden de evaluación. Estado
+        inicial Planned. Responde 404 si la categoría no existe o es de otro PF; 400 si
+        la lista de pruebas está vacía, si se repite una prueba o si alguna no existe en
+        el catálogo.
+      operationId: createFieldTestSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFieldTestSessionRequest'
+      responses:
+        "201":
+          description: Sesión creada con éxito (estado Planned).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSession'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions/{sessionId}/status:
+    patch:
+      tags:
+        - Fitness Tests
+      summary: Cambiar el estado de la sesión
+      description: >
+        Avanza el estado de la sesión en orden estricto Planned -> InProgress -> Closed.
+        Un salto (Planned -> Closed), una reapertura o repetir el estado actual responde
+        400 con el detalle de la transición no permitida (orden: Planificada -> En curso
+        -> Cerrada). La sesión no exista o sea de otro PF → 404.
+      operationId: updateFieldTestSessionStatus
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFieldTestSessionStatusRequest'
+      responses:
+        "200":
+          description: Estado actualizado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSessionSummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions/{sessionId}:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Sesión de test de campo con sus resultados
+      description: >
+        Devuelve la sesión de test de campo con sus tests del catálogo (en orden de
+        evaluación) y los resultados cargados por atleta. Responde 404 si la sesión no
+        existe o es de otro PF.
+      operationId: getFieldTestSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Sesión obtenida con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestSession'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/field-test-sessions/{sessionId}/results:
+    post:
+      tags:
+        - Fitness Tests
+      summary: Carga rápida de un resultado de campo
+      description: >
+        Registra el valor de un atleta para un test de la sesión. Responde 404 si la
+        sesión no existe o es de otro PF, o si el atleta no existe o es de otro PF (en
+        ese caso no se persiste nada). Responde 409 si el mismo (sesión, prueba, atleta
+        e intento) ya fue cargado. Si la sesión está en estado Closed responde 400
+        "La sesión ya está cerrada." (KAN-427). Si la prueba no forma parte de la sesión
+        responde 400 (KAN-568).
+      operationId: createFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFieldTestResultRequest'
+      responses:
+        "201":
+          description: Resultado registrado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/field-test-sessions/{sessionId}/results/{resultId}:
+    put:
+      tags:
+        - Fitness Tests
+      summary: Corregir un resultado de campo
+      description: >
+        Actualiza el valor y el intento de un resultado ya cargado. Responde 404 si la
+        sesión o el resultado no existen o son de otro PF. Responde 409 si la corrección
+        choca con un resultado ya cargado (misma prueba, atleta e intento). Si la sesión
+        está en estado Closed responde 400 "La sesión ya está cerrada." (KAN-427).
+      operationId: updateFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFieldTestResultRequest'
+      responses:
+        "200":
+          description: Resultado actualizado con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/field-test-sessions/{sessionId}/results/{resultId}/confirm:
+    post:
+      tags:
+        - Fitness Tests
+      summary: Confirmar un resultado de fuerza y sincronizar el 1RM
+      description: >
+        Confirma un resultado de fuerza (test en kg) y envía de forma síncrona el 1RM
+        testeado al microservicio Entrenamiento con origen TestedInSession, resolviendo
+        el ejercicio homónimo por nombre exacto la primera vez (el GUID resuelto queda
+        cacheado en la prueba del catálogo). Responde 404 si la sesión, el resultado o
+        la prueba no existen o son de otro PF; 400 si el test no genera récord 1RM o si
+        Entrenamiento no tiene un ejercicio con ese nombre; y 503 si Entrenamiento no
+        responde tras los reintentos de Polly (la confirmación no quedó registrada allí).
+        Re-confirmar una marca ya confirmada responde 200 sin volver a llamar a
+        Entrenamiento (idempotente, KAN-568); si la marca se corrige con PUT, queda
+        pendiente de reconfirmar. Si la sesión está en estado Closed responde 400
+        "La sesión ya está cerrada." y no se envía ningún 1RM (KAN-427).
+      operationId: confirmFieldTestResult
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resultado confirmado y 1RM sincronizado con Entrenamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTestResult'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/health:
     get:
       tags:
@@ -417,7 +1041,21 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
     Forbidden:
-      description: "Acceso denegado: el token no corresponde al atleta de la ruta."
+      description: "Acceso denegado: el token no corresponde al atleta de la ruta o rol no autorizado."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflicto con el estado actual del recurso.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: >
+        Servicio dependiente no disponible (Estructura o Entrenamiento no respondió
+        tras los reintentos de Polly). La operación no se completó y puede reintentarse.
       content:
         application/json:
           schema:
@@ -439,6 +1077,9 @@ components:
           format: double
           minimum: 0
           maximum: 24
+          description: >
+            Horas de sueño de 0 a 12 (decimales permitidos); 13 significa "más de 12 horas".
+            Cualquier valor mayor a 12 se guarda como 13.
           example: 7.5
         sleepQuality:
           type: integer
@@ -486,6 +1127,13 @@ components:
           default: false
           description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
           example: false
+
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha original del check-in (dia en Argentina). La manda el front al sincronizar un check-in guardado sin conexion; si no viene, se usa la fecha del servidor.
+          example: "2026-10-26"
 
     CheckInResponse:
       type: object
@@ -576,27 +1224,123 @@ components:
           type: boolean
           example: false
 
-    DailyLoadRequest:
+    DailyLoadActivity:
       type: object
-      required:
-        - gymMinutes
       properties:
-        gymMinutes:
+        minutes:
           type: integer
           minimum: 0
           example: 60
-        sportTrainingMinutes:
+        rpe:
           type: integer
+          nullable: true
           minimum: 0
-          example: 45
-        matchMinutes:
+          maximum: 10
+          example: 7
+
+    DailyLoadRequest:
+      type: object
+      properties:
+        gym:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        sportTraining:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match1:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match2:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        individualWork:
+          $ref: '#/components/schemas/DailyLoadActivity'
+
+    DailyLoadResponse:
+      type: object
+      required:
+        - message
+        - totalMinutes
+        - totalLoad
+        - date
+        - gym
+        - sportTraining
+        - match1
+        - match2
+        - individualWork
+      properties:
+        message:
+          type: string
+          example: "Carga del día registrada."
+        totalMinutes:
           type: integer
-          minimum: 0
-          example: 0
-        individualWorkMinutes:
+          example: 60
+        totalLoad:
           type: integer
-          minimum: 0
-          example: 0
+          example: 420
+        date:
+          type: string
+          format: date
+          example: "2026-10-26"
+        gym:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        sportTraining:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match1:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        match2:
+          $ref: '#/components/schemas/DailyLoadActivity'
+        individualWork:
+          $ref: '#/components/schemas/DailyLoadActivity'
+
+    AthleteWeekDay:
+      type: object
+      required:
+        - date
+        - dayOfWeek
+        - completed
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-26"
+        dayOfWeek:
+          type: string
+          example: "Monday"
+        completed:
+          type: boolean
+          example: true
+
+    AthleteWeek:
+      type: object
+      required:
+        - weekStart
+        - weekEnd
+        - completedDays
+        - days
+      properties:
+        weekStart:
+          type: string
+          format: date
+          example: "2026-10-26"
+        weekEnd:
+          type: string
+          format: date
+          example: "2026-11-01"
+        completedDays:
+          type: array
+          items:
+            type: string
+            format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/AthleteWeekDay'
+
+    SetAttendanceRequest:
+      type: object
+      required:
+        - present
+      properties:
+        present:
+          type: boolean
+          example: true
 
     CategoryAttendanceSummary:
       type: object
@@ -624,6 +1368,26 @@ components:
           type: number
           format: double
           example: 90.6
+        athletes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AthleteAttendanceSummary'
+
+    AthleteAttendanceSummary:
+      type: object
+      required:
+        - athleteId
+        - athleteName
+        - status
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        athleteName:
+          type: string
+        status:
+          type: string
+          enum: [Present, NoRecord]
 
     AthleteTrafficLightSummary:
       type: object
@@ -685,6 +1449,9 @@ components:
           format: double
           minimum: 0
           maximum: 24
+          description: >
+            Horas de sueño guardadas: de 0 a 12 (decimales permitidos);
+            13 significa "más de 12 horas" (valores mayores se guardan como 13).
           example: 6.5
         sleepQuality:
           type: integer
@@ -724,6 +1491,9 @@ components:
           type: string
           format: uuid
           example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        categoryName:
+          type: string
+          example: "Primera División"
         metrics:
           type: array
           items:
@@ -731,7 +1501,6 @@ components:
             required:
               - dimension
               - athleteValue
-              - groupAverage
             properties:
               dimension:
                 type: string
@@ -741,23 +1510,256 @@ components:
                 example: 140.0
               groupAverage:
                 type: number
+                nullable: true
                 example: 125.5
+              unit:
+                type: string
+                example: "kg"
+              difference:
+                type: number
+                nullable: true
+                example: 14.5
+              percentageDifference:
+                type: number
+                nullable: true
+                example: 11.5
+              direction:
+                type: string
+                example: "HigherIsBetter"
+              status:
+                type: string
+                example: "AboveAverage"
+              isWeakestPoint:
+                type: boolean
+                example: false
               trend:
                 type: string
+                nullable: true
                 example: "Superior al promedio (+11.5%)"
+
+    AthleteEvolutionResponse:
+      type: object
+      description: Vista consolidada de curvas de evolución temporal del atleta para graficar.
+      required:
+        - athleteId
+        - from
+        - to
+        - strength
+        - fitnessTests
+        - wellness
+        - weeklyLoads
+        - strengthUnavailable
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        from:
+          type: string
+          format: date
+          example: "2026-08-01"
+        to:
+          type: string
+          format: date
+          example: "2026-11-01"
+        strength:
+          type: array
+          description: Series de progresión de fuerza (1RM) agrupadas por ejercicio.
+          items:
+            $ref: '#/components/schemas/StrengthEvolutionSeries'
+        fitnessTests:
+          type: array
+          description: Series de capacidades atléticas (salto, velocidad, etc.) agrupadas por test físico.
+          items:
+            $ref: '#/components/schemas/FitnessTestEvolutionSeries'
+        wellness:
+          $ref: '#/components/schemas/WellnessEvolution'
+        weeklyLoads:
+          type: array
+          description: Series de carga semanal acumulada (lunes a domingo en hora de Argentina). Solo disponible para el Preparador Físico; para el atleta se devuelve un arreglo vacío.
+          items:
+            $ref: '#/components/schemas/WeeklyLoadEvolutionPoint'
+        strengthUnavailable:
+          type: boolean
+          description: Indica si el servicio de Entrenamiento no estuvo disponible para consultar los récords (modo degradado).
+          example: false
+
+    StrengthEvolutionSeries:
+      type: object
+      required:
+        - exerciseId
+        - exerciseName
+        - unit
+        - points
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+          example: "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        exerciseName:
+          type: string
+          example: "Sentadilla Trasera"
+        unit:
+          type: string
+          example: "kg"
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+
+    FitnessTestEvolutionSeries:
+      type: object
+      required:
+        - catalogTestId
+        - testName
+        - motorCapacity
+        - unit
+        - points
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          type: string
+          example: "Power"
+        unit:
+          type: string
+          example: "cm"
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+
+    EvolutionDataPoint:
+      type: object
+      required:
+        - date
+        - value
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-15"
+        value:
+          type: number
+          format: double
+          example: 45.5
+        label:
+          type: string
+          nullable: true
+          example: "45.5 cm"
+
+    WellnessEvolution:
+      type: object
+      required:
+        - fatiguePoints
+        - dailyPoints
+      properties:
+        fatiguePoints:
+          type: array
+          description: Curva de progresión de niveles de fatiga día a día.
+          items:
+            $ref: '#/components/schemas/EvolutionDataPoint'
+        dailyPoints:
+          type: array
+          description: Detalle completo de variables de wellness registradas día a día.
+          items:
+            $ref: '#/components/schemas/DailyWellnessPoint'
+
+    DailyWellnessPoint:
+      type: object
+      required:
+        - date
+        - fatigueLevel
+        - sleepHours
+        - sleepQuality
+        - muscleSoreness
+        - moodRate
+        - stressLevel
+        - trafficLight
+        - hasActiveInjury
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-15"
+        fatigueLevel:
+          type: integer
+          example: 3
+        sleepHours:
+          type: number
+          format: double
+          example: 7.5
+        sleepQuality:
+          type: integer
+          example: 4
+        muscleSoreness:
+          type: integer
+          example: 2
+        moodRate:
+          type: integer
+          example: 4
+        stressLevel:
+          type: integer
+          example: 2
+        trafficLight:
+          type: string
+          example: "Green"
+        hasActiveInjury:
+          type: boolean
+          example: false
+
+    WeeklyLoadEvolutionPoint:
+      type: object
+      required:
+        - weekStartDate
+        - weekEndDate
+        - totalLoad
+        - totalMinutes
+      properties:
+        weekStartDate:
+          type: string
+          format: date
+          example: "2026-10-12"
+        weekEndDate:
+          type: string
+          format: date
+          example: "2026-10-18"
+        totalLoad:
+          type: integer
+          description: Carga semanal acumulada (suma de minutos × RPE de todas las actividades). Las semanas sin actividad registrada se devuelven en 0.
+          example: 1850
+        totalMinutes:
+          type: integer
+          description: Minutos totales de actividad física en la semana.
+          example: 320
 
     CreateInjuryRequest:
       type: object
       required:
-        - bodyZone
-        - notes
+        - zone
+        - description
+        - injuryDate
+        - estimatedReturnDate
       properties:
-        bodyZone:
+        zone:
           type: string
-          example: "Hombro derecho"
-        notes:
+          example: "isquiotibiales"
+        description:
           type: string
-          example: "Molestia punzante al bloquear banco plano con 90 kg."
+          example: "Gradación 3 tras sprint."
+        injuryDate:
+          type: string
+          format: date
+          example: "2026-10-01"
+        estimatedReturnDate:
+          type: string
+          format: date
+          example: "2026-11-01"
 
     UpdateInjuryStatusRequest:
       type: object
@@ -767,7 +1769,7 @@ components:
       properties:
         newStatus:
           type: string
-          enum: [Active, InRecovery, Cleared]
+          enum: [Active, InRecovery, MedicallyCleared]
           example: "InRecovery"
         transitionNotes:
           type: string
@@ -778,8 +1780,10 @@ components:
       required:
         - id
         - athleteId
-        - bodyZone
-        - notes
+        - zone
+        - description
+        - injuryDate
+        - estimatedReturnDate
         - status
         - createdAt
       properties:
@@ -791,16 +1795,29 @@ components:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-        bodyZone:
+        zone:
           type: string
-          example: "Hombro derecho"
-        notes:
+          example: "isquiotibiales"
+        description:
           type: string
-          example: "Molestia punzante al bloquear banco plano. | [2026-10-10] Estado a InRecovery: Kinesiología favorable."
+          example: "Gradación 3 tras sprint."
+        injuryDate:
+          type: string
+          format: date
+          example: "2026-10-01"
+        estimatedReturnDate:
+          type: string
+          format: date
+          example: "2026-11-01"
         status:
           type: string
-          enum: [Active, InRecovery, Cleared]
+          enum: [Active, InRecovery, MedicallyCleared]
           example: "InRecovery"
+        clearedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T00:00:00Z"
         createdAt:
           type: string
           format: date-time
@@ -809,6 +1826,53 @@ components:
           type: string
           format: date-time
           example: "2026-10-10T09:30:00Z"
+
+    AthleteFitnessTest:
+      type: object
+      description: Resultado histórico de una prueba física de un atleta.
+      required:
+        - id
+        - athleteId
+        - catalogTestId
+        - testName
+        - motorCapacity
+        - value
+        - measurementUnit
+        - attempt
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6c24fcf8-0fb5-48b2-b01f-0e4c67eb2581"
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorCapacity:
+          type: string
+          example: "Power"
+        value:
+          type: number
+          format: double
+          example: 45.5
+        measurementUnit:
+          type: string
+          example: "cm"
+        attempt:
+          type: integer
+          example: 1
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-10-15T14:30:00Z"
 
     FitnessTest:
       type: object
@@ -885,3 +1949,332 @@ components:
             type: array
             items:
               type: string
+    CategoryAveragesResponse:
+      type: object
+      required:
+        - categoryId
+        - categoryName
+        - athleteCount
+        - weekStart
+        - weekEnd
+        - fitnessTests
+        - wellnessMetrics
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        categoryName:
+          type: string
+          example: "Sub 20"
+        athleteCount:
+          type: integer
+          example: 18
+        weekStart:
+          type: string
+          format: date
+          example: "2026-10-26"
+        weekEnd:
+          type: string
+          format: date
+          example: "2026-11-01"
+        fitnessTests:
+          type: array
+          items:
+            $ref: '#/components/schemas/FitnessTestAverage'
+        wellnessMetrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/WellnessMetricAverage'
+
+    FitnessTestAverage:
+      type: object
+      required:
+        - testId
+        - testName
+        - motorSkill
+        - unit
+        - average
+        - testedAthleteCount
+      properties:
+        testId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        testName:
+          type: string
+          example: "Salto Vertical CMJ"
+        motorSkill:
+          type: string
+          example: "Power"
+        unit:
+          type: string
+          example: "cm"
+        average:
+          type: number
+          format: double
+          example: 38.4
+        testedAthleteCount:
+          type: integer
+          example: 15
+
+    WellnessMetricAverage:
+      type: object
+      required:
+        - metric
+        - average
+        - reportedAthleteCount
+        - totalCheckIns
+      properties:
+        metric:
+          type: string
+          example: "Sleep"
+        average:
+          type: number
+          format: double
+          example: 7.6
+        reportedAthleteCount:
+          type: integer
+          example: 14
+        totalCheckIns:
+          type: integer
+          example: 42
+
+    FieldTestSession:
+      type: object
+      description: Sesión de test de campo (KAN-425) con sus tests y resultados.
+      required:
+        - id
+        - categoryId
+        - date
+        - name
+        - status
+        - tests
+        - results
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        status:
+          type: string
+          enum:
+            - Planned
+            - InProgress
+            - Closed
+          example: "InProgress"
+        tests:
+          type: array
+          description: Tests del catálogo de la sesión, en orden de evaluación.
+          items:
+            $ref: '#/components/schemas/FieldTestSessionTest'
+        results:
+          type: array
+          description: Resultados cargados por los atletas.
+          items:
+            $ref: '#/components/schemas/FieldTestResult'
+
+    FieldTestSessionTest:
+      type: object
+      description: Test del catálogo incluido en la sesión, con su orden de evaluación.
+      required:
+        - catalogTestId
+        - order
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+
+    FieldTestResult:
+      type: object
+      description: Resultado de un atleta en un test de la sesión, con su intento.
+      required:
+        - id
+        - catalogTestId
+        - athleteId
+        - value
+        - attempt
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a6a6f8a4-0a6c-4f5f-9a5a-1b2c3d4e5f60"
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
+        value:
+          type: number
+          format: double
+          example: 42.5
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1
+        recordedAt:
+          type: string
+          format: date-time
+          example: "2026-11-04T15:30:00Z"
+
+    CreateFieldTestResultRequest:
+      type: object
+      description: Carga rápida de un resultado de campo (KAN-425).
+      required:
+        - catalogTestId
+        - athleteId
+        - value
+        - attempt
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        athleteId:
+          type: string
+          format: uuid
+          example: "2c74a0e9-b5ef-4d32-9cb7-28045d6f83ab"
+        value:
+          type: number
+          format: double
+          example: 42.5
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateFieldTestResultRequest:
+      type: object
+      description: Corrección de un resultado de campo ya cargado (KAN-425).
+      required:
+        - value
+        - attempt
+      properties:
+        value:
+          type: number
+          format: double
+          example: 41.8
+        attempt:
+          type: integer
+          minimum: 1
+          example: 1
+
+    FieldTestSessionSummary:
+      type: object
+      description: >
+        Resumen de sesión de test de campo para el listado por categoría (KAN-427), sin
+        tests ni resultados. El estado viaja como texto.
+      required:
+        - id
+        - categoryId
+        - date
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        categoryId:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        status:
+          type: string
+          enum:
+            - Planned
+            - InProgress
+            - Closed
+          example: "Planned"
+
+    CreateFieldTestSessionRequest:
+      type: object
+      description: >
+        Alta de una sesión de test de campo (KAN-427): categoría del PF, fecha, nombre y
+        pruebas del catálogo en orden de evaluación.
+      required:
+        - categoryId
+        - date
+        - name
+        - tests
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          description: Categoría del PF autenticado; si no existe o es de otra → 404.
+          example: "d3b07384-d113-4ec4-9844-3c8b4df56844"
+        date:
+          type: string
+          format: date
+          example: "2026-11-04"
+        name:
+          type: string
+          maxLength: 150
+          example: "Evaluación de pretemporada"
+        tests:
+          type: array
+          minItems: 1
+          description: Pruebas del catálogo en el orden en que se evalúan; sin repetidos.
+          items:
+            $ref: '#/components/schemas/FieldTestSessionTestInput'
+
+    FieldTestSessionTestInput:
+      type: object
+      description: Prueba del catálogo pedida al crear la sesión, con su orden.
+      required:
+        - catalogTestId
+        - order
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          description: Debe existir en el catálogo del PF; si no → 400.
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        order:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateFieldTestSessionStatusRequest:
+      type: object
+      description: >
+        Avance de estado de la sesión (KAN-427): solo Planned -> InProgress -> Closed, en
+        orden estricto. Un salto o una reapertura → 400.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - InProgress
+            - Closed
+          example: "InProgress"

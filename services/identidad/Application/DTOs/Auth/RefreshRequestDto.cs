@@ -1,4 +1,4 @@
-﻿namespace Application.DTOs.Auth;
+namespace Application.DTOs.Auth;
 /// <summary>
 /// credenciales requeridas para renovar el token de acceso
 /// </summary>

@@ -12,5 +12,7 @@ public record ScheduledSessionDto(
     Guid? CategoryId,
     Guid? AthleteId,
     int ExerciseCount,
-    string? CoachNotes
+    string? CoachNotes,
+    TimeOnly? StartTime = null,
+    DateOnly? AssignmentEndDate = null
 );

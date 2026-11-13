@@ -1,16 +1,41 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.CheckIns.GetTodayCheckIn;
+using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.SubmitCheckIn;
+using Application.UseCases.DailyLoads.GetAthleteWeek;
+using Application.UseCases.DailyLoads.RegisterDailyLoad;
+using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Application.UseCases.FitnessTests.ListFitnessTests;
+using Application.UseCases.FieldTests.ConfirmFieldTestResult;
+using Application.UseCases.FieldTests.CreateFieldTestResult;
+using Application.UseCases.FieldTests.CreateFieldTestSession;
+using Application.UseCases.FieldTests.GetFieldTestSession;
+using Application.UseCases.FieldTests.ListFieldTestSessions;
+using Application.UseCases.FieldTests.UpdateFieldTestResult;
+using Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 using Application.UseCases.Health.GetHealth;
+using Application.UseCases.Injuries.CreateAthleteInjury;
+using Application.UseCases.Injuries.ListAthleteInjuries;
+using Application.UseCases.Injuries.UpdateInjuryStatus;
+using Application.UseCases.Attendance.GetCategoryAttendanceToday;
+using Application.UseCases.Attendance.SetAttendance;
 using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
+using Application.UseCases.Categories.GetCategoryAverages;
+using Application.UseCases.Benchmark;
+using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.Services;
+using Infrastructure.Services;
 using Domain.Services;
 using Infrastructure;
+using Infrastructure.Services.Entrenamiento;
 using Infrastructure.Services.Structure;
+using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -24,6 +49,10 @@ builder.Host.UseSerilog((context, services, logger) => logger
     .Enrich.WithProperty("Service", serviceName)
     .WriteTo.Console(new CompactJsonFormatter()));
 builder.Services.AddControllers()
+    // Los enums viajan como su nombre en el contrato (p. ej. "MedicallyCleared"), no como número;
+    // sin este converter el front recibiría un 400 por no poder convertir el texto del contrato.
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
@@ -52,27 +81,67 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // a otros servicios, así funciona aunque el Asistente esté caído. Si algún día se agrega una llamada
 // opcional al Asistente o a un módulo de IA, debe ser best-effort con timeouts cortos (1-2 s), un único
 // reintento y caída siempre al motivo local del TrafficLightEngine (plan B), nunca propagando el error al cliente.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 
 // Motor puro del semáforo (KAN-363) y caso de uso del check-in diario (KAN-364/Demo 1):
 // todo se calcula con datos locales de esta base, sin llamadas a otros servicios.
 builder.Services.AddScoped<TrafficLightEngine>();
 builder.Services.AddScoped<SubmitCheckInCommandHandler>();
-// Catálogo de tests físicos por capacidad motora (KAN-333).
+builder.Services.AddScoped<ListAthleteCheckInsQueryHandler>();
+builder.Services.AddScoped<GetTodayCheckInQueryHandler>();
+builder.Services.AddScoped<RegisterDailyLoadCommandHandler>();
+builder.Services.AddScoped<GetAthleteWeekQueryHandler>();
+// Catálogo de tests físicos por capacidad motora (KAN-333) e historial de tests del atleta (KAN-434).
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
+builder.Services.AddScoped<ListAthleteFitnessTestsQueryHandler>();
+// Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
+builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
+builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();
+// Máquina de estados estricta de las lesiones (KAN-420): Active → InRecovery → MedicallyCleared.
+builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();
+// Carga rápida de resultados de campo (KAN-425): POST/GET/PUT de la sesión de test.
+builder.Services.AddScoped<CreateFieldTestResultCommandHandler>();
+builder.Services.AddScoped<GetFieldTestSessionQueryHandler>();
+builder.Services.AddScoped<UpdateFieldTestResultCommandHandler>();
+// Confirmación de un resultado de fuerza con envío síncrono del 1RM a Entrenamiento.
+builder.Services.AddScoped<ConfirmFieldTestResultCommandHandler>();
+// Gestión de las sesiones de test de campo y sus estados: alta, listado por
+// categoría y transición Planned → InProgress → Closed.
+builder.Services.AddScoped<CreateFieldTestSessionCommandHandler>();
+builder.Services.AddScoped<ListFieldTestSessionsQueryHandler>();
+builder.Services.AddScoped<UpdateFieldTestSessionStatusCommandHandler>();
 // Semáforo del día por categoría para el PF (KAN-364): consulta a Estructura best-effort
 // (con la resiliencia del HttpClient) y degrada a los check-ins locales si no responde.
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
+builder.Services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
+builder.Services.AddScoped<SetAttendanceCommandHandler>();
+builder.Services.AddScoped<IFitnessTestMeasurementService, FieldTestMeasurementService>();
+builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
+builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
+builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 // Estructura por HTTP, con el token del usuario (KAN-329): el controller compara el atleta
 // del token con el athleteId de la ruta antes de registrar el check-in.
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
     throw new InvalidOperationException("Falta la variable de configuración Services__Estructura__BaseUrl (URL absoluta).");
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddTransient<IServiceTokenFactory, ServiceTokenFactory>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+// Entrenamiento por HTTP (confirmación del 1RM y consulta de récords de evolución): misma cadena
+// que Estructura (token reenviado + resiliencia global de Polly de ConfigureHttpClientDefaults)
+// y la misma Services__Entrenamiento__BaseUrl. La URL es obligatoria: sin ella el envío del
+// 1RM no tendría destino y el error aparecería tarde.
+var entrenamientoBaseUrl = builder.Configuration["Services:Entrenamiento:BaseUrl"];
+if (!Uri.TryCreate(entrenamientoBaseUrl, UriKind.Absolute, out var entrenamientoUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Entrenamiento__BaseUrl (URL absoluta).");
+builder.Services.AddHttpClient<IEntrenamientoClient, EntrenamientoClient>(client => client.BaseAddress = entrenamientoUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+builder.Services.AddHttpClient<ITrainingClient, TrainingClient>(client => client.BaseAddress = entrenamientoUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 

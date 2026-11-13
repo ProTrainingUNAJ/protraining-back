@@ -107,6 +107,27 @@ public sealed class CheckInPersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task Given_OfflineCheckInFromYesterday_When_SyncedNextDay_Then_KeepsOriginalDate()
+    {
+        var yesterday = ArgentinaTime.Today.AddDays(-1);
+
+        await CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(_athleteId, 8, 4, 1, 2, 4, 2, false, 4, null, false, Date: yesterday));
+        await CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(_athleteId, 7, 3, 2, 3, 3, 3, true, 6, "tobillo", true));
+
+        using var db = CreateDbContext();
+        var rows = await db.CheckIns.IgnoreQueryFilters()
+            .Where(checkIn => checkIn.AthleteId == _athleteId)
+            .OrderBy(checkIn => checkIn.Date)
+            .ToListAsync();
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(yesterday, DateOnly.FromDateTime(rows[0].Date));
+        Assert.Equal(ArgentinaTime.Today, DateOnly.FromDateTime(rows[1].Date));
+    }
+
+    [Fact]
     public async Task Given_DuplicateAthleteAndDate_When_InsertedDirectly_Then_ThrowsDbUpdateException()
     {
         var date = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);

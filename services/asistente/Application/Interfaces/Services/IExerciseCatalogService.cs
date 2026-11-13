@@ -26,4 +26,25 @@ public interface IExerciseCatalogService
     /// Obtiene todos los ejercicios disponibles en el catálogo.
     /// </summary>
     Task<IReadOnlyList<CatalogExerciseDto>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Consulta ejercicios en el catálogo de Entrenamiento filtrando opcionalmente por grupo muscular,
+    /// término de búsqueda y agrupamiento de variantes (#158 · KAN-563 / KAN-554).
+    /// </summary>
+    Task<IReadOnlyList<CatalogExerciseDto>> GetExercisesAsync(
+        string? muscleGroup,
+        string? search,
+        int pageSize = 50,
+        bool groupVariants = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene ejercicios contextualizados según el objetivo deportivo solicitado (#158 · KAN-563).
+    /// Prioriza ejercicios compuestos básicos (sentadilla con barra, prensa de piernas, empuje de cadera,
+    /// press de banca, press militar, peso muerto con barra, remo con barra) mediante búsqueda directa en Entrenamiento.
+    /// </summary>
+    Task<IReadOnlyList<CatalogExerciseDto>> GetExercisesForGoalAsync(
+        string? goal,
+        int maxExercises = 25,
+        CancellationToken cancellationToken = default);
 }

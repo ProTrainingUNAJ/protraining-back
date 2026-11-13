@@ -32,6 +32,11 @@ public sealed class FakeStructureHandler : HttpMessageHandler
     public void RespondWithAthletes(string athletesJson) =>
         Behavior = (_, _) => Task.FromResult(Json(HttpStatusCode.OK, athletesJson));
 
+    // Estructura viva: cualquier atleta consultado es del PF (GET athletes/{id} → 200).
+    // Lo usan los tests de lesiones que no prueban el aislamiento (KAN-431).
+    public void RespondAllAthletesAreOwn() =>
+        Behavior = (_, _) => Task.FromResult(Json(HttpStatusCode.OK, "{}"));
+
     // Estructura viva pero con un error puntual (p. ej. 404 de categoría inexistente).
     public void RespondWith(HttpStatusCode status, string body) =>
         Behavior = (_, _) => Task.FromResult(Json(status, body));

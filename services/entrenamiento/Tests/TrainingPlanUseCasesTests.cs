@@ -1,6 +1,9 @@
 using Application.DTOs.TrainingPlans;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
+using Application.UseCases.TrainingPlans.ApplyTemplate;
+using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -30,6 +33,7 @@ public class TrainingPlanUseCasesTests
     [Fact]
     public async Task CreatePlan_DadoPlanConSemanaYSesiones_CuandoSeCrea_EntoncesRetornaArbolCompleto()
     {
+        // ARRANGE: Criterio para cerrarla: DADO un PF CUANDO hace POST /api/v1/training-plans con 1 semana, 2 sesiones y sus ejercicios ENTONCES responde 201, y el GET del plan devuelve el mismo árbol con sus ids.
         var exerciseId = Guid.NewGuid();
         _planRepoMock.Setup(r => r.AllExercisesExistAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -70,8 +74,10 @@ public class TrainingPlanUseCasesTests
 
         var handler = new CreateTrainingPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object);
 
+        // ACT
         var result = await handler.Handle(new CreateTrainingPlanCommand(request));
 
+        // ASSERT
         Assert.NotEqual(Guid.Empty, result.Id);
         Assert.Equal("Fuerza base", result.Name);
         Assert.Equal("Pretemporada", result.Objective);
@@ -457,5 +463,37 @@ public class TrainingPlanUseCasesTests
         var session = TrainingSession.Create(week.Id, "S1", 1, DayOfWeek.Monday);
         session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 8, null, session.Id, Guid.NewGuid()));
         Assert.Throws<DomainException>(() => session.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, null, session.Id, Guid.NewGuid())));
+    }
+
+    [Fact]
+    public async Task ApplyTemplate_CuandoAsignacionFalla_DeberiaEjecutarseEnTransaccionYNoPersistirPlan()
+    {
+        // Arrange: Plantilla existente
+        var templateId = Guid.NewGuid();
+        var template = TrainingPlan.Create("Plantilla Fuerza Base", isTemplate: true);
+        _planRepoMock.Setup(r => r.GetWithDetailsByIdAsync(templateId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(template);
+        _planRepoMock.Setup(r => r.ExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        // Simulamos que la categoría pertenece a otro PF (falla con NotFoundException en AssignPlan)
+        var foreignCategoryId = Guid.NewGuid();
+        var structureMock = new Mock<IStructureClient>();
+        structureMock.Setup(s => s.IsOwnCategoryAsync(foreignCategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var assignHandler = new AssignPlanCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object, structureMock.Object);
+        var applyHandler = new ApplyPlanTemplateCommandHandler(_planRepoMock.Object, _unitOfWorkMock.Object, assignHandler);
+
+        var command = new ApplyPlanTemplateCommand(
+            templateId,
+            new DateOnly(2026, 11, 2),
+            CategoryId: foreignCategoryId);
+
+        // Act & Assert: Debe propagar la excepción de la categoría inválida
+        await Assert.ThrowsAsync<NotFoundException>(() => applyHandler.Handle(command));
+
+        // Verifica que toda la operación se ejecutó dentro de ExecuteInTransactionAsync
+        _unitOfWorkMock.Verify(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

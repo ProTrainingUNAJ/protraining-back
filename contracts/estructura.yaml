@@ -207,16 +207,16 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/athletes/{id}/medical-record:
-    get:
+  /api/v1/athletes/{id}/medical-record/access:
+    post:
       tags:
         - Athletes
-      summary: Consultar ficha médica de un atleta con justificación auditada
+      summary: Acceder a la ficha médica de un atleta con justificación auditada
       description: >
         Retorna los antecedentes médicos, cirugías, patologías y estado del apto físico del atleta.
-        Exige declarar un motivo explícito en el parámetro `justification`, que el consentimiento digital
+        Exige declarar un motivo explícito en el cuerpo (`justification`), que el consentimiento digital
         esté firmado (por el atleta o su tutor si es menor) y registra un evento inmutable de lectura en auditoría.
-      operationId: getAthleteMedicalRecord
+      operationId: accessAthleteMedicalRecord
       parameters:
         - name: id
           in: path
@@ -224,14 +224,12 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: justification
-          in: query
-          required: true
-          description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
-          schema:
-            type: string
-            maxLength: 500
-            example: "Revisión médica previa a planificación de fuerza"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessMedicalRecordRequest'
       responses:
         "200":
           description: Ficha médica obtenida y acceso registrado en auditoría.
@@ -246,6 +244,7 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/medical-record:
     put:
       tags:
         - Athletes
@@ -475,6 +474,66 @@ paths:
                   $ref: '#/components/schemas/MeCategory'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/consent:
+    get:
+      tags:
+        - Me
+      summary: Consultar estado del consentimiento del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Retorna el estado del consentimiento digital informado (si ya fue firmado,
+        si el atleta es menor de edad y fecha de registro).
+      operationId: getMyConsent
+      responses:
+        "200":
+          description: Estado del consentimiento del atleta logueado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteConsentStatus'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Me
+      summary: Registrar consentimiento digital para atleta adulto
+      description: >-
+        Solo para el rol Atleta mayor de edad. Registra la firma digital inmutable del consentimiento informado
+        para preparación física y opcionalmente recomendaciones de hábitos. Si el atleta es menor de edad, devuelve 400.
+      operationId: registerMyConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterAdultConsentRequest'
+      responses:
+        "200":
+          description: Consentimiento digital registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteConsentStatus'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -748,6 +807,97 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{id}/invitation-token:
+    post:
+      tags:
+        - Categories
+      summary: Generar token de invitación por categoría
+      description: Genera un token único con expiración a 7 días para enrolar atletas en la categoría mediante enlace o código QR.
+      operationId: generateCategoryInvitationToken
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Token de invitación generado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryInvitation'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/invitations/{token}:
+    get:
+      tags:
+        - Categories
+      summary: Validar token de invitación
+      description: Endpoint público para validar un token de invitación asociado a una categoría antes del registro del atleta.
+      operationId: validateCategoryInvitationToken
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token válido. Retorna la información de la categoría para el enrolamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryInvitation'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "410":
+          $ref: '#/components/responses/Gone'
+
+  /api/v1/invitations/{token}/accept:
+    post:
+      tags:
+        - Categories
+      summary: Aceptar invitación y dar de alta atleta en la categoría
+      description: Endpoint protegido para que el atleta recién registrado dé de alta su ficha de atleta vinculada a su cuenta y sea enrolado en la categoría deportiva de la invitación.
+      operationId: acceptCategoryInvitation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptCategoryInvitationRequest'
+      responses:
+        "200":
+          description: Invitación aceptada con éxito y atleta vinculado a la categoría.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "410":
+          $ref: '#/components/responses/Gone'
+
   /api/v1/categories/{id}/matches:
     get:
       tags:
@@ -802,6 +952,339 @@ paths:
                 $ref: '#/components/schemas/Match'
         "400":
           $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/events:
+    get:
+      tags:
+        - Categories
+      summary: Listar eventos competitivos de una categoría
+      description: >
+        Retorna los eventos competitivos activos de la categoría dentro del rango de fechas especificado.
+        Si 'from' se omite, toma la fecha actual de calendario en la zona horaria America/Argentina/Buenos_Aires.
+        Si 'to' se omite, toma 'from + 14 días'. Ambas cotas son inclusivas.
+        Los resultados se ordenan cronológicamente por 'date' ascendente, 'startTime' ascendente e 'id' ascendente.
+        Excluye eventos con borrado lógico (soft-deleted).
+      operationId: listCategoryEvents
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          description: Fecha inicio (inclusiva) en formato ISO YYYY-MM-DD. Por defecto fecha actual de Argentina.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-02"
+        - name: to
+          in: query
+          required: false
+          description: Fecha fin (inclusiva) en formato ISO YYYY-MM-DD. Por defecto from + 14 días.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-29"
+      responses:
+        "200":
+          description: Lista de eventos competitivos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Categories
+      summary: Crear evento competitivo
+      description: >
+        Registra un nuevo partido o evento competitivo asociado a la categoría.
+        Operación restringida exclusivamente al preparador físico dueño de la categoría.
+      operationId: createCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompetitiveEventRequest'
+      responses:
+        "201":
+          description: Evento competitivo creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden crear eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/events/{id}:
+    put:
+      tags:
+        - Categories
+      summary: Actualizar evento competitivo
+      description: >
+        Actualiza los detalles o reprogramación de un evento competitivo existente.
+        Solo permitido para el preparador físico dueño de la categoría. No permite modificar eventos eliminados.
+      operationId: updateCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompetitiveEventRequest'
+      responses:
+        "200":
+          description: Evento competitivo actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitiveEvent'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden actualizar eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Categories
+      summary: Eliminar evento competitivo (borrado lógico)
+      description: >
+        Aplica soft-delete registrando deleted_at en el evento.
+        No borra físicamente la fila y lo excluye de futuras consultas.
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: deleteCategoryEvent
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Evento competitivo eliminado lógicamente con éxito.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden eliminar eventos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/season-phases:
+    get:
+      tags:
+        - Categories
+      summary: Listar fases de temporada de una categoría
+      description: >
+        Retorna las fases de temporada activas asociadas a la categoría ordenadas cronológicamente por startDate ascendente.
+        Excluye fases eliminadas lógicamente.
+      operationId: listCategorySeasonPhases
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de fases de temporada obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeasonPhase'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Categories
+      summary: Crear fase de temporada
+      description: >
+        Registra una nueva fase de temporada para la categoría.
+        Valida que endDate >= startDate y rechaza superposiciones con otras fases activas de la misma categoría (HTTP 400).
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: createCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSeasonPhaseRequest'
+      responses:
+        "201":
+          description: Fase de temporada creada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeasonPhase'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden crear fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/season-phases/{id}:
+    put:
+      tags:
+        - Categories
+      summary: Actualizar fase de temporada
+      description: >
+        Actualiza el nombre, tipo y rango de fechas de una fase de temporada.
+        Valida que no se superponga con otras fases activas de la categoría (excluyendo la fase en edición).
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: updateCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSeasonPhaseRequest'
+      responses:
+        "200":
+          description: Fase de temporada actualizada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeasonPhase'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden modificar fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Categories
+      summary: Eliminar fase de temporada (borrado lógico)
+      description: >
+        Aplica soft-delete registrando deleted_at en la fase de temporada.
+        No se elimina físicamente y deja de ser tenida en cuenta en futuras validaciones de solapamiento.
+        Solo permitido para el preparador físico dueño de la categoría.
+      operationId: deleteCategorySeasonPhase
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Fase de temporada eliminada lógicamente con éxito.
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: Acceso denegado (atletas no pueden eliminar fases).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         "404":
           $ref: '#/components/responses/NotFound'
 
@@ -983,8 +1466,105 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    Gone:
+      description: El recurso solicitado ha expirado o ya no está disponible.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Acceso no autorizado o permisos insuficientes para la operación solicitada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
 
   schemas:
+    CategoryInvitation:
+      type: object
+      required:
+        - token
+        - expiresAt
+        - categoryId
+        - categoryName
+        - pfId
+      properties:
+        token:
+          type: string
+          example: "e3b0c44298fc1c149afbf4c8996fb924"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-11-05T15:00:00Z"
+        categoryId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        categoryName:
+          type: string
+          example: "Primera División"
+        pfId:
+          type: string
+          format: uuid
+          example: "8fe42b78-0c67-4d7a-8f4b-76fca82d61b5"
+        invitationUrl:
+          type: string
+          nullable: true
+          example: "https://protraining.app/invite/e3b0c44298fc1c149afbf4c8996fb924"
+    AcceptCategoryInvitationRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - phone
+        - birthDate
+      properties:
+        firstName:
+          type: string
+          example: "Mateo"
+        lastName:
+          type: string
+          example: "Fernández"
+        phone:
+          type: string
+          example: "+5491112345678"
+        birthDate:
+          type: string
+          format: date
+          example: "2008-05-15"
+          description: Fecha de nacimiento del atleta (determina minoría de edad < 18 años).
+        guardianName:
+          type: string
+          nullable: true
+          example: "Roberto Fernández"
+          description: Obligatorio si el atleta es menor de 18 años.
+        guardianEmail:
+          type: string
+          format: email
+          nullable: true
+          example: "roberto@ejemplo.com"
+          description: Obligatorio si el atleta es menor y no proporciona teléfono.
+        guardianPhone:
+          type: string
+          nullable: true
+          example: "+5491144441234"
+          description: Obligatorio si el atleta es menor y no proporciona email.
+        allowsPhysicalTraining:
+          type: boolean
+          nullable: true
+          default: true
+          example: true
+          description: Autorización de preparación física por el tutor (obligatoria si es menor).
+        allowsHabitsRecommendations:
+          type: boolean
+          nullable: true
+          default: false
+          example: false
+          description: Autorización secundaria de recomendaciones de hábitos por el tutor.
+        emergencyContact:
+          type: string
+          nullable: true
+          example: "+5491187654321"
     GuardianConsent:
       type: object
       description: Registro de consentimiento parental obligatorio para atletas menores.
@@ -1208,6 +1788,18 @@ components:
           nullable: true
           example: "2026-03-01T14:30:00Z"
 
+    AccessMedicalRecordRequest:
+      type: object
+      description: Solicitud para acceder a la historia clínica/ficha médica declarando el motivo en el cuerpo.
+      required:
+        - justification
+      properties:
+        justification:
+          type: string
+          maxLength: 500
+          description: Motivo explícito por el cual el preparador físico consulta la ficha médica.
+          example: "…"
+
     UpdateMedicalRecordRequest:
       type: object
       description: Solicitud para cargar o actualizar la ficha médica exigiendo justificación explícita.
@@ -1374,6 +1966,66 @@ components:
           description: Categorías a las que pertenece. Vacía si el atleta está dado de baja.
           items:
             $ref: '#/components/schemas/MeCategory'
+        hasSignedConsent:
+          type: boolean
+          description: Indica si el atleta cuenta con consentimiento digital firmado.
+          example: true
+        isMinor:
+          type: boolean
+          description: Indica si el atleta es menor de edad.
+          example: false
+
+    AthleteConsentStatus:
+      type: object
+      description: Estado del consentimiento digital del atleta.
+      required:
+        - hasSignedConsent
+        - isMinor
+        - allowsPhysicalTraining
+        - allowsHabitsRecommendations
+      properties:
+        hasSignedConsent:
+          type: boolean
+          description: Indica si el consentimiento ya fue firmado (por el atleta si es mayor, o por el tutor si es menor).
+          example: true
+        isMinor:
+          type: boolean
+          description: Indica si el atleta es menor de edad.
+          example: false
+        consentDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha y hora en la que se registró la firma digital.
+          example: "2026-11-01T15:30:00Z"
+        allowsPhysicalTraining:
+          type: boolean
+          description: Autorización para preparación física.
+          example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          description: Autorización para recomendaciones de hábitos saludables y descanso.
+          example: false
+        guardianName:
+          type: string
+          nullable: true
+          description: Nombre del tutor legal en caso de atleta menor de edad.
+          example: null
+
+    RegisterAdultConsentRequest:
+      type: object
+      description: Solicitud de firma digital del consentimiento para atleta adulto.
+      properties:
+        allowsPhysicalTraining:
+          type: boolean
+          default: true
+          description: Autorización de preparación física (obligatoria en true para completar el consentimiento).
+          example: true
+        allowsHabitsRecommendations:
+          type: boolean
+          default: false
+          description: Autorización opcional para recepción de recomendaciones de hábitos saludables y descanso.
+          example: false
 
     MeCategory:
       type: object
@@ -1592,3 +2244,181 @@ components:
           format: uri
           description: URL del endpoint de la suscripción a revocar
           example: "https://fcm.googleapis.com/fcm/send/c_zQ..."
+
+    CompetitiveEvent:
+      type: object
+      required:
+        - id
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Partido clave por el torneo"
+
+    CreateCompetitiveEventRequest:
+      type: object
+      required:
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Partido clave por el torneo"
+
+    UpdateCompetitiveEventRequest:
+      type: object
+      required:
+        - date
+        - opponent
+        - venue
+        - type
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-11-14"
+        startTime:
+          type: string
+          nullable: true
+          example: "15:30:00"
+        opponent:
+          type: string
+          example: "Rival FC"
+        venue:
+          type: string
+          enum: [Home, Away, Neutral]
+          example: "Home"
+        type:
+          type: string
+          enum: [Official, Friendly, Tournament]
+          example: "Official"
+        notes:
+          type: string
+          nullable: true
+          example: "Reprogramado para las 15:30"
+
+    SeasonPhase:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"
+
+    CreateSeasonPhaseRequest:
+      type: object
+      required:
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"
+
+    UpdateSeasonPhaseRequest:
+      type: object
+      required:
+        - name
+        - type
+        - startDate
+        - endDate
+      properties:
+        name:
+          type: string
+          example: "Pretemporada 2026"
+        type:
+          type: string
+          enum: [Preseason, Competitive, Transition]
+          example: "Preseason"
+        startDate:
+          type: string
+          format: date
+          example: "2026-01-10"
+        endDate:
+          type: string
+          format: date
+          example: "2026-02-28"

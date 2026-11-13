@@ -1,3 +1,5 @@
+using Domain.Entities;
+
 namespace Application.DTOs.TrainingPlans;
 
 public record PrescribedExerciseDto(
@@ -7,7 +9,8 @@ public record PrescribedExerciseDto(
     int Order,
     int Sets,
     int Reps,
-    decimal? TargetPercentage
+    decimal? TargetPercentage,
+    ExerciseType ExerciseType = ExerciseType.Weight
 );
 
 public record TrainingPlanSessionDto(
@@ -16,7 +19,8 @@ public record TrainingPlanSessionDto(
     int Order,
     DayOfWeek DayOfWeek,
     string? CoachNotes,
-    List<PrescribedExerciseDto> Exercises
+    List<PrescribedExerciseDto> Exercises,
+    TimeOnly? StartTime = null
 );
 
 public record TrainingPlanWeekDto(

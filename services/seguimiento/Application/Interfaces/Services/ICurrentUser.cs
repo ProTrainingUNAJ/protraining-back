@@ -4,4 +4,7 @@ public interface ICurrentUser
 {
     // PF that owns the data of the current request ("pf_id" claim of the token). Null without a valid token.
     Guid? PfId { get; }
+
+    // Comprueba si el usuario autenticado tiene el rol indicado ("PreparadorFisico", "Atleta", etc.).
+    bool IsInRole(string role) => false;
 }

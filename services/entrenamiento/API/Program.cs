@@ -1,26 +1,49 @@
 using API.Extensions;
 using API.HealthChecks;
+using API.Mcp;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.Services;
+using Application.UseCases.AthleteRecord.CompleteOnboarding;
+using Application.UseCases.AthleteRecord.ConfirmRecordsImport;
+using Application.UseCases.AthleteRecord.GetRecordsReliability;
 using Application.UseCases.AthleteRecord.ListAthleteRecords;
+using Application.UseCases.AthleteRecord.PreviewRecordsImport;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
+using Application.UseCases.Exercise.AddExercise;
+using Application.UseCases.Exercise.CheckRestrictions;
+using Application.UseCases.Exercise.GetSubstitutes;
+using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.ListExercises;
+using Application.UseCases.Exercise.SearchCatalogExercises;
+using Application.UseCases.Exercise.UpdateVideoUrl;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Memberships.ResolveActiveMemberships;
+using Application.UseCases.RecordProposals.ApproveRecordProposal;
+using Application.UseCases.RecordProposals.DiscardRecordProposal;
+using Application.UseCases.RecordProposals.ListRecordProposals;
+using Application.UseCases.Routines.GetTodayRoutine;
+using Application.UseCases.Routines.RecordPerformedSets;
+using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
+using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.ListTemplates;
+using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
+using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
 using Application.UseCases.TrainingSessions.UpdateCoachNotes;
-using Application.UseCases.Routines.GetTodayRoutine;
 using Domain.Services;
 using Infrastructure;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
+using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Text.Json;
@@ -58,25 +81,51 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 // Retries, timeouts and circuit breaker for every registered HttpClient.
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
+builder.Services.AddScoped<SearchCatalogExercisesQueryHandler>();
 builder.Services.AddScoped<AssignPlanCommandHandler>();
 builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();
 builder.Services.AddScoped<UpdateTrainingPlanCommandHandler>();
 builder.Services.AddScoped<GetTrainingPlanQueryHandler>();
 builder.Services.AddScoped<ListTrainingPlansQueryHandler>();
 builder.Services.AddScoped<GetPlanScheduleQueryHandler>();
+builder.Services.AddScoped<ListPlanAssignmentsQueryHandler>();
+builder.Services.AddScoped<GetAthletesWithScheduledSessionQueryHandler>();
 builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
 builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
+builder.Services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
 builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+builder.Services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionChecker>();
+builder.Services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
+builder.Services.AddScoped<GetExerciseSubstitutesQueryHandler>();
 builder.Services.AddScoped<GetTodayRoutineQueryHandler>();
+builder.Services.AddScoped<RecordPerformedSetsCommandHandler>();
 builder.Services.AddScoped<ListAthleteRecordsQueryHandler>();
+builder.Services.AddScoped<GetRecordsReliabilityQueryHandler>();
 builder.Services.AddScoped<RegisterAthleteRecordCommandHandler>();
+builder.Services.AddScoped<CompleteOnboardingCommandHandler>();
+builder.Services.AddScoped<PreviewRecordsImportQueryHandler>();
+builder.Services.AddScoped<ConfirmRecordsImportCommandHandler>();
+builder.Services.AddScoped<CreateExerciseCommandHandler>();
+builder.Services.AddScoped<ListRecordProposalsQueryHandler>();
+builder.Services.AddScoped<ApproveRecordProposalCommandHandler>();
+builder.Services.AddScoped<DiscardRecordProposalCommandHandler>();
+builder.Services.AddScoped<SavePlanAsTemplateCommandHandler>();
+builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
+builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
+builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
+builder.Services.AddScoped<GetSubstitutesByZoneQueryHandler>();
 
-
+// E51: servidor MCP (Streamable HTTP, sin estado) para la biblioteca de ejercicios.
+// Se expone en /mcp y el gateway ya lo publica como /entrenamiento/mcp.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
+    .WithTools<ExerciseLibraryTools>();
 
 // Estructura por HTTP, con el token del usuario (#062).
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
@@ -109,8 +158,15 @@ if (app.Environment.IsDevelopment())
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseStaticFiles();
 
 app.MapControllers();
+
+// E51: la biblioteca de ejercicios es de solo lectura y solo para PF o servicios internos.
+// La política fallback del servicio ya exige token; acá además se restringen los roles.
+app.MapMcp("/mcp")
+    .RequireAuthorization(policy => policy.RequireRole("PreparadorFisico", "Servicio"));
+
 app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
+
+public partial class Program { }
