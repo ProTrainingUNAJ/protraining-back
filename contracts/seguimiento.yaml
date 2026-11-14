@@ -111,6 +111,39 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{athleteId}/check-in/injuries/resolved:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Listar las molestias resueltas de un atleta con su pico de dolor
+      description: >
+        Devuelve las molestias del atleta que ya fueron dadas de alta (MedicallyCleared),
+        incluyendo el pico de dolor (máximo nivel registrado durante su evolución).
+        Accesible por el preparador físico dueño o por el propio atleta.
+      operationId: listResolvedInjuries
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de molestias resueltas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Injury'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/internal/check-ins/done:
     post:
       tags:
@@ -1884,6 +1917,12 @@ components:
           format: date-time
           nullable: true
           example: "2026-11-05T00:00:00Z"
+        peakPain:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 10
+          example: 8
         createdAt:
           type: string
           format: date-time

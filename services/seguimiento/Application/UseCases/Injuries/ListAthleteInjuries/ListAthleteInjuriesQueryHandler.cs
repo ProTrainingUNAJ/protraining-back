@@ -9,6 +9,7 @@ namespace Application.UseCases.Injuries.ListAthleteInjuries;
 // Caso de uso de lectura: solo consulta y mapea a DTO, nunca guarda cambios (AsNoTracking en el repositorio).
 public sealed class ListAthleteInjuriesQueryHandler(
     IAthleteInjuryRepository repository,
+    ICheckInInjuryPainRepository injuryPainRepository,
     IStructureClient structureClient)
 {
     public async Task<List<AthleteInjuryDto>> HandleAsync(
@@ -21,8 +22,14 @@ public sealed class ListAthleteInjuriesQueryHandler(
 
         var injuries = await repository.ListByAthleteAsync(query.AthleteId, query.Status, cancellationToken);
 
+        var peakPains = await injuryPainRepository.GetPeakPainByInjuryIdsAsync(
+            injuries.Select(injury => injury.Id).ToList(),
+            cancellationToken);
+
         return injuries
-            .Select(AthleteInjuryMappings.ToDto)
+            .Select(injury => AthleteInjuryMappings.ToDto(
+                injury,
+                peakPains.TryGetValue(injury.Id, out var peak) ? peak : null))
             .ToList();
     }
 }

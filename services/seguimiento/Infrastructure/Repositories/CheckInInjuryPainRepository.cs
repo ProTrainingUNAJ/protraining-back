@@ -39,6 +39,24 @@ public sealed class CheckInInjuryPainRepository(AppDbContext context) : ICheckIn
                 kvp => (IReadOnlyList<CheckInInjuryPainDto>)kvp.Value);
         });
 
+    public async Task<IReadOnlyDictionary<Guid, int>> GetPeakPainByInjuryIdsAsync(
+        IReadOnlyCollection<Guid> injuryIds,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            if (injuryIds.Count == 0)
+                return (IReadOnlyDictionary<Guid, int>)new Dictionary<Guid, int>();
+
+            var rows = await context.CheckInInjuryPains
+                .AsNoTracking()
+                .Where(pain => injuryIds.Contains(pain.InjuryId))
+                .GroupBy(pain => pain.InjuryId)
+                .Select(group => new { InjuryId = group.Key, Peak = group.Max(p => p.Level) })
+                .ToListAsync(cancellationToken);
+
+            return rows.ToDictionary(row => row.InjuryId, row => row.Peak);
+        });
+
     public async Task SetForCheckInAsync(
         Guid checkInId,
         IReadOnlyCollection<(Guid InjuryId, int Level)> pains,

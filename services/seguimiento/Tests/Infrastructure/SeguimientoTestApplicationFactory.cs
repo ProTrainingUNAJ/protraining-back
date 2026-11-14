@@ -149,6 +149,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.ListAthleteCheckIns.ListAthleteCheckInsQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.ListCheckInInjuries.ListCheckInInjuriesQueryHandler>();
+services.AddScoped<Application.UseCases.CheckIns.ListResolvedInjuries.ListResolvedInjuriesQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
                 services.AddScoped<Application.UseCases.FitnessTests.ListAthleteFitnessTests.ListAthleteFitnessTestsQueryHandler>();
                 services.AddScoped<ListFitnessTestsQueryHandler>();
