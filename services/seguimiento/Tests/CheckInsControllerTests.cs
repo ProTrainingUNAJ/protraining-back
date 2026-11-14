@@ -8,6 +8,7 @@ using Application.Interfaces.Services;
 using Application.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
+using Application.UseCases.CheckIns.ListCheckInInjuries;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
 using Domain.Entities;
@@ -22,6 +23,8 @@ namespace Seguimiento.Tests;
 public class CheckInsControllerTests
 {
     private readonly Mock<ICheckInRepository> _checkIns = new();
+    private readonly Mock<ICheckInInjuryPainRepository> _injuryPains = new();
+    private readonly Mock<IAthleteInjuryRepository> _injuries = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IStructureClient> _estructura = new();
     private readonly TrafficLightEngine _engine = new();
@@ -35,6 +38,14 @@ public class CheckInsControllerTests
                 It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<CheckIn>());
+
+        _injuries
+            .Setup(r => r.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AthleteInjury>());
+
+        _injuryPains
+            .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>());
     }
 
     private CheckInsController CreateController(string? role = null)
@@ -45,9 +56,10 @@ public class CheckInsControllerTests
         var guard = new AthleteAccessGuard(currentUserMock.Object, _estructura.Object);
 
         var controller = new CheckInsController(
-            new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine),
-            new ListAthleteCheckInsQueryHandler(_checkIns.Object),
-            new GetTodayCheckInQueryHandler(_checkIns.Object),
+            new SubmitCheckInCommandHandler(_checkIns.Object, _injuryPains.Object, _injuries.Object, _unitOfWork.Object, _engine),
+            new ListAthleteCheckInsQueryHandler(_checkIns.Object, _injuryPains.Object),
+            new GetTodayCheckInQueryHandler(_checkIns.Object, _injuryPains.Object),
+            new ListCheckInInjuriesQueryHandler(_injuries.Object),
             _estructura.Object,
             guard);
 

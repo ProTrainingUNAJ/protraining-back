@@ -150,7 +150,12 @@ load_check_ins() {
   # Valentina con dolor nuevo en el cuádriceps → amarillo
   check_in valentina@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
   # Camila con lesión activa en el hombro → rojo (está en Alumnos particulares y en Musculación)
-  check_in camila@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":3,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"hombros:4","hasActiveInjury":true}'
+  if [[ -n "${CAMILA_INJURY_ID:-}" ]]; then
+    camila_body=$(jq -nc --arg inj "$CAMILA_INJURY_ID" '{sleepHours:8,sleepQuality:4,muscleSoreness:3,fatigueLevel:2,moodRate:3,stressLevel:2,effortRate:5,isSick:false,painZones:"hombros:4",hasActiveInjury:true,injuries:[{injuryId:$inj,level:4}]}')
+  else
+    camila_body='{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":3,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"hombros:4","hasActiveInjury":true}'
+  fi
+  check_in camila@protraining.com "$camila_body"
   # Sofía durmió 3,5 h → rojo "Muy poco sueño" (menos de 4 h, KAN-560)
   check_in sofia@protraining.com '{"sleepHours":3.5,"sleepQuality":1,"muscleSoreness":2,"fatigueLevel":4,"moodRate":2,"stressLevel":3,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
   # Bruno durmió más de 12 h hace 4 días, hace 2 días y hoy → amarillo "Durmió más de 12 horas en 3 de los últimos 7 días…"
@@ -191,7 +196,12 @@ load_live_parts() {
   fi
 
   # Lucas con lesión activa en el isquiotibial → rojo (la zona se ve pintada en la ficha del PF); Martín bien → verde
-  check_in atleta@protraining.com '{"sleepHours":8,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
+  if [[ -n "${LUCAS_INJURY_ID:-}" ]]; then
+    lucas_body=$(jq -nc --arg inj "$LUCAS_INJURY_ID" '{sleepHours:8,sleepQuality:3,muscleSoreness:3,fatigueLevel:3,moodRate:3,stressLevel:2,effortRate:6,isSick:false,painZones:"isquiotibiales:4",hasActiveInjury:true,injuries:[{injuryId:$inj,level:4}]}')
+  else
+    lucas_body='{"sleepHours":8,"sleepQuality":3,"muscleSoreness":3,"fatigueLevel":3,"moodRate":3,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"isquiotibiales:4","hasActiveInjury":true}'
+  fi
+  check_in atleta@protraining.com "$lucas_body"
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
 }
 
@@ -388,10 +398,10 @@ echo "Lesiones:"
 injury() {
   api POST "/seguimiento/api/v1/athletes/$1/injuries" "$PF_TOKEN" \
     "$(jq -nc --arg z "$2" --arg d "$3" --arg from "$(day_ago 6)" --arg to "$(day_ago -10)" \
-      '{zone:$z,description:$d,injuryDate:$from,estimatedReturnDate:$to}')" >/dev/null
+      '{zone:$z,description:$d,injuryDate:$from,estimatedReturnDate:$to}')"
 }
-injury "$LUCAS_ID" "isquiotibiales" "Distensión grado 1 en un sprint del entrenamiento."
-injury "$CAMILA_ID" "hombros" "Sobrecarga del manguito rotador."
+LUCAS_INJURY_ID=$(injury "$LUCAS_ID" "isquiotibiales" "Distensión grado 1 en un sprint del entrenamiento." | jq -r .id)
+CAMILA_INJURY_ID=$(injury "$CAMILA_ID" "hombros" "Sobrecarga del manguito rotador." | jq -r .id)
 echo "  Lucas (isquiotibiales) y Camila (hombro), activas, con retorno estimado en 10 días"
 
 # Sesión de tests de campo de hoy, ya en curso (KAN-425/427): la pantalla táctil arranca con marcas cargadas.

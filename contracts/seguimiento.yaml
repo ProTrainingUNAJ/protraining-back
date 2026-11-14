@@ -78,6 +78,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/athletes/{athleteId}/check-in/injuries:
+    get:
+      tags:
+        - Check-in and Traffic Light
+      summary: Listar las molestias activas de un atleta para puntuar en el check-in
+      description: >
+        Devuelve las molestias del atleta que aún no fueron dadas de alta (Active o InRecovery),
+        para que el check-in diario exija puntuar el dolor (0 a 10) de cada una. Accesible por
+        el preparador físico dueño o por el propio atleta.
+      operationId: listCheckInInjuries
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de molestias activas (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Injury'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/internal/check-ins/done:
     post:
       tags:
@@ -1127,6 +1160,25 @@ components:
           default: false
           description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
           example: false
+        injuries:
+           type: array
+           nullable: true
+           description: >
+             Puntaje de dolor (0 a 10) de cada molestia activa del atleta. Obligatorio (un item
+             por molestia activa) si el atleta tiene molestias activas; el 0 es válido ("ya no duele").
+           items:
+             type: object
+             required:
+               - injuryId
+               - level
+             properties:
+               injuryId:
+                 type: string
+                 format: uuid
+               level:
+                 type: integer
+                 minimum: 0
+                 maximum: 10
 
         date:
           type: string
@@ -1223,6 +1275,20 @@ components:
         hasActiveInjury:
           type: boolean
           example: false
+        injuries:
+          type: array
+          items:
+            type: object
+            properties:
+              injuryId:
+                type: string
+                format: uuid
+              zone:
+                type: string
+              level:
+                type: integer
+                minimum: 0
+                maximum: 10
 
     DailyLoadActivity:
       type: object

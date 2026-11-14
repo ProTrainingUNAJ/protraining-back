@@ -15,6 +15,8 @@ public class SubmitCheckInCommandHandlerTests
     private static readonly Guid AthleteId = Guid.NewGuid();
 
     private readonly Mock<ICheckInRepository> _checkIns = new();
+    private readonly Mock<ICheckInInjuryPainRepository> _injuryPains = new();
+    private readonly Mock<IAthleteInjuryRepository> _injuries = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly TrafficLightEngine _engine = new();
 
@@ -27,13 +29,16 @@ public class SubmitCheckInCommandHandlerTests
                 It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<CheckIn>());
+    _injuries
+        .Setup(repo => repo.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        .ReturnsAsync(Array.Empty<AthleteInjury>());
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
     }
 
     private SubmitCheckInCommandHandler CreateHandler() =>
-        new(_checkIns.Object, _unitOfWork.Object, _engine);
+        new(_checkIns.Object, _injuryPains.Object, _injuries.Object, _unitOfWork.Object, _engine);
 
     private static SubmitCheckInCommand CommandValido(bool hasActiveInjury = false, double sleepHours = 8) =>
         new(AthleteId, sleepHours, 4, 1, 2, 4, 2, false, 4, null, hasActiveInjury);

@@ -19,6 +19,7 @@ public sealed class AthletePrivacyTests
         [
             "CheckInsController.Submit",
             "CheckInsController.List",
+            "CheckInsController.ListInjuries",
             "AthleteFitnessTestsController.List",
             "DailyLoadsController.Register",
             "DailyLoadsController.Get",

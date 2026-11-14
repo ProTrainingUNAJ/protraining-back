@@ -22,6 +22,14 @@ public sealed class AthleteInjuryRepository(AppDbContext context) : IAthleteInju
                 .OrderByDescending(injury => injury.InjuryDate)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<AthleteInjury>> ListNotClearedByAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteInjuries
+                .AsNoTracking()
+                .Where(injury => injury.AthleteId == athleteId && injury.Status != InjuryStatus.MedicallyCleared)
+                .OrderByDescending(injury => injury.InjuryDate)
+                .ToListAsync(cancellationToken));
+
     public Task AddAsync(AthleteInjury injury, CancellationToken cancellationToken = default)
     {
         context.AthleteInjuries.Add(injury);

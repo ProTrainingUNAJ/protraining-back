@@ -30,6 +30,8 @@ public sealed class CheckInPersistenceTests : IDisposable
         var services = new ServiceCollection();
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(_connection));
         services.AddScoped<ICheckInRepository, CheckInRepository>();
+        services.AddScoped<ICheckInInjuryPainRepository, CheckInInjuryPainRepository>();
+        services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<TrafficLightEngine>();
         services.AddScoped<SubmitCheckInCommandHandler>();

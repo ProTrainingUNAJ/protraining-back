@@ -325,6 +325,49 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("check_ins", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.CheckInInjuryPain", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CheckInId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("check_in_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("InjuryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("injury_id");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer")
+                        .HasColumnName("level");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckInId");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("CheckInId", "InjuryId")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("check_in_injury_pains", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.DailyLoad", b =>
                 {
                     b.Property<Guid>("Id")

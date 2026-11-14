@@ -112,6 +112,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<ICheckInRepository, CheckInRepository>();
+                services.AddScoped<ICheckInInjuryPainRepository, CheckInInjuryPainRepository>();
                 services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
                 services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
                 services.AddScoped<IAttendanceRepository, AttendanceRepository>();
@@ -147,6 +148,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.ListAthleteCheckIns.ListAthleteCheckInsQueryHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.ListCheckInInjuries.ListCheckInInjuriesQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
                 services.AddScoped<Application.UseCases.FitnessTests.ListAthleteFitnessTests.ListAthleteFitnessTestsQueryHandler>();
                 services.AddScoped<ListFitnessTestsQueryHandler>();

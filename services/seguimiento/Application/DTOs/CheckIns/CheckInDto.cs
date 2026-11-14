@@ -15,4 +15,5 @@ public sealed record CheckInDto(
     int? EffortRate,
     bool IsSick,
     string? PainZones,
-    bool HasActiveInjury);
+    bool HasActiveInjury,
+    IReadOnlyList<CheckInInjuryPainDto> Injuries);
