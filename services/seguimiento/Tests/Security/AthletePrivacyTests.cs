@@ -20,6 +20,7 @@ public sealed class AthletePrivacyTests
             "CheckInsController.Submit",
             "CheckInsController.List",
             "CheckInsController.ListInjuries",
+            "CheckInsController.ListResolvedInjuries",
             "AthleteFitnessTestsController.List",
             "DailyLoadsController.Register",
             "DailyLoadsController.Get",

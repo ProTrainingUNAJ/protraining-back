@@ -5,6 +5,7 @@ using Application.Interfaces.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.ListCheckInInjuries;
+using Application.UseCases.CheckIns.ListResolvedInjuries;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -20,6 +21,7 @@ public sealed class CheckInsController(
     ListAthleteCheckInsQueryHandler listHandler,
     GetTodayCheckInQueryHandler getTodayHandler,
     ListCheckInInjuriesQueryHandler listInjuriesHandler,
+    ListResolvedInjuriesQueryHandler listResolvedInjuriesHandler,
     IStructureClient structureClient,
     IAthleteAccessGuard athleteAccessGuard) : ControllerBase
 {
@@ -71,6 +73,24 @@ public sealed class CheckInsController(
 
         var result = await listInjuriesHandler.HandleAsync(
             new ListCheckInInjuriesQuery(athleteId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpGet("injuries/resolved")]
+    [ProducesResponseType(typeof(IReadOnlyList<AthleteInjuryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<AthleteInjuryDto>>> ListResolvedInjuries(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        await athleteAccessGuard.EnsureCanReadAsync(athleteId, cancellationToken);
+
+        var result = await listResolvedInjuriesHandler.HandleAsync(
+            new ListResolvedInjuriesQuery(athleteId),
             cancellationToken);
 
         return Ok(result);

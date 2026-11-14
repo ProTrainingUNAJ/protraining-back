@@ -9,6 +9,7 @@ using Application.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
 using Application.UseCases.CheckIns.ListCheckInInjuries;
+using Application.UseCases.CheckIns.ListResolvedInjuries;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
 using Domain.Entities;
@@ -43,6 +44,14 @@ public class CheckInsControllerTests
             .Setup(r => r.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AthleteInjury>());
 
+        _injuries
+            .Setup(r => r.ListByAthleteAsync(It.IsAny<Guid>(), It.IsAny<InjuryStatus?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AthleteInjury>());
+
+        _injuryPains
+            .Setup(r => r.GetPeakPainByInjuryIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, int>());
+
         _injuryPains
             .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>());
@@ -60,6 +69,7 @@ public class CheckInsControllerTests
             new ListAthleteCheckInsQueryHandler(_checkIns.Object, _injuryPains.Object),
             new GetTodayCheckInQueryHandler(_checkIns.Object, _injuryPains.Object),
             new ListCheckInInjuriesQueryHandler(_injuries.Object),
+            new ListResolvedInjuriesQueryHandler(_injuries.Object, _injuryPains.Object),
             _estructura.Object,
             guard);
 

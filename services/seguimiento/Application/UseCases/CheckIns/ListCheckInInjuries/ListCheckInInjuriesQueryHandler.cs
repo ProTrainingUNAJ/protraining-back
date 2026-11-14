@@ -17,6 +17,6 @@ public sealed class ListCheckInInjuriesQueryHandler(IAthleteInjuryRepository rep
             throw new DomainException("El identificador del atleta es inválido.");
 
         var injuries = await repository.ListNotClearedByAthleteAsync(query.AthleteId, cancellationToken);
-        return injuries.Select(AthleteInjuryMappings.ToDto).ToList();
+        return injuries.Select(injury => AthleteInjuryMappings.ToDto(injury)).ToList();
     }
 }
