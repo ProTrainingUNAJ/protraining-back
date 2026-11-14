@@ -379,14 +379,15 @@ Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handl
 
 ## Comandos de IA para el equipo
 
-En `.agents/` hay tres comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
+En `.agents/` hay cuatro comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
 
 - **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
+- **`/revisar-tarea`**: revisa tu tarea **antes de abrir el PR**, como la va a revisar el PM: si cumple el ticket de Jira y cada criterio de aceptación, las reglas del proyecto (la IA propone y el PF decide, nada de datos personales a modelos externos, aislamiento entre PFs), las convenciones, la calidad del código, los tests y la integración con el resto. Corre build y tests, te da un veredicto, qué corregir y las preguntas que te pueden hacer. Lo guarda en `notas/revision-<rama>.md`. Si no tenés Jira conectado al asistente, te pide que pegues la descripción de la tarea.
 - **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
 - **`/informe-po <servicio>`** (por ejemplo `/informe-po seguimiento`): arma el resumen del sprint de ese servicio para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene. Cuenta lo mergeado en `develop` del servicio y sus pantallas del front (`../protraining-front`), y lo publica en Notion, en **Documentación PO** > sprint > página del servicio. Necesita el MCP de Notion conectado; si no está, lo deja en `notas/` para pegarlo a mano.
 
 Cómo se usan:
-- **Antigravity**: escribí `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
+- **Antigravity**: escribí `/revisar-tarea`, `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
 - **Otro asistente**: pedile "seguí las instrucciones de `.agents/skills/convenciones/SKILL.md`".
 
 Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. Si cambian las convenciones, se actualizan este README y ese archivo.
