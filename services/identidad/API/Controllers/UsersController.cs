@@ -129,7 +129,7 @@ public class UsersController(
     /// Returns the profile photo in WebP format for the user with the given id.
     /// </summary>
     [HttpGet("{id:guid}/photo")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserPhoto(Guid id, CancellationToken cancellationToken)
@@ -143,7 +143,6 @@ public class UsersController(
     /// Returns the profile photo in WebP format for the authenticated user.
     /// </summary>
     [HttpGet("me/photo")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -165,7 +164,6 @@ public class UsersController(
     /// </summary>
     [HttpGet("me/pf-photo")]
     [Authorize(Roles = "Atleta")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

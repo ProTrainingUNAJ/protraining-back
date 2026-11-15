@@ -10,6 +10,7 @@ public sealed class AthletePhotoRepository(AppDbContext context) : IAthletePhoto
     public async Task<AthletePhoto?> GetByAthleteIdAsync(Guid athleteId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.AthletePhotos
+                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(p => p.AthleteId == athleteId, cancellationToken));
 
     public Task AddAsync(AthletePhoto photo, CancellationToken cancellationToken = default)

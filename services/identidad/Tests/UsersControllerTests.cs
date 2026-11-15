@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using API.Controllers;
 using Application.DTOs.Auth;
 using Application.DTOs.Users;

@@ -82,7 +82,7 @@ public sealed class OrganizationsController(
     }
 
     [HttpGet("{id:guid}/photo")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [AllowAnonymous]
     public async Task<IActionResult> GetPhoto(Guid id, CancellationToken cancellationToken)
     {
         var photo = await getPhotoHandler.HandleAsync(new GetOrganizationPhotoQuery(id), cancellationToken);
