@@ -5,8 +5,8 @@ namespace Application.Mappings;
 
 public static class CategoryMappings
 {
-    public static CategoryDto ToDto(Category category) =>
-        new(category.Id, category.OrganizationId, category.Name, category.Description);
+    public static CategoryDto ToDto(Category category, int athletesCount = 0) =>
+        new(category.Id, category.OrganizationId, category.Name, category.Description, athletesCount);
 
     public static CompetitiveEventDto ToDto(CompetitiveEvent ev) =>
         new(ev.Id, ev.Date, ev.StartTime, ev.Opponent, ev.Venue, ev.Type, ev.Notes);

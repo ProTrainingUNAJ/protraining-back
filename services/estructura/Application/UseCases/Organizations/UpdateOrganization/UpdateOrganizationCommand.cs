@@ -22,6 +22,8 @@ public sealed class UpdateOrganizationCommandHandler(
         organization.Rename(command.Name);
         organization.UpdateDescription(command.Description);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return OrganizationMappings.ToDto(organization);
+
+        var withCounts = await repository.GetWithCountsByIdAsync(command.Id, cancellationToken);
+        return OrganizationMappings.ToDto(organization, withCounts?.CategoriesCount ?? 0, withCounts?.AthletesCount ?? 0);
     }
 }

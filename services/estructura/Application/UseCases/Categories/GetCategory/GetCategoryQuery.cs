@@ -13,10 +13,10 @@ public sealed class GetCategoryQueryHandler(ICategoryRepository repository)
         GetCategoryQuery query,
         CancellationToken cancellationToken = default)
     {
-        var category = await repository.GetByIdAsync(query.Id, cancellationToken);
-        if (category is null)
+        var withCounts = await repository.GetWithAthletesCountByIdAsync(query.Id, cancellationToken);
+        if (withCounts is null)
             throw new CategoryNotFoundException();
 
-        return CategoryMappings.ToDto(category);
+        return CategoryMappings.ToDto(withCounts.Value.Category, withCounts.Value.AthletesCount);
     }
 }

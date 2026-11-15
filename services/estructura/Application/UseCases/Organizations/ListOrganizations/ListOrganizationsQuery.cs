@@ -11,7 +11,7 @@ public sealed class ListOrganizationsQueryHandler(IOrganizationRepository reposi
     public async Task<IReadOnlyList<OrganizationDto>> HandleAsync(
         ListOrganizationsQuery query,
         CancellationToken cancellationToken = default) =>
-        (await repository.ListAsync(cancellationToken))
-            .Select(OrganizationMappings.ToDto)
+        (await repository.ListWithCountsAsync(cancellationToken))
+            .Select(r => OrganizationMappings.ToDto(r.Organization, r.CategoriesCount, r.AthletesCount))
             .ToList();
 }

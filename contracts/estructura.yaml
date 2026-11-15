@@ -816,11 +816,11 @@ paths:
       parameters:
         - name: organizationId
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: uuid
-          description: Identificador de la organización para filtrar.
+          description: Identificador opcional de la organización para filtrar. Si no se especifica, lista todas las categorías del preparador físico.
       responses:
         "200":
           description: Lista de categorías obtenida.
@@ -2058,6 +2058,19 @@ components:
           type: string
           nullable: true
           example: "Sede central de entrenamiento deportivo"
+        categoriesCount:
+          type: integer
+          example: 3
+        athletesCount:
+          type: integer
+          example: 25
+        hasPhoto:
+          type: boolean
+          example: false
+        photoUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     CreateOrganizationRequest:
       type: object
