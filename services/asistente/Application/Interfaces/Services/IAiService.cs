@@ -1,9 +1,11 @@
 namespace Application.Interfaces.Services;
 
 using Application.Common.DayAdjustments;
+using Application.Common.Recommendations;
 using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 
 public interface IAiService
 {
@@ -20,4 +22,14 @@ public interface IAiService
         IReadOnlyList<DayAdjustmentItemDto> items,
         CancellationToken cancellationToken = default) =>
         Task.FromResult((DayAdjustmentMapper.BuildDeterministicJustification(items), "Rules"));
+
+    Task<TrainingRecommendationResponseDto> GenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, "Reglas"));
+
+    Task<NutritionRecommendationResponseDto> GenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, "Reglas"));
 }

@@ -1,7 +1,9 @@
 using Application.Common.PlanDrafts;
 using Application.Common.DayAdjustments;
+using Application.Common.Recommendations;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Domain.Exceptions;
 using System.Diagnostics;
@@ -437,5 +439,181 @@ public sealed class ResilientAiService : IAiService
         }
 
         return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas");
+    }
+
+    public async Task<TrainingRecommendationResponseDto> GenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var candidate = await provider.TryGenerateTrainingRecommendationAsync(request, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (candidate != null)
+                {
+                    var validation = RecommendationOutputValidator.ValidateTrainingDto(candidate, request);
+                    if (validation.IsValid && validation.Value != null)
+                    {
+                        return validation.Value with { ProviderUsed = provider.ProviderName };
+                    }
+
+                    _logger.LogWarning(
+                        "La recomendación de entrenamiento de '{Provider}' fue descartada por validación ({ValidationCode}): {Error}. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        validation.ValidationCode,
+                        validation.ErrorMessage);
+
+                    if (_auditService != null)
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider.ProviderName,
+                            prompt,
+                            tierStopwatch.ElapsedMilliseconds,
+                            isValid: false,
+                            validationResult: validation.ValidationCode,
+                            response: candidate.RecommendationText,
+                            pfId: _currentUser?.PfId,
+                            athleteId: request.AthleteId,
+                            errorMessage: validation.ErrorMessage), cancellationToken);
+                    }
+
+                    continue;
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la recomendación de entrenamiento tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(
+                    ex,
+                    "Excepción en proveedor '{Provider}' al redactar recomendación de entrenamiento. Pasando al siguiente respaldo.",
+                    provider.ProviderName);
+            }
+        }
+
+        var fallback = RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, "Reglas");
+        var fallbackValidation = RecommendationOutputValidator.ValidateTrainingDto(fallback, request);
+        if (!fallbackValidation.IsValid || fallbackValidation.Value is null)
+        {
+            throw new DomainException(fallbackValidation.ErrorMessage ?? "No se pudo validar la recomendación de entrenamiento.");
+        }
+
+        return fallbackValidation.Value;
+    }
+
+    public async Task<NutritionRecommendationResponseDto> GenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(request.AthleticGoal, out var goalWeightLoss))
+        {
+            throw new DomainException($"No se permiten recomendaciones ni cantidades para bajar de peso ('{goalWeightLoss}').");
+        }
+
+        if (request.ApprovedFoods is { Count: 0 })
+        {
+            throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
+        }
+
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var candidate = await provider.TryGenerateNutritionRecommendationAsync(request, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (candidate != null)
+                {
+                    var validation = RecommendationOutputValidator.ValidateNutritionDto(candidate, request);
+                    if (validation.IsValid && validation.Value != null)
+                    {
+                        return validation.Value with { ProviderUsed = provider.ProviderName };
+                    }
+
+                    _logger.LogWarning(
+                        "La recomendación de alimentación de '{Provider}' fue descartada por validación ({ValidationCode}): {Error}. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        validation.ValidationCode,
+                        validation.ErrorMessage);
+
+                    if (_auditService != null)
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider.ProviderName,
+                            prompt,
+                            tierStopwatch.ElapsedMilliseconds,
+                            isValid: false,
+                            validationResult: validation.ValidationCode,
+                            response: candidate.SuggestedPlateComposition,
+                            pfId: _currentUser?.PfId,
+                            athleteId: request.AthleteId,
+                            errorMessage: validation.ErrorMessage), cancellationToken);
+                    }
+
+                    continue;
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la recomendación de alimentación tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(
+                    ex,
+                    "Excepción en proveedor '{Provider}' al redactar recomendación de alimentación. Pasando al siguiente respaldo.",
+                    provider.ProviderName);
+            }
+        }
+
+        var fallback = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, "Reglas");
+        var fallbackValidation = RecommendationOutputValidator.ValidateNutritionDto(fallback, request);
+        if (!fallbackValidation.IsValid || fallbackValidation.Value is null)
+        {
+            throw new DomainException(fallbackValidation.ErrorMessage ?? "No se pudo validar la recomendación de alimentación.");
+        }
+
+        return fallbackValidation.Value;
     }
 }

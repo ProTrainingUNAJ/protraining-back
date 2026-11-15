@@ -4,9 +4,11 @@ using System.Text.Json;
 using Application.Common.Ai;
 using Application.Common.DayAdjustments;
 using Application.Common.PlanDrafts;
+using Application.Common.Recommendations;
 using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -400,6 +402,189 @@ public sealed class OllamaClient(
                 validationResult: "ErrorConexion",
                 athleteId: request.AthleteId,
                 errorMessage: ex.Message));
+            return null;
+        }
+    }
+
+    public Task<TrainingRecommendationResponseDto?> TryGenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
+
+        return ExecuteRecommendationPromptAsync(
+            prompt,
+            request.AthleteId,
+            rawText => RecommendationOutputValidator.ValidateTrainingOutput(rawText, request),
+            dto => dto with { ProviderUsed = ProviderName },
+            cancellationToken);
+    }
+
+    public Task<NutritionRecommendationResponseDto?> TryGenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        return ExecuteRecommendationPromptAsync(
+            prompt,
+            request.AthleteId,
+            rawText => RecommendationOutputValidator.ValidateNutritionOutput(rawText, request),
+            dto => dto with { ProviderUsed = ProviderName },
+            cancellationToken);
+    }
+
+    private async Task<T?> ExecuteRecommendationPromptAsync<T>(
+        string prompt,
+        Guid? athleteId,
+        Func<string, RecommendationValidationResult<T>> validator,
+        Func<T, T> attachProvider,
+        CancellationToken cancellationToken) where T : class
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            var payload = new
+            {
+                model = _options.Model,
+                prompt,
+                format = "json",
+                stream = false
+            };
+
+            var url = $"{_options.BaseUrl.TrimEnd('/')}/api/generate";
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
+            using var response = await httpClient.PostAsync(url, content, timeoutCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("Ollama respondió con error {StatusCode} al generar recomendación. Activando respaldo.", response.StatusCode);
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "ErrorHttp",
+                    athleteId: athleteId,
+                    errorMessage: $"Ollama HTTP {(int)response.StatusCode} ({response.StatusCode})"), cancellationToken);
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+            using var document = JsonDocument.Parse(responseBody);
+
+            int? promptTokens = document.RootElement.TryGetProperty("prompt_eval_count", out var pProp) ? pProp.GetInt32() : null;
+            int? completionTokens = document.RootElement.TryGetProperty("eval_count", out var eProp) ? eProp.GetInt32() : null;
+
+            if (!document.RootElement.TryGetProperty("response", out var rawTextProp))
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("La respuesta de Ollama no contuvo la propiedad 'response'. Activando respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "FormatoInvalido",
+                    athleteId: athleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: "La respuesta no contuvo la propiedad 'response'."), cancellationToken);
+                return null;
+            }
+
+            var rawText = rawTextProp.GetString();
+            if (string.IsNullOrWhiteSpace(rawText))
+            {
+                stopwatch.Stop();
+                logger?.LogWarning("El modelo de Ollama devolvió una respuesta vacía al generar recomendación. Activando respaldo.");
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "RespuestaVacia",
+                    athleteId: athleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: "El modelo devolvió texto vacío."), cancellationToken);
+                return null;
+            }
+
+            var validationResult = validator(rawText);
+            if (!validationResult.IsValid || validationResult.Value is null)
+            {
+                stopwatch.Stop();
+                logger?.LogWarning(
+                    "La recomendación de Ollama fue rechazada por el validador ({ValidationCode}): {Error}. Activando respaldo.",
+                    validationResult.ValidationCode,
+                    validationResult.ErrorMessage);
+                await aiAuditService.LogAsync(AiLog.Create(
+                    ProviderName,
+                    prompt,
+                    stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: validationResult.ValidationCode,
+                    response: rawText,
+                    athleteId: athleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    errorMessage: validationResult.ErrorMessage), cancellationToken);
+                return null;
+            }
+
+            stopwatch.Stop();
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: true,
+                validationResult: "Valido",
+                response: rawText,
+                athleteId: athleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens), cancellationToken);
+
+            return attachProvider(validationResult.Value);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning("La llamada a Ollama superó el tiempo límite de {Seconds} segundos al generar recomendación. Activando respaldo.", _options.TimeoutSeconds);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "Timeout",
+                athleteId: athleteId,
+                errorMessage: $"Superó el tiempo límite de {_options.TimeoutSeconds} segundos."), cancellationToken);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger?.LogWarning(ex, "Ollama no estuvo disponible al generar recomendación ({Message}). Activando respaldo.", ex.Message);
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "ErrorConexion",
+                athleteId: athleteId,
+                errorMessage: ex.Message), cancellationToken);
             return null;
         }
     }
