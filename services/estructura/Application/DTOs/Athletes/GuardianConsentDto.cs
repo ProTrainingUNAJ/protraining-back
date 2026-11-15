@@ -8,4 +8,5 @@ public sealed record GuardianConsentDto(
     string? GuardianEmail,
     string? GuardianPhone,
     bool AllowsPhysicalTraining,
-    bool AllowsHabitsRecommendations);
+    bool AllowsHabitsRecommendations,
+    bool AllowsProfilePhoto = true);

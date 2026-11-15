@@ -90,6 +90,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.Configure<DataProtectionTokenProviderOptions>(options =>
                     options.TokenLifespan = TimeSpan.FromMinutes(30));
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+                services.AddScoped<IUserPhotoRepository, UserPhotoRepository>();
                 services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
@@ -116,6 +117,10 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<ResetAthletePasswordUseCase>();
                 services.AddScoped<ForgotPasswordUseCase>();
                 services.AddScoped<ResetPasswordWithTokenUseCase>();
+                services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);

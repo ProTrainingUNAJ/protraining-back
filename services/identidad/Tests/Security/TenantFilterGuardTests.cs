@@ -16,6 +16,7 @@ public sealed class TenantFilterGuardTests
     {
         ["User"] = "Cuenta de login: se busca por email antes de saber el PF del usuario.",
         ["RefreshToken"] = "Se valida al renovar la sesión, antes de saber el PF.",
+        ["UserPhoto"] = "Foto de perfil vinculada al usuario de Identity por UserId; la visibilidad y autorización se gestiona por endpoint autenticado.",
         ["IdentityRole`1"] = "Tabla de ASP.NET Identity (roles), compartida por todos los PFs.",
         ["IdentityRoleClaim`1"] = "Tabla de ASP.NET Identity.",
         ["IdentityUserClaim`1"] = "Tabla de ASP.NET Identity.",

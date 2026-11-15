@@ -13,6 +13,8 @@ public sealed class Athlete : BaseEntity
     public string? EmergencyContact { get; private set; }
     public bool Active { get; private set; } = true;
     public Guid? AccountId { get; private set; }
+    public bool HasPhoto { get; private set; }
+    public DateTime? PhotoUpdatedAt { get; private set; }
 
     public DigitalConsent? DigitalConsent { get; private set; }
     public MedicalRecord? MedicalRecord { get; private set; }
@@ -20,6 +22,7 @@ public sealed class Athlete : BaseEntity
     public string FullName => $"{FirstName} {LastName}".Trim();
     public bool HasSignedConsent => DigitalConsent?.IsValidForAthlete(IsMinor) == true;
     public bool AllowsHabitsRecommendations => HasSignedConsent && DigitalConsent!.AllowsHabitsRecommendations;
+    public bool AllowsProfilePhoto => !IsMinor || (HasSignedConsent && (DigitalConsent?.AllowsProfilePhoto ?? false));
 
     private Athlete() { }
 
@@ -51,7 +54,8 @@ public sealed class Athlete : BaseEntity
         string? guardianPhone,
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
-        string? emergencyContact = null)
+        string? emergencyContact = null,
+        bool allowsProfilePhoto = true)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
@@ -63,7 +67,8 @@ public sealed class Athlete : BaseEntity
             guardianEmail,
             guardianPhone,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations);
+            allowsHabitsRecommendations,
+            allowsProfilePhoto);
 
         return athlete;
     }
@@ -88,7 +93,8 @@ public sealed class Athlete : BaseEntity
         string? email,
         string? phone,
         bool signsInitialConsent = false,
-        string? emergencyContact = null)
+        string? emergencyContact = null,
+        bool allowsProfilePhoto = true)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
@@ -96,7 +102,11 @@ public sealed class Athlete : BaseEntity
 
         if (signsInitialConsent)
         {
-            athlete.DigitalConsent = DigitalConsent.RegisterForAdult(athlete.Id);
+            athlete.DigitalConsent = DigitalConsent.RegisterForAdult(
+                athlete.Id,
+                allowsPhysicalTraining: true,
+                allowsHabitsRecommendations: false,
+                allowsProfilePhoto: allowsProfilePhoto);
         }
 
         return athlete;
@@ -107,7 +117,8 @@ public sealed class Athlete : BaseEntity
         string? guardianEmail,
         string? guardianPhone,
         bool allowsPhysicalTraining,
-        bool allowsHabitsRecommendations)
+        bool allowsHabitsRecommendations,
+        bool allowsProfilePhoto = true)
     {
         if (!IsMinor)
             throw new DomainException("Solo los atletas menores de edad requieren consentimiento de un tutor.");
@@ -121,12 +132,14 @@ public sealed class Athlete : BaseEntity
             guardianEmail,
             guardianPhone,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations);
+            allowsHabitsRecommendations,
+            allowsProfilePhoto);
     }
 
     public void RegisterAdultConsent(
         bool allowsPhysicalTraining = true,
-        bool allowsHabitsRecommendations = false)
+        bool allowsHabitsRecommendations = false,
+        bool allowsProfilePhoto = true)
     {
         if (IsMinor)
             throw new DomainException("Los atletas menores de edad deben ser autorizados por un tutor legal.");
@@ -137,7 +150,8 @@ public sealed class Athlete : BaseEntity
         DigitalConsent = DigitalConsent.RegisterForAdult(
             Id,
             allowsPhysicalTraining,
-            allowsHabitsRecommendations);
+            allowsHabitsRecommendations,
+            allowsProfilePhoto);
     }
 
     public void UpdateHabitsPermission(bool allowsHabitsRecommendations)
@@ -146,6 +160,26 @@ public sealed class Athlete : BaseEntity
             throw new DomainException("No existe un consentimiento firmado para modificar los permisos.");
 
         DigitalConsent.UpdateHabitsPermission(allowsHabitsRecommendations);
+    }
+
+    public void UpdateProfilePhotoPermission(bool allowsProfilePhoto)
+    {
+        if (DigitalConsent == null || !DigitalConsent.IsSigned)
+            throw new DomainException("No existe un consentimiento firmado para modificar los permisos.");
+
+        DigitalConsent.UpdateProfilePhotoPermission(allowsProfilePhoto);
+    }
+
+    public void SetPhotoUpdated(DateTime timestamp)
+    {
+        HasPhoto = true;
+        PhotoUpdatedAt = timestamp;
+    }
+
+    public void RemovePhoto()
+    {
+        HasPhoto = false;
+        PhotoUpdatedAt = null;
     }
 
     // Lee la ficha médica del atleta exigiendo que el consentimiento digital esté firmado (o el del tutor si es menor).

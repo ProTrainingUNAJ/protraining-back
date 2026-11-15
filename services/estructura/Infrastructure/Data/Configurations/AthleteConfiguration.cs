@@ -46,6 +46,14 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
         builder.Property(athlete => athlete.AccountId)
             .HasColumnName("account_id");
 
+        builder.Property(athlete => athlete.HasPhoto)
+            .HasColumnName("has_photo")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(athlete => athlete.PhotoUpdatedAt)
+            .HasColumnName("photo_updated_at");
+
         builder.HasOne(athlete => athlete.DigitalConsent)
             .WithOne()
             .HasForeignKey<DigitalConsent>(consent => consent.AthleteId)
