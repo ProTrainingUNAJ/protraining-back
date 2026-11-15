@@ -13,10 +13,10 @@ public sealed class GetOrganizationQueryHandler(IOrganizationRepository reposito
         GetOrganizationQuery query,
         CancellationToken cancellationToken = default)
     {
-        var organization = await repository.GetByIdAsync(query.Id, cancellationToken);
-        if (organization is null)
+        var withCounts = await repository.GetWithCountsByIdAsync(query.Id, cancellationToken);
+        if (withCounts is null)
             throw new OrganizationNotFoundException();
 
-        return OrganizationMappings.ToDto(organization);
+        return OrganizationMappings.ToDto(withCounts.Value.Organization, withCounts.Value.CategoriesCount, withCounts.Value.AthletesCount);
     }
 }
