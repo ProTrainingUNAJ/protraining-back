@@ -129,6 +129,7 @@ public class UsersController(
     /// Returns the profile photo in WebP format for the user with the given id.
     /// </summary>
     [HttpGet("{id:guid}/photo")]
+    [AllowAnonymous]
     [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
