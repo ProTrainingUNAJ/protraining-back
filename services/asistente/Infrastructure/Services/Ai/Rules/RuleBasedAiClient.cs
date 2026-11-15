@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using Application.Common.Ai;
 using Application.Common.DayAdjustments;
+using Application.Common.Recommendations;
 using Application.DTOs.DayAdjustments;
 using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Entities;
@@ -363,5 +365,87 @@ public sealed class RuleBasedAiClient(
             totalTokens: 0), cancellationToken);
 
         return justification;
+    }
+
+    public async Task<TrainingRecommendationResponseDto?> TryGenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var stopwatch = Stopwatch.StartNew();
+        var recommendation = RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, ProviderName);
+        var validation = RecommendationOutputValidator.ValidateTrainingDto(recommendation, request);
+        stopwatch.Stop();
+
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
+        if (!validation.IsValid || validation.Value is null)
+        {
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: validation.ValidationCode,
+                athleteId: request.AthleteId,
+                errorMessage: validation.ErrorMessage), cancellationToken);
+            return null;
+        }
+
+        await aiAuditService.LogAsync(AiLog.Create(
+            ProviderName,
+            prompt,
+            stopwatch.ElapsedMilliseconds,
+            isValid: true,
+            validationResult: "Valido",
+            response: validation.Value.RecommendationText,
+            athleteId: request.AthleteId,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0), cancellationToken);
+
+        return validation.Value;
+    }
+
+    public async Task<NutritionRecommendationResponseDto?> TryGenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var stopwatch = Stopwatch.StartNew();
+        var recommendation = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, ProviderName);
+        var validation = RecommendationOutputValidator.ValidateNutritionDto(recommendation, request);
+        stopwatch.Stop();
+
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+        if (!validation.IsValid || validation.Value is null)
+        {
+            await aiAuditService.LogAsync(AiLog.Create(
+                ProviderName,
+                prompt,
+                stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: validation.ValidationCode,
+                athleteId: request.AthleteId,
+                errorMessage: validation.ErrorMessage), cancellationToken);
+            return null;
+        }
+
+        await aiAuditService.LogAsync(AiLog.Create(
+            ProviderName,
+            prompt,
+            stopwatch.ElapsedMilliseconds,
+            isValid: true,
+            validationResult: "Valido",
+            response: validation.Value.SuggestedPlateComposition,
+            athleteId: request.AthleteId,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0), cancellationToken);
+
+        return validation.Value;
     }
 }

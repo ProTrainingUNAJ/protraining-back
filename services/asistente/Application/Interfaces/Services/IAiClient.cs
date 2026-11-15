@@ -4,6 +4,7 @@ using Application.Common.DayAdjustments;
 using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 
 public interface IAiClient
 {
@@ -22,4 +23,14 @@ public interface IAiClient
         IReadOnlyList<DayAdjustmentItemDto> items,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<string?>(null);
+
+    Task<TrainingRecommendationResponseDto?> TryGenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<TrainingRecommendationResponseDto?>(null);
+
+    Task<NutritionRecommendationResponseDto?> TryGenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<NutritionRecommendationResponseDto?>(null);
 }
