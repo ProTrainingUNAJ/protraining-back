@@ -30,6 +30,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<CompetitiveEvent> CompetitiveEvents => Set<CompetitiveEvent>();
     public DbSet<SeasonPhase> SeasonPhases => Set<SeasonPhase>();
     public DbSet<CategoryInvitation> CategoryInvitations => Set<CategoryInvitation>();
+    public DbSet<AthletePhoto> AthletePhotos => Set<AthletePhoto>();
+    public DbSet<OrganizationPhoto> OrganizationPhotos => Set<OrganizationPhoto>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

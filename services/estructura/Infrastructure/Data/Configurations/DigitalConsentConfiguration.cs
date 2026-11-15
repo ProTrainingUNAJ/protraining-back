@@ -46,6 +46,11 @@ public sealed class DigitalConsentConfiguration : IEntityTypeConfiguration<Digit
             .HasColumnName("allows_habits_recommendations")
             .IsRequired();
 
+        builder.Property(consent => consent.AllowsProfilePhoto)
+            .HasColumnName("allows_profile_photo")
+            .HasDefaultValue(true)
+            .IsRequired();
+
         builder.HasIndex(consent => consent.AthleteId)
             .IsUnique();
     }

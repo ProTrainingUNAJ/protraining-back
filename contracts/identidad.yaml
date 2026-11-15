@@ -358,6 +358,120 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/users/me/photo:
+    put:
+      tags:
+        - Users
+      summary: Cargar o actualizar foto de perfil del usuario
+      description: Sube una foto en formato WebP (máx. 200 KB) para el usuario autenticado.
+      operationId: uploadMyPhoto
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Archivo de imagen en formato WebP.
+              required:
+                - photo
+      responses:
+        "204":
+          description: Foto actualizada correctamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado.
+    get:
+      tags:
+        - Users
+      summary: Obtener foto de perfil del usuario autenticado
+      description: Retorna la imagen WebP de perfil del usuario autenticado con encabezados de caché del navegador.
+      operationId: getMyPhoto
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: No autenticado.
+        "404":
+          description: El usuario no tiene foto de perfil.
+    delete:
+      tags:
+        - Users
+      summary: Eliminar foto de perfil del usuario autenticado
+      description: Elimina la foto de perfil del usuario autenticado.
+      operationId: deleteMyPhoto
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Foto eliminada correctamente.
+        "401":
+          description: No autenticado.
+
+  /api/v1/users/{id}/photo:
+    get:
+      tags:
+        - Users
+      summary: Obtener foto de perfil de un usuario
+      description: Retorna la imagen WebP de perfil de un usuario por su identificador.
+      operationId: getUserPhoto
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: El usuario no tiene foto de perfil.
+
+  /api/v1/users/me/pf-photo:
+    get:
+      tags:
+        - Users
+      summary: Obtener la foto de perfil del preparador físico del atleta
+      description: Solo para el rol Atleta. Devuelve la foto de perfil en formato WebP de su preparador físico.
+      operationId: getMyPfPhoto
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: No autenticado.
+        "403":
+          description: El token no es de un atleta.
+        "404":
+          description: El preparador físico no tiene foto de perfil.
+
   /api/health:
     get:
       tags:

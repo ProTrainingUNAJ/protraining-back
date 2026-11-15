@@ -2,6 +2,7 @@
 using API.Controllers;
 using Application.DTOs.Auth;
 using Application.DTOs.Users;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.UpdatePhone;
@@ -18,6 +19,8 @@ public class UsersControllerTests
 {
     private readonly Mock<UserManager<User>> _mockUserManager;
     private readonly Mock<ICurrentUser> _mockCurrentUser = new();
+    private readonly Mock<IUserPhotoRepository> _mockPhotoRepo = new();
+    private readonly Mock<IUnitOfWork> _mockUnitOfWork = new();
     private readonly UsersController _controller;
 
     public UsersControllerTests()
@@ -26,10 +29,21 @@ public class UsersControllerTests
         _mockUserManager = new Mock<UserManager<User>>(
             userStoreMock.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
+        var uploadPhotoHandler = new Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler(
+            _mockUserManager.Object, _mockPhotoRepo.Object, _mockUnitOfWork.Object);
+        var getPhotoHandler = new Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler(_mockPhotoRepo.Object);
+        var getPfPhotoHandler = new Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler(_mockPhotoRepo.Object);
+        var deletePhotoHandler = new Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler(
+            _mockUserManager.Object, _mockPhotoRepo.Object, _mockUnitOfWork.Object);
+
         _controller = new UsersController(
             new UpdateWhatsAppPhoneUseCase(_mockUserManager.Object),
             new GetPfContactUseCase(_mockUserManager.Object),
-            _mockCurrentUser.Object);
+            _mockCurrentUser.Object,
+            uploadPhotoHandler,
+            getPhotoHandler,
+            getPfPhotoHandler,
+            deletePhotoHandler);
     }
 
     // Roles que exige el atributo [Authorize] puesto en el método del controller.

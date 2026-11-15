@@ -12,4 +12,6 @@ public sealed record AthleteDto(
     string? EmergencyContact,
     bool Active,
     bool AllowsHabitsRecommendations,
-    GuardianConsentDto? GuardianConsent);
+    GuardianConsentDto? GuardianConsent,
+    bool HasPhoto = false,
+    DateTime? PhotoUpdatedAt = null);

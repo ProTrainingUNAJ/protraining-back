@@ -99,7 +99,9 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
 
                 // Scoped repositories and unit of work
                 services.AddScoped<IAthleteRepository, AthleteRepository>();
+                services.AddScoped<IAthletePhotoRepository, AthletePhotoRepository>();
                 services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+                services.AddScoped<IOrganizationPhotoRepository, OrganizationPhotoRepository>();
                 services.AddScoped<ICategoryRepository, CategoryRepository>();
                 services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
@@ -149,6 +151,12 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ListMyCategoriesQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UploadAthletePhoto.UploadAthletePhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.GetAthletePhoto.GetAthletePhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.DeleteAthletePhoto.DeleteAthletePhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Organizations.UploadOrganizationPhoto.UploadOrganizationPhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Organizations.GetOrganizationPhoto.GetOrganizationPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Organizations.DeleteOrganizationPhoto.DeleteOrganizationPhotoCommandHandler>();
                 services.AddScoped<ListOrganizationsQueryHandler>();
                 services.AddScoped<GetOrganizationQueryHandler>();
                 services.AddScoped<CreateOrganizationCommandHandler>();

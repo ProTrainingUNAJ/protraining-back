@@ -149,6 +149,82 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/photo:
+    put:
+      tags:
+        - Athletes
+      summary: Cargar o actualizar foto de perfil del atleta
+      description: Sube una foto en formato WebP (máx. 200 KB) para el atleta. Para menores, requiere autorización en el consentimiento digital.
+      operationId: uploadAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Archivo de imagen en formato WebP.
+              required:
+                - photo
+      responses:
+        "204":
+          description: Foto actualizada correctamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags:
+        - Athletes
+      summary: Obtener foto de perfil del atleta
+      description: Retorna la imagen WebP de perfil del atleta con encabezados de caché del navegador.
+      operationId: getAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Athletes
+      summary: Eliminar foto de perfil del atleta
+      description: Elimina la foto de perfil del atleta.
+      operationId: deleteAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Foto eliminada correctamente.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{id}/habits-permission:
     patch:
       tags:
@@ -651,6 +727,82 @@ paths:
       responses:
         "204":
           description: Organización eliminada.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/organizations/{id}/photo:
+    put:
+      tags:
+        - Organizations
+      summary: Cargar o actualizar logo de la organización
+      description: Sube una foto o logo en formato WebP (máx. 200 KB) para la organización.
+      operationId: uploadOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Archivo de imagen en formato WebP.
+              required:
+                - photo
+      responses:
+        "204":
+          description: Logo actualizado correctamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags:
+        - Organizations
+      summary: Obtener logo de la organización
+      description: Retorna la imagen WebP del logo de la organización con encabezados de caché del navegador.
+      operationId: getOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Organizations
+      summary: Eliminar logo de la organización
+      description: Elimina el logo de la organización.
+      operationId: deleteOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Logo eliminado correctamente.
         "404":
           $ref: '#/components/responses/NotFound'
 

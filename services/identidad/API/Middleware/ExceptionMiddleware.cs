@@ -31,6 +31,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
                 InvitationNotFoundException notFound => (400, "Invitación inválida.", notFound.Message),
                 StructureUnavailableException unavailable => (503, "Servicio no disponible.", unavailable.Message),
                 DomainException domain => (400, domain.Message, (string?)null),
+                PhotoNotFoundException photoNotFound => (404, photoNotFound.Message, (string?)null),
                 PersistenceConcurrencyException => (409, "Conflicto de concurrencia.",
                     "El dato cambió durante la operación. Recarga e inténtalo de nuevo."),
                 PersistenceConflictException conflict => (409, conflict.Message,

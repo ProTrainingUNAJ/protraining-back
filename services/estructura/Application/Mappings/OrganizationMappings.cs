@@ -6,5 +6,5 @@ namespace Application.Mappings;
 public static class OrganizationMappings
 {
     public static OrganizationDto ToDto(Organization organization) =>
-        new(organization.Id, organization.Name, organization.Description);
+        new(organization.Id, organization.Name, organization.Description, organization.HasPhoto, organization.PhotoUpdatedAt);
 }

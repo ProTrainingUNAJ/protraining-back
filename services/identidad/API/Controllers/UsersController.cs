@@ -6,6 +6,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.DTOs.Users;
 using Application.UseCases.Auth.GetPfContact;
+using Application.UseCases.Users.UploadUserPhoto;
+using Application.UseCases.Users.GetUserPhoto;
+using Application.UseCases.Users.GetPfPhoto;
+using Application.UseCases.Users.DeleteUserPhoto;
 
 namespace API.Controllers;
 
@@ -18,7 +22,11 @@ namespace API.Controllers;
 public class UsersController(
     UpdateWhatsAppPhoneUseCase updatePhoneUseCase,
     GetPfContactUseCase getPfContactUseCase,
-    ICurrentUser currentUser) : ControllerBase
+    ICurrentUser currentUser,
+    UploadUserPhotoCommandHandler uploadPhotoHandler,
+    GetUserPhotoQueryHandler getPhotoHandler,
+    GetPfPhotoQueryHandler getPfPhotoHandler,
+    DeleteUserPhotoCommandHandler deletePhotoHandler) : ControllerBase
 {
     /// <summary>
     /// Actualiza el número de WhatsApp del usuario autenticado.
@@ -83,5 +91,113 @@ public class UsersController(
         }
 
         return Ok(new PfContactDto(phoneNumber));
+    }
+
+    /// <summary>
+    /// Uploads or updates the authenticated user's profile photo in WebP format.
+    /// </summary>
+    [HttpPut("me/photo")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UploadMyPhoto(IFormFile photo, CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (photo is null || photo.Length == 0)
+        {
+            throw new Domain.Exceptions.DomainException("El archivo de imagen no puede estar vacío.");
+        }
+
+        using var memoryStream = new MemoryStream();
+        await photo.CopyToAsync(memoryStream, cancellationToken);
+        var bytes = memoryStream.ToArray();
+
+        await uploadPhotoHandler.HandleAsync(
+            new UploadUserPhotoCommand(userId.Value, bytes, photo.ContentType, photo.Length),
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Returns the profile photo in WebP format for the user with the given id.
+    /// </summary>
+    [HttpGet("{id:guid}/photo")]
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUserPhoto(Guid id, CancellationToken cancellationToken)
+    {
+        var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(id), cancellationToken);
+        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        return File(photo.Data, photo.ContentType);
+    }
+
+    /// <summary>
+    /// Returns the profile photo in WebP format for the authenticated user.
+    /// </summary>
+    [HttpGet("me/photo")]
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyPhoto(CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(userId.Value), cancellationToken);
+        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        return File(photo.Data, photo.ContentType);
+    }
+
+    /// <summary>
+    /// Returns the profile photo in WebP format for the physical trainer assigned to the authenticated athlete.
+    /// </summary>
+    [HttpGet("me/pf-photo")]
+    [Authorize(Roles = "Atleta")]
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyPfPhoto(CancellationToken cancellationToken)
+    {
+        var pfId = currentUser.PfId;
+        if (pfId is null)
+        {
+            return Unauthorized();
+        }
+
+        var photo = await getPfPhotoHandler.HandleAsync(new GetPfPhotoQuery(pfId.Value), cancellationToken);
+        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        return File(photo.Data, photo.ContentType);
+    }
+
+    /// <summary>
+    /// Deletes the authenticated user's profile photo.
+    /// </summary>
+    [HttpDelete("me/photo")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteMyPhoto(CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        await deletePhotoHandler.HandleAsync(new DeleteUserPhotoCommand(userId.Value), cancellationToken);
+        return NoContent();
     }
 }

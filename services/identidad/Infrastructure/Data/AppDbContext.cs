@@ -17,6 +17,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     private Guid CurrentPfId => currentUser.PfId ?? Guid.Empty;
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<UserPhoto> UserPhotos => Set<UserPhoto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +36,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
             b.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
             b.Property(u => u.CreatedAt).HasColumnName("created_at");
             b.Property(u => u.UpdatedAt).HasColumnName("updated_at");
+            b.Property(u => u.HasPhoto).HasColumnName("has_photo").HasDefaultValue(false);
+            b.Property(u => u.PhotoUpdatedAt).HasColumnName("photo_updated_at");
         });
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
         modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("user_roles");
