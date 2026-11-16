@@ -20,6 +20,7 @@ public class UsersControllerTests
     private readonly Mock<UserManager<User>> _mockUserManager;
     private readonly Mock<ICurrentUser> _mockCurrentUser = new();
     private readonly Mock<IUserPhotoRepository> _mockPhotoRepo = new();
+    private readonly Mock<IRefreshTokenRepository> _mockRefreshTokenRepo = new();
     private readonly Mock<IUnitOfWork> _mockUnitOfWork = new();
     private readonly UsersController _controller;
 
@@ -35,6 +36,10 @@ public class UsersControllerTests
         var getPfPhotoHandler = new Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler(_mockPhotoRepo.Object);
         var deletePhotoHandler = new Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler(
             _mockUserManager.Object, _mockPhotoRepo.Object, _mockUnitOfWork.Object);
+        var updateStatusUseCase = new Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase(
+            _mockUserManager.Object, _mockRefreshTokenRepo.Object, _mockCurrentUser.Object);
+        var updateEmailUseCase = new Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase(
+            _mockUserManager.Object, _mockCurrentUser.Object);
 
         _controller = new UsersController(
             new UpdateWhatsAppPhoneUseCase(_mockUserManager.Object),
@@ -43,7 +48,9 @@ public class UsersControllerTests
             uploadPhotoHandler,
             getPhotoHandler,
             getPfPhotoHandler,
-            deletePhotoHandler);
+            deletePhotoHandler,
+            updateStatusUseCase,
+            updateEmailUseCase);
     }
 
     // Roles que exige el atributo [Authorize] puesto en el método del controller.
@@ -134,5 +141,17 @@ public class UsersControllerTests
         var result = await _controller.GetPfContact();
 
         Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public void Given_UpdateAthleteStatusEndpoint_When_CheckingAuthorization_Then_OnlyPreparadorFisicoCanCallIt()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateAthleteStatus)));
+    }
+
+    [Fact]
+    public void Given_UpdateAthleteEmailEndpoint_When_CheckingAuthorization_Then_OnlyPreparadorFisicoCanCallIt()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateAthleteEmail)));
     }
 }

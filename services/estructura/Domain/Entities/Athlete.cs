@@ -248,6 +248,18 @@ public sealed class Athlete : BaseEntity
 
     public void SetActive(bool active) => Active = active;
 
+    public void UpdateEmail(string newEmail)
+    {
+        if (string.IsNullOrWhiteSpace(newEmail))
+            throw new DomainException("El correo electrónico no puede estar vacío.");
+
+        var cleanEmail = newEmail.Trim().ToLowerInvariant();
+        if (!cleanEmail.Contains('@') || !cleanEmail.Contains('.'))
+            throw new DomainException("El formato del correo electrónico no es válido.");
+
+        Email = cleanEmail;
+    }
+
     private void EnsureConsentSignedForMedicalRecord()
     {
         if (!HasSignedConsent)

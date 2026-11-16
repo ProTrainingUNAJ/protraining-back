@@ -72,6 +72,8 @@ builder.Services.AddScoped<RegisterByInvitationUseCase>();
 builder.Services.AddScoped<ChangePasswordUseCase>();
 builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
 builder.Services.AddScoped<ResetAthletePasswordUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
 
 builder.Services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();

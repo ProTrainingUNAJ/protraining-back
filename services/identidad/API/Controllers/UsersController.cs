@@ -26,7 +26,9 @@ public class UsersController(
     UploadUserPhotoCommandHandler uploadPhotoHandler,
     GetUserPhotoQueryHandler getPhotoHandler,
     GetPfPhotoQueryHandler getPfPhotoHandler,
-    DeleteUserPhotoCommandHandler deletePhotoHandler) : ControllerBase
+    DeleteUserPhotoCommandHandler deletePhotoHandler,
+    Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase updateAthleteStatusUseCase,
+    Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase updateAthleteEmailUseCase) : ControllerBase
 {
     /// <summary>
     /// Actualiza el número de WhatsApp del usuario autenticado.
@@ -196,6 +198,44 @@ public class UsersController(
         }
 
         await deletePhotoHandler.HandleAsync(new DeleteUserPhotoCommand(userId.Value), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Actualiza el estado activo/inactivo de un atleta a cargo del Preparador Físico.
+    /// Si se desactiva, revoca todas sus sesiones activas.
+    /// </summary>
+    [HttpPatch("athletes/{athleteId:guid}/status")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAthleteStatus(
+        [FromRoute] Guid athleteId,
+        [FromBody] UpdateAthleteUserStatusRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await updateAthleteStatusUseCase.ExecuteAsync(athleteId, request, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Actualiza el correo electrónico de la cuenta de un atleta a cargo del Preparador Físico.
+    /// </summary>
+    [HttpPatch("athletes/{athleteId:guid}/email")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAthleteEmail(
+        [FromRoute] Guid athleteId,
+        [FromBody] UpdateAthleteUserEmailRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await updateAthleteEmailUseCase.ExecuteAsync(athleteId, request, cancellationToken);
         return NoContent();
     }
 }
