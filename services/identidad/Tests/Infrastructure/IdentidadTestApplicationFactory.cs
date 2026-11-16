@@ -15,6 +15,8 @@ using Application.UseCases.Auth.RegisterByInvitation;
 using Application.UseCases.Auth.ResetAthletePassword;
 using Application.UseCases.Auth.ResetPasswordWithToken;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Auth.UpdateHabitsRecommendations;
+using Application.UseCases.Auth.GetPfHabitsRecommendations;
 using Application.UseCases.Health.GetHealth;
 using Domain.Entities;
 using Infrastructure.Data;
@@ -111,6 +113,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<RefreshUseCase>();
                 services.AddScoped<UpdateWhatsAppPhoneUseCase>();
                 services.AddScoped<GetPfContactUseCase>();
+                services.AddScoped<UpdateHabitsRecommendationsUseCase>();
+                services.AddScoped<GetPfHabitsRecommendationsUseCase>();
                 services.AddScoped<RegisterByInvitationUseCase>();
                 services.AddScoped<ChangePasswordUseCase>();
                 services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();

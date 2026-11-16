@@ -11,6 +11,7 @@ public class User : IdentityUser<Guid>
     public DateTime? UpdatedAt { get; set; }
     public bool HasPhoto { get; set; } = false;
     public DateTime? PhotoUpdatedAt { get; set; }
+    public bool HabitsRecommendationsEnabled { get; set; } = true;
     public User()
     {
         Id = Guid.NewGuid();
