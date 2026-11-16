@@ -2,6 +2,7 @@ namespace Application.Common.PlanDrafts;
 
 using System.Text.Json;
 using Application.Common.Ai;
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 
@@ -50,16 +51,19 @@ public static class PlanDraftBlockParser
                 for (var sessionIdx = 0; sessionIdx < blockModel.ModelSessions.Count; sessionIdx++)
                 {
                     var blockSession = blockModel.ModelSessions[sessionIdx];
-                    var dayOfWeek = FlexibleDayOfWeekConverter.ParseDayOfWeek(blockSession.DayOfWeek) ?? DayOfWeek.Monday;
-                    var dayOfWeek = ParseDayOfWeekFromString(blockSession.DayOfWeek);
+                    var dayOfWeek = ParseDayOfWeek(blockSession.DayOfWeek);
                     var sessionExercises = new List<PlanDraftExerciseDto>();
                     var currentOrder = 1;
 
                     // Aplanar los 4 bloques en la secuencia funcional oficial
-                    AppendBlock(sessionExercises, blockSession.WarmUp, catalog, ref currentOrder, defaultSets: 2, defaultReps: 10, defaultPct: null);
-                    AppendBlock(sessionExercises, blockSession.StrengthA, catalog, ref currentOrder, defaultSets: 4, defaultReps: 6, defaultPct: 80m);
-                    AppendBlock(sessionExercises, blockSession.StrengthB, catalog, ref currentOrder, defaultSets: 3, defaultReps: 8, defaultPct: 75m);
-                    AppendBlock(sessionExercises, blockSession.Accessories, catalog, ref currentOrder, defaultSets: 3, defaultReps: 12, defaultPct: null);
+                    if (AppendBlock(sessionExercises, blockSession.WarmUp, catalog, ref currentOrder, defaultSets: 2, defaultReps: 10, defaultPct: null) is { } errWarmUp)
+                        return (false, null, errWarmUp);
+                    if (AppendBlock(sessionExercises, blockSession.StrengthA, catalog, ref currentOrder, defaultSets: 4, defaultReps: 6, defaultPct: 80m) is { } errStrA)
+                        return (false, null, errStrA);
+                    if (AppendBlock(sessionExercises, blockSession.StrengthB, catalog, ref currentOrder, defaultSets: 3, defaultReps: 8, defaultPct: 75m) is { } errStrB)
+                        return (false, null, errStrB);
+                    if (AppendBlock(sessionExercises, blockSession.Accessories, catalog, ref currentOrder, defaultSets: 3, defaultReps: 12, defaultPct: null) is { } errAcc)
+                        return (false, null, errAcc);
 
                     if (sessionExercises.Count == 0)
                     {
@@ -125,7 +129,7 @@ public static class PlanDraftBlockParser
         }
     }
 
-    private static void AppendBlock(
+    private static string? AppendBlock(
         List<PlanDraftExerciseDto> targetList,
         List<BlockExerciseItemDto>? blockItems,
         IReadOnlyList<CatalogExerciseDto> catalog,
@@ -135,14 +139,16 @@ public static class PlanDraftBlockParser
         decimal? defaultPct)
     {
         if (blockItems == null || blockItems.Count == 0)
-            return;
+            return null;
 
         foreach (var item in blockItems)
         {
             // Traducir número en lista (1..N) a ejercicio real del catálogo
             var exercise = ResolveCatalogExercise(item.ExerciseIndex, catalog);
             if (exercise == null)
-                continue;
+            {
+                return $"El ejercicio con índice {item.ExerciseIndex} no existe en el catálogo disponible (1..{catalog.Count}).";
+            }
 
             targetList.Add(new PlanDraftExerciseDto(
                 ExerciseId: exercise.Id,
@@ -152,6 +158,8 @@ public static class PlanDraftBlockParser
                 TargetPercentage: item.TargetPercentage ?? defaultPct
             ));
         }
+
+        return null;
     }
 
     private static CatalogExerciseDto? ResolveCatalogExercise(int index, IReadOnlyList<CatalogExerciseDto> catalog)
@@ -169,5 +177,26 @@ public static class PlanDraftBlockParser
         }
 
         return null;
+    }
+
+    private static DayOfWeek ParseDayOfWeek(string? rawDay)
+    {
+        if (string.IsNullOrWhiteSpace(rawDay))
+            return DayOfWeek.Monday;
+
+        var clean = TextNormalizer.Normalize(rawDay);
+
+        if (clean.StartsWith("lun") || clean.StartsWith("mon")) return DayOfWeek.Monday;
+        if (clean.StartsWith("mar") || clean.StartsWith("tue")) return DayOfWeek.Tuesday;
+        if (clean.StartsWith("mie") || clean.StartsWith("wed")) return DayOfWeek.Wednesday;
+        if (clean.StartsWith("jue") || clean.StartsWith("thu")) return DayOfWeek.Thursday;
+        if (clean.StartsWith("vie") || clean.StartsWith("fri")) return DayOfWeek.Friday;
+        if (clean.StartsWith("sab") || clean.StartsWith("sat")) return DayOfWeek.Saturday;
+        if (clean.StartsWith("dom") || clean.StartsWith("sun")) return DayOfWeek.Sunday;
+
+        if (Enum.TryParse<DayOfWeek>(rawDay, ignoreCase: true, out var parsed))
+            return parsed;
+
+        return DayOfWeek.Monday;
     }
 }
