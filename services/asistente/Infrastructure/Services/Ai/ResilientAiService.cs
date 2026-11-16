@@ -33,6 +33,7 @@ public sealed class ResilientAiService : IAiService
     private readonly ICurrentUser? _currentUser;
     private readonly IAiAuditService? _auditService;
     private readonly IExerciseCatalogService? _catalogService;
+    private readonly IAiQuotaService? _quotaService;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -40,7 +41,7 @@ public sealed class ResilientAiService : IAiService
         GeminiClient geminiClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, null, logger)
     {
     }
 
@@ -50,7 +51,7 @@ public sealed class ResilientAiService : IAiService
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
     {
     }
 
@@ -61,7 +62,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, logger)
+        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
     {
     }
 
@@ -74,7 +75,21 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        OllamaClient ollamaClient,
+        GeminiClient geminiClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        ILogger<ResilientAiService> logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
     {
     }
 
@@ -87,8 +102,9 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
+        IAiQuotaService? quotaService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, logger)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger)
     {
     }
 
@@ -97,7 +113,7 @@ public sealed class ResilientAiService : IAiService
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, null, null, null, logger)
+        : this(providers, semanticValidator, responseCache, null, null, null, null, logger)
     {
     }
 
@@ -108,7 +124,7 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, logger)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, null, logger)
     {
     }
 
@@ -119,6 +135,19 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
+        ILogger<ResilientAiService> logger)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        IAiQuotaService? quotaService,
         ILogger<ResilientAiService> logger)
     {
         _providers = providers;
@@ -127,6 +156,7 @@ public sealed class ResilientAiService : IAiService
         _currentUser = currentUser;
         _auditService = auditService;
         _catalogService = catalogService;
+        _quotaService = quotaService;
         _logger = logger;
     }
 
@@ -136,12 +166,12 @@ public sealed class ResilientAiService : IAiService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var totalStopwatch = Stopwatch.StartNew();
+        var pfId = _currentUser?.PfId;
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
         string? promptHash = null;
         if (_responseCache != null && request.AdaptationContext is null)
         {
-            var pfId = _currentUser?.PfId;
             promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis, pfId);
             if (_responseCache.TryGet(promptHash, out var cachedResponse) && cachedResponse != null)
             {
@@ -211,6 +241,57 @@ public sealed class ResilientAiService : IAiService
                 _logger.LogWarning(
                     ex,
                     "No se pudieron obtener ejercicios del catálogo oficial desde el microservicio de Entrenamiento. Continuando con prompt general.");
+            }
+        }
+
+        // 3. Verificación de cuota diaria en memoria por PF (KAN-510)
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de pedidos a la IA. Derivando a reglas determinísticas.",
+                pfId);
+
+            var ruleClient = _providers.OfType<RuleBasedAiClient>().FirstOrDefault() ?? _providers.Last();
+            var fallbackTierStopwatch = Stopwatch.StartNew();
+            var fallbackResponse = await ruleClient.TrySuggestRoutineAsync(request, cancellationToken);
+            fallbackTierStopwatch.Stop();
+            totalStopwatch.Stop();
+
+            if (fallbackResponse != null)
+            {
+                const string quotaNotice = "Llegaste al límite de pedidos a la IA por hoy. Se generó una propuesta basada en reglas determinísticas.";
+                var warnings = fallbackResponse.AdaptationWarnings?.ToList() ?? new List<string>();
+                if (!warnings.Contains(quotaNotice))
+                {
+                    warnings.Insert(0, quotaNotice);
+                }
+
+                if (_auditService != null)
+                {
+                    try
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider: "Reglas",
+                            prompt: $"Goal: {request.Goal} (Límite de IA alcanzado)",
+                            latencyMs: fallbackTierStopwatch.ElapsedMilliseconds,
+                            isValid: true,
+                            validationResult: "QuotaExceededFallback",
+                            response: fallbackResponse.JustificationSummary,
+                            pfId: pfId,
+                            athleteId: request.AthleteId), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error al auditar fallback por cuota de IA.");
+                    }
+                }
+
+                return fallbackResponse with
+                {
+                    ProviderUsed = "Reglas (Límite diario alcanzado)",
+                    AdaptationWarnings = warnings
+                };
             }
         }
 
@@ -286,6 +367,13 @@ public sealed class ResilientAiService : IAiService
                     _responseCache.Set(promptHash, response);
                 }
 
+                // 3. Registrar consumo de cuota diaria de IA si la respuesta provino de un proveedor de IA real (KAN-510)
+                if (provider is not RuleBasedAiClient &&
+                    !response.ProviderUsed.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                {
+                    _quotaService?.RecordUsage(pfId);
+                }
+
                 totalStopwatch.Stop();
                 _logger.LogInformation(
                     "Propuesta de rutina resuelta exitosamente por proveedor '{Provider}' en {ElapsedMs} ms (tiempo total: {TotalMs} ms).",
@@ -318,6 +406,44 @@ public sealed class ResilientAiService : IAiService
             request.Goal, request.Weeks, request.DaysPerWeek);
 
         var totalStopwatch = Stopwatch.StartNew();
+
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para generación de planes. Derivando a reglas determinísticas.",
+                pfId);
+
+            var ruleClient = _providers.OfType<RuleBasedAiClient>().FirstOrDefault() ?? _providers.Last();
+            var fallbackContent = await ruleClient.TryGeneratePlanDraftAsync(request, matchDates, cancellationToken);
+            totalStopwatch.Stop();
+
+            if (fallbackContent != null)
+            {
+                if (_auditService != null)
+                {
+                    try
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider: "Reglas",
+                            prompt: $"PlanDraft: {request.Goal} (Límite de IA alcanzado)",
+                            latencyMs: 0,
+                            isValid: true,
+                            validationResult: "QuotaExceededFallback",
+                            athleteId: request.AthleteId,
+                            pfId: pfId), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error al auditar fallback de plan por cuota de IA.");
+                    }
+                }
+
+                return (fallbackContent, "Reglas (Límite diario alcanzado)");
+            }
+        }
 
         for (var i = 0; i < _providers.Count; i++)
         {
@@ -378,6 +504,13 @@ public sealed class ResilientAiService : IAiService
                     tierStopwatch.ElapsedMilliseconds,
                     totalStopwatch.ElapsedMilliseconds);
 
+                // Registrar consumo de cuota diaria si respondió un modelo de IA real (KAN-510)
+                if (provider is not RuleBasedAiClient &&
+                    !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                {
+                    _quotaService?.RecordUsage(pfId);
+                }
+
                 return (content, provider.ProviderName);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -403,6 +536,17 @@ public sealed class ResilientAiService : IAiService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para redacción de justificaciones. Derivando a reglas determinísticas.",
+                pfId);
+            return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas (Límite diario alcanzado)");
+        }
+
         for (var i = 0; i < _providers.Count; i++)
         {
             var provider = _providers[i];
@@ -416,6 +560,12 @@ public sealed class ResilientAiService : IAiService
 
                 if (!string.IsNullOrWhiteSpace(justification))
                 {
+                    if (provider is not RuleBasedAiClient &&
+                        !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _quotaService?.RecordUsage(pfId);
+                    }
+
                     return (justification.Trim(), provider.ProviderName);
                 }
 
@@ -448,6 +598,18 @@ public sealed class ResilientAiService : IAiService
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para recomendaciones de entrenamiento. Derivando a reglas determinísticas.",
+                pfId);
+            var quotaFallback = RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, "Reglas (Límite diario alcanzado)");
+            return quotaFallback;
+        }
+
         var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
 
         for (var i = 0; i < _providers.Count; i++)
@@ -466,6 +628,12 @@ public sealed class ResilientAiService : IAiService
                     var validation = RecommendationOutputValidator.ValidateTrainingDto(candidate, request);
                     if (validation.IsValid && validation.Value != null)
                     {
+                        if (provider is not RuleBasedAiClient &&
+                            !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _quotaService?.RecordUsage(pfId);
+                        }
+
                         return validation.Value with { ProviderUsed = provider.ProviderName };
                     }
 
@@ -541,6 +709,18 @@ public sealed class ResilientAiService : IAiService
             throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
         }
 
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para recomendaciones de nutrición. Derivando a reglas determinísticas.",
+                pfId);
+            var quotaFallback = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, "Reglas (Límite diario alcanzado)");
+            return quotaFallback;
+        }
+
         var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
 
         for (var i = 0; i < _providers.Count; i++)
@@ -559,6 +739,12 @@ public sealed class ResilientAiService : IAiService
                     var validation = RecommendationOutputValidator.ValidateNutritionDto(candidate, request);
                     if (validation.IsValid && validation.Value != null)
                     {
+                        if (provider is not RuleBasedAiClient &&
+                            !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _quotaService?.RecordUsage(pfId);
+                        }
+
                         return validation.Value with { ProviderUsed = provider.ProviderName };
                     }
 

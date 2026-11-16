@@ -57,10 +57,12 @@ public static class DependencyInjection
 
         services.AddMemoryCache();
         services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));
+        services.Configure<Infrastructure.Services.Ai.Quota.AiQuotaOptions>(configuration.GetSection(Infrastructure.Services.Ai.Quota.AiQuotaOptions.SectionName));
         services.Configure<OllamaOptions>(configuration.GetSection(OllamaOptions.SectionName));
         services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
 
         services.AddSingleton<IAiResponseCache, Infrastructure.Services.Ai.Cache.AiResponseMemoryCache>();
+        services.AddSingleton<IAiQuotaService, Infrastructure.Services.Ai.Quota.AiQuotaService>();
         services.AddHttpClient<OllamaClient>();
         services.AddHttpClient<GeminiClient>();
         services.AddScoped<RuleBasedAiClient>();
