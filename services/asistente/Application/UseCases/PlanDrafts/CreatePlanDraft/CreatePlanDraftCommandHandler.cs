@@ -160,7 +160,8 @@ public sealed class CreatePlanDraftCommandHandler(
         var warnings = new List<string>();
         if (calendarReadFailed)
         {
-            warnings.Add("No se pudo leer el calendario de partidos. El borrador se generó sin restricciones de calendario pre-partido.");
+            // Criterio de aceptación KAN-486: indicar explícitamente que no se pudo sincronizar el fixture
+            warnings.Add("No se pudo sincronizar el fixture (calendario de partidos). El borrador se generó sin restricciones de calendario pre-partido.");
         }
         if (corrections is { Count: > 0 })
         {
