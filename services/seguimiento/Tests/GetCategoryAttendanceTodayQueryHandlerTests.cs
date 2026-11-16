@@ -71,6 +71,35 @@ public class GetCategoryAttendanceTodayQueryHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_PopulatesLoadAndActivities_WhenAthleteHasRegisteredDailyLoad()
+    {
+        var athleteId = Guid.NewGuid();
+        var load = new DailyLoad
+        {
+            AthleteId = athleteId,
+            Date = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue),
+            GymMinutes = 60,
+            GymRpe = 3,
+            SportTrainingMinutes = 30,
+            SportTrainingRpe = 4
+        };
+
+        SetupAthletes(CreateAthleteDto(athleteId, "Lucas Gómez"));
+        SetupLoads(load);
+
+        var result = await CreateHandler().HandleAsync(new GetCategoryAttendanceTodayQuery(_categoryId));
+
+        var athlete = Assert.Single(result.Athletes);
+        Assert.Equal("Present", athlete.Status);
+        Assert.Equal(90, athlete.TotalMinutes);
+        Assert.Equal(60 * 3 + 30 * 4, athlete.TotalLoad);
+        Assert.NotNull(athlete.Activities);
+        Assert.Equal(2, athlete.Activities.Count);
+        Assert.Contains(athlete.Activities, a => a.Type == "Gym" && a.Minutes == 60 && a.Rpe == 3);
+        Assert.Contains(athlete.Activities, a => a.Type == "SportTraining" && a.Minutes == 30 && a.Rpe == 4);
+    }
+
+    [Fact]
     public async Task HandleAsync_WhenNoneLoaded_PresentCountZero()
     {
         var athleteId = Guid.NewGuid();
