@@ -153,6 +153,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/auth/register-pf:
+    post:
+      tags:
+        - Authentication
+      summary: Registro independiente de Preparador Físico (KAN-601)
+      description: Registra la cuenta de un nuevo preparador físico y despacha un correo con enlace de confirmación. Responde 409 si el email ya existe.
+      operationId: registerPf
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPfRequest'
+      responses:
+        "201":
+          description: Preparador físico registrado exitosamente. Correo de confirmación enviado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterPfResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          description: Ya existe una cuenta registrada con este correo electrónico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/confirm-email:
+    post:
+      tags:
+        - Authentication
+      summary: Confirmación de correo electrónico (KAN-601)
+      description: Activa el correo de la cuenta utilizando el token recibido por email para habilitar el inicio de sesión del PF.
+      operationId: confirmEmail
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmEmailRequest'
+      responses:
+        "200":
+          description: Correo confirmado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmEmailResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/resend-confirmation:
+    post:
+      tags:
+        - Authentication
+      summary: Reenviar correo de confirmación de cuenta (KAN-601)
+      description: Reenvía el correo de confirmación de cuenta de forma anti-enumeración.
+      operationId: resendConfirmation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendConfirmationRequest'
+      responses:
+        "202":
+          description: Solicitud recibida. Si la cuenta existe y está pendiente, se envía el correo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendConfirmationResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+
   /api/v1/auth/forgot-password:
     post:
       tags:
@@ -289,6 +367,76 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         "404":
           description: Atleta no encontrado o no pertenece al Preparador Físico autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/users/me/profile:
+    put:
+      tags:
+        - Users
+      summary: Actualizar perfil de Preparador Físico (KAN-601)
+      description: Actualiza nombre completo y teléfono normalizado del preparador físico autenticado.
+      operationId: updateProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        "200":
+          description: Perfil actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/users/me/deactivate:
+    post:
+      tags:
+        - Users
+      summary: Baja lógica de cuenta del Preparador Físico (KAN-601)
+      description: Da de baja la cuenta del preparador físico, validando la contraseña actual y revocando todas las sesiones activas.
+      operationId: deactivateAccount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivateAccountRequest'
+      responses:
+        "204":
+          description: Cuenta dada de baja exitosamente y sesiones revocadas.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o contraseña incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
           content:
             application/json:
               schema:
@@ -836,3 +984,133 @@ components:
               type: string
           example:
             email: ["El email no tiene un formato válido."]
+
+    RegisterPfRequest:
+      type: object
+      required:
+        - fullName
+        - email
+        - password
+      properties:
+        fullName:
+          type: string
+          example: "Juan Pérez"
+        email:
+          type: string
+          format: email
+          example: "juan.perez@protraining.com"
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"
+        phone:
+          type: string
+          nullable: true
+          example: "+54 9 11 1234-5678"
+        deviceId:
+          type: string
+          nullable: true
+          example: "device-web-pwa-01"
+
+    RegisterPfResponse:
+      type: object
+      required:
+        - id
+        - email
+        - fullName
+        - message
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        message:
+          type: string
+          example: "Registro exitoso. Se ha enviado un correo con instrucciones para activar la cuenta."
+
+    ConfirmEmailRequest:
+      type: object
+      required:
+        - userId
+        - token
+      properties:
+        userId:
+          type: string
+          format: uuid
+        token:
+          type: string
+
+    ConfirmEmailResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Correo electrónico confirmado exitosamente. Ya podés iniciar sesión."
+
+    ResendConfirmationRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "juan.perez@protraining.com"
+
+    ResendConfirmationResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Si la cuenta existe y está pendiente de confirmación, se ha enviado un nuevo correo de activación."
+
+    UpdateProfileRequest:
+      type: object
+      required:
+        - fullName
+      properties:
+        fullName:
+          type: string
+          example: "Juan Pérez Modificado"
+        phone:
+          type: string
+          nullable: true
+          example: "+54 9 11 9988-7766"
+
+    ProfileResponse:
+      type: object
+      required:
+        - id
+        - email
+        - fullName
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "5491199887766"
+
+    DeactivateAccountRequest:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          format: password
+          example: "PasswordSegura123!"

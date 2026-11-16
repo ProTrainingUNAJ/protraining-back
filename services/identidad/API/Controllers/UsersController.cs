@@ -8,10 +8,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.DTOs.Users;
 using Application.UseCases.Auth.GetPfContact;
-using Application.UseCases.Users.UploadUserPhoto;
-using Application.UseCases.Users.GetUserPhoto;
-using Application.UseCases.Users.GetPfPhoto;
+using Application.UseCases.Users.DeactivateAccount;
 using Application.UseCases.Users.DeleteUserPhoto;
+using Application.UseCases.Users.GetPfPhoto;
+using Application.UseCases.Users.GetUserPhoto;
+using Application.UseCases.Users.UpdateProfile;
+using Application.UseCases.Users.UploadUserPhoto;
 
 namespace API.Controllers;
 
@@ -33,7 +35,9 @@ public class UsersController(
     DeleteUserPhotoCommandHandler deletePhotoHandler,
     Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase updateAthleteStatusUseCase,
     Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase updateAthleteEmailUseCase,
-    Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase updateAthletePhoneUseCase) : ControllerBase
+    Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase updateAthletePhoneUseCase,
+    UpdateProfileUseCase updateProfileUseCase,
+    DeactivateAccountUseCase deactivateAccountUseCase) : ControllerBase
 {
     /// <summary>
     /// Actualiza el número de WhatsApp del usuario autenticado.
@@ -351,5 +355,58 @@ public class UsersController(
         }
 
         return Ok(new PfHabitsRecommendationsStatusDto(enabled.Value));
+    }
+
+    /// <summary>
+    /// Actualiza el perfil del Preparador Físico autenticado (Nombre y Teléfono) (KAN-601).
+    /// </summary>
+    /// <param name="request">Nombre completo y teléfono opcional.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 200 con los datos actualizados del perfil.</returns>
+    [HttpPut("me/profile")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(ProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateProfile(
+        [FromBody] UpdateProfileRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await updateProfileUseCase.ExecuteAsync(userId.Value, request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Desactiva la cuenta del Preparador Físico autenticado tras validar su contraseña (KAN-601).
+    /// Pone IsActive = false y revoca todas sus sesiones activas.
+    /// </summary>
+    /// <param name="request">Contraseña actual para confirmación de baja.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 204 No Content si se desactiva con éxito o HTTP 400/401 si la contraseña es errónea.</returns>
+    [HttpPost("me/deactivate")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeactivateAccount(
+        [FromBody] DeactivateAccountRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        await deactivateAccountUseCase.ExecuteAsync(userId.Value, request, cancellationToken);
+        return NoContent();
     }
 }
