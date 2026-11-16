@@ -1,7 +1,37 @@
-# Microservicio Asistente · Evaluación y Selección del Modelo de IA (Llama)
+# Microservicio Asistente · IA, bloques y progresión semanal
 
-> **Tarea:** #079 (`KAN-374`) · **Épica:** E23 · Proveedores de IA: Ollama y Gemini  
-> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 1
+> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 3
+
+> **Estado de proveedores:** la implementación actual mantiene Ollama y Gemini por compatibilidad
+> durante la transición. La cadena objetivo es **agente compatible con OpenAI → Gemini → reglas**.
+> Ollama no debe agregarse a nuevos flujos. Las mediciones históricas de Ollama que siguen en este documento
+> son evidencia de la decisión anterior, no una recomendación para la arquitectura nueva.
+
+## Decisión Sprint 3: caso de uso, proveedor y límites
+
+| Caso | Orden recomendado | Temperatura | Máximo de tokens | Tiempo recomendado |
+|---|---|---:|---:|---:|
+| Borrador de plan por bloques (1-2 semanas) | OpenAI mini → Gemini → reglas | 0,2 | 1.200 | 45 s por proveedor |
+| Ajuste del día / justificación | OpenAI mini → Gemini → reglas | 0,2 | 250 | 15 s por proveedor |
+| Recomendación de entrenamiento | OpenAI mini → Gemini → reglas | 0,3 | 500 | 20 s por proveedor |
+| Recomendación de alimentación | OpenAI mini → Gemini → reglas | 0,2 | 500 | 20 s por proveedor |
+
+Los límites se configuran por `.env` y la suma de los timeouts no debe superar los 100 s del gateway
+ni los 120 s del frontend. Si el saldo de OpenAI fuera limitado, el ajuste del día puede comenzar
+directamente en Gemini por ser un texto corto; la decisión por defecto del proyecto mantiene OpenAI
+primero para comparar calidad y latencia de los tres casos funcionales.
+
+### Privacidad y herramientas
+
+- OpenAI y Gemini reciben únicamente el contexto anonimizado necesario: nunca nombre, email, teléfono,
+  texto libre de lesiones ni otros identificadores directos.
+- El agente debe consultar el catálogo mediante `BuscarEjercicios` y `ObtenerSustitutos`, con un máximo
+  de seis llamadas MCP por solicitud. La IA propone; los validadores y las reglas de dominio deciden.
+- La respuesta del borrador es JSON estructurado por bloques (`warmUp`, `strengthA`, `strengthB`,
+  `accessories`). C# traduce índices a GUIDs y calcula la progresión semanal, incluyendo descarga,
+  límites de intensidad y reglas D-1/D-2.
+- Las claves viven únicamente en el `.env` local (`OPENAI_API_KEY`, `GEMINI_API_KEY`); nunca deben
+  escribirse en el repositorio, Jira, Confluence o logs.
 
 ---
 

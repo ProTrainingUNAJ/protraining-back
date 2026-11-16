@@ -42,7 +42,12 @@ public sealed class OllamaClient(
                 model = _options.Model,
                 prompt,
                 format = "json",
-                stream = false
+                stream = false,
+                options = new
+                {
+                    temperature = _options.Temperature,
+                    num_predict = _options.MaxOutputTokens
+                }
             };
 
             var url = $"{_options.BaseUrl.TrimEnd('/')}/api/generate";
@@ -263,7 +268,7 @@ public sealed class OllamaClient(
             return null;
         }
 
-        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises, matchDates);
+        var prompt = RoutinePromptBuilder.BuildBlockPlanDraftPrompt(request, availableExercises, matchDates);
 
         try
         {
@@ -338,11 +343,16 @@ public sealed class OllamaClient(
                 return null;
             }
 
-            var (isValid, parsedContent, errorMessage, isSyntaxError) = PlanDraftAiParser.Parse(rawText);
+            var (isValid, parsedContent, errorMessage) = PlanDraftBlockParser.ParseAndExpand(
+                rawText,
+                availableExercises,
+                request.Weeks,
+                request.StartDate,
+                matchDates);
             if (!isValid)
             {
                 stopwatch.Stop();
-                var validationTag = isSyntaxError ? "JsonInvalido" : "SchemaInvalido";
+                var validationTag = "SchemaInvalido";
                 logger?.LogWarning("La respuesta de Ollama no cumple con el esquema del borrador ({ValidationTag}): {Errors}. Activando respaldo.", validationTag, errorMessage);
                 await aiAuditService.LogAsync(AiLog.Create(
                     ProviderName,

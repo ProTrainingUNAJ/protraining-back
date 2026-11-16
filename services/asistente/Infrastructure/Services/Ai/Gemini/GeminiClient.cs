@@ -68,7 +68,8 @@ public sealed class GeminiClient(
                 generationConfig = new
                 {
                     responseMimeType = "application/json",
-                    temperature = 0.2
+                    temperature = _options.Temperature,
+                    maxOutputTokens = _options.MaxOutputTokens
                 }
             };
 
@@ -255,7 +256,7 @@ public sealed class GeminiClient(
             return null;
         }
 
-        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, availableExercises, matchDates);
+        var prompt = RoutinePromptBuilder.BuildBlockPlanDraftPrompt(request, availableExercises, matchDates);
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
@@ -341,7 +342,13 @@ public sealed class GeminiClient(
             var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
             stopwatch.Stop();
 
-            return await ParseAndLogGeminiPlanDraftResponseAsync(request.AthleteId, prompt, responseBody, stopwatch.ElapsedMilliseconds);
+            return await ParseAndLogGeminiPlanDraftResponseAsync(
+                request,
+                availableExercises,
+                matchDates,
+                prompt,
+                responseBody,
+                stopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -481,7 +488,9 @@ public sealed class GeminiClient(
     }
 
     private async Task<PlanDraftContentDto?> ParseAndLogGeminiPlanDraftResponseAsync(
-        Guid? athleteId,
+        CreatePlanDraftRequestDto request,
+        IReadOnlyList<CatalogExerciseDto> availableExercises,
+        IReadOnlyList<DateOnly>? matchDates,
         string prompt,
         string jsonResponse,
         long latencyMs)
@@ -510,7 +519,7 @@ public sealed class GeminiClient(
                 isValid: false,
                 validationResult: "SinCandidatos",
                 response: jsonResponse,
-                athleteId: athleteId,
+                athleteId: request.AthleteId,
                 promptTokens: promptTokens,
                 completionTokens: completionTokens,
                 totalTokens: totalTokens,
@@ -533,7 +542,7 @@ public sealed class GeminiClient(
                 latencyMs,
                 isValid: false,
                 validationResult: "ContenidoVacio",
-                athleteId: athleteId,
+                athleteId: request.AthleteId,
                 promptTokens: promptTokens,
                 completionTokens: completionTokens,
                 totalTokens: totalTokens,
@@ -541,10 +550,15 @@ public sealed class GeminiClient(
             return null;
         }
 
-        var (isValid, content, errorMessage, isSyntaxError) = PlanDraftAiParser.Parse(text);
+        var (isValid, content, errorMessage) = PlanDraftBlockParser.ParseAndExpand(
+            text,
+            availableExercises,
+            request.Weeks,
+            request.StartDate,
+            matchDates);
         if (!isValid)
         {
-            var validationTag = isSyntaxError ? "JsonInvalido" : "SchemaInvalido";
+            var validationTag = "SchemaInvalido";
             logger?.LogWarning("La propuesta de planificación de Gemini no cumple con el esquema ({ValidationTag}): {Error}. Activando respaldo.",
                 validationTag, errorMessage);
             await aiAuditService.LogAsync(AiLog.Create(
@@ -554,7 +568,7 @@ public sealed class GeminiClient(
                 isValid: false,
                 validationResult: validationTag,
                 response: text,
-                athleteId: athleteId,
+                athleteId: request.AthleteId,
                 promptTokens: promptTokens,
                 completionTokens: completionTokens,
                 totalTokens: totalTokens,
@@ -569,7 +583,7 @@ public sealed class GeminiClient(
             isValid: true,
             validationResult: "Valido",
             response: text,
-            athleteId: athleteId,
+            athleteId: request.AthleteId,
             promptTokens: promptTokens,
             completionTokens: completionTokens,
             totalTokens: totalTokens));

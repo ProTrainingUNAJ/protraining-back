@@ -232,6 +232,47 @@ public static class RoutinePromptBuilder
         return sb.ToString();
     }
 
+    public static string BuildBlockPlanDraftPrompt(
+        CreatePlanDraftRequestDto request,
+        IReadOnlyList<CatalogExerciseDto> availableExercises,
+        IReadOnlyList<DateOnly>? matchDates = null)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Sos un preparador físico experto para ProTraining.");
+        sb.AppendLine("Diseñá una sesión modelo de una semana dividida en bloques. La aplicación calcula la progresión de las semanas siguientes.");
+        sb.AppendLine($"Objetivo: {request.Goal}");
+        sb.AppendLine($"Días por semana: {request.DaysPerWeek}");
+        sb.AppendLine("La respuesta debe contener exactamente una sesión por día solicitado y usar índices de la lista de ejercicios.");
+        sb.AppendLine();
+
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
+        sb.AppendLine("BLOQUES OBLIGATORIOS Y ORDEN:");
+        sb.AppendLine("1. warmUp: entrada en calor y movilidad, sin porcentaje de RM.");
+        sb.AppendLine("2. strengthA: ejercicio principal multiarticular, 3-5 series de 3-8 repeticiones.");
+        sb.AppendLine("3. strengthB: segundo patrón de fuerza, 3-4 series de 5-10 repeticiones.");
+        sb.AppendLine("4. accessories: 1-3 ejercicios accesorios, 2-4 series de 8-15 repeticiones.");
+        sb.AppendLine("Usá entre 5 y 6 ejercicios por sesión cuando el catálogo lo permita, sin repetir un ejercicio dentro de la sesión.");
+        sb.AppendLine("Escribí name, objective, justificationSummary y coachNotes en español de Argentina, de forma concreta.");
+        sb.AppendLine("No calcules progresiones semanales: eso lo hará una regla determinística en C#.");
+
+        if (matchDates is { Count: > 0 })
+        {
+            sb.AppendLine("Hay partidos oficiales en el calendario. No armes fuerza el día del partido y respetá D-1 <= 60% y D-2 <= 75%.");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("CATÁLOGO OFICIAL. El índice empieza en 1:");
+        for (var index = 0; index < availableExercises.Count; index++)
+        {
+            var exercise = availableExercises[index];
+            sb.AppendLine($"{index + 1}. {exercise.Name} | grupo: {exercise.MuscleGroup ?? "no informado"} | id: {exercise.Id}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("Respondé únicamente JSON válido con este esquema:");
+        sb.AppendLine(BlockPromptSchema.SchemaJson);
+        return sb.ToString();
+    }
+
     private static void AppendPfDecisionContext(
         StringBuilder sb,
         IReadOnlyList<PfDecisionContextDto>? decisions)
