@@ -1,6 +1,7 @@
 namespace Application.UseCases.Ai.SuggestRoutine;
 
 using System.Text.Json;
+using Application.Common.PfDecisions;
 using Application.DTOs.Ai;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -15,7 +16,8 @@ public sealed class SuggestRoutineUseCase(
     IStructureAthleteClient structureAthleteClient,
     IRoutineDraftRepository? routineDraftRepository = null,
     IUnitOfWork? unitOfWork = null,
-    ILogger<SuggestRoutineUseCase>? logger = null)
+    ILogger<SuggestRoutineUseCase>? logger = null,
+    IPfDecisionRepository? pfDecisionRepository = null)
 {
     public async Task<RoutineSuggestionResponseDto> ExecuteAsync(
         RoutineSuggestionRequestDto request,
@@ -27,7 +29,20 @@ public sealed class SuggestRoutineUseCase(
         if (string.IsNullOrWhiteSpace(request.Goal))
             throw new DomainException("El objetivo de entrenamiento es obligatorio.");
 
-        var normalizedRequest = request with { Goal = request.Goal.Trim() };
+        var previousDecisions = request.PreviousPfDecisions;
+        if (previousDecisions is null && pfDecisionRepository != null)
+        {
+            var decisions = await pfDecisionRepository.GetRecentAsync(
+                request.AthleteId,
+                cancellationToken: cancellationToken);
+            previousDecisions = PfDecisionContextMapper.Map(decisions);
+        }
+
+        var normalizedRequest = request with
+        {
+            Goal = request.Goal.Trim(),
+            PreviousPfDecisions = previousDecisions
+        };
 
         var aiResponse = await aiService.SuggestRoutineAsync(normalizedRequest, cancellationToken);
 

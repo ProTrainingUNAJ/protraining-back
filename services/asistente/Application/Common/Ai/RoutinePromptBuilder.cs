@@ -71,6 +71,8 @@ public static class RoutinePromptBuilder
             sb.AppendLine();
         }
 
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
+
         var exercises = availableExercises ?? request.AvailableExercises;
         if (exercises is { Count: > 0 })
         {
@@ -141,6 +143,8 @@ public static class RoutinePromptBuilder
             sb.AppendLine($"Start date: {request.StartDate.Value:yyyy-MM-dd}");
         }
         sb.AppendLine();
+
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
 
         // KAN-407: Periodización competitiva pre-partido
         if (request.StartDate.HasValue && matchDates is { Count: > 0 })
@@ -226,6 +230,34 @@ public static class RoutinePromptBuilder
             """);
 
         return sb.ToString();
+    }
+
+    private static void AppendPfDecisionContext(
+        StringBuilder sb,
+        IReadOnlyList<PfDecisionContextDto>? decisions)
+    {
+        if (decisions is not { Count: > 0 })
+            return;
+
+        sb.AppendLine("DECISIONES PREVIAS DEL PREPARADOR FÍSICO:");
+        sb.AppendLine("Usá estas decisiones como evidencia del criterio del PF. No las trates como reglas absolutas si contradicen las restricciones actuales.");
+        foreach (var decision in decisions)
+        {
+            var zone = string.IsNullOrWhiteSpace(decision.Zone) ? "zona no informada" : decision.Zone;
+            var finalExercise = decision.FinalExerciseId.HasValue
+                ? decision.FinalExerciseId.Value.ToString()
+                : "sin ejercicio final";
+            var percentage = decision.FinalPercentage.HasValue
+                ? $"{decision.FinalPercentage.Value:0.##}%"
+                : "sin porcentaje final";
+
+            sb.AppendLine(
+                $"- {decision.Date:yyyy-MM-dd} | origen: {decision.Source} | zona: {zone} | " +
+                $"decisión: {decision.Decision} | sugerido: {decision.SuggestedExerciseId} | " +
+                $"final: {finalExercise} | porcentaje final: {percentage}.");
+        }
+        sb.AppendLine("Priorizá los patrones repetidos del PF y explicá cuando una restricción actual obligue a apartarse de ellos.");
+        sb.AppendLine();
     }
 
     /// <summary>
