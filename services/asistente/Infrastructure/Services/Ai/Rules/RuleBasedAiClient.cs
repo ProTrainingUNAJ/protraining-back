@@ -4,6 +4,7 @@ using Application.Common.DayAdjustments;
 using Application.Common.Recommendations;
 using Application.DTOs.DayAdjustments;
 using Application.Common.Helpers;
+using Application.Common.PlanDrafts;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Application.DTOs.Recommendations;
@@ -101,98 +102,58 @@ public sealed class RuleBasedAiClient(
 
         var (legs, push, pull) = CategorizeCatalog(catalog);
 
-        var weeks = new List<PlanDraftWeekDto>();
-
         // KAN-563: Respetar días de entrenamiento solicitados (trainingDays) o usar días por defecto
         var selectedDays = ResolveTrainingDays(request.TrainingDays, request.DaysPerWeek);
+        var startDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Armar una semana modelo de sesiones y proyectar semanas 2 a N con WeeklyProgressionEngine
+        var modelSessions = new List<PlanDraftSessionDto>();
+        foreach (var dayOfWeek in selectedDays)
+        {
+            var sessionIndexInWeek = modelSessions.Count;
+            var (sessionGroupName, targetGroupExercises) = (sessionIndexInWeek % 3) switch
+            {
+                0 => ("Piernas", legs),
+                1 => ("Empuje", push),
+                _ => ("Tracción", pull)
+            };
+
+            var exercisesInSession = Math.Min(ExercisesPerSession, targetGroupExercises.Count);
+            var sessionExercises = new List<PlanDraftExerciseDto>();
+            for (var e = 1; e <= exercisesInSession; e++)
+            {
+                var catEx = targetGroupExercises[(e - 1) % targetGroupExercises.Count];
+
+                sessionExercises.Add(new PlanDraftExerciseDto(
+                    ExerciseId: catEx.Id,
+                    Order: e,
+                    Sets: 3,
+                    Reps: 8,
+                    TargetPercentage: 80m
+                ));
+            }
+
+            var sessionOrder = modelSessions.Count + 1;
+            modelSessions.Add(new PlanDraftSessionDto(
+                Name: $"Sesión {sessionOrder} - {sessionGroupName}",
+                DayOfWeek: dayOfWeek,
+                Order: sessionOrder,
+                CoachNotes: $"{WarmUpNote} Progresión base 3x8 al 80%. Enfoque en técnica y control excéntrico.",
+                Exercises: sessionExercises
+            ));
+        }
+
+        var weeks = WeeklyProgressionEngine.GenerateProgressionWeeks(
+            modelSessions,
+            request.Weeks,
+            startDate,
+            matchDates);
+
+        stopwatch.Stop();
 
         var matchSet = matchDates != null && matchDates.Count > 0
             ? new HashSet<DateOnly>(matchDates)
             : null;
-
-        var startDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-
-        for (var w = 1; w <= request.Weeks; w++)
-        {
-            var weekStart = startDate.AddDays((w - 1) * 7);
-            var sessions = new List<PlanDraftSessionDto>();
-
-            foreach (var dayOfWeek in selectedDays)
-            {
-                var sessionDate = weekStart;
-                for (var i = 0; i < 7; i++)
-                {
-                    var candidate = weekStart.AddDays(i);
-                    if (candidate.DayOfWeek == dayOfWeek)
-                    {
-                        sessionDate = candidate;
-                        break;
-                    }
-                }
-
-                if (matchSet != null && matchSet.Contains(sessionDate) && !MatchDayLoadRules.AllowStrengthSessionOnMatchDay)
-                {
-                    // Día de partido (D): no se programa sesión de fuerza
-                    continue;
-                }
-
-                var targetPercentage = 80m;
-                var notes = "Progresión base 3x8 al 80%. Enfoque en técnica y control excéntrico.";
-
-                if (matchSet != null && matchSet.Contains(sessionDate.AddDays(1)))
-                {
-                    targetPercentage = MatchDayLoadRules.MaxPercentageOneDayBeforeMatch;
-                    notes = $"Tapering pre-partido (D-1): Carga reducida al {targetPercentage:0.#}% para optimizar recuperación.";
-                }
-                else if (matchSet != null && matchSet.Contains(sessionDate.AddDays(2)))
-                {
-                    targetPercentage = MatchDayLoadRules.MaxPercentageTwoDaysBeforeMatch;
-                    notes = $"Tapering pre-partido (D-2): Carga moderada al {targetPercentage:0.#}% para preservar frescura neuromuscular.";
-                }
-
-                // KAN-563: Armar cada sesión con ejercicios del grupo correspondiente (piernas, empuje, tracción)
-                var sessionIndexInWeek = sessions.Count;
-                var (sessionGroupName, targetGroupExercises) = (sessionIndexInWeek % 3) switch
-                {
-                    0 => ("Piernas", legs),
-                    1 => ("Empuje", push),
-                    _ => ("Tracción", pull)
-                };
-
-                // Una sesión real tiene 5 ejercicios distintos (menos solo si el grupo no tiene tantos en el catálogo)
-                var exercisesInSession = Math.Min(ExercisesPerSession, targetGroupExercises.Count);
-                var sessionExercises = new List<PlanDraftExerciseDto>();
-                for (var e = 1; e <= exercisesInSession; e++)
-                {
-                    var exerciseOffset = ((w - 1) * exercisesInSession) + (e - 1);
-                    var catEx = targetGroupExercises[exerciseOffset % targetGroupExercises.Count];
-
-                    sessionExercises.Add(new PlanDraftExerciseDto(
-                        ExerciseId: catEx.Id,
-                        Order: e,
-                        Sets: 3,
-                        Reps: 8,
-                        TargetPercentage: targetPercentage
-                    ));
-                }
-
-                var sessionOrder = sessions.Count + 1;
-                sessions.Add(new PlanDraftSessionDto(
-                    Name: $"Sesión {sessionOrder} - {sessionGroupName}",
-                    DayOfWeek: dayOfWeek,
-                    Order: sessionOrder,
-                    CoachNotes: $"{WarmUpNote} {notes}",
-                    Exercises: sessionExercises
-                ));
-            }
-
-            weeks.Add(new PlanDraftWeekDto(
-                WeekNumber: w,
-                Sessions: sessions
-            ));
-        }
-
-        stopwatch.Stop();
 
         var justification = matchSet != null && matchSet.Count > 0
             ? $"Planificación adaptada con periodización competitiva ({matchSet.Count} partido(s) oficial(es) considerados). Base 3x8 al 80% con tapering pre-partido (D-1 <= 60%, D-2 <= 75%)."

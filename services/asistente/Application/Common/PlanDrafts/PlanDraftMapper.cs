@@ -51,17 +51,17 @@ public static class PlanDraftMapper
         );
     }
 
-    // El PF tiene que saber por qué el borrador no lo armó el modelo local. Se arma a partir del proveedor
+    // El PF tiene que saber qué proveedor armó el borrador. Se arma a partir del proveedor
     // guardado, así el aviso aparece también al volver a abrir el borrador (los demás avisos no se guardan).
     public static IReadOnlyList<string> ProviderWarnings(string? provider) => provider switch
     {
-        "Gemini" =>
+        "Gemini" or "Agente (Gemini)" =>
         [
-            "El modelo local (Ollama) no devolvió un borrador válido a tiempo, así que lo armó el respaldo externo (Gemini), sin nombres ni datos personales de los atletas."
+            "El borrador lo armó el respaldo externo (Gemini), sin nombres ni datos personales de los atletas."
         ],
         "Reglas" =>
         [
-            "Ni el modelo local (Ollama) ni el respaldo externo (Gemini) devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
+            "Los proveedores de IA no devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
         ],
         _ => []
     };
