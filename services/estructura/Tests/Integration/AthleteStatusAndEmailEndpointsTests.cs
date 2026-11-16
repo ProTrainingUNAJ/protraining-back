@@ -104,6 +104,43 @@ public sealed class AthleteStatusAndEmailEndpointsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Given_ValidAthlete_When_PfUpdatesPhone_Then_PhoneIsUpdatedInDbAndReturns200Ok()
+    {
+        // arrange
+        var athlete = Athlete.CreateAdult(
+            "Lautaro",
+            "Martínez",
+            "toro@inter.it",
+            "+5491112345678",
+            signsInitialConsent: true);
+
+        using (var dbContext = _factory.CreateDbContext(_pfId))
+        {
+            dbContext.Athletes.Add(athlete);
+            await dbContext.SaveChangesAsync();
+        }
+
+        // act: actualizar phone
+        var newPhone = "+5491198765432";
+        var response = await _clientPf.PatchAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/phone",
+            new UpdateAthletePhoneRequest(Phone: newPhone));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var dto = await response.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(dto);
+        Assert.Equal(newPhone, dto.Phone);
+
+        // verify in db
+        using (var dbContext = _factory.CreateDbContext(_pfId))
+        {
+            var dbAthlete = await dbContext.Athletes.FindAsync(athlete.Id);
+            Assert.NotNull(dbAthlete);
+            Assert.Equal(newPhone, dbAthlete.Phone);
+        }
+    }
+
+    [Fact]
     public async Task Given_CrossTenantAttempt_When_PfBAttemptsToModifyPfAAthlete_Then_Returns404NotFound()
     {
         // arrange: atleta pertenece a _pfId
@@ -134,6 +171,12 @@ public sealed class AthleteStatusAndEmailEndpointsTests : IAsyncDisposable
             $"/api/v1/athletes/{athlete.Id}/email",
             new UpdateAthleteEmailRequest(Email: "hacker@test.com"));
         Assert.Equal(HttpStatusCode.NotFound, emailResponse.StatusCode);
+
+        // act & assert phone
+        var phoneResponse = await clientPfB.PatchAsJsonAsync(
+            $"/api/v1/athletes/{athlete.Id}/phone",
+            new UpdateAthletePhoneRequest(Phone: "+5491100000000"));
+        Assert.Equal(HttpStatusCode.NotFound, phoneResponse.StatusCode);
     }
 
     public async ValueTask DisposeAsync()

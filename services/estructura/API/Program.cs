@@ -94,6 +94,7 @@ builder.Services.AddScoped<CreateAthleteCommandHandler>();
 builder.Services.AddScoped<UpdateAthleteCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.UpdateAthleteStatus.UpdateAthleteStatusCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.UpdateAthleteEmail.UpdateAthleteEmailCommandHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhone.UpdateAthletePhoneCommandHandler>();
 builder.Services.AddScoped<UpdateHabitsPermissionCommandHandler>();
 builder.Services.AddScoped<DeleteAthleteCommandHandler>();
 builder.Services.AddScoped<AssignAthleteCategoryCommandHandler>();

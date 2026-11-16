@@ -12,6 +12,7 @@ using Application.UseCases.Athletes.RemoveAthleteCategory;
 using Application.UseCases.Athletes.UpdateAthlete;
 using Application.UseCases.Athletes.UpdateAthleteStatus;
 using Application.UseCases.Athletes.UpdateAthleteEmail;
+using Application.UseCases.Athletes.UpdateAthletePhone;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Athletes.UpdateMedicalRecord;
 using Application.UseCases.Athletes.UploadAthletePhoto;
@@ -42,7 +43,8 @@ public sealed class AthletesController(
     GetAthletePhotoQueryHandler getPhotoHandler,
     DeleteAthletePhotoCommandHandler deletePhotoHandler,
     UpdateAthleteStatusCommandHandler updateStatusHandler,
-    UpdateAthleteEmailCommandHandler updateEmailHandler) : ControllerBase
+    UpdateAthleteEmailCommandHandler updateEmailHandler,
+    UpdateAthletePhoneCommandHandler updatePhoneHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -118,6 +120,15 @@ public sealed class AthletesController(
         CancellationToken cancellationToken) =>
         Ok(await updateEmailHandler.HandleAsync(
             new UpdateAthleteEmailCommand(id, request.Email),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/phone")]
+    public async Task<ActionResult<AthleteDto>> UpdatePhone(
+        Guid id,
+        UpdateAthletePhoneRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updatePhoneHandler.HandleAsync(
+            new UpdateAthletePhoneCommand(id, request.Phone),
             cancellationToken));
 
     [HttpPost("{id:guid}/medical-record/access")]

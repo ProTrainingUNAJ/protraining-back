@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Application.DTOs.Auth;
 using Application.DTOs.Users;
 using Identidad.Tests.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Identidad.Tests.Integration;
@@ -77,6 +78,32 @@ public sealed class UpdateAthleteAccountTests : IAsyncDisposable
             "/api/v1/auth/login",
             new LoginRequestDto(newEmail, "PasswordSegura123!", "device-acc-new"));
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_AuthenticatedPf_When_UpdatingAthletePhone_Then_PhoneNumberIsUpdatedInDatabase()
+    {
+        // arrange
+        var pf = await _factory.SeedUserAsync("pf.acc03@protraining.com", "PF Acc 03", "PreparadorFisico", "PasswordSegura123!");
+        var athlete = await _factory.SeedUserAsync("atleta.acc03@protraining.com", "Atleta Acc 03", "Atleta", "PasswordSegura123!", pfId: pf.Id);
+
+        var pfLogin = await LoginUserAsync(pf.Email!, "PasswordSegura123!");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pfLogin.AccessToken);
+
+        // act: actualizar telefono
+        var newPhone = "+5491122334455";
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/users/athletes/{athlete.Id}/phone",
+            new Application.DTOs.Users.UpdateAthleteUserPhoneRequestDto(PhoneNumber: newPhone));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // assert: verificado en base de datos
+        using var scope = _factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User>>();
+        var dbAthlete = await userManager.FindByIdAsync(athlete.Id.ToString());
+        Assert.NotNull(dbAthlete);
+        Assert.Equal(newPhone, dbAthlete.PhoneNumber);
     }
 
     public async ValueTask DisposeAsync()
