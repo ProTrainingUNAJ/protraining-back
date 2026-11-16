@@ -32,7 +32,8 @@ public class UsersController(
     GetPfPhotoQueryHandler getPfPhotoHandler,
     DeleteUserPhotoCommandHandler deletePhotoHandler,
     Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase updateAthleteStatusUseCase,
-    Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase updateAthleteEmailUseCase) : ControllerBase
+    Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase updateAthleteEmailUseCase,
+    Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase updateAthletePhoneUseCase) : ControllerBase
 {
     /// <summary>
     /// Actualiza el número de WhatsApp del usuario autenticado.
@@ -240,6 +241,25 @@ public class UsersController(
         CancellationToken cancellationToken)
     {
         await updateAthleteEmailUseCase.ExecuteAsync(athleteId, request, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Actualiza el número de teléfono de la cuenta de un atleta a cargo del Preparador Físico.
+    /// </summary>
+    [HttpPatch("athletes/{athleteId:guid}/phone")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAthletePhone(
+        [FromRoute] Guid athleteId,
+        [FromBody] Application.DTOs.Users.UpdateAthleteUserPhoneRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await updateAthletePhoneUseCase.ExecuteAsync(athleteId, request, cancellationToken);
         return NoContent();
     }
 

@@ -78,6 +78,7 @@ builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerat
 builder.Services.AddScoped<ResetAthletePasswordUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase>();
 
 builder.Services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();

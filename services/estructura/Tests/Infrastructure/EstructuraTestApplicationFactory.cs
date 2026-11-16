@@ -141,6 +141,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<UpdateAthleteCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UpdateAthleteStatus.UpdateAthleteStatusCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UpdateAthleteEmail.UpdateAthleteEmailCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhone.UpdateAthletePhoneCommandHandler>();
                 services.AddScoped<UpdateHabitsPermissionCommandHandler>();
                 services.AddScoped<DeleteAthleteCommandHandler>();
                 services.AddScoped<AssignAthleteCategoryCommandHandler>();
