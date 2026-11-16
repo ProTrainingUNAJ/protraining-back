@@ -6,14 +6,15 @@ using API.Services;
 using Application.Exceptions;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
 /// <summary>
-/// Pruebas unitarias para el cliente HTTP resiliente de eventos de calendario de Estructura (#111 · KAN-406 · #178 · KAN-473).
-/// Valida el consumo de partidos vía endpoint interno, reenvío de Authorization y lanzamiento de excepciones ante 401/403.
+/// Pruebas unitarias para el cliente HTTP resiliente de eventos de calendario de Estructura (#111 · KAN-406 · #178 · KAN-473 · #191 · KAN-486).
+/// Valida el consumo de partidos vía endpoint interno, reenvío de Authorization, degradación elegante a caché y lanzamiento de excepciones ante 401/403.
 /// </summary>
 public sealed class StructureCalendarClientTests
 {
@@ -32,13 +33,14 @@ public sealed class StructureCalendarClientTests
 
     private static StructureCalendarClient CreateClient(
         HttpMessageHandler handler,
-        ILogger<StructureCalendarClient>? logger = null)
+        ILogger<StructureCalendarClient>? logger = null,
+        IMemoryCache? memoryCache = null)
     {
         var httpClient = new HttpClient(handler)
         {
             BaseAddress = new Uri("http://estructura:8080/")
         };
-        return new StructureCalendarClient(httpClient, logger ?? NullLogger<StructureCalendarClient>.Instance);
+        return new StructureCalendarClient(httpClient, logger ?? NullLogger<StructureCalendarClient>.Instance, memoryCache);
     }
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode status, string body) =>
@@ -230,5 +232,114 @@ public sealed class StructureCalendarClientTests
         Assert.NotNull(innerHandler.LastRequest.Headers.Authorization);
         Assert.Equal("Bearer", innerHandler.LastRequest.Headers.Authorization.Scheme);
         Assert.Equal("token-del-preparador-fisico", innerHandler.LastRequest.Headers.Authorization.Parameter);
+    }
+
+    [Fact]
+    public async Task Given_SuccessfulFetch_Then_StructureFailsWith500_When_GetMatchDates_Then_DegradesGracefullyToCachedDates()
+    {
+        // Arrange: KAN-486 Degradación elegante a caché ante fallo de Estructura
+        var categoryId = Guid.NewGuid();
+        var from = new DateOnly(2026, 11, 2);
+        var to = new DateOnly(2026, 11, 8);
+        var matchDate = new DateOnly(2026, 11, 7);
+
+        var json = $$"""
+            [
+                { "date": "{{matchDate:yyyy-MM-dd}}", "type": "Official" }
+            ]
+            """;
+
+        var call = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            call++;
+            return call == 1
+                ? JsonResponse(HttpStatusCode.OK, json)
+                : new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var client = CreateClient(handler, memoryCache: cache);
+
+        // Act 1: Primera llamada exitosa, puebla la caché
+        var firstResult = await client.GetMatchDatesAsync(categoryId, from, to);
+        Assert.Single(firstResult);
+        Assert.Equal(matchDate, firstResult[0]);
+
+        // Act 2: Segunda llamada con Estructura caído (500) -> Debe degradar a caché sin arrojar excepción
+        var fallbackResult = await client.GetMatchDatesAsync(categoryId, from, to);
+
+        // Assert
+        Assert.NotNull(fallbackResult);
+        var date = Assert.Single(fallbackResult);
+        Assert.Equal(matchDate, date);
+    }
+
+    [Fact]
+    public async Task Given_SuccessfulFetch_Then_StructureThrowsConnectionRefused_When_GetMatchDates_Then_DegradesGracefullyToCachedDates()
+    {
+        // Arrange: KAN-486 Caída total por excepción de conectividad
+        var categoryId = Guid.NewGuid();
+        var from = new DateOnly(2026, 11, 2);
+        var to = new DateOnly(2026, 11, 8);
+        var matchDate = new DateOnly(2026, 11, 7);
+
+        var json = $$"""
+            [
+                { "date": "{{matchDate:yyyy-MM-dd}}", "type": "Official" }
+            ]
+            """;
+
+        var call = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            call++;
+            if (call == 1)
+                return JsonResponse(HttpStatusCode.OK, json);
+
+            throw new HttpRequestException("Connection refused (estructura:8080)");
+        });
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var client = CreateClient(handler, memoryCache: cache);
+
+        // 1. Primer llamado exitoso
+        await client.GetMatchDatesAsync(categoryId, from, to);
+
+        // 2. Segundo llamado con error de red -> degrada a caché
+        var fallbackResult = await client.GetMatchDatesAsync(categoryId, from, to);
+
+        Assert.NotNull(fallbackResult);
+        var date = Assert.Single(fallbackResult);
+        Assert.Equal(matchDate, date);
+    }
+
+    [Fact]
+    public async Task Given_CacheExists_When_StructureReturns403Forbidden_Then_DoesNotUseCacheAndThrowsException()
+    {
+        // Arrange: Un error 403 Forbidden no debe ser silenciado ni enmascarado con datos cacheados
+        var categoryId = Guid.NewGuid();
+        var from = new DateOnly(2026, 11, 2);
+        var to = new DateOnly(2026, 11, 8);
+
+        var json = """[ { "date": "2026-11-07", "type": "Official" } ]""";
+        var call = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            call++;
+            return call == 1
+                ? JsonResponse(HttpStatusCode.OK, json)
+                : new HttpResponseMessage(HttpStatusCode.Forbidden);
+        });
+
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var client = CreateClient(handler, memoryCache: cache);
+
+        // Puebla caché
+        await client.GetMatchDatesAsync(categoryId, from, to);
+
+        // Al recibir 403, debe lanzar StructureServiceUnavailableException
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
+            client.GetMatchDatesAsync(categoryId, from, to));
     }
 }
