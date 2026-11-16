@@ -5,7 +5,6 @@ using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
-using Application.Interfaces.Services;
 using Application.UseCases.DailyLoads.GetAthleteWeek;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
 using Domain.Common;
@@ -28,10 +27,10 @@ public class DailyLoadsControllerTests
         _weekHandler = new GetAthleteWeekQueryHandler(_loads.Object);
     }
 
-    private DailyLoadsController CreateController()
+    private DailyLoadsController CreateController(Mock<ICurrentUser>? currentUser = null)
     {
         var handler = new RegisterDailyLoadCommandHandler(_loads.Object, _unitOfWork.Object);
-        var controller = new DailyLoadsController(handler, _weekHandler, _estructura.Object);
+        var controller = new DailyLoadsController(handler, _weekHandler, _estructura.Object, currentUser?.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -89,6 +88,35 @@ public class DailyLoadsControllerTests
         _loads.Verify(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
         _loads.Verify(r => r.AddAsync(It.IsAny<DailyLoad>(), It.IsAny<CancellationToken>()), Times.Never);
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Register_WithPreparadorFisicoRole_AndOwnAthlete_Returns_201()
+    {
+        var athleteId = Guid.NewGuid();
+        var userMock = new Mock<ICurrentUser>();
+        userMock.Setup(u => u.IsInRole("PreparadorFisico")).Returns(true);
+        _estructura.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        ConfigurarNuevo();
+
+        var result = await CreateController(userMock).Register(athleteId, RequestValido(), CancellationToken.None);
+
+        var created = Assert.IsType<CreatedResult>(result.Result);
+        Assert.Equal(201, created.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_WithPreparadorFisicoRole_AndNotOwnAthlete_Throws_AthleteNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        var userMock = new Mock<ICurrentUser>();
+        userMock.Setup(u => u.IsInRole("PreparadorFisico")).Returns(true);
+        _estructura.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
+            CreateController(userMock).Register(athleteId, RequestValido(), CancellationToken.None));
+
+        _loads.Verify(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

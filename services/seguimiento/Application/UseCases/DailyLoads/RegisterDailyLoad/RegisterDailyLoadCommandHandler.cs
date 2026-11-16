@@ -11,7 +11,9 @@ namespace Application.UseCases.DailyLoads.RegisterDailyLoad;
 public sealed record RegisterDailyLoadResult(DailyLoadResponseDto Response, bool Created);
 
 public sealed class RegisterDailyLoadCommandHandler(
-    IDailyLoadRepository repository, IUnitOfWork unitOfWork)
+    IDailyLoadRepository repository,
+    IUnitOfWork unitOfWork,
+    IAttendanceRepository? attendanceRepository = null)
 {
     public async Task<RegisterDailyLoadResult> HandleAsync(
         RegisterDailyLoadCommand command, CancellationToken cancellationToken = default)
@@ -42,6 +44,15 @@ public sealed class RegisterDailyLoadCommandHandler(
             match1.Minutes, match1.Rpe,
             match2.Minutes, match2.Rpe,
             individual.Minutes, individual.Rpe);
+
+        if (attendanceRepository is not null)
+        {
+            var attendance = await attendanceRepository.GetByAthleteAndDateAsync(command.AthleteId, date, cancellationToken);
+            if (attendance is not null && !attendance.IsPresent)
+            {
+                attendance.IsPresent = true;
+            }
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

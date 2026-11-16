@@ -14,15 +14,14 @@ namespace API.Controllers.DailyLoads;
 public sealed class DailyLoadsController(
     RegisterDailyLoadCommandHandler handler,
     GetAthleteWeekQueryHandler weekHandler,
-    IStructureClient structureClient) : ControllerBase
+    IStructureClient structureClient,
+    ICurrentUser? currentUser = null) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<DailyLoadResponseDto>> Register(
         Guid athleteId, RegisterDailyLoadRequest request, CancellationToken cancellationToken)
     {
-        var me = await structureClient.GetMeAsync(cancellationToken);
-        if (me is null) throw new NoAthleteLinkedException();
-        if (me.AthleteId != athleteId) throw new ForbiddenException();
+        await ValidateAccessAsync(athleteId, cancellationToken);
 
         var result = await handler.HandleAsync(
             new RegisterDailyLoadCommand(athleteId, request), cancellationToken);
@@ -36,9 +35,7 @@ public sealed class DailyLoadsController(
     public async Task<ActionResult<DailyLoadResponseDto>> Get(
         Guid athleteId, CancellationToken cancellationToken)
     {
-        var me = await structureClient.GetMeAsync(cancellationToken);
-        if (me is null) throw new NoAthleteLinkedException();
-        if (me.AthleteId != athleteId) throw new ForbiddenException();
+        await ValidateAccessAsync(athleteId, cancellationToken);
 
         return Ok(await handler.GetTodayAsync(athleteId, cancellationToken));
     }
@@ -47,11 +44,23 @@ public sealed class DailyLoadsController(
     public async Task<ActionResult<AthleteWeekDto>> GetWeek(
         Guid athleteId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
     {
-        var me = await structureClient.GetMeAsync(cancellationToken);
-        if (me is null) throw new NoAthleteLinkedException();
-        if (me.AthleteId != athleteId) throw new ForbiddenException();
+        await ValidateAccessAsync(athleteId, cancellationToken);
 
         return Ok(await weekHandler.HandleAsync(
             new GetAthleteWeekQuery(athleteId, date), cancellationToken));
+    }
+
+    private async Task ValidateAccessAsync(Guid athleteId, CancellationToken cancellationToken)
+    {
+        if (currentUser?.IsInRole("PreparadorFisico") == true)
+        {
+            if (!await structureClient.IsOwnAthleteAsync(athleteId, cancellationToken))
+                throw new AthleteNotFoundException();
+            return;
+        }
+
+        var me = await structureClient.GetMeAsync(cancellationToken);
+        if (me is null) throw new NoAthleteLinkedException();
+        if (me.AthleteId != athleteId) throw new ForbiddenException();
     }
 }

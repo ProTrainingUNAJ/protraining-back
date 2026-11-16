@@ -16,10 +16,19 @@
 | Recomendación de entrenamiento | OpenAI mini → Gemini → reglas | 0,3 | 500 | 20 s por proveedor |
 | Recomendación de alimentación | OpenAI mini → Gemini → reglas | 0,2 | 500 | 20 s por proveedor |
 
-Los límites se configuran por `.env` y la suma de los timeouts no debe superar los 100 s del gateway
-ni los 120 s del frontend. Si el saldo de OpenAI fuera limitado, el ajuste del día puede comenzar
-directamente en Gemini por ser un texto corto; la decisión por defecto del proyecto mantiene OpenAI
-primero para comparar calidad y latencia de los tres casos funcionales.
+### Justificación de hiperparámetros y presupuestos de tiempo
+
+* **Temperatura baja (0,2):** Aplicada en generación de borradores, ajustes y nutrición. Dado que estos casos requieren apego estricto a esquemas JSON forzados (Structured Outputs), índices del catálogo y reglas determinísticas, una temperatura baja previene alucinaciones y divergencias sintácticas.
+* **Temperatura moderada (0,3):** Aplicada en recomendaciones de entrenamiento para permitir variedad en la redacción pedagógica para el preparador físico sin apartarse de los números calculados por reglas.
+* **Presupuesto de tiempo:** El gateway YARP / Azure API Management tiene un límite máximo de 100 segundos y el frontend corta a los 120 segundos. La configuración de timeouts por proveedor (ej. 45 s en OpenAI + 30 s en Gemini = 75 s) garantiza que la cadena de fallback siempre active las reglas determinísticas antes de alcanzar el timeout del gateway, evitando errores 504 o 500 al preparador físico.
+
+### Directivas de optimización de prompts deportivos
+
+Para minimizar la necesidad de edición manual por parte del preparador físico, los prompts incorporan:
+1. **Especificidad muscular obligatoria:** Se analiza el objetivo deportivo (`ExtractMuscleGroups`) e instruye a la IA a concentrar los bloques en los grupos pertinentes (ej. en objetivos de tren superior se descartan sentadillas o dominantes de rodilla como fuerza principal).
+2. **Volúmenes e intensidades metodológicas:** Pautas claras por bloque funcional (`warmUp` sin %RM, `strengthA` multiarticular 3-5 series x 3-8 reps con 75-85%, `strengthB` complementario 3-4 series x 5-10 reps con 70-80%, y `accessories` analíticos 2-4 series x 8-15 reps).
+3. **Indicaciones de campo en notas:** Inclusión obligatoria de pausas recomendadas (2-3 min en básicos, 60-90 s en accesorios) y foco en la fase excéntrica.
+4. **Español rioplatense técnico:** Redacción sobria, concreta y sin frases genéricas de relleno.
 
 ### Privacidad y herramientas
 

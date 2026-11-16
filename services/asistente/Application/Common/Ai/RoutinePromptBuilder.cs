@@ -246,13 +246,25 @@ public static class RoutinePromptBuilder
         sb.AppendLine();
 
         AppendPfDecisionContext(sb, request.PreviousPfDecisions);
-        sb.AppendLine("BLOQUES OBLIGATORIOS Y ORDEN:");
-        sb.AppendLine("1. warmUp: entrada en calor y movilidad, sin porcentaje de RM.");
-        sb.AppendLine("2. strengthA: ejercicio principal multiarticular, 3-5 series de 3-8 repeticiones.");
-        sb.AppendLine("3. strengthB: segundo patrón de fuerza, 3-4 series de 5-10 repeticiones.");
-        sb.AppendLine("4. accessories: 1-3 ejercicios accesorios, 2-4 series de 8-15 repeticiones.");
+
+        var targetGroups = ExtractMuscleGroups(request.Goal);
+        if (targetGroups.Count > 0)
+        {
+            sb.AppendLine($"ENFOQUE MUSCULAR DEL OBJETIVO: {string.Join(", ", targetGroups)}.");
+            sb.AppendLine("DIRECTIVAS DE ESPECIFICIDAD DEPORTIVA:");
+            sb.AppendLine("1. Los bloques principales (strengthA y strengthB) y accesorios DEBEN priorizar ejercicios de estos grupos musculares compatibles.");
+            sb.AppendLine("2. No mezcles patrones incongruentes (por ejemplo, en objetivos de tren superior no utilices sentadillas ni prensa en los bloques principales).");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("BLOQUES OBLIGATORIOS Y PAUTAS DE CARGA:");
+        sb.AppendLine("1. warmUp: 1-2 ejercicios de entrada en calor, movilidad articular o activación neuromuscular. Sin porcentaje de RM.");
+        sb.AppendLine("2. strengthA: ejercicio principal multiarticular, 3-5 series de 3-8 repeticiones (intensidad objetivo 75-85% RM).");
+        sb.AppendLine("3. strengthB: segundo patrón de fuerza complementario o unilateral, 3-4 series de 5-10 repeticiones (intensidad objetivo 70-80% RM).");
+        sb.AppendLine("4. accessories: 1-3 ejercicios analíticos, de aislamiento o zona media/core, 2-4 series de 8-15 repeticiones (sin RM o moderado).");
         sb.AppendLine("Usá entre 5 y 6 ejercicios por sesión cuando el catálogo lo permita, sin repetir un ejercicio dentro de la sesión.");
-        sb.AppendLine("Escribí name, objective, justificationSummary y coachNotes en español de Argentina, de forma concreta.");
+        sb.AppendLine("Escribí name, objective, justificationSummary y coachNotes en español de Argentina, de forma concreta y técnica.");
+        sb.AppendLine("En coachNotes indicá descansos recomendados (ej. 2-3 min en básicos, 60-90 s en accesorios) y foco técnico en fase excéntrica.");
         sb.AppendLine("No calcules progresiones semanales: eso lo hará una regla determinística en C#.");
 
         if (matchDates is { Count: > 0 })
@@ -369,6 +381,14 @@ public static class RoutinePromptBuilder
         if (text.Contains("core") || text.Contains("abdominal") ||
             text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
         {
+            groups.Add("Core");
+        }
+
+        // Deportes de contacto / Rugby (potencia de tren inferior, tracción y estabilidad de core)
+        if (text.Contains("rugby") || text.Contains("contacto") || text.Contains("colision"))
+        {
+            groups.Add("Piernas");
+            groups.Add("Espalda");
             groups.Add("Core");
         }
 
