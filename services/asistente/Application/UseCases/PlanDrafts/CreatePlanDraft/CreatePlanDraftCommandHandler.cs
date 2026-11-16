@@ -1,6 +1,7 @@
 namespace Application.UseCases.PlanDrafts.CreatePlanDraft;
 
 using Application.Common.PlanDrafts;
+using Application.Common.PfDecisions;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -15,7 +16,8 @@ public sealed class CreatePlanDraftCommandHandler(
     IStructureCalendarClient? calendarClient = null,
     IMatchDayLoadValidator? matchDayLoadValidator = null,
     IExerciseCatalogService? catalogService = null,
-    ILogger<CreatePlanDraftCommandHandler>? logger = null)
+    ILogger<CreatePlanDraftCommandHandler>? logger = null,
+    IPfDecisionRepository? pfDecisionRepository = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
         CreatePlanDraftCommand command,
@@ -57,6 +59,17 @@ public sealed class CreatePlanDraftCommandHandler(
             DaysPerWeek = daysPerWeek,
             StartDate = startDate
         };
+
+        if (pfDecisionRepository != null)
+        {
+            var previousDecisions = await pfDecisionRepository.GetRecentAsync(
+                normalizedRequest.AthleteId,
+                cancellationToken: cancellationToken);
+            normalizedRequest = normalizedRequest with
+            {
+                PreviousPfDecisions = PfDecisionContextMapper.Map(previousDecisions)
+            };
+        }
 
         IReadOnlyList<DateOnly>? matchDates = null;
         var calendarReadFailed = false;

@@ -170,7 +170,9 @@ public sealed class ResilientAiService : IAiService
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
         string? promptHash = null;
-        if (_responseCache != null && request.AdaptationContext is null)
+        if (_responseCache != null &&
+            request.AdaptationContext is null &&
+            request.PreviousPfDecisions is not { Count: > 0 })
         {
             promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis, pfId);
             if (_responseCache.TryGet(promptHash, out var cachedResponse) && cachedResponse != null)

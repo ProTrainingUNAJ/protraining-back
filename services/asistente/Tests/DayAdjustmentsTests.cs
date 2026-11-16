@@ -125,6 +125,21 @@ public sealed class DayAdjustmentsTests
             return Task.FromResult(result);
         }
 
+        public Task<IReadOnlyList<PfDecision>> GetRecentAsync(
+            Guid? athleteId = null,
+            int limit = 50,
+            CancellationToken cancellationToken = default)
+        {
+            var pfId = currentPfId();
+            IReadOnlyList<PfDecision> result = store
+                .Where(d => d.PfId == pfId && (!athleteId.HasValue || d.AthleteId == athleteId) && d.DeletedAt == null)
+                .OrderByDescending(d => d.Date)
+                .ThenByDescending(d => d.CreatedAt)
+                .Take(limit)
+                .ToList();
+            return Task.FromResult(result);
+        }
+
         public Task<IReadOnlyList<PfDecision>> GetRecentByAthleteAsync(
             Guid athleteId,
             string? zone = null,

@@ -1,14 +1,26 @@
 using System.Text.Json.Serialization;
 using Application.DTOs.Adaptation;
+using Domain.Entities;
 
 namespace Application.DTOs.Ai;
+
+public sealed record PfDecisionContextDto(
+    PfDecisionSource Source,
+    DateOnly Date,
+    string? Zone,
+    Guid SuggestedExerciseId,
+    PfDecisionType Decision,
+    Guid? FinalExerciseId,
+    decimal? FinalPercentage
+);
 
 public sealed record RoutineSuggestionRequestDto(
     [property: JsonPropertyName("athleteId")] Guid AthleteId,
     [property: JsonPropertyName("goal")] string Goal,
     [property: JsonPropertyName("muscleGroupEmphasis")] List<string>? MuscleGroupEmphasis = null,
     [property: JsonIgnore] IReadOnlyList<CatalogExerciseDto>? AvailableExercises = null,
-    [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null
+    [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null,
+    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null
 );
 
 public sealed record SuggestedExerciseDto(
