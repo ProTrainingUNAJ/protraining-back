@@ -107,6 +107,12 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("full_name");
 
+                    b.Property<bool>("HabitsRecommendationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("habits_recommendations_enabled");
+
                     b.Property<bool>("HasPhoto")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

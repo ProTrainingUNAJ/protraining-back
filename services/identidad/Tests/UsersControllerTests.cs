@@ -6,6 +6,8 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Auth.UpdateHabitsRecommendations;
+using Application.UseCases.Auth.GetPfHabitsRecommendations;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -44,6 +46,8 @@ public class UsersControllerTests
         _controller = new UsersController(
             new UpdateWhatsAppPhoneUseCase(_mockUserManager.Object),
             new GetPfContactUseCase(_mockUserManager.Object),
+            new UpdateHabitsRecommendationsUseCase(_mockUserManager.Object),
+            new GetPfHabitsRecommendationsUseCase(_mockUserManager.Object),
             _mockCurrentUser.Object,
             uploadPhotoHandler,
             getPhotoHandler,

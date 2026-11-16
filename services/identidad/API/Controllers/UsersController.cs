@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Application.DTOs.Auth;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Auth.UpdateHabitsRecommendations;
+using Application.UseCases.Auth.GetPfHabitsRecommendations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.DTOs.Users;
@@ -22,6 +24,8 @@ namespace API.Controllers;
 public class UsersController(
     UpdateWhatsAppPhoneUseCase updatePhoneUseCase,
     GetPfContactUseCase getPfContactUseCase,
+    UpdateHabitsRecommendationsUseCase updateHabitsRecommendationsUseCase,
+    GetPfHabitsRecommendationsUseCase getPfHabitsRecommendationsUseCase,
     ICurrentUser currentUser,
     UploadUserPhotoCommandHandler uploadPhotoHandler,
     GetUserPhotoQueryHandler getPhotoHandler,
@@ -237,5 +241,96 @@ public class UsersController(
     {
         await updateAthleteEmailUseCase.ExecuteAsync(athleteId, request, cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Actualiza la preferencia del PF autenticado sobre el uso de recomendaciones de hábitos y alimentación.
+    /// </summary>
+    [HttpPut("me/habits-recommendations")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(PfHabitsRecommendationsStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateHabitsRecommendations([FromBody] UpdateHabitsRecommendationsRequestDto request)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var success = await updateHabitsRecommendationsUseCase.ExecuteAsync(userId.Value, request.Enabled);
+        if (!success)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Usuario no encontrado."
+            });
+        }
+
+        return Ok(new PfHabitsRecommendationsStatusDto(request.Enabled));
+    }
+
+    /// <summary>
+    /// Devuelve la preferencia del PF autenticado sobre el uso de recomendaciones de hábitos y alimentación.
+    /// </summary>
+    [HttpGet("me/habits-recommendations")]
+    [Authorize(Roles = "PreparadorFisico")]
+    [ProducesResponseType(typeof(PfHabitsRecommendationsStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetHabitsRecommendations()
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var enabled = await getPfHabitsRecommendationsUseCase.ExecuteAsync(userId.Value);
+        if (enabled is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Usuario no encontrado."
+            });
+        }
+
+        return Ok(new PfHabitsRecommendationsStatusDto(enabled.Value));
+    }
+
+    /// <summary>
+    /// Devuelve la preferencia de recomendaciones de hábitos y alimentación del PF del atleta autenticado.
+    /// </summary>
+    [HttpGet("me/pf-habits-recommendations")]
+    [Authorize(Roles = "Atleta")]
+    [ProducesResponseType(typeof(PfHabitsRecommendationsStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPfHabitsRecommendations()
+    {
+        var pfId = currentUser.PfId;
+        if (pfId is null)
+        {
+            return Unauthorized();
+        }
+
+        var enabled = await getPfHabitsRecommendationsUseCase.ExecuteAsync(pfId.Value);
+        if (enabled is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Tu preparador no fue encontrado."
+            });
+        }
+
+        return Ok(new PfHabitsRecommendationsStatusDto(enabled.Value));
+    }
     }
 }
