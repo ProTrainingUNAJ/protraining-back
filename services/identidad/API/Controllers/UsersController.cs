@@ -332,5 +332,4 @@ public class UsersController(
 
         return Ok(new PfHabitsRecommendationsStatusDto(enabled.Value));
     }
-    }
 }
