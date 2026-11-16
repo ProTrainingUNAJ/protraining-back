@@ -10,6 +10,8 @@ using Application.UseCases.Athletes.ListMedicalRecordAuditLogs;
 using Application.UseCases.Athletes.ReadMedicalRecord;
 using Application.UseCases.Athletes.RemoveAthleteCategory;
 using Application.UseCases.Athletes.UpdateAthlete;
+using Application.UseCases.Athletes.UpdateAthleteStatus;
+using Application.UseCases.Athletes.UpdateAthleteEmail;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Athletes.UpdateMedicalRecord;
 using Application.UseCases.Athletes.UploadAthletePhoto;
@@ -38,7 +40,9 @@ public sealed class AthletesController(
     ListMedicalRecordAuditLogsQueryHandler listMedicalRecordAuditLogsHandler,
     UploadAthletePhotoCommandHandler uploadPhotoHandler,
     GetAthletePhotoQueryHandler getPhotoHandler,
-    DeleteAthletePhotoCommandHandler deletePhotoHandler) : ControllerBase
+    DeleteAthletePhotoCommandHandler deletePhotoHandler,
+    UpdateAthleteStatusCommandHandler updateStatusHandler,
+    UpdateAthleteEmailCommandHandler updateEmailHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -96,6 +100,24 @@ public sealed class AthletesController(
         CancellationToken cancellationToken) =>
         Ok(await updateHandler.HandleAsync(
             new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<AthleteDto>> UpdateStatus(
+        Guid id,
+        UpdateAthleteStatusRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateStatusHandler.HandleAsync(
+            new UpdateAthleteStatusCommand(id, request.Active),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/email")]
+    public async Task<ActionResult<AthleteDto>> UpdateEmail(
+        Guid id,
+        UpdateAthleteEmailRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateEmailHandler.HandleAsync(
+            new UpdateAthleteEmailCommand(id, request.Email),
             cancellationToken));
 
     [HttpPost("{id:guid}/medical-record/access")]

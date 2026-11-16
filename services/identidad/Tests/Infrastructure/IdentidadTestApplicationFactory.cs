@@ -125,6 +125,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);
