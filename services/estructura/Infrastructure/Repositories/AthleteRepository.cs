@@ -32,9 +32,27 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
 
     public async Task<Athlete?> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
-            await context.Athletes
+        {
+            var candidates = await context.Athletes
                 .Include(athlete => athlete.DigitalConsent)
-                .FirstOrDefaultAsync(athlete => athlete.AccountId == accountId, cancellationToken));
+                .Where(athlete => athlete.AccountId == accountId)
+                .ToListAsync(cancellationToken);
+
+            if (candidates.Count == 0) return null;
+            if (candidates.Count == 1) return candidates[0];
+
+            var candidateIds = candidates.Select(c => c.Id).ToList();
+            var enrolledIds = await context.AthleteCategories
+                .Where(ac => candidateIds.Contains(ac.AthleteId))
+                .Select(ac => ac.AthleteId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var enrolled = candidates.FirstOrDefault(c => enrolledIds.Contains(c.Id) && c.Active)
+                           ?? candidates.FirstOrDefault(c => enrolledIds.Contains(c.Id));
+
+            return enrolled ?? candidates.FirstOrDefault(c => c.Active) ?? candidates[0];
+        });
 
     public Task AddAsync(Athlete athlete, CancellationToken cancellationToken = default)
     {
