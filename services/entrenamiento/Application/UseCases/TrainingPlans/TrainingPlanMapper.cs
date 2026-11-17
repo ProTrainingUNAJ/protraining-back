@@ -38,7 +38,11 @@ public static class TrainingPlanMapper
                                 e.Sets,
                                 e.Reps,
                                 e.TargetPercentage,
-                                e.Exercise?.ExerciseType ?? ExerciseType.Weight
+                                e.Exercise?.ExerciseType ?? ExerciseType.Weight,
+                                e.Exercise?.Images ?? [],
+                                e.Exercise?.PrimaryMuscles ?? [],
+                                e.Exercise?.SecondaryMuscles ?? [],
+                                e.Exercise?.MuscleGroup
                             )).ToList(),
                         s.StartTime
                     )).ToList()
