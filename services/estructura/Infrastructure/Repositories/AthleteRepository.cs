@@ -79,19 +79,38 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
 
             var athleteIds = athletes.Select(a => a.Id).ToList();
 
-            var categoriesByAthlete = await context.AthleteCategories
+            var athleteCategories = await context.AthleteCategories
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(ac => athleteIds.Contains(ac.AthleteId) && ac.DeletedAt == null)
-                .GroupBy(ac => ac.AthleteId)
-                .Select(g => new { AthleteId = g.Key, CategoryId = g.Select(x => x.CategoryId).FirstOrDefault() })
-                .ToDictionaryAsync(x => x.AthleteId, x => (Guid?)x.CategoryId, cancellationToken);
+                .Join(
+                    context.Categories.IgnoreQueryFilters().Where(c => c.DeletedAt == null),
+                    ac => new { ac.CategoryId, ac.PfId },
+                    c => new { CategoryId = c.Id, c.PfId },
+                    (ac, c) => new { ac.AthleteId, ac.CategoryId, ac.CreatedAt }
+                )
+                .OrderBy(x => x.CreatedAt)
+                .ThenBy(x => x.CategoryId)
+                .ToListAsync(cancellationToken);
 
-            return (IReadOnlyList<InternalAthleteSummaryDto>)athletes.Select(a => new InternalAthleteSummaryDto(
-                a.Id,
-                a.PfId,
-                categoriesByAthlete.TryGetValue(a.Id, out var catId) ? catId : null,
-                a.Active
-            )).ToList();
+            var categoriesByAthlete = athleteCategories
+                .GroupBy(x => x.AthleteId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<Guid>)g.Select(x => x.CategoryId).Distinct().ToList());
+
+            return (IReadOnlyList<InternalAthleteSummaryDto>)athletes.Select(a =>
+            {
+                var catIds = categoriesByAthlete.TryGetValue(a.Id, out var list)
+                    ? list
+                    : Array.Empty<Guid>();
+
+                return new InternalAthleteSummaryDto(
+                    a.Id,
+                    a.PfId,
+                    catIds.Count > 0 ? catIds[0] : null,
+                    a.Active,
+                    catIds);
+            }).ToList();
         });
 }

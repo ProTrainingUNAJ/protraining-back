@@ -55,5 +55,36 @@ public sealed class InternalAthletesControllerTests
         Assert.Equal(categoryId, returnedAthletes[0].CategoryId);
         Assert.True(returnedAthletes[0].Active);
     }
+
+    [Fact]
+    public async Task GetActiveAthletes_WhenAthleteHasMultipleCategories_ReturnsAllCategoryIds()
+    {
+        // Arrange
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        var cat1 = Guid.NewGuid();
+        var cat2 = Guid.NewGuid();
+        var athletes = new List<InternalAthleteSummaryDto>
+        {
+            new(athleteId, pfId, cat1, true, [cat1, cat2])
+        };
+
+        _athleteRepoMock
+            .Setup(r => r.GetActiveAthletesInternalAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athletes);
+
+        // Act
+        var result = await _controller.GetActiveAthletes(CancellationToken.None);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var returnedAthletes = Assert.IsAssignableFrom<IReadOnlyList<InternalAthleteSummaryDto>>(okResult.Value);
+        Assert.Single(returnedAthletes);
+        Assert.Equal(cat1, returnedAthletes[0].CategoryId);
+        Assert.NotNull(returnedAthletes[0].CategoryIds);
+        Assert.Equal(2, returnedAthletes[0].CategoryIds!.Count);
+        Assert.Equal(cat1, returnedAthletes[0].CategoryIds![0]);
+        Assert.Equal(cat2, returnedAthletes[0].CategoryIds![1]);
+    }
 }
 
