@@ -17,36 +17,76 @@ public static class RecommendationPromptBuilder
         "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista.";
 
     /// <summary>
+    /// Etiqueta del grupo de meriendas antes de entrenar (#KAN-495).
+    /// </summary>
+    public const string PreWorkoutSnackGroupLabel = "Meriendas / Opciones Pre-entreno (Digestión Rápida)";
+
+    /// <summary>
+    /// Lista blanca de alimentos de la base actual, organizada formalmente según la taxonomía
+    /// de nutrición deportiva (#KAN-495): ninguna categoría elimina alimentos de la lista base
+    /// anterior y sólo se completan los grupos con los elementos originales existentes.
+    /// El grupo de meriendas pre-entreno (digestión rápida) referencia alimentos que ya pertenecen
+    /// a otros grupos; no agrega elementos nuevos a la lista.
+    /// </summary>
+    public static readonly IReadOnlyList<ApprovedFoodGroup> DefaultApprovedFoodGroups =
+    [
+        new("Proteínas de Alta Calidad",
+        [
+            "pollo",
+            "carne vacuna magra",
+            "atún",
+            "merluza",
+            "huevo",
+            "yogur natural",
+            "queso magro",
+            "leche",
+            "lentejas",
+            "garbanzos"
+        ]),
+        new("Hidratos de Carbono Complejos",
+        [
+            "arroz",
+            "fideos",
+            "papa",
+            "batata",
+            "avena",
+            "pan integral"
+        ]),
+        new("Frutas y Verduras / Hortalizas",
+        [
+            "banana",
+            "manzana",
+            "naranja",
+            "espinaca",
+            "tomate",
+            "zanahoria"
+        ]),
+        new("Grasas Saludables y Frutos Secos",
+        [
+            "aceite de oliva",
+            "palta",
+            "frutos secos"
+        ]),
+        new(PreWorkoutSnackGroupLabel,
+        [
+            "avena",
+            "banana",
+            "pan integral",
+            "yogur natural",
+            "frutos secos",
+            "manzana"
+        ])
+    ];
+
+    /// <summary>
     /// Lista base de alimentos naturales aprobados por defecto cuando el llamador no especifica un subconjunto propio.
+    /// Es la unión aplanada y sin duplicados de <see cref="DefaultApprovedFoodGroups"/> (#KAN-495).
     /// </summary>
     public static readonly IReadOnlyList<string> DefaultApprovedFoods =
-    [
-        "pollo",
-        "huevo",
-        "carne vacuna magra",
-        "atún",
-        "merluza",
-        "yogur natural",
-        "queso magro",
-        "leche",
-        "lentejas",
-        "garbanzos",
-        "arroz",
-        "fideos",
-        "papa",
-        "batata",
-        "avena",
-        "pan integral",
-        "banana",
-        "manzana",
-        "naranja",
-        "palta",
-        "frutos secos",
-        "aceite de oliva",
-        "tomate",
-        "zanahoria",
-        "espinaca"
-    ];
+        DefaultApprovedFoodGroups
+            .SelectMany(group => group.Foods)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>
     /// Resuelve la lista efectiva de alimentos aprobados para la solicitud.
@@ -202,7 +242,21 @@ public static class RecommendationPromptBuilder
 
         sb.AppendLine();
         sb.AppendLine("LISTA CERRADA DE ALIMENTOS APROBADOS (USAR SÓLO ALIMENTOS DE ESTA LISTA):");
-        sb.AppendLine($"- Alimentos permitidos: {foodsLine}");
+        if (request.ApprovedFoods is null)
+        {
+            sb.AppendLine("- Alimentos permitidos por grupo:");
+            foreach (var group in DefaultApprovedFoodGroups)
+            {
+                sb.AppendLine($"  * {group.Label}: {string.Join(", ", group.Foods)}");
+            }
+
+            sb.AppendLine($"- CONTEXTO PRE-ENTRENO: si el momento / contexto es antes de entrenar, priorizá una merienda del grupo '{PreWorkoutSnackGroupLabel}'.");
+        }
+        else
+        {
+            sb.AppendLine($"- Alimentos permitidos: {foodsLine}");
+        }
+
         sb.AppendLine();
         sb.AppendLine("REGLAS ESTRICTAS E INNEGOCIABLES:");
         sb.AppendLine("1. LA IA SÓLO REDACTA: los números vienen calculados por reglas y los alimentos deben salir EXCLUSIVAMENTE de la lista aprobada de arriba.");
@@ -223,9 +277,11 @@ public static class RecommendationPromptBuilder
             {
               "suggestedPlateComposition": "Descripción clara de cómo armar el plato o la merienda usando únicamente alimentos de la lista aprobada y las pautas de las reglas.",
               "hydrationAndSleepGuidelines": "Consejo de hidratación con agua y horas de descanso nocturno según los datos de las reglas.",
-              "mentionedFoods": ["alimento aprobado 1", "alimento aprobado 2"]
+              "mentionedFoods": ["alimento aprobado 1", "alimento aprobado 2"],
+              "legalDisclaimer": "Aviso legal obligatorio (texto fijo, no modificar)."
             }
             """);
+        sb.AppendLine($"8. AVISO LEGAL: el campo 'legalDisclaimer' debe contener exactamente este texto fijo y sin modificar: «{OfficialNutritionDisclaimer}»");
 
         return sb.ToString();
     }
@@ -347,3 +403,8 @@ public static class RecommendationPromptBuilder
             ProviderUsed: providerUsed);
     }
 }
+
+/// <summary>
+/// Grupo de la lista blanca de alimentos usada por las recomendaciones de alimentación (#KAN-495).
+/// </summary>
+public sealed record ApprovedFoodGroup(string Label, IReadOnlyList<string> Foods);

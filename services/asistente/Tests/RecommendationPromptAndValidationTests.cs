@@ -458,4 +458,99 @@ public sealed class RecommendationPromptAndValidationTests
     }
 
     #endregion
+
+    #region 5. KAN-495: Listas blancas por grupo y aviso legal fijo
+
+    [Fact]
+    public void OfficialNutritionDisclaimer_MatchesTicketTextExactly()
+    {
+        Assert.Equal(
+            "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista.",
+            RecommendationPromptBuilder.OfficialNutritionDisclaimer);
+    }
+
+    [Fact]
+    public void DefaultApprovedFoodGroups_OrganizeOriginalFoodsIntoCompleteGroupsWithoutLoss()
+    {
+        var labels = RecommendationPromptBuilder.DefaultApprovedFoodGroups
+            .Select(group => group.Label)
+            .ToList();
+
+        Assert.Equal(
+            new[]
+            {
+                "Proteínas de Alta Calidad",
+                "Hidratos de Carbono Complejos",
+                "Frutas y Verduras / Hortalizas",
+                "Grasas Saludables y Frutos Secos",
+                RecommendationPromptBuilder.PreWorkoutSnackGroupLabel
+            },
+            labels);
+
+        var union = RecommendationPromptBuilder.DefaultApprovedFoodGroups
+            .SelectMany(group => group.Foods)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Sin pérdida ni invención: los 25 alimentos originales siguen presentes.
+        var originalFoods = new[]
+        {
+            "pollo", "huevo", "carne vacuna magra", "atún", "merluza",
+            "yogur natural", "queso magro", "leche", "lentejas", "garbanzos",
+            "arroz", "fideos", "papa", "batata", "avena", "pan integral",
+            "banana", "manzana", "naranja", "palta", "frutos secos",
+            "aceite de oliva", "tomate", "zanahoria", "espinaca"
+        };
+
+        Assert.Equal(originalFoods.Length, union.Count);
+        Assert.All(originalFoods, food => Assert.Contains(food, union, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(RecommendationPromptBuilder.DefaultApprovedFoods, union);
+    }
+
+    [Fact]
+    public void BuildNutritionRecommendationPrompt_WithoutCustomFoods_ListsGroupedWhitelistAndPreWorkoutGuidance()
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            Moment: "Antes del entrenamiento");
+
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        Assert.Contains("Alimentos permitidos por grupo", prompt);
+        Assert.Contains("* Proteínas de Alta Calidad: pollo, carne vacuna magra, atún, merluza, huevo, yogur natural, queso magro, leche, lentejas, garbanzos", prompt);
+        Assert.Contains("* Hidratos de Carbono Complejos: arroz, fideos, papa, batata, avena, pan integral", prompt);
+        Assert.Contains("* Frutas y Verduras / Hortalizas: banana, manzana, naranja, espinaca, tomate, zanahoria", prompt);
+        Assert.Contains("* Grasas Saludables y Frutos Secos: aceite de oliva, palta, frutos secos", prompt);
+        Assert.Contains(
+            $"* {RecommendationPromptBuilder.PreWorkoutSnackGroupLabel}: avena, banana, pan integral, yogur natural, frutos secos, manzana",
+            prompt);
+        Assert.Contains("CONTEXTO PRE-ENTRENO", prompt);
+        Assert.Contains("SÓLO ALIMENTOS DE LA LISTA", prompt);
+    }
+
+    [Fact]
+    public void BuildNutritionRecommendationPrompt_IncludesFixedLegalDisclaimerInTemplate()
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        Assert.Contains("\"legalDisclaimer\"", prompt);
+        Assert.Contains(RecommendationPromptBuilder.OfficialNutritionDisclaimer, prompt);
+        Assert.Contains("AVISO LEGAL", prompt);
+    }
+
+    [Fact]
+    public void BuildDeterministicNutritionRecommendation_ReturnsOfficialDisclaimerInLegalDisclaimerField()
+    {
+        var request = new NutritionRecommendationRequestDto(AthleticGoal: "Ganar masa muscular");
+
+        var response = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request);
+
+        Assert.Equal(RecommendationPromptBuilder.OfficialNutritionDisclaimer, response.LegalDisclaimer);
+    }
+
+    #endregion
 }

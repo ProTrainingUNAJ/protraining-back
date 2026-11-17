@@ -1430,7 +1430,7 @@ components:
           example: "Consumir al menos 2.5 litros de agua y procurar 8 horas de sueño continuo."
         legalDisclaimer:
           type: string
-          example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista. ProTraining no promueve el consumo de suplementos."
+          example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
         approvedByPf:
           type: boolean
           example: false
