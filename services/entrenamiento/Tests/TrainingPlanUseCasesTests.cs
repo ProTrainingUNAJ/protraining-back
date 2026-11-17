@@ -402,6 +402,9 @@ public class TrainingPlanUseCasesTests
         var exercises = result.Weeks[0].Sessions[0].Exercises;
         Assert.Equal("Sentadilla trasera con barra", exercises[0].ExerciseName);
         Assert.Equal("Press de banca plano", exercises[1].ExerciseName);
+        Assert.NotNull(exercises[0].Images);
+        Assert.NotNull(exercises[0].PrimaryMuscles);
+        Assert.NotNull(exercises[0].SecondaryMuscles);
         _planRepoMock.Verify(r => r.GetExerciseNamesAsync(
             It.Is<IEnumerable<Guid>>(ids => ids.Count() == 2 && ids.Contains(squatId) && ids.Contains(benchId)),
             It.IsAny<CancellationToken>()), Times.Once);

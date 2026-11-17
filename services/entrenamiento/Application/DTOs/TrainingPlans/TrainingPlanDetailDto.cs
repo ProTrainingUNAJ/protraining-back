@@ -10,7 +10,11 @@ public record PrescribedExerciseDto(
     int Sets,
     int Reps,
     decimal? TargetPercentage,
-    ExerciseType ExerciseType = ExerciseType.Weight
+    ExerciseType ExerciseType = ExerciseType.Weight,
+    List<string>? Images = null,
+    List<string>? PrimaryMuscles = null,
+    List<string>? SecondaryMuscles = null,
+    string? MuscleGroup = null
 );
 
 public record TrainingPlanSessionDto(
