@@ -22,7 +22,8 @@ public sealed class StructureAthleteClient(
         [property: JsonPropertyName("firstName")] string? FirstName,
         [property: JsonPropertyName("lastName")] string? LastName,
         [property: JsonPropertyName("active")] bool Active,
-        [property: JsonPropertyName("categoryId")] Guid? CategoryId);
+        [property: JsonPropertyName("categoryId")] Guid? CategoryId,
+        [property: JsonPropertyName("categoryIds")] IReadOnlyList<Guid>? CategoryIds = null);
 
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
@@ -113,7 +114,13 @@ public sealed class StructureAthleteClient(
                         name = "Atleta " + a.Id.ToString()[..8];
                     }
 
-                    return new StructureAthleteSummaryDto(a.Id, name, a.CategoryId, a.Active, a.PfId);
+                    return new StructureAthleteSummaryDto(
+                        Id: a.Id,
+                        FullName: name,
+                        CategoryId: a.CategoryId,
+                        Active: a.Active,
+                        PfId: a.PfId,
+                        CategoryIds: a.CategoryIds);
                 })
                 .ToList();
         }

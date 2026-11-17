@@ -5,7 +5,27 @@ public sealed record StructureAthleteSummaryDto(
     string FullName,
     Guid? CategoryId = null,
     bool Active = true,
-    Guid PfId = default);
+    Guid PfId = default,
+    IReadOnlyList<Guid>? CategoryIds = null)
+{
+    /// <summary>
+    /// Devuelve todas las categorías activas asignadas al atleta, consolidando 'CategoryIds' o 'CategoryId' para compatibilidad (#182 · KAN-477).
+    /// </summary>
+    public IReadOnlyList<Guid> AllCategoryIds
+    {
+        get
+        {
+            if (CategoryIds is { Count: > 0 })
+            {
+                return CategoryIds.Where(id => id != Guid.Empty).Distinct().ToList();
+            }
+
+            return CategoryId.HasValue && CategoryId.Value != Guid.Empty
+                ? [CategoryId.Value]
+                : [];
+        }
+    }
+}
 
 public interface IStructureAthleteClient
 {

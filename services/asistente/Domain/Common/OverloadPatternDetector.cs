@@ -41,7 +41,7 @@ public sealed record OverloadPatternResult(
 }
 
 /// <summary>
-/// Detector de patrones de sobrecarga, fatiga acumulada, riesgo de lesión y correlación precompetitiva (D-2) en el dominio (#177 · KAN-472 / #178 · KAN-473).
+/// Detector de patrones de sobrecarga, fatiga acumulada, riesgo de lesión y correlación precompetitiva (D-2 / D-3) en el dominio (#177 · KAN-472 / #178 · KAN-473 / #182 · KAN-477).
 /// Evalúa el historial de check-ins del atleta (típicamente los últimos 7 días) cruzado con el fixture de partidos mediante reglas determinísticas.
 /// </summary>
 public static class OverloadPatternDetector
@@ -51,7 +51,8 @@ public static class OverloadPatternDetector
         IReadOnlyList<AthleteCheckInRecord> records,
         bool hasMatchInTwoDays = false,
         DateOnly? matchDate = null,
-        int? daysUntilMatch = null)
+        int? daysUntilMatch = null,
+        bool hasUpcomingMatchInProximity = false)
     {
         if (athleteId == Guid.Empty || records.Count == 0)
         {
@@ -116,15 +117,31 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 25);
         }
 
-        // 4. Patrón de Alarma B: RPE alto sostenido (3 o más sesiones con RPE >= 8 en la semana)
+        // 4. Patrón de Alarma B: Sobrecarga aguda acumulada con umbral adaptativo (#177 · KAN-472 / #182 · KAN-477)
+        // Umbral normal: 3 o más sesiones con RPE >= 8 en los últimos 7 días.
+        // Umbral reducido (partido en D0 a D+3): 2 o más sesiones con RPE >= 8 (#182 · KAN-477).
+        var isMatchInProximityWindow = hasUpcomingMatchInProximity ||
+            (daysUntilMatch.HasValue && daysUntilMatch.Value is >= 0 and <= 3) ||
+            hasMatchInTwoDays;
+
+        var threshold = isMatchInProximityWindow ? 2 : 3;
         var highRpeCount = ordered.Count(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8);
-        if (highRpeCount >= 3)
+
+        if (highRpeCount >= threshold)
         {
+            var matchDateSuffix = isMatchInProximityWindow && matchDate.HasValue
+                ? $" ({matchDate.Value:dd/MM})"
+                : string.Empty;
+
+            var reason = isMatchInProximityWindow
+                ? $"El atleta acumula {highRpeCount} sesiones de esfuerzo alto y tiene un partido próximo{matchDateSuffix}. Se recomienda revisar su carga de entrenamiento."
+                : $"Sobrecarga aguda sostenida: {highRpeCount} sesiones con RPE >= 8 en los últimos 7 días.";
+
             return new OverloadPatternResult(
                 HasPattern: true,
                 Severity: AlertSeverity.High,
                 Type: AlertType.AcuteOverload,
-                Reason: $"Sobrecarga aguda sostenida: {highRpeCount} sesiones con RPE >= 8 en los últimos 7 días.",
+                Reason: reason,
                 Suggestion: "Programar descarga activa o sesión regenerativa. Se sugiere una reducción de carga del 20%.",
                 SuggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
                 SuggestedAdjustmentPercentage: 20);

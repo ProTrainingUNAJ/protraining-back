@@ -52,6 +52,204 @@ public sealed class OverloadPatternDetectorTests
     }
 
     [Fact]
+    public void Given_ActiveInjuryWithTwoHighEffortSessionsAndUpcomingMatch_When_Detect_Then_PrioritizesInjuryRisk()
+    {
+        // KAN-477 · Prioridad 1: Lesión activa prevalece sobre partido y sobrecarga
+        var matchDate = new DateOnly(2026, 11, 7);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 8, false, null, false),
+            new(new DateOnly(2026, 11, 3), 7.0, 2, 4, 4, 3, 3, 9, false, "Isquiotibial izquierdo", true)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            matchDate: matchDate,
+            daysUntilMatch: 3,
+            hasUpcomingMatchInProximity: true);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.InjuryRisk, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.Rest, result.SuggestedAdjustmentType);
+        Assert.Equal(50, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("lesión activa", result.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // =========================================================================
+    // KAN-477 (#182): Pruebas de umbral adaptativo por partido próximo
+    // =========================================================================
+
+    [Fact]
+    public void K477_01_Given_TwoHighEffortSessionsAndMatchInD3_When_Detect_Then_GeneratesAlertWithReducedThreshold()
+    {
+        // DADO un atleta con 2 sesiones de esfuerzo alto y un partido en D+3 (ej. sábado con análisis miércoles)
+        var matchDate = new DateOnly(2026, 11, 7);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 8, false, null, false), // Lunes: RPE 8
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 2, 2, 4, 2, 9, false, null, false)  // Martes: RPE 9
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            matchDate: matchDate,
+            daysUntilMatch: 3,
+            hasUpcomingMatchInProximity: true);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(20, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("El atleta acumula 2 sesiones de esfuerzo alto y tiene un partido próximo", result.Reason);
+        Assert.Contains("07/11", result.Reason);
+    }
+
+    [Fact]
+    public void K477_02_Given_TwoHighEffortSessionsWithoutMatch_When_Detect_Then_DoesNotGenerateAlert()
+    {
+        // DADO un atleta con 2 sesiones duras y sin partido próximo
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 8, false, null, false),
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 2, 2, 4, 2, 9, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: false,
+            matchDate: null,
+            daysUntilMatch: null,
+            hasUpcomingMatchInProximity: false);
+
+        Assert.False(result.HasPattern);
+    }
+
+    [Fact]
+    public void K477_03_Given_ThreeHighEffortSessionsWithoutMatch_When_Detect_Then_AppliesNormalRule()
+    {
+        // DADO un atleta con 3 sesiones duras y sin partido próximo
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 1), 8.0, 4, 2, 2, 4, 2, 8, false, null, false),
+            new(new DateOnly(2026, 11, 2), 7.5, 4, 2, 2, 4, 2, 9, false, null, false),
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 3, 3, 4, 2, 8, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: false,
+            matchDate: null,
+            daysUntilMatch: null,
+            hasUpcomingMatchInProximity: false);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(20, result.SuggestedAdjustmentPercentage);
+        Assert.Contains("Sobrecarga aguda sostenida: 3 sesiones con RPE >= 8", result.Reason);
+    }
+
+    [Fact]
+    public void K477_04_Given_TwoHighEffortSessionsAndMatchInD4_When_Detect_Then_DoesNotReduceThreshold()
+    {
+        // DADO un partido fuera de la ventana (D+4, ej. domingo si el análisis es miércoles)
+        var matchDate = new DateOnly(2026, 11, 8);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 8, false, null, false),
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 2, 2, 4, 2, 9, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: false,
+            matchDate: matchDate,
+            daysUntilMatch: 4,
+            hasUpcomingMatchInProximity: false);
+
+        Assert.False(result.HasPattern);
+    }
+
+    [Fact]
+    public void K477_05_Given_TwoHighEffortSessionsAndMatchExactlyInD3_When_Detect_Then_ReducesThreshold()
+    {
+        // DADO un partido situado exactamente en el último día permitido (D+3)
+        var matchDate = new DateOnly(2026, 11, 7);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 8, false, null, false),
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 2, 2, 4, 2, 8, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            matchDate: matchDate,
+            daysUntilMatch: 3,
+            hasUpcomingMatchInProximity: true);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Contains("El atleta acumula 2 sesiones de esfuerzo alto y tiene un partido próximo", result.Reason);
+    }
+
+    [Fact]
+    public void K477_06_Given_OneHighEffortSessionAndMatchInD1OrD2_When_Detect_Then_PreservesKan473PreMatchAlert()
+    {
+        // KAN-473 Prioridad: partido en D+1 con 1 sola sesión de esfuerzo alto
+        var matchDate = new DateOnly(2026, 11, 5);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 2, 2, 4, 2, 5, false, null, false),
+            new(new DateOnly(2026, 11, 4), 7.5, 4, 2, 2, 4, 2, 9, false, null, false) // 1 sesión RPE 9
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            hasMatchInTwoDays: true,
+            matchDate: matchDate,
+            daysUntilMatch: 1,
+            hasUpcomingMatchInProximity: true);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.AcuteOverload, result.Type);
+        Assert.Equal(AlertSeverity.High, result.Severity);
+        Assert.Equal(SuggestedAdjustmentType.LoadReduction, result.SuggestedAdjustmentType);
+        Assert.Equal(30, result.SuggestedAdjustmentPercentage); // 30% según KAN-473
+        Assert.Contains("Alerta pre-partido (D-1)", result.Reason);
+    }
+
+    [Fact]
+    public void K477_07_Given_NoHighEffortSessionsWithUpcomingMatch_When_Detect_Then_ReturnsNoPattern()
+    {
+        // DADO un atleta sin sesiones duras pero con partido próximo
+        var matchDate = new DateOnly(2026, 11, 7);
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 8.0, 4, 1, 1, 4, 1, 5, false, null, false),
+            new(new DateOnly(2026, 11, 3), 8.0, 4, 2, 2, 4, 2, 6, false, null, false)
+        };
+
+        var result = OverloadPatternDetector.Detect(
+            _athleteId,
+            records,
+            matchDate: matchDate,
+            daysUntilMatch: 3,
+            hasUpcomingMatchInProximity: true);
+
+        Assert.False(result.HasPattern);
+    }
+
+    [Fact]
     public void Given_HighEffortAndMatchInTwoDays_When_Detect_Then_ReturnsPreMatchAlertHighSeverity()
     {
         // KAN-473 · Criterio de Aceptación:

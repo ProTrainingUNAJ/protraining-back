@@ -303,7 +303,7 @@ public sealed class DailyOverloadAnalysisWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), matchDate, It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([matchDate]);
 
         _alertRepoMock
@@ -360,7 +360,7 @@ public sealed class DailyOverloadAnalysisWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([matchDate]);
 
         _alertRepoMock

@@ -52,7 +52,7 @@ jobs:
             exit 0
           fi
           for project in $tests; do
-            dotnet test "$project" -c Release --filter "Category=Isolation"
+            dotnet test "$project" -c Release --filter "Category=Isolation&Category!=ServiceIntegration"
           done
 
       # El resto de los tests del servicio (los que terminan en Tests.csproj), si hay.
@@ -64,7 +64,7 @@ jobs:
             exit 0
           fi
           for project in $tests; do
-            dotnet test "$project" -c Release --filter "Category!=Isolation"
+            dotnet test "$project" -c Release --filter "Category!=Isolation&Category!=ServiceIntegration"
           done
 
   smoke:
@@ -99,6 +99,33 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  service-integration:
+    name: Integración entre microservicios
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Levantar Estructura y Seguimiento
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 180 estructura seguimiento
+
+      - name: Ejecutar pruebas de integración real (Asistente)
+        run: dotnet test services/asistente/Tests/Asistente.Tests.csproj -c Release --filter "Category=ServiceIntegration"
+
+      - name: Logs si algo falló
+        if: failure()
+        run: docker compose logs estructura seguimiento
+
+      - name: Bajar todo
+        if: always()
+        run: docker compose down -v
+
   contracts:
     name: Validar contratos OpenAPI
     runs-on: ubuntu-24.04
@@ -113,13 +140,13 @@ jobs:
   ci-ok:
     name: CI ok
     if: always()
-    needs: [build, smoke, contracts]
+    needs: [build, smoke, service-integration, contracts]
     runs-on: ubuntu-24.04
     steps:
       - name: Verificar que todo pasó
         run: |
-          if [ "${{ needs.build.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ] || [ "${{ needs.contracts.result }}" != "success" ]; then
-            echo "Falló build (${{ needs.build.result }}), smoke (${{ needs.smoke.result }}) o contracts (${{ needs.contracts.result }})."
+          if [ "${{ needs.build.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ] || [ "${{ needs.service-integration.result }}" != "success" ] || [ "${{ needs.contracts.result }}" != "success" ]; then
+            echo "Falló build (${{ needs.build.result }}), smoke (${{ needs.smoke.result }}), service-integration (${{ needs.service-integration.result }}) o contracts (${{ needs.contracts.result }})."
             exit 1
           fi
 
