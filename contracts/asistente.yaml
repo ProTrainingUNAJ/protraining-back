@@ -762,6 +762,11 @@ components:
         reviewed:
           type: boolean
           example: false
+        suggestedAdjustmentType:
+          type: string
+          nullable: true
+          enum: [LoadReduction, RoutineAdjustment, Rest]
+          example: "RoutineAdjustment"
 
     TodayAdjustmentRequest:
       type: object
