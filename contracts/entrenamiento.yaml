@@ -2732,6 +2732,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2847,6 +2862,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2926,3 +2956,18 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]

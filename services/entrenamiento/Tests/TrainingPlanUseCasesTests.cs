@@ -7,6 +7,7 @@ using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.ListTemplates;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -499,5 +500,77 @@ public class TrainingPlanUseCasesTests
 
         // Verifica que toda la operación se ejecutó dentro de ExecuteInTransactionAsync
         _unitOfWorkMock.Verify(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListPlans_DeberiaSepararMusculosPrimariosYSecundariosDeduplicando()
+    {
+        var plan = TrainingPlan.Create("Plan Hipertrofia", "Enfoque brazos");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día A", 1, DayOfWeek.Monday);
+
+        var ex1 = Exercise.Create("Curl con barra", "Bíceps", primaryMuscles: new List<string> { "biceps", "antebrazos" }, secondaryMuscles: new List<string> { "hombros" });
+        var pe1 = PrescribedExercise.Create(1, 3, 10, null, session.Id, ex1.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe1, ex1);
+
+        var ex2 = Exercise.Create("Remo con barra", "Espalda", primaryMuscles: new List<string> { "espalda" }, secondaryMuscles: new List<string> { "biceps", "trapecios" });
+        var pe2 = PrescribedExercise.Create(2, 4, 8, null, session.Id, ex2.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe2, ex2);
+
+        session.AddPrescribedExercise(pe1);
+        session.AddPrescribedExercise(pe2);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        _planRepoMock.Setup(r => r.ListAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TrainingPlan> { plan });
+
+        var handler = new ListTrainingPlansQueryHandler(_planRepoMock.Object);
+
+        var result = await handler.Handle(new ListTrainingPlansQuery());
+
+        Assert.Single(result);
+        var summary = result[0];
+        Assert.NotNull(summary.PrimaryMuscles);
+        Assert.NotNull(summary.SecondaryMuscles);
+        Assert.Contains("biceps", summary.PrimaryMuscles);
+        Assert.Contains("antebrazos", summary.PrimaryMuscles);
+        Assert.Contains("espalda", summary.PrimaryMuscles);
+        Assert.Contains("hombros", summary.SecondaryMuscles);
+        Assert.Contains("trapecios", summary.SecondaryMuscles);
+        // Bíceps es secundario en remo, pero primario en curl: no debe aparecer en SecondaryMuscles
+        Assert.DoesNotContain("biceps", summary.SecondaryMuscles);
+        Assert.Equal(summary.PrimaryMuscles, summary.TargetMuscles);
+    }
+
+    [Fact]
+    public async Task ListPlanTemplates_DeberiaSepararMusculosPrimariosYSecundarios()
+    {
+        var template = TrainingPlan.Create("Plantilla Fuerza", "Pretemporada", isTemplate: true);
+        var week = TrainingWeek.Create(1, template.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1", 1, DayOfWeek.Monday);
+
+        var ex1 = Exercise.Create("Press Banca", "Pecho", primaryMuscles: new List<string> { "pecho" }, secondaryMuscles: new List<string> { "triceps", "hombros" });
+        var pe1 = PrescribedExercise.Create(1, 4, 6, 80m, session.Id, ex1.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe1, ex1);
+
+        session.AddPrescribedExercise(pe1);
+        week.AddSession(session);
+        template.AddWeek(week);
+
+        _planRepoMock.Setup(r => r.ListTemplatesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TrainingPlan> { template });
+
+        var handler = new ListPlanTemplatesQueryHandler(_planRepoMock.Object);
+
+        var result = await handler.Handle(new ListPlanTemplatesQuery());
+
+        Assert.Single(result);
+        var summary = result[0];
+        Assert.NotNull(summary.PrimaryMuscles);
+        Assert.NotNull(summary.SecondaryMuscles);
+        Assert.Contains("pecho", summary.PrimaryMuscles);
+        Assert.Contains("triceps", summary.SecondaryMuscles);
+        Assert.Contains("hombros", summary.SecondaryMuscles);
     }
 }

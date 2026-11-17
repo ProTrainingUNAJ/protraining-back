@@ -44,5 +44,7 @@ public record TrainingPlanSummaryDto(
     Guid Id,
     string Name,
     string? Objective,
+    List<string>? PrimaryMuscles = null,
+    List<string>? SecondaryMuscles = null,
     List<string>? TargetMuscles = null
 );
