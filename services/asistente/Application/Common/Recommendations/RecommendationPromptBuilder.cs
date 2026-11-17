@@ -22,11 +22,10 @@ public static class RecommendationPromptBuilder
     public const string PreWorkoutSnackGroupLabel = "Meriendas / Opciones Pre-entreno (Digestión Rápida)";
 
     /// <summary>
-    /// Lista blanca de alimentos de la base actual, organizada formalmente según la taxonomía
-    /// de nutrición deportiva (#KAN-495): ninguna categoría elimina alimentos de la lista base
-    /// anterior y sólo se completan los grupos con los elementos originales existentes.
+    /// Lista blanca de alimentos organizada formalmente según la taxonomía de nutrición deportiva,
+    /// ampliada con opciones más completas sin perder ningún elemento de la lista base original (#KAN-495).
     /// El grupo de meriendas pre-entreno (digestión rápida) referencia alimentos que ya pertenecen
-    /// a otros grupos; no agrega elementos nuevos a la lista.
+    /// a otros grupos, más una opción combinada propia; es la única suma exclusiva de ese grupo.
     /// </summary>
     public static readonly IReadOnlyList<ApprovedFoodGroup> DefaultApprovedFoodGroups =
     [
@@ -41,7 +40,9 @@ public static class RecommendationPromptBuilder
             "queso magro",
             "leche",
             "lentejas",
-            "garbanzos"
+            "garbanzos",
+            "ricota magra",
+            "pechuga de pavo"
         ]),
         new("Hidratos de Carbono Complejos",
         [
@@ -50,22 +51,32 @@ public static class RecommendationPromptBuilder
             "papa",
             "batata",
             "avena",
-            "pan integral"
+            "pan integral",
+            "quínoa",
+            "galletas de arroz",
+            "choclo",
+            "calabaza"
         ]),
         new("Frutas y Verduras / Hortalizas",
         [
             "banana",
             "manzana",
             "naranja",
+            "pera",
+            "frutillas",
             "espinaca",
             "tomate",
-            "zanahoria"
+            "zanahoria",
+            "brócoli",
+            "zucchini"
         ]),
         new("Grasas Saludables y Frutos Secos",
         [
             "aceite de oliva",
             "palta",
-            "frutos secos"
+            "frutos secos",
+            "mantequilla de maní",
+            "semillas de chía"
         ]),
         new(PreWorkoutSnackGroupLabel,
         [
@@ -74,7 +85,8 @@ public static class RecommendationPromptBuilder
             "pan integral",
             "yogur natural",
             "frutos secos",
-            "manzana"
+            "manzana",
+            "galletas de arroz con mantequilla de maní"
         ])
     ];
 

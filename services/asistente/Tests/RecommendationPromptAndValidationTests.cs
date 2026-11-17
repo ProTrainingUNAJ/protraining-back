@@ -492,7 +492,7 @@ public sealed class RecommendationPromptAndValidationTests
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Sin pérdida ni invención: los 25 alimentos originales siguen presentes.
+        // Sin pérdida: los 25 alimentos de la lista base original siguen todos presentes.
         var originalFoods = new[]
         {
             "pollo", "huevo", "carne vacuna magra", "atún", "merluza",
@@ -502,8 +502,23 @@ public sealed class RecommendationPromptAndValidationTests
             "aceite de oliva", "tomate", "zanahoria", "espinaca"
         };
 
-        Assert.Equal(originalFoods.Length, union.Count);
+        // Taxonomía expandida completa: 38 alimentos únicos (los 25 originales + los nuevos,
+        // con el grupo de meriendas aportando sólo la opción combinada de digestión rápida).
+        var allApprovedFoods = new[]
+        {
+            "pollo", "carne vacuna magra", "atún", "merluza", "huevo", "yogur natural",
+            "queso magro", "leche", "lentejas", "garbanzos", "ricota magra", "pechuga de pavo",
+            "arroz", "fideos", "papa", "batata", "avena", "pan integral",
+            "quínoa", "galletas de arroz", "choclo", "calabaza",
+            "banana", "manzana", "naranja", "pera", "frutillas",
+            "espinaca", "tomate", "zanahoria", "brócoli", "zucchini",
+            "aceite de oliva", "palta", "frutos secos", "mantequilla de maní", "semillas de chía",
+            "galletas de arroz con mantequilla de maní"
+        };
+
+        Assert.Equal(allApprovedFoods.Length, union.Count);
         Assert.All(originalFoods, food => Assert.Contains(food, union, StringComparer.OrdinalIgnoreCase));
+        Assert.All(allApprovedFoods, food => Assert.Contains(food, union, StringComparer.OrdinalIgnoreCase));
         Assert.Equal(RecommendationPromptBuilder.DefaultApprovedFoods, union);
     }
 
@@ -517,12 +532,12 @@ public sealed class RecommendationPromptAndValidationTests
         var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
 
         Assert.Contains("Alimentos permitidos por grupo", prompt);
-        Assert.Contains("* Proteínas de Alta Calidad: pollo, carne vacuna magra, atún, merluza, huevo, yogur natural, queso magro, leche, lentejas, garbanzos", prompt);
-        Assert.Contains("* Hidratos de Carbono Complejos: arroz, fideos, papa, batata, avena, pan integral", prompt);
-        Assert.Contains("* Frutas y Verduras / Hortalizas: banana, manzana, naranja, espinaca, tomate, zanahoria", prompt);
-        Assert.Contains("* Grasas Saludables y Frutos Secos: aceite de oliva, palta, frutos secos", prompt);
+        Assert.Contains("* Proteínas de Alta Calidad: pollo, carne vacuna magra, atún, merluza, huevo, yogur natural, queso magro, leche, lentejas, garbanzos, ricota magra, pechuga de pavo", prompt);
+        Assert.Contains("* Hidratos de Carbono Complejos: arroz, fideos, papa, batata, avena, pan integral, quínoa, galletas de arroz, choclo, calabaza", prompt);
+        Assert.Contains("* Frutas y Verduras / Hortalizas: banana, manzana, naranja, pera, frutillas, espinaca, tomate, zanahoria, brócoli, zucchini", prompt);
+        Assert.Contains("* Grasas Saludables y Frutos Secos: aceite de oliva, palta, frutos secos, mantequilla de maní, semillas de chía", prompt);
         Assert.Contains(
-            $"* {RecommendationPromptBuilder.PreWorkoutSnackGroupLabel}: avena, banana, pan integral, yogur natural, frutos secos, manzana",
+            $"* {RecommendationPromptBuilder.PreWorkoutSnackGroupLabel}: avena, banana, pan integral, yogur natural, frutos secos, manzana, galletas de arroz con mantequilla de maní",
             prompt);
         Assert.Contains("CONTEXTO PRE-ENTRENO", prompt);
         Assert.Contains("SÓLO ALIMENTOS DE LA LISTA", prompt);
