@@ -39,5 +39,6 @@ public record TrainingPlanDetailDto(
 public record TrainingPlanSummaryDto(
     Guid Id,
     string Name,
-    string? Objective
+    string? Objective,
+    List<string>? TargetMuscles = null
 );

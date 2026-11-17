@@ -37,6 +37,10 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         return await _context.TrainingPlans
             .AsNoTracking()
             .Where(p => !p.IsTemplate)
+            .Include(p => p.Weeks)
+                .ThenInclude(w => w.Sessions)
+                    .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(e => e.Exercise)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }

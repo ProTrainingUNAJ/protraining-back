@@ -15,6 +15,31 @@ public class ListTrainingPlansQueryHandler
     public async Task<List<TrainingPlanSummaryDto>> Handle(ListTrainingPlansQuery query, CancellationToken cancellationToken = default)
     {
         var plans = await _planRepository.ListAsync(cancellationToken);
-        return plans.Select(p => new TrainingPlanSummaryDto(p.Id, p.Name, p.Objective)).ToList();
+        return plans.Select(p =>
+        {
+            var targetMuscles = p.Weeks
+                .SelectMany(w => w.Sessions)
+                .SelectMany(s => s.PrescribedExercises)
+                .Where(pe => pe.Exercise != null)
+                .SelectMany(pe =>
+                {
+                    var muscles = new List<string>();
+                    if (pe.Exercise.PrimaryMuscles != null && pe.Exercise.PrimaryMuscles.Count > 0)
+                        muscles.AddRange(pe.Exercise.PrimaryMuscles);
+                    else if (!string.IsNullOrWhiteSpace(pe.Exercise.MuscleGroup))
+                        muscles.Add(pe.Exercise.MuscleGroup);
+
+                    if (pe.Exercise.SecondaryMuscles != null && pe.Exercise.SecondaryMuscles.Count > 0)
+                        muscles.AddRange(pe.Exercise.SecondaryMuscles);
+
+                    return muscles;
+                })
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            return new TrainingPlanSummaryDto(p.Id, p.Name, p.Objective, targetMuscles);
+        }).ToList();
     }
 }

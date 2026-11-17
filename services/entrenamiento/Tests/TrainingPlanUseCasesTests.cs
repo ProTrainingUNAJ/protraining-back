@@ -439,6 +439,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(2, result.Count);
         Assert.Equal("Plan 1", result[0].Name);
         Assert.Equal("Plan 2", result[1].Name);
+        Assert.NotNull(result[0].TargetMuscles);
     }
 
     [Fact]
