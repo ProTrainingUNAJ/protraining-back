@@ -3,9 +3,11 @@ using System.Net.Http.Json;
 using Application.DTOs.Athletes;
 using Application.DTOs.Categories;
 using Application.DTOs.Organizations;
+using Application.UseCases.Athletes.PurgePendingAthletes;
 using Domain.Entities;
 using Estructura.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Estructura.Tests.Integration;
 
@@ -261,6 +263,54 @@ public sealed class AthleteSoftDeleteOutboxTests : IAsyncDisposable
             .Where(p => p.AthleteId == athlete2.Id)
             .ToListAsync();
         Assert.Empty(athlete2Purges);
+    }
+
+    [Fact]
+    public async Task Given_SoftDeletedAthlete_When_PurgeWorkerRunsBeyondRetention_Then_PurgesLocalAthleteDataAndMarksPurgeAsProcessed()
+    {
+        // 1. Arrange: Create Athlete with PF-A
+        var request = new CreateAthleteRequest(
+            FirstName: "Lautaro",
+            LastName: "Martinez",
+            Email: "lautaro.martinez@test.com",
+            Phone: "+5491122334455",
+            IsMinor: false);
+
+        var createResponse = await _clientPfA.PostAsJsonAsync("/api/v1/athletes", request);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var athlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+
+        // Delete Athlete (soft delete + pending_purges)
+        var deleteResponse = await _clientPfA.DeleteAsync($"/api/v1/athletes/{athlete.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        // 2. Act: Run purge process with RetentionDays = 0 (immediately eligible)
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var purgeHandler = scope.ServiceProvider.GetRequiredService<ProcessPendingPurgesCommandHandler>();
+            var result = await purgeHandler.HandleAsync(new ProcessPendingPurgesCommand(RetentionDays: 0), CancellationToken.None);
+
+            Assert.True(result.TotalEvaluated >= 1);
+            Assert.True(result.PurgedSuccessfully >= 1);
+        }
+
+        // 3. Assert: Direct Database State
+        using var dbContext = _factory.CreateDbContext();
+
+        // Athlete is physically purged from the database
+        var dbAthlete = await dbContext.Athletes
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.Id == athlete.Id);
+        Assert.Null(dbAthlete);
+
+        // PendingPurge is marked as Processed
+        var dbPurge = await dbContext.PendingPurges
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.AthleteId == athlete.Id);
+        Assert.NotNull(dbPurge);
+        Assert.Equal(PendingPurge.ProcessedStatus, dbPurge.Status);
+        Assert.NotNull(dbPurge.ProcessedAt);
     }
 
     public async ValueTask DisposeAsync()

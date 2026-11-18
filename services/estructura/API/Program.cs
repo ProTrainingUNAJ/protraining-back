@@ -9,6 +9,7 @@ using Application.Services;
 using Application.UseCases.Athletes.AssignAthleteCategory;
 using Application.UseCases.Athletes.CreateAthlete;
 using Application.UseCases.Athletes.DeleteAthlete;
+using Application.UseCases.Athletes.PurgePendingAthletes;
 using Application.UseCases.Athletes.GetAthlete;
 using Application.UseCases.Athletes.GetMe;
 using Application.UseCases.Athletes.ListAthletes;
@@ -132,6 +133,7 @@ builder.Services.AddScoped<ExportStructureCsvQueryHandler>();
 builder.Services.AddScoped<SendDailyWellnessRemindersCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.RegisterPushSubscription.RegisterPushSubscriptionCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Notifications.UnsubscribePush.UnsubscribePushCommandHandler>();
+builder.Services.AddScoped<ProcessPendingPurgesCommandHandler>();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICategoryAccessValidator, CategoryAccessValidator>();
@@ -168,7 +170,12 @@ builder.Services.AddHttpClient<ISessionScheduleService, SessionScheduleService>(
 builder.Services.AddHttpClient<IWellnessCheckInService, WellnessCheckInService>(client => client.BaseAddress = seguimientoUri)
     .AddHttpMessageHandler<ServiceAuthenticationHandler>();
 
+builder.Services.AddScoped<IAthletePurgeDispatcher, AthletePurgeDispatcher>();
+builder.Services.AddHttpClient<IExternalServicePurgeClient, ExternalServicePurgeClient>()
+    .AddHttpMessageHandler<ServiceAuthenticationHandler>();
+
 builder.Services.AddHostedService<WellnessReminderWorker>();
+builder.Services.AddHostedService<DataPurgeWorker>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");

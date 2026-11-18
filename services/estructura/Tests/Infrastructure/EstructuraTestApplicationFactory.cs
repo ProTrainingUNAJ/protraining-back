@@ -56,6 +56,7 @@ using Microsoft.Extensions.Configuration;
 using Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
+using Moq;
 
 namespace Estructura.Tests.Infrastructure;
 
@@ -65,13 +66,16 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
     private readonly TestServer _server;
     private readonly IWebPushClientWrapper? _customWebPushClient;
     private readonly TimeProvider _timeProvider;
+    private readonly IAthletePurgeDispatcher? _customPurgeDispatcher;
 
     public EstructuraTestApplicationFactory(
         IWebPushClientWrapper? customWebPushClient = null,
-        TimeProvider? customTimeProvider = null)
+        TimeProvider? customTimeProvider = null,
+        IAthletePurgeDispatcher? customPurgeDispatcher = null)
     {
         _customWebPushClient = customWebPushClient;
         _timeProvider = customTimeProvider ?? TimeProvider.System;
+        _customPurgeDispatcher = customPurgeDispatcher;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -105,6 +109,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ICategoryRepository, CategoryRepository>();
                 services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+                services.AddScoped<IEstructuraPurgeRepository, EstructuraPurgeRepository>();
                 services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
                 services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
                 services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
@@ -133,6 +138,19 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                     services.AddScoped<IWebPushClientWrapper, DefaultWebPushClientWrapper>();
                 }
                 services.AddScoped<IPushNotificationService, PushNotificationService>();
+
+                if (_customPurgeDispatcher is not null)
+                {
+                    services.AddScoped<IAthletePurgeDispatcher>(_ => _customPurgeDispatcher);
+                }
+                else
+                {
+                    var mockDispatcher = new Moq.Mock<IAthletePurgeDispatcher>();
+                    mockDispatcher
+                        .Setup(d => d.DispatchPurgeToExternalServicesAsync(Moq.It.IsAny<Guid>(), Moq.It.IsAny<CancellationToken>()))
+                        .ReturnsAsync(true);
+                    services.AddScoped<IAthletePurgeDispatcher>(_ => mockDispatcher.Object);
+                }
 
                 // Handlers
                 services.AddScoped<ListAthletesQueryHandler>();
@@ -186,6 +204,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
                 services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
                 services.AddScoped<AcceptCategoryInvitationCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgePendingAthletes.ProcessPendingPurgesCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
@@ -241,6 +260,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
         context.Database.EnsureCreated();
     }
 
+    public IServiceProvider Services => _server.Services;
     public HttpClient CreateClient() => _server.CreateClient();
 
     public HttpClient CreateAuthenticatedClient(Guid pfId, string role = "PreparadorFisico", Guid? userId = null)
