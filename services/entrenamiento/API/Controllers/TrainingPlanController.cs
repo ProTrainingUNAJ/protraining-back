@@ -2,6 +2,7 @@ using Application.DTOs.TrainingPlans;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
@@ -31,6 +32,7 @@ public class TrainingPlanController : ControllerBase
     private readonly ListPlanTemplatesQueryHandler _listPlansTemplatesHandler;
     private readonly ApplyPlanTemplateCommandHandler _applyPlanTemplateHandler;
     private readonly ListPlanAssignmentsQueryHandler _listAssignmentsHandler;
+    private readonly DeletePlanAssignmentCommandHandler _deleteAssignmentHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -42,7 +44,8 @@ public class TrainingPlanController : ControllerBase
         SavePlanAsTemplateCommandHandler savePlanAsTemplateHandler,
         ListPlanTemplatesQueryHandler listPlanTemplatesHandler,
         ApplyPlanTemplateCommandHandler applyPlanTemplateHandler,
-        ListPlanAssignmentsQueryHandler listAssignmentsHandler)
+        ListPlanAssignmentsQueryHandler listAssignmentsHandler,
+        DeletePlanAssignmentCommandHandler deleteAssignmentHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -54,6 +57,7 @@ public class TrainingPlanController : ControllerBase
         _listPlansTemplatesHandler = listPlanTemplatesHandler;
         _applyPlanTemplateHandler = applyPlanTemplateHandler;
         _listAssignmentsHandler = listAssignmentsHandler;
+        _deleteAssignmentHandler = deleteAssignmentHandler;
     }
 
     [HttpPost]
@@ -123,6 +127,14 @@ public class TrainingPlanController : ControllerBase
         return Created(
             $"/api/v1/training-plans/assignments/{assignment.AssignmentId}",
             AssignmentResponse(assignment, "Plan asignado exitosamente."));
+    }
+
+    [HttpDelete("assignments/{assignmentId:guid}")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> DeleteAssignment(Guid assignmentId, CancellationToken cancellationToken = default)
+    {
+        await _deleteAssignmentHandler.Handle(new DeletePlanAssignmentCommand(assignmentId), cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("{id:guid}/save-as-template")]

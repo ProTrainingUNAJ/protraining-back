@@ -29,6 +29,7 @@ using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
@@ -111,6 +112,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<ListExercisesQueryHandler>();
                 services.AddScoped<AssignPlanCommandHandler>();
+                services.AddScoped<DeletePlanAssignmentCommandHandler>();
                 services.AddScoped<CreateTrainingPlanCommandHandler>();
                 services.AddScoped<UpdateTrainingPlanCommandHandler>();
                 services.AddScoped<GetTrainingPlanQueryHandler>();

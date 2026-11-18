@@ -12,5 +12,7 @@ public interface ITrainingPlanRepository
     Task<Dictionary<Guid, string>> GetExerciseNamesAsync(IEnumerable<Guid> exerciseIds, CancellationToken cancellationToken = default);
     Task AddAsync(TrainingPlan plan, CancellationToken cancellationToken = default);
     Task AddAssignmentAsync(PlanAssignment assignment, CancellationToken cancellationToken = default);
+    Task<PlanAssignment?> GetAssignmentByIdAsync(Guid assignmentId, CancellationToken cancellationToken = default);
+    void RemoveAssignment(PlanAssignment assignment);
     Task <List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default);
 }

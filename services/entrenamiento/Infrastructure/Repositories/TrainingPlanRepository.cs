@@ -84,6 +84,17 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         await _context.PlanAssignments.AddAsync(assignment, cancellationToken);
     }
 
+    public async Task<PlanAssignment?> GetAssignmentByIdAsync(Guid assignmentId, CancellationToken cancellationToken = default)
+    {
+        return await _context.PlanAssignments
+            .FirstOrDefaultAsync(a => a.Id == assignmentId, cancellationToken);
+    }
+
+    public void RemoveAssignment(PlanAssignment assignment)
+    {
+        _context.PlanAssignments.Remove(assignment);
+    }
+
     public async Task<List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.TrainingPlans
