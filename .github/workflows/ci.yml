@@ -115,8 +115,10 @@ jobs:
           cp .env.example .env
           docker compose up -d --build --wait --wait-timeout 180 estructura seguimiento
 
-      - name: Ejecutar pruebas de integración real (Asistente)
-        run: dotnet test services/asistente/Tests/Asistente.Tests.csproj -c Release --filter "Category=ServiceIntegration"
+      - name: Ejecutar pruebas de integración real (Asistente y Seguimiento)
+        run: |
+          dotnet test services/asistente/Tests/Asistente.Tests.csproj -c Release --filter "Category=ServiceIntegration"
+          dotnet test services/seguimiento/Tests/Seguimiento.Tests.csproj -c Release --filter "Category=ServiceIntegration"
 
       - name: Logs si algo falló
         if: failure()

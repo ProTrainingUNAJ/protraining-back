@@ -31,6 +31,8 @@ using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.UseCases.Trends.GetAthleteWeeklyTrends;
+using Application.UseCases.Trends.GetCategoryWeeklyTrends;
 using Application.Services;
 using Infrastructure.Services;
 using Domain.Services;
@@ -124,6 +126,8 @@ builder.Services.AddScoped<IFitnessTestMeasurementService, FieldTestMeasurementS
 builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
 builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
 builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();
+builder.Services.AddScoped<GetAthleteWeeklyTrendsQueryHandler>();
+builder.Services.AddScoped<GetCategoryWeeklyTrendsQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();

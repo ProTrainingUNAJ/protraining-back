@@ -25,6 +25,8 @@ using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.UseCases.Trends.GetAthleteWeeklyTrends;
+using Application.UseCases.Trends.GetCategoryWeeklyTrends;
 using Application.Services;
 using Domain.Services;
 using Infrastructure.Data;
@@ -179,6 +181,8 @@ services.AddScoped<Application.UseCases.CheckIns.ListResolvedInjuries.ListResolv
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();
                 services.AddScoped<GetAthleteEvolutionQueryHandler>();
+                services.AddScoped<GetAthleteWeeklyTrendsQueryHandler>();
+                services.AddScoped<GetCategoryWeeklyTrendsQueryHandler>();
 
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.

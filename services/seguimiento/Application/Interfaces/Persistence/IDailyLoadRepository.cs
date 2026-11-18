@@ -9,6 +9,9 @@ public interface IDailyLoadRepository
     // Cargas del día de un atleta en un rango de fechas (semana del atleta, KAN-446).
     Task<IReadOnlyList<DailyLoad>> GetByAthleteAndDateRangeAsync(Guid athleteId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 
+    // Cargas del día de varios atletas en un rango de fechas en lote (tendencias semanales grupales, KAN-489).
+    Task<IReadOnlyList<DailyLoad>> GetByAthletesAndDateRangeAsync(IReadOnlyCollection<Guid> athleteIds, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
+
     // Cargas del día de varios atletas en una misma fecha, en una sola consulta (asistencia por categoría).
     Task<IReadOnlyList<DailyLoad>> GetByAthletesAndDateAsync(IReadOnlyCollection<Guid> athleteIds, DateTime date, CancellationToken cancellationToken = default);
 
