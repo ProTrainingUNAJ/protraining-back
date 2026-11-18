@@ -333,6 +333,11 @@ public sealed class RecommendationPromptAndValidationTests
         var auditMock = new Mock<IAiAuditService>();
         var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
 
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock
+            .Setup(c => c.GetHabitsPermissionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteHabitsPermissionDto(IsMinor: false, AllowsHabitsRecommendations: false));
+
         var service = new ResilientAiService(
             providers: [badProvider.Object, ruleClient],
             semanticValidator: null,
@@ -340,6 +345,7 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: auditMock.Object,
             catalogService: null,
+            structureAthleteClient: structureMock.Object,
             logger: NullLogger<ResilientAiService>.Instance);
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
@@ -565,6 +571,147 @@ public sealed class RecommendationPromptAndValidationTests
         var response = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request);
 
         Assert.Equal(RecommendationPromptBuilder.OfficialNutritionDisclaimer, response.LegalDisclaimer);
+    }
+
+    #endregion
+
+    #region 6. Permiso del tutor para alimentación en menores (#201 · KAN-496)
+
+    private static NutritionRecommendationRequestDto NutritionRequestWithAthlete(Guid? athleteId) =>
+        new(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: SampleApprovedFoods,
+            MinProteinGrams: 100,
+            MaxProteinGrams: 140,
+            HydrationLiters: 2.5,
+            SleepHours: 8,
+            AthleteId: athleteId);
+
+    private static Mock<IStructureAthleteClient> StructureClientReturning(StructureAthleteHabitsPermissionDto? permission)
+    {
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock
+            .Setup(c => c.GetHabitsPermissionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(permission);
+        return structureMock;
+    }
+
+    private static ResilientAiService BuildServiceWith(IReadOnlyList<IAiClient> providers, IStructureAthleteClient? structureClient) =>
+        new(
+            providers: providers,
+            semanticValidator: null,
+            responseCache: null,
+            currentUser: null,
+            auditService: null,
+            catalogService: null,
+            structureAthleteClient: structureClient,
+            logger: NullLogger<ResilientAiService>.Instance);
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenMinorWithoutTutorPermission_ThrowsDomainException_WithoutCallingProviders()
+    {
+        var athleteId = Guid.NewGuid();
+        var request = NutritionRequestWithAthlete(athleteId);
+
+        var structureMock = StructureClientReturning(
+            new StructureAthleteHabitsPermissionDto(IsMinor: true, AllowsHabitsRecommendations: false));
+
+        var providerMock = new Mock<IAiClient>();
+        providerMock.Setup(p => p.ProviderName).Returns("Ollama");
+
+        var service = BuildServiceWith([providerMock.Object], structureMock.Object);
+
+        await Assert.ThrowsAsync<DomainException>(() => service.GenerateNutritionRecommendationAsync(request));
+
+        providerMock.Verify(
+            p => p.TryGenerateNutritionRecommendationAsync(It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        structureMock.Verify(
+            c => c.GetHabitsPermissionAsync(athleteId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenMinorWithTutorPermission_GeneratesRecommendation()
+    {
+        var athleteId = Guid.NewGuid();
+        var request = NutritionRequestWithAthlete(athleteId);
+
+        var structureMock = StructureClientReturning(
+            new StructureAthleteHabitsPermissionDto(IsMinor: true, AllowsHabitsRecommendations: true));
+
+        var auditMock = new Mock<IAiAuditService>();
+        var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var service = BuildServiceWith([ruleClient], structureMock.Object);
+
+        var response = await service.GenerateNutritionRecommendationAsync(request);
+
+        Assert.NotNull(response);
+        structureMock.Verify(
+            c => c.GetHabitsPermissionAsync(athleteId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenAdultWithoutHabitsFlag_GeneratesRecommendation()
+    {
+        var athleteId = Guid.NewGuid();
+        var request = NutritionRequestWithAthlete(athleteId);
+
+        var structureMock = StructureClientReturning(
+            new StructureAthleteHabitsPermissionDto(IsMinor: false, AllowsHabitsRecommendations: false));
+
+        var auditMock = new Mock<IAiAuditService>();
+        var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var service = BuildServiceWith([ruleClient], structureMock.Object);
+
+        var response = await service.GenerateNutritionRecommendationAsync(request);
+
+        Assert.NotNull(response);
+        Assert.Equal("Reglas", response.ProviderUsed);
+    }
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenAthleteIdIsNull_SkipsPermissionCheck_AndGenerates()
+    {
+        var request = NutritionRequestWithAthlete(athleteId: null);
+
+        var structureMock = StructureClientReturning(null);
+
+        var auditMock = new Mock<IAiAuditService>();
+        var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        var service = BuildServiceWith([ruleClient], structureMock.Object);
+
+        var response = await service.GenerateNutritionRecommendationAsync(request);
+
+        Assert.NotNull(response);
+        structureMock.Verify(
+            c => c.GetHabitsPermissionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenEstructuraDoesNotRespond_ThrowsDomainException_WithoutCallingProviders()
+    {
+        var athleteId = Guid.NewGuid();
+        var request = NutritionRequestWithAthlete(athleteId);
+
+        // Estructura caída / 404 / 5xx: el cliente devuelve null y el motor no genera nada (fail-closed).
+        var structureMock = StructureClientReturning(null);
+
+        var providerMock = new Mock<IAiClient>();
+        providerMock.Setup(p => p.ProviderName).Returns("Ollama");
+
+        var service = BuildServiceWith([providerMock.Object], structureMock.Object);
+
+        await Assert.ThrowsAsync<DomainException>(() => service.GenerateNutritionRecommendationAsync(request));
+
+        providerMock.Verify(
+            p => p.TryGenerateNutritionRecommendationAsync(It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     #endregion

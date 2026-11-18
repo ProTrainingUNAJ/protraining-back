@@ -611,4 +611,91 @@ public sealed class PfDecisionsTests
         await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
             clientNoBaseAddress.IsOwnAthleteAsync(MyAthleteId));
     }
+
+    // =========================================================================
+    // 11. PERMISO DEL TUTOR PARA ALIMENTACIÓN (KAN-496)
+    // =========================================================================
+    [Fact]
+    public async Task Given_StructureAthleteClient_When_EstructuraReturnsMinorWithoutPermission_Then_ReturnsHabitsPermission()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains($"api/v1/athletes/{MyAthleteId}")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","isMinor":true,"allowsHabitsRecommendations":false}""")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:8082/")
+        };
+
+        var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+        // Act
+        var result = await client.GetHabitsPermissionAsync(MyAthleteId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.True(result!.IsMinor);
+        Assert.False(result.AllowsHabitsRecommendations);
+    }
+
+    [Fact]
+    public async Task Given_StructureAthleteClient_When_EstructuraReturns404Or500_Then_ReturnsNull_FailClosed()
+    {
+        foreach (var statusCode in new[] { HttpStatusCode.NotFound, HttpStatusCode.InternalServerError })
+        {
+            // Arrange
+            var handlerMock = new Mock<HttpMessageHandler>();
+            handlerMock.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains($"api/v1/athletes/{OtherAthleteId}")),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(new HttpResponseMessage(statusCode));
+
+            var httpClient = new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("http://localhost:8082/")
+            };
+
+            var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+            // Act & Assert: sin permiso verificable no hay recomendación (fail-closed)
+            Assert.Null(await client.GetHabitsPermissionAsync(OtherAthleteId));
+        }
+    }
+
+    [Fact]
+    public async Task Given_StructureAthleteClient_When_ConnectionFailsOrEmptyId_Then_ReturnsNull_FailClosed()
+    {
+        // Arrange: caída completa de red hacia Estructura
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:8082/")
+        };
+
+        var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+        // Act & Assert
+        Assert.Null(await client.GetHabitsPermissionAsync(MyAthleteId));
+        Assert.Null(await client.GetHabitsPermissionAsync(Guid.Empty));
+
+        var clientNoBaseAddress = new StructureAthleteClient(new HttpClient(), Mock.Of<ILogger<StructureAthleteClient>>());
+        Assert.Null(await clientNoBaseAddress.GetHabitsPermissionAsync(MyAthleteId));
+    }
 }

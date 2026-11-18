@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Services.Structure;
 
 /// <summary>
-/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431 / KAN-472).
+/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431 / KAN-472 / KAN-496).
 /// El aislamiento multi-tenant por PfId se propaga con el token del PF o token de Servicio a través de ForwardAuthorizationHandler.
 /// </summary>
 public sealed class StructureAthleteClient(
@@ -69,6 +69,63 @@ public sealed class StructureAthleteClient(
 
             throw new StructureServiceUnavailableException(
                 "El microservicio de Estructura no se encuentra disponible.", ex);
+        }
+    }
+
+    private sealed record StructureAthletePermissionApiResponse(
+        [property: JsonPropertyName("isMinor")] bool IsMinor,
+        [property: JsonPropertyName("allowsHabitsRecommendations")] bool AllowsHabitsRecommendations);
+
+    public async Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            return null;
+
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogError("La dirección base de Estructura no está configurada.");
+            return null;
+        }
+
+        try
+        {
+            var url = $"api/v1/athletes/{athleteId}";
+            using var response = await httpClient.GetAsync(url, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning(
+                    "Estructura respondió código HTTP {StatusCode} al consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    (int)response.StatusCode,
+                    athleteId);
+                return null;
+            }
+
+            var athlete = await response.Content.ReadFromJsonAsync<StructureAthletePermissionApiResponse>(cancellationToken: cancellationToken);
+            if (athlete is null)
+            {
+                logger.LogWarning(
+                    "Estructura devolvió una respuesta vacía al consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    athleteId);
+                return null;
+            }
+
+            return new StructureAthleteHabitsPermissionDto(athlete.IsMinor, athlete.AllowsHabitsRecommendations);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Error al comunicarse con Estructura para consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                athleteId);
+            return null;
         }
     }
 

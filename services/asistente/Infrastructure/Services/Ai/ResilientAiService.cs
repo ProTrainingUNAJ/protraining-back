@@ -34,6 +34,7 @@ public sealed class ResilientAiService : IAiService
     private readonly IAiAuditService? _auditService;
     private readonly IExerciseCatalogService? _catalogService;
     private readonly IAiQuotaService? _quotaService;
+    private readonly IStructureAthleteClient? _structureAthleteClient;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -103,8 +104,9 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
-        ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
+        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient)
     {
     }
 
@@ -135,8 +137,9 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
-        ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger, structureAthleteClient)
     {
     }
 
@@ -148,7 +151,8 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
-        ILogger<ResilientAiService> logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
     {
         _providers = providers;
         _semanticValidator = semanticValidator;
@@ -157,6 +161,7 @@ public sealed class ResilientAiService : IAiService
         _auditService = auditService;
         _catalogService = catalogService;
         _quotaService = quotaService;
+        _structureAthleteClient = structureAthleteClient;
         _logger = logger;
     }
 
@@ -709,6 +714,32 @@ public sealed class ResilientAiService : IAiService
         if (request.ApprovedFoods is { Count: 0 })
         {
             throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
+        }
+
+        // Verificación del permiso del tutor en atletas menores (#201 · KAN-496):
+        // si no se puede verificar o el tutor no autorizó, no se genera ninguna recomendación (fail-closed).
+        if (request.AthleteId.HasValue)
+        {
+            var permission = _structureAthleteClient is not null
+                ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
+                : null;
+
+            if (permission is null)
+            {
+                _logger.LogWarning(
+                    "No se pudo verificar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    request.AthleteId.Value);
+                throw new DomainException(
+                    $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
+            }
+
+            if (permission.IsMinor && !permission.AllowsHabitsRecommendations)
+            {
+                _logger.LogWarning(
+                    "El atleta {AthleteId} es menor de edad y su tutor no autorizó las recomendaciones de alimentación. No se generará recomendación (KAN-496).",
+                    request.AthleteId.Value);
+                throw new DomainException("El atleta es menor de edad y su tutor no autorizó las recomendaciones de alimentación.");
+            }
         }
 
         // Verificación de cuota diaria en memoria por PF (KAN-510)
