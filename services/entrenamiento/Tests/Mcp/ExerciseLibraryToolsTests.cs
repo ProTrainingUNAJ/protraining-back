@@ -1,5 +1,6 @@
 using API.Mcp;
 using Application.Interfaces.Persistence;
+using Application.UseCases.Exercise.GetRestrictionsByZone;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.SearchCatalogExercises;
 using Domain.Entities;
@@ -9,7 +10,7 @@ using Moq;
 
 namespace Entrenamiento.Tests.Mcp;
 
-// E51: pruebas de la herramienta MCP BuscarEjercicios.
+// E51: pruebas de la herramienta MCP BuscarEjercicios, ObtenerSustitutos y ObtenerRestricciones.
 public sealed class ExerciseLibraryToolsTests
 {
     private static (
@@ -21,7 +22,8 @@ public sealed class ExerciseLibraryToolsTests
         var restrictionRepository = new Mock<IExerciseRestrictionRepository>();
         var handler = new SearchCatalogExercisesQueryHandler(repository.Object);
         var substitutesHandler = new GetSubstitutesByZoneQueryHandler(restrictionRepository.Object);
-        var tool = new ExerciseLibraryTools(handler, substitutesHandler, NullLogger<ExerciseLibraryTools>.Instance);
+        var restrictionsHandler = new GetRestrictionsByZoneQueryHandler(restrictionRepository.Object);
+        var tool = new ExerciseLibraryTools(handler, substitutesHandler, restrictionsHandler, NullLogger<ExerciseLibraryTools>.Instance);
         return (tool, repository, restrictionRepository);
     }
 
@@ -234,5 +236,97 @@ public sealed class ExerciseLibraryToolsTests
 
         // ACT + ASSERT
         await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(new SearchCatalogExercisesQuery()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Pruebas para ObtenerRestricciones (#188 · KAN-483)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Given_McpClient_When_CallsObtenerRestriccionesForRodilla_Then_ReturnsRestrictedExercisesAndSubstitutes()
+    {
+        // ARRANGE
+        var (tool, _, restrictionRepository) = CreateTool();
+
+        var restrictedExercise = Exercise.Create("Sentadilla con barra", "Piernas", "barra con pesas");
+        var substituteExercise = Exercise.Create("Prensa de Piernas 45", "Piernas", "máquina");
+
+        var restriction = ExerciseRestriction.Create("cuadriceps", restrictedExercise.Id, "Carga axial sobre rodilla", minPainLevel: 1);
+        restriction.AddSubstitute(substituteExercise, 1);
+
+        // Inyectamos navegación de entidad para emular EF Core Include
+        typeof(ExerciseRestriction)
+            .GetProperty(nameof(ExerciseRestriction.Exercise))!
+            .SetValue(restriction, restrictedExercise);
+
+        restrictionRepository
+            .Setup(r => r.GetRestrictionsByZonesAsync(
+                It.Is<IEnumerable<string>>(zones => zones.Contains("cuadriceps")),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([restriction]);
+
+        // ACT
+        var result = await tool.GetRestrictions("rodilla");
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.Equal("rodilla", result.Zone);
+        var item = Assert.Single(result.Restrictions);
+        Assert.Equal(restrictedExercise.Id, item.ExerciseId);
+        Assert.Equal("Sentadilla con barra", item.ExerciseName);
+        Assert.Equal("cuadriceps", item.Zone);
+        Assert.Equal(1, item.MinPainLevel);
+        Assert.Equal("Carga axial sobre rodilla", item.Reason);
+        var sub = Assert.Single(item.Substitutes);
+        Assert.Equal(substituteExercise.Id, sub.ExerciseId);
+        Assert.Equal("Prensa de Piernas 45", sub.Name);
+    }
+
+    [Theory]
+    [InlineData("rodilla")]
+    [InlineData("knee")]
+    public async Task Given_KneeAlias_When_CallsObtenerRestricciones_Then_ResolvesLowerBodyZones(string zoneAlias)
+    {
+        // ARRANGE
+        var (tool, _, restrictionRepository) = CreateTool();
+        restrictionRepository
+            .Setup(r => r.GetRestrictionsByZonesAsync(
+                It.Is<IEnumerable<string>>(z => z.SequenceEqual(new[] { "cuadriceps", "isquiotibiales", "gemelos" })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        // ACT
+        var result = await tool.GetRestrictions(zoneAlias);
+
+        // ASSERT
+        Assert.Equal(zoneAlias, result.Zone);
+        Assert.Empty(result.Restrictions);
+        restrictionRepository.Verify(
+            r => r.GetRestrictionsByZonesAsync(
+                It.Is<IEnumerable<string>>(z => z.SequenceEqual(new[] { "cuadriceps", "isquiotibiales", "gemelos" })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_UnknownZone_When_GettingRestrictions_Then_ThrowsMcpException()
+    {
+        var (tool, _, restrictionRepository) = CreateTool();
+
+        await Assert.ThrowsAsync<McpException>(() => tool.GetRestrictions("zona_invalida_total"));
+
+        restrictionRepository.Verify(
+            r => r.GetRestrictionsByZonesAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Given_EmptyOrWhitespaceZone_When_GettingRestrictions_Then_ThrowsMcpException(string invalidZone)
+    {
+        var (tool, _, _) = CreateTool();
+
+        await Assert.ThrowsAsync<McpException>(() => tool.GetRestrictions(invalidZone));
     }
 }

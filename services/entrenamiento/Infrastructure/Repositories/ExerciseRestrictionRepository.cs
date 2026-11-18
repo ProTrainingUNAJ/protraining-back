@@ -62,6 +62,7 @@ public class ExerciseRestrictionRepository : IExerciseRestrictionRepository
 
         return await _context.ExerciseRestrictions
             .AsNoTracking()
+            .Include(r => r.Exercise)
             .Include(r => r.Substitutes)
                 .ThenInclude(s => s.SubstituteExercise)
             .Where(r => zonesList.Contains(r.Zone))
