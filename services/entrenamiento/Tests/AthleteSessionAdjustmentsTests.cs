@@ -471,4 +471,99 @@ public sealed class AthleteSessionAdjustmentsTests
         Assert.Equal(note, response.Note);
         Assert.Single(response.Items);
     }
+
+    // =========================================================================
+    // 7. Ajuste preventivo con reducción de carga por fatiga en un clic (#183 · KAN-478)
+    // =========================================================================
+    [Fact]
+    public async Task Given_PreventiveAlertWithLoadReduction_When_ApplyAdjustment_Then_PersistsWithoutSubstitutesAndAppliesReducedLoadInTodayRoutine()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla trasera", "Piernas", equipment: "Barra");
+        db.Exercises.Add(squat);
+
+        // Prescripción al 80% (1RM de 100 kg -> 80 kg)
+        var session = CreateSessionWithExercise(squat, targetPercentage: 80m, coachNotes: "Sesión habitual");
+        db.TrainingSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        var mateoId = Guid.NewGuid();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(mateoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(mateoId, "Mateo"));
+
+        var handler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow);
+
+        var today = ArgentinaTime.Today;
+        var note = "Reducción de carga del 20% por fatiga acumulada detectada.";
+
+        // Act 1: Aplicar el ajuste de aviso preventivo (reducción de carga del 20% sin sustitutos)
+        var result = await handler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                AthleteId: mateoId,
+                Date: today,
+                Note: note,
+                Items: [],
+                LoadReductionPercentage: 20)));
+
+        Assert.NotNull(result);
+        Assert.Equal(20, result.LoadReductionPercentage);
+        Assert.Equal(note, result.Note);
+        Assert.Empty(result.Items);
+
+        // Act 2: Mateo consulta su rutina del día en GetTodayRoutine
+        var recordRepoMock = new Mock<IAthleteRecordRepository>();
+        var squatRecord = AthleteRecord.Create(mateoId, squat.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+        recordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(mateoId, squat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(squatRecord);
+
+        var sessionRepoMock = new Mock<ITrainingSessionRepository>();
+        sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(mateoId, It.IsAny<IReadOnlyList<Guid>>(), today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(v => v.GetVideosByExerciseIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            recordRepoMock.Object,
+            sessionRepoMock.Object,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            videoRepoMock.Object,
+            new Mock<IPerformedSetRepository>().Object,
+            adjustmentRepo,
+            exerciseRepo);
+
+        var routineResponse = await queryHandler.Handle(new GetTodayRoutineQuery { AthleteId = mateoId, Date = today });
+
+        Assert.True(routineResponse.RoutineAdapted);
+        Assert.True(routineResponse.AdjustedByCoach);
+        Assert.Equal(note, routineResponse.AdjustmentNote);
+        Assert.Single(routineResponse.Exercises);
+
+        var exerciseResult = routineResponse.Exercises[0];
+        // 80% con 20% de reducción = 80 * 0.8 = 64%
+        // Con 1RM de 100 kg -> 64 kg redondeado a barra/discos más cercana (65 o 62.5 kg)
+        Assert.Equal(64, exerciseResult.Percentage);
+        Assert.NotNull(exerciseResult.WeightKg);
+        Assert.True(exerciseResult.WeightKg < 80);
+    }
 }

@@ -31,3 +31,8 @@ public sealed record ReviewAlertResponseDto(
     string Message,
     Guid AlertId);
 
+public sealed record ApplyAlertAdjustmentResponseDto(
+    string Message,
+    Guid AlertId,
+    string Status);
+

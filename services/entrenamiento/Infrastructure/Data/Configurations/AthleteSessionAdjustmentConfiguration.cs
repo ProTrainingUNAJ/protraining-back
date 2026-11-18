@@ -16,6 +16,7 @@ public sealed class AthleteSessionAdjustmentConfiguration : IEntityTypeConfigura
         builder.Property(a => a.Date).HasColumnName("date").IsRequired();
         builder.Property(a => a.Note).HasColumnName("note").HasMaxLength(1000);
         builder.Property(a => a.Items).HasColumnName("items").HasColumnType("jsonb").IsRequired();
+        builder.Property(a => a.LoadReductionPercentage).HasColumnName("load_reduction_percentage");
         builder.Property(a => a.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
         builder.HasIndex(a => new { a.TrainingSessionId, a.AthleteId, a.Date })
