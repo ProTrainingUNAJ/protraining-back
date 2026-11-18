@@ -6,6 +6,7 @@ public interface ITrainingPlanRepository
 {
     Task<TrainingPlan?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<TrainingPlan?> GetWithDetailsByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<TrainingPlan?> GetWithDetailsNoTrackingByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<List<TrainingPlan>> ListAsync(CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> AllExercisesExistAsync(IEnumerable<Guid> exerciseIds, CancellationToken cancellationToken = default);

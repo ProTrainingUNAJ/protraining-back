@@ -835,6 +835,36 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans/{id}/pdf:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Descargar o imprimir rutina en PDF
+      description: Genera y devuelve un archivo PDF formateado e imprimible con la estructura de la planificacion para uso en cancha o pizarra. Requiere rol PreparadorFisico.
+      operationId: getTrainingPlanPdf
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la planificacion.
+      responses:
+        "200":
+          description: Archivo PDF generado exitosamente.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/training-plans/schedule:
     get:
       tags:
