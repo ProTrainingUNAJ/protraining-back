@@ -99,4 +99,58 @@ public class TrainingPlanPdfGeneratorTests
         var header = Encoding.ASCII.GetString(pdfBytes.Take(4).ToArray());
         Assert.Equal("%PDF", header);
     }
+
+    [Fact]
+    public void Generate_DadoPlanConEjerciciosDeResistencia_CuandoProcesa_EntoncesRetornaPdfValidoConDistanciaYTiempo()
+    {
+        // ARRANGE: Ejercicios de resistencia con metros y segundos
+        var plan = TrainingPlan.Create("Plan Aeróbico y Resistencia", "Fase preparatoria de carrera");
+        var exercise = Exercise.Create("Carrera continua", "Cardio", "pista");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Fondo aeróbico", 1, DayOfWeek.Tuesday, "Ritmo sostenido");
+
+        var prescribed = PrescribedExercise.Create(1, 1, 1, null, session.Id, exercise.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(prescribed, exercise);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.TargetDistanceMeters))!.SetValue(prescribed, 5000m);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.TargetTimeSeconds))!.SetValue(prescribed, 1200m);
+
+        session.AddPrescribedExercise(prescribed);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        // ACT
+        var pdfBytes = _generator.Generate(plan);
+
+        // ASSERT
+        Assert.NotNull(pdfBytes);
+        Assert.NotEmpty(pdfBytes);
+        var header = Encoding.ASCII.GetString(pdfBytes.Take(4).ToArray());
+        Assert.Equal("%PDF", header);
+    }
+
+    [Fact]
+    public void Generate_DadoPlanConCaracteresEspecialesYTildes_CuandoProcesa_EntoncesGeneraPdfValidoSinExcepciones()
+    {
+        // ARRANGE: Texto con caracteres especiales, tildes y eñes
+        var plan = TrainingPlan.Create("Planificación: Potencia & Aceleración (Niños / Jóvenes)", "Objetivo: ¡Mejorar explosión máxima!");
+        var exercise = Exercise.Create("Tirón con flexión de cadera", "Espalda y Piernas", "barra olímpica");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1: Técnica & Coordinación", 1, DayOfWeek.Monday, "Notas: ¡Prestar atención a la postura! 100% concentración.");
+
+        var prescribed = PrescribedExercise.Create(1, 4, 8, 80m, session.Id, exercise.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(prescribed, exercise);
+
+        session.AddPrescribedExercise(prescribed);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        // ACT
+        var pdfBytes = _generator.Generate(plan);
+
+        // ASSERT
+        Assert.NotNull(pdfBytes);
+        Assert.NotEmpty(pdfBytes);
+        var header = Encoding.ASCII.GetString(pdfBytes.Take(4).ToArray());
+        Assert.Equal("%PDF", header);
+    }
 }
