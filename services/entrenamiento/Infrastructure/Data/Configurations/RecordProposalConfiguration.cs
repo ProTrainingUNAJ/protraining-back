@@ -18,6 +18,10 @@ public sealed class RecordProposalConfiguration : IEntityTypeConfiguration<Recor
             .HasColumnName("exercise_id")
             .IsRequired();
 
+        builder.Property(p => p.CurrentRecordId)
+            .HasColumnName("current_record_id")
+            .IsRequired(false);
+
         builder.Property(p => p.CurrentWeight)
             .HasColumnName("current_weight")
             .HasPrecision(6, 2)

@@ -537,6 +537,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("CurrentRecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_record_id");
+
                     b.Property<decimal>("CurrentWeight")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
