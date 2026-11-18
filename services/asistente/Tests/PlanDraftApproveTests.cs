@@ -439,4 +439,198 @@ public sealed class PlanDraftApproveTests
             return responder(request, body);
         }
     }
+
+    [Fact]
+    public async Task Given_DraftWithRepeatedReferenceExercise_When_PfApproves_Then_CreatesExerciseOnceUpdatesDraftAndSendsResolvedIdToCreatePlan()
+    {
+        var createdExerciseId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var expectedPlanId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var expectedAssignmentId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+
+        var refContent = new PlanDraftContentDto(
+            Name: "Plan con Referencia",
+            Objective: "Fuerza",
+            JustificationSummary: "Incluye ejercicio nuevo",
+            Weeks:
+            [
+                new PlanDraftWeekDto(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new PlanDraftSessionDto("Día 1", DayOfWeek.Monday, 1, null,
+                        [
+                            new PlanDraftExerciseDto(null, 1, 4, 8, 75m, "Hip Thrust Unilateral", IsReference: true, MuscleGroup: "Piernas")
+                        ])
+                    ]),
+                new PlanDraftWeekDto(
+                    WeekNumber: 2,
+                    Sessions:
+                    [
+                        new PlanDraftSessionDto("Día 1", DayOfWeek.Monday, 1, null,
+                        [
+                            new PlanDraftExerciseDto(null, 1, 4, 8, 77.5m, "Hip Thrust Unilateral", IsReference: true, MuscleGroup: "Piernas")
+                        ])
+                    ])
+            ]);
+
+        var draft = PlanDraft.Create(
+            categoryId: CategoryId,
+            athleteId: null,
+            goal: "Fuerza",
+            startDate: StartMonday,
+            content: PlanDraftMapper.SerializeContent(refContent),
+            provider: "Ollama");
+
+        var fakeHandler = new FakeEntrenamientoHttpHandler((req, _) =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/exercises", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { id = createdExerciseId, name = "Hip Thrust Unilateral" }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/training-plans", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { id = expectedPlanId }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/training-plans/assignments", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { assignmentId = expectedAssignmentId }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var client = CreateHttpClientWithForwardedAuth(fakeHandler, "Bearer pf-token");
+        var (handler, _, _) = CreateApproveHandler(draft, client);
+
+        var result = await handler.HandleAsync(new ApprovePlanDraftCommand(draft.Id));
+
+        Assert.Equal(expectedPlanId, result.PlanId);
+        Assert.Equal(PlanDraftStatus.Approved, draft.Status);
+
+        var createExerciseReqs = fakeHandler.RecordedRequests
+            .Where(r => r.Method == HttpMethod.Post && r.Path.EndsWith("/api/v1/exercises", StringComparison.Ordinal))
+            .ToList();
+        Assert.Single(createExerciseReqs);
+        Assert.Contains("Hip Thrust Unilateral", createExerciseReqs[0].Body);
+        Assert.Contains("Piernas", createExerciseReqs[0].Body);
+
+        var createPlanReq = Assert.Single(fakeHandler.RecordedRequests, r => r.Path.EndsWith("/api/v1/training-plans", StringComparison.Ordinal));
+        Assert.Contains(createdExerciseId.ToString(), createPlanReq.Body);
+
+        var updatedContent = PlanDraftMapper.DeserializeContent(draft.Content);
+        Assert.All(updatedContent.Weeks.SelectMany(w => w.Sessions).SelectMany(s => s.Exercises), e =>
+        {
+            Assert.Equal(createdExerciseId, e.ExerciseId);
+            Assert.False(e.IsReference);
+        });
+    }
+
+    [Fact]
+    public async Task Given_DraftWithReferenceExerciseReturningConflict_When_PfApproves_Then_ResolvesExistingExerciseByNameAndApproves()
+    {
+        var existingExerciseId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        var expectedPlanId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+
+        var refContent = new PlanDraftContentDto(
+            Name: "Plan Conflict",
+            Objective: "Fuerza",
+            JustificationSummary: "Resolución idempotente en 409",
+            Weeks:
+            [
+                new PlanDraftWeekDto(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new PlanDraftSessionDto("Día 1", DayOfWeek.Monday, 1, null,
+                        [
+                            new PlanDraftExerciseDto(null, 1, 3, 10, 70m, "Remo Pendlay", IsReference: true, MuscleGroup: "Espalda")
+                        ])
+                    ])
+            ]);
+
+        var draft = PlanDraft.Create(
+            categoryId: CategoryId,
+            athleteId: null,
+            goal: "Fuerza",
+            startDate: StartMonday,
+            content: PlanDraftMapper.SerializeContent(refContent),
+            provider: "Ollama");
+
+        var fakeHandler = new FakeEntrenamientoHttpHandler((req, _) =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/exercises", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Conflict);
+            }
+
+            if (req.Method == HttpMethod.Get && path.EndsWith("/api/v1/exercises", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new
+                        {
+                            items = new[] { new { id = existingExerciseId, name = "Remo Pendlay" } }
+                        }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/training-plans", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { id = expectedPlanId }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (req.Method == HttpMethod.Post && path.EndsWith("/api/v1/training-plans/assignments", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { assignmentId = Guid.NewGuid() }),
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var client = CreateHttpClientWithForwardedAuth(fakeHandler, "Bearer pf-token");
+        var (handler, _, _) = CreateApproveHandler(draft, client);
+
+        var result = await handler.HandleAsync(new ApprovePlanDraftCommand(draft.Id));
+
+        Assert.Equal(expectedPlanId, result.PlanId);
+        var createPlanReq = Assert.Single(fakeHandler.RecordedRequests, r => r.Path.EndsWith("/api/v1/training-plans", StringComparison.Ordinal));
+        Assert.Contains(existingExerciseId.ToString(), createPlanReq.Body);
+    }
 }

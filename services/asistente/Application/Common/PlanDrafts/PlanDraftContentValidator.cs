@@ -68,25 +68,28 @@ public static class PlanDraftContentValidator
 
                 foreach (var exercise in session.Exercises)
                 {
-                    if (exercise.ExerciseId == Guid.Empty)
-                        throw new DomainException($"Todos los ejercicios de la sesión '{session.Name}' (semana {week.WeekNumber}) deben tener un exerciseId válido.");
-
+                    if(exercise.IsReference || !exercise.ExerciseId.HasValue || exercise.ExerciseId.Value == Guid.Empty)
+                    {
+                        if (string.IsNullOrWhiteSpace(exercise.ExerciseName))
+                            throw new DomainException($"Los ejercicios de referencia de la sesión '{session.Name}' (semana {week.WeekNumber}) deben tener un nombre válido.");
+                    }
+                    else
+                        exerciseIdsToVerify.Add(exercise.ExerciseId.Value);
+             
                     if (exercise.Order < 1)
                         throw new DomainException($"El orden del ejercicio en la sesión '{session.Name}' debe ser mayor o igual a 1.");
 
                     if (exercise.Sets is < MinSets or > MaxSets)
-                        throw new DomainException($"Las series del ejercicio '{exercise.ExerciseId}' deben estar entre {MinSets} y {MaxSets} (se recibió {exercise.Sets}).");
+                        throw new DomainException($"Las series del ejercicio '{exercise.ExerciseName ?? exercise.ExerciseId?.ToString()}' deben estar entre {MinSets} y {MaxSets} (se recibió {exercise.Sets}).");
 
                     if (exercise.Reps is < MinReps or > MaxReps)
-                        throw new DomainException($"Las repeticiones del ejercicio '{exercise.ExerciseId}' deben estar entre {MinReps} y {MaxReps} (se recibió {exercise.Reps}).");
+                        throw new DomainException($"Las repeticiones del ejercicio '{exercise.ExerciseName ?? exercise.ExerciseId?.ToString()}' deben estar entre {MinReps} y {MaxReps} (se recibió {exercise.Reps}).");
 
                     if (exercise.TargetPercentage.HasValue &&
                         (exercise.TargetPercentage.Value < MinPercentage || exercise.TargetPercentage.Value > MaxPercentage))
                     {
-                        throw new DomainException($"El porcentaje objetivo del ejercicio '{exercise.ExerciseId}' debe estar entre {MinPercentage} y {MaxPercentage} (se recibió {exercise.TargetPercentage.Value}).");
+                        throw new DomainException($"El porcentaje objetivo del ejercicio '{exercise.ExerciseName ?? exercise.ExerciseId?.ToString()}' debe estar entre {MinPercentage} y {MaxPercentage} (se recibió {exercise.TargetPercentage.Value}).");
                     }
-
-                    exerciseIdsToVerify.Add(exercise.ExerciseId);
                 }
             }
         }

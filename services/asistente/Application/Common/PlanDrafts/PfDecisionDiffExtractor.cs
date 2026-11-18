@@ -35,14 +35,14 @@ public static class PfDecisionDiffExtractor
                 {
                     foreach (var removedExercise in prevExercises)
                     {
-                        if (removedExercise.ExerciseId == Guid.Empty)
+                        if (removedExercise.ExerciseId is not { } removedId || removedId == Guid.Empty)
                             continue;
 
                         decisions.Add(PfDecision.Create(
                             athleteId: athleteId,
                             source: PfDecisionSource.PlanDraft,
                             sourceId: draftId,
-                            suggestedExerciseId: removedExercise.ExerciseId,
+                            suggestedExerciseId: removedId,
                             decision: PfDecisionType.Rejected));
                     }
 
@@ -84,7 +84,7 @@ public static class PfDecisionDiffExtractor
             {
                 matchedNewIndices.Add(matchIndex);
             }
-            else if (prev.ExerciseId != Guid.Empty)
+            else if (prev.ExerciseId is { } prevId && prevId != Guid.Empty)
             {
                 unmatchedPrev.Add(prev);
             }
@@ -104,7 +104,10 @@ public static class PfDecisionDiffExtractor
                 }
             }
 
-            if (replacementIndex >= 0 && newExercises[replacementIndex].ExerciseId != Guid.Empty)
+            if (prev.ExerciseId is not { } prevExerciseId || prevExerciseId == Guid.Empty)
+                continue;
+
+            if (replacementIndex >= 0 && newExercises[replacementIndex].ExerciseId is { } replacementId && replacementId != Guid.Empty)
             {
                 var replacement = newExercises[replacementIndex];
                 matchedNewIndices.Add(replacementIndex);
@@ -113,7 +116,7 @@ public static class PfDecisionDiffExtractor
                     athleteId: athleteId,
                     source: PfDecisionSource.PlanDraft,
                     sourceId: draftId,
-                    suggestedExerciseId: prev.ExerciseId,
+                    suggestedExerciseId: prevExerciseId,
                     decision: PfDecisionType.Modified,
                     finalExerciseId: replacement.ExerciseId,
                     finalPercentage: replacement.TargetPercentage));
@@ -124,7 +127,7 @@ public static class PfDecisionDiffExtractor
                     athleteId: athleteId,
                     source: PfDecisionSource.PlanDraft,
                     sourceId: draftId,
-                    suggestedExerciseId: prev.ExerciseId,
+                    suggestedExerciseId: prevExerciseId,
                     decision: PfDecisionType.Rejected));
             }
         }

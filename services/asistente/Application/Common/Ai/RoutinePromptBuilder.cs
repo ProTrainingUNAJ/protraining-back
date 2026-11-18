@@ -242,7 +242,7 @@ public static class RoutinePromptBuilder
         sb.AppendLine("Diseñá una sesión modelo de una semana dividida en bloques. La aplicación calcula la progresión de las semanas siguientes.");
         sb.AppendLine($"Objetivo: {request.Goal}");
         sb.AppendLine($"Días por semana: {request.DaysPerWeek}");
-        sb.AppendLine("La respuesta debe contener exactamente una sesión por día solicitado y usar índices de la lista de ejercicios.");
+        sb.AppendLine("La respuesta debe contener exactamente una sesión por día solicitado, priorizando los índices del catálogo oficial.");
         sb.AppendLine();
 
         AppendPfDecisionContext(sb, request.PreviousPfDecisions);
@@ -279,6 +279,7 @@ public static class RoutinePromptBuilder
             var exercise = availableExercises[index];
             sb.AppendLine($"{index + 1}. {exercise.Name} | grupo: {exercise.MuscleGroup ?? "no informado"} | id: {exercise.Id}");
         }
+        sb.AppendLine("Si necesitás proponer un ejercicio que NO está en el catálogo oficial, devolvé \"exerciseIndex\": null junto con \"exerciseName\" y \"muscleGroup\" (usando los mismos nombres de grupo muscular del catálogo). Si el ejercicio SÍ está en el catálogo, usá obligatoriamente su \"exerciseIndex\" y no inventes uno nuevo.");
         sb.AppendLine();
         sb.AppendLine("Respondé únicamente JSON válido con este esquema:");
         sb.AppendLine(BlockPromptSchema.SchemaJson);

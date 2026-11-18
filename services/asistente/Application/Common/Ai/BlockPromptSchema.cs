@@ -27,9 +27,11 @@ public static class BlockPromptSchema
                 "items": {
                   "type": "object",
                   "properties": {
-                    "exerciseIndex": { "type": "integer" },
+                    "exerciseIndex": { "type": ["integer", "null"] },
                     "sets": { "type": "integer" },
-                    "reps": { "type": "integer" }
+                    "reps": { "type": "integer" },
+                    "exerciseName": { "type": "string" },
+                    "muscleGroup": { "type": "string" }
                   },
                   "required": ["exerciseIndex", "sets", "reps"]
                 }
@@ -39,10 +41,12 @@ public static class BlockPromptSchema
                 "items": {
                   "type": "object",
                   "properties": {
-                    "exerciseIndex": { "type": "integer" },
+                    "exerciseIndex": { "type": ["integer", "null"] },
                     "sets": { "type": "integer" },
                     "reps": { "type": "integer" },
-                    "targetPercentage": { "type": "number" }
+                    "targetPercentage": { "type": "number" },
+                    "exerciseName": { "type": "string" },
+                    "muscleGroup": { "type": "string" }
                   },
                   "required": ["exerciseIndex", "sets", "reps", "targetPercentage"]
                 }
@@ -52,10 +56,12 @@ public static class BlockPromptSchema
                 "items": {
                   "type": "object",
                   "properties": {
-                    "exerciseIndex": { "type": "integer" },
+                    "exerciseIndex": { "type": ["integer", "null"] },
                     "sets": { "type": "integer" },
                     "reps": { "type": "integer" },
-                    "targetPercentage": { "type": "number" }
+                    "targetPercentage": { "type": "number" },
+                    "exerciseName": { "type": "string" },
+                    "muscleGroup": { "type": "string" }
                   },
                   "required": ["exerciseIndex", "sets", "reps", "targetPercentage"]
                 }
@@ -65,9 +71,11 @@ public static class BlockPromptSchema
                 "items": {
                   "type": "object",
                   "properties": {
-                    "exerciseIndex": { "type": "integer" },
+                    "exerciseIndex": { "type": ["integer", "null"] },
                     "sets": { "type": "integer" },
-                    "reps": { "type": "integer" }
+                    "reps": { "type": "integer" },
+                    "exerciseName": { "type": "string" },
+                    "muscleGroup": { "type": "string" }
                   },
                   "required": ["exerciseIndex", "sets", "reps"]
                 }
