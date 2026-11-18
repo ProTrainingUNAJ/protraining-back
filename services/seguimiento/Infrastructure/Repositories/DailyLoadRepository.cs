@@ -23,6 +23,27 @@ public sealed class DailyLoadRepository(AppDbContext context) : IDailyLoadReposi
                     && load.Date <= to.ToDateTime(TimeOnly.MaxValue))
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<DailyLoad>> GetByAthletesAndDateRangeAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            if (athleteIds.Count == 0)
+                return [];
+
+            var start = from.ToDateTime(TimeOnly.MinValue);
+            var end = to.ToDateTime(TimeOnly.MaxValue);
+
+            return await context.DailyLoads
+                .AsNoTracking()
+                .Where(load => athleteIds.Contains(load.AthleteId)
+                    && load.Date >= start
+                    && load.Date <= end)
+                .ToListAsync(cancellationToken);
+        });
+
     public async Task<IReadOnlyList<DailyLoad>> GetByAthletesAndDateAsync(IReadOnlyCollection<Guid> athleteIds, DateTime date, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.DailyLoads

@@ -26,7 +26,8 @@ public sealed class AthletePrivacyTests
             "DailyLoadsController.Get",
             "DailyLoadsController.GetWeek",
             "GroupBenchmarkController.GetGroupBenchmark",
-            "AthleteEvolutionController.GetEvolution"
+            "AthleteEvolutionController.GetEvolution",
+            "TrendsController.GetAthleteTrends"
         ];
 
     [Fact]
