@@ -14,6 +14,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
     public DateOnly Date { get; private set; }
     public string? Note { get; private set; }
     public string Items { get; private set; } = "[]";
+    public int? LoadReductionPercentage { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
     private AthleteSessionAdjustment() { }
@@ -24,7 +25,8 @@ public sealed class AthleteSessionAdjustment : BaseEntity
         DateOnly date,
         string itemsJson,
         string? note = null,
-        Guid? trainingPlanId = null)
+        Guid? trainingPlanId = null,
+        int? loadReductionPercentage = null)
     {
         if (trainingSessionId == Guid.Empty)
             throw new DomainException("El identificador de la sesión de entrenamiento es obligatorio.");
@@ -35,8 +37,13 @@ public sealed class AthleteSessionAdjustment : BaseEntity
         if (date == default)
             throw new DomainException("La fecha del ajuste es obligatoria.");
 
-        if (string.IsNullOrWhiteSpace(itemsJson))
-            throw new DomainException("Debe incluir al menos un cambio de ejercicio para la sesión.");
+        var normalizedItems = string.IsNullOrWhiteSpace(itemsJson) ? "[]" : itemsJson.Trim();
+
+        if (loadReductionPercentage.HasValue && (loadReductionPercentage.Value <= 0 || loadReductionPercentage.Value > 100))
+            throw new DomainException("El porcentaje de reducción de carga debe estar entre 1 y 100.");
+
+        if (normalizedItems == "[]" && !loadReductionPercentage.HasValue && string.IsNullOrWhiteSpace(note))
+            throw new DomainException("Debe incluir al menos un cambio de ejercicio o una reducción de carga para la sesión.");
 
         return new AthleteSessionAdjustment
         {
@@ -44,23 +51,30 @@ public sealed class AthleteSessionAdjustment : BaseEntity
             AthleteId = athleteId,
             TrainingPlanId = trainingPlanId ?? Guid.Empty,
             Date = date,
-            Items = itemsJson.Trim(),
+            Items = normalizedItems,
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+            LoadReductionPercentage = loadReductionPercentage,
             UpdatedAt = DateTime.UtcNow
         };
     }
 
-    public void Update(string itemsJson, string? note = null, Guid? trainingPlanId = null)
+    public void Update(string itemsJson, string? note = null, Guid? trainingPlanId = null, int? loadReductionPercentage = null)
     {
-        if (string.IsNullOrWhiteSpace(itemsJson))
-            throw new DomainException("Debe incluir al menos un cambio de ejercicio para la sesión.");
+        var normalizedItems = string.IsNullOrWhiteSpace(itemsJson) ? "[]" : itemsJson.Trim();
 
-        Items = itemsJson.Trim();
+        if (loadReductionPercentage.HasValue && (loadReductionPercentage.Value <= 0 || loadReductionPercentage.Value > 100))
+            throw new DomainException("El porcentaje de reducción de carga debe estar entre 1 y 100.");
+
+        if (normalizedItems == "[]" && !loadReductionPercentage.HasValue && string.IsNullOrWhiteSpace(note))
+            throw new DomainException("Debe incluir al menos un cambio de ejercicio o una reducción de carga para la sesión.");
+
+        Items = normalizedItems;
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         if (trainingPlanId.HasValue && trainingPlanId.Value != Guid.Empty)
         {
             TrainingPlanId = trainingPlanId.Value;
         }
+        LoadReductionPercentage = loadReductionPercentage;
         UpdatedAt = DateTime.UtcNow;
     }
 }

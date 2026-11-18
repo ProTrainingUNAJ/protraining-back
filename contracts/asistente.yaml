@@ -97,6 +97,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/alerts/{alertId}/apply:
+    post:
+      tags:
+        - Preventive Alerts
+      summary: Aplicar ajuste de aviso preventivo en un clic
+      description: >
+        Aplica la modificación sugerida por el aviso preventivo directamente en Entrenamiento
+        generando la variante de sesión para el atleta (#183 · KAN-478).
+        Requiere rol PreparadorFisico.
+      operationId: applyAlertAdjustment
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ajuste aplicado exitosamente en Entrenamiento y aviso marcado como aplicado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Ajuste preventivo aplicado exitosamente en Entrenamiento."
+                  alertId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "Applied"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/alerts/scan:
     post:
       tags:

@@ -2,8 +2,12 @@ using System.Reflection;
 using API.Controllers;
 using Application.Common.Alerts;
 using Application.DTOs.Alerts;
+using Application.DTOs.DayAdjustments;
+using Application.DTOs.DayConflicts;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
+using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
 using Application.UseCases.Alerts.GetAlertById;
 using Application.UseCases.Alerts.GetAlerts;
@@ -28,10 +32,6 @@ public sealed class PreventiveAlertsTests
     private const string AthleteName = "Lucas Fernández";
     private const string ReasonFatigue = "Sobrecarga acumulada: 3 sesiones consecutivas con esfuerzo >= 8 y registro de descanso menor a 5 horas.";
     private const string SuggestionAdjustment = "Programar una sesión de descarga o movilidad pasiva. Reducir volumen general un 25%.";
-
-    // -------------------------------------------------------------------------
-    // 1. REGLAS DE DOMINIO Y PROPUESTAS DE AJUSTE CONCRETO
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void Given_ValidData_When_CreateAlert_Then_SetsPropertiesAndStatusIsPending()
@@ -158,9 +158,6 @@ public sealed class PreventiveAlertsTests
         Assert.Equal(now, alert.ReviewedAtUtc);
     }
 
-    // -------------------------------------------------------------------------
-    // 2. CASOS DE USO Y CONSULTA DE AVISOS
-    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task Given_GetAlertsQuery_When_OnlyUnreviewed_Then_ReturnsPendingAlerts()
@@ -267,7 +264,152 @@ public sealed class PreventiveAlertsTests
     }
 
     // -------------------------------------------------------------------------
-    // 3. CONTROLADOR Y CONTRATOS REST / SEGURIDAD
+    // 3. APLICACIÓN DE AJUSTE CON 1 CLIC EN ENTRENAMIENTO (#183 · KAN-478)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Given_ApplyAlertAdjustmentCommand_When_ValidAlertAndSessionExists_Then_CallsTrainingServiceAndMarksAlertAsApplied()
+    {
+        var alert = PreventiveAlert.Create(
+            athleteId: AthleteId,
+            athleteName: AthleteName,
+            reason: ReasonFatigue,
+            suggestion: SuggestionAdjustment,
+            severity: AlertSeverity.High,
+            type: AlertType.AccumulatedFatigue,
+            suggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
+            suggestedAdjustmentPercentage: 20);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alert);
+
+        var sessionId = Guid.NewGuid();
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        clientMock.Setup(c => c.GetTodayRoutineAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(
+                AthleteId: AthleteId,
+                Date: Domain.Common.ArgentinaTime.Today,
+                Exercises: [],
+                SessionId: sessionId));
+
+        clientMock.Setup(c => c.ApplyAthleteSessionAdjustmentAsync(
+                sessionId,
+                It.Is<ApplyAthleteAdjustmentRequestRemoteDto>(req =>
+                    req.AthleteId == AthleteId &&
+                    req.LoadReductionPercentage == 20),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var uowMock = new Mock<IUnitOfWork>();
+        uowMock.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+        var result = await handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id));
+
+        Assert.Equal(alert.Id, result.AlertId);
+        Assert.Equal("Applied", result.Status);
+        Assert.Equal(AlertStatus.Applied, alert.Status);
+        Assert.NotNull(alert.AppliedAtUtc);
+        clientMock.Verify(c => c.ApplyAthleteSessionAdjustmentAsync(sessionId, It.IsAny<ApplyAthleteAdjustmentRequestRemoteDto>(), It.IsAny<CancellationToken>()), Times.Once);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_ApplyAlertAdjustmentCommand_When_TrainingServiceFails_Then_ThrowsExceptionAndAlertRemainsPending()
+    {
+        // Regla KAN-373/KAN-478: Si Entrenamiento falla (500 o timeout), el aviso NO debe marcarse como aplicado
+        var alert = PreventiveAlert.Create(
+            athleteId: AthleteId,
+            athleteName: AthleteName,
+            reason: ReasonFatigue,
+            suggestion: SuggestionAdjustment,
+            severity: AlertSeverity.High,
+            type: AlertType.AccumulatedFatigue,
+            suggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
+            suggestedAdjustmentPercentage: 20);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alert);
+
+        var sessionId = Guid.NewGuid();
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        clientMock.Setup(c => c.GetTodayRoutineAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(
+                AthleteId: AthleteId,
+                Date: Domain.Common.ArgentinaTime.Today,
+                Exercises: [],
+                SessionId: sessionId));
+
+        clientMock.Setup(c => c.ApplyAthleteSessionAdjustmentAsync(
+                sessionId,
+                It.IsAny<ApplyAthleteAdjustmentRequestRemoteDto>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Error 500: Servicio de Entrenamiento no disponible temporalmente"));
+
+        var uowMock = new Mock<IUnitOfWork>();
+
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id)));
+
+        Assert.Equal(AlertStatus.Pending, alert.Status);
+        Assert.Null(alert.AppliedAtUtc);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_ApplyAlertAdjustmentCommand_When_AlreadyApplied_Then_ReturnsEarlyWithoutCallingTrainingService()
+    {
+        var alert = PreventiveAlert.Create(AthleteId, AthleteName, ReasonFatigue, SuggestionAdjustment);
+        alert.MarkAsApplied(DateTime.UtcNow);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alert);
+
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        var uowMock = new Mock<IUnitOfWork>();
+
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+        var result = await handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id));
+
+        Assert.Equal("El aviso ya se encuentra aplicado.", result.Message);
+        Assert.Equal("Applied", result.Status);
+        clientMock.Verify(c => c.GetTodayRoutineAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        clientMock.Verify(c => c.ApplyAthleteSessionAdjustmentAsync(It.IsAny<Guid>(), It.IsAny<ApplyAthleteAdjustmentRequestRemoteDto>(), It.IsAny<CancellationToken>()), Times.Never);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_ApplyAlertAdjustmentCommand_When_NoSessionToday_Then_ThrowsDomainException()
+    {
+        var alert = PreventiveAlert.Create(AthleteId, AthleteName, ReasonFatigue, SuggestionAdjustment);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alert);
+
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        clientMock.Setup(c => c.GetTodayRoutineAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TodayRoutineRemoteDto?)null);
+
+        var uowMock = new Mock<IUnitOfWork>();
+
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id)));
+
+        Assert.Contains("no tiene una sesión de entrenamiento programada", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AlertStatus.Pending, alert.Status);
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. CONTROLADOR Y CONTRATOS REST / SEGURIDAD
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -290,11 +432,17 @@ public sealed class PreventiveAlertsTests
         repoMock.Setup(r => r.ListAsync(true, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([alert]);
 
+        var applyHandler = new ApplyAlertAdjustmentCommandHandler(
+            repoMock.Object,
+            new Mock<ITrainingPlanServiceClient>().Object,
+            new Mock<IUnitOfWork>().Object);
+
         var controller = new AlertsController(
             new GetAlertsQueryHandler(repoMock.Object),
             new GetAlertByIdQueryHandler(repoMock.Object),
             new ReviewAlertCommandHandler(repoMock.Object, new Mock<IUnitOfWork>().Object),
-            new CreatePreventiveAlertCommandHandler(repoMock.Object, new Mock<IUnitOfWork>().Object));
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, new Mock<IUnitOfWork>().Object),
+            applyHandler);
 
         var actionResult = await controller.List(onlyUnreviewed: true);
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
@@ -314,11 +462,17 @@ public sealed class PreventiveAlertsTests
         uowMock.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
+        var applyHandler = new ApplyAlertAdjustmentCommandHandler(
+            repoMock.Object,
+            new Mock<ITrainingPlanServiceClient>().Object,
+            uowMock.Object);
+
         var controller = new AlertsController(
             new GetAlertsQueryHandler(repoMock.Object),
             new GetAlertByIdQueryHandler(repoMock.Object),
             new ReviewAlertCommandHandler(repoMock.Object, uowMock.Object),
-            new CreatePreventiveAlertCommandHandler(repoMock.Object, uowMock.Object));
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, uowMock.Object),
+            applyHandler);
 
         var request = new CreatePreventiveAlertRequestDto(
             AthleteId: AthleteId,
@@ -337,6 +491,42 @@ public sealed class PreventiveAlertsTests
         Assert.Equal(AthleteName, dto.AthleteName);
         Assert.Equal("LoadReduction", dto.SuggestedAdjustmentType);
         Assert.Equal(20, dto.SuggestedAdjustmentPercentage);
+    }
+
+    [Fact]
+    public async Task Given_AlertsController_When_ApplyAdjustmentCalled_Then_ReturnsOkWithResult()
+    {
+        var alert = PreventiveAlert.Create(AthleteId, AthleteName, ReasonFatigue, SuggestionAdjustment);
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alert);
+
+        var sessionId = Guid.NewGuid();
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        clientMock.Setup(c => c.GetTodayRoutineAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(AthleteId, Domain.Common.ArgentinaTime.Today, [], sessionId));
+        clientMock.Setup(c => c.ApplyAthleteSessionAdjustmentAsync(sessionId, It.IsAny<ApplyAthleteAdjustmentRequestRemoteDto>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var uowMock = new Mock<IUnitOfWork>();
+        uowMock.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var applyHandler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+
+        var controller = new AlertsController(
+            new GetAlertsQueryHandler(repoMock.Object),
+            new GetAlertByIdQueryHandler(repoMock.Object),
+            new ReviewAlertCommandHandler(repoMock.Object, uowMock.Object),
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, uowMock.Object),
+            applyHandler);
+
+        var actionResult = await controller.Apply(alert.Id, CancellationToken.None);
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
+        var dto = Assert.IsType<ApplyAlertAdjustmentResponseDto>(okResult.Value);
+
+        Assert.Equal(alert.Id, dto.AlertId);
+        Assert.Equal("Applied", dto.Status);
     }
 }
 
