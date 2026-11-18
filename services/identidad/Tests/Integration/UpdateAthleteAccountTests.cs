@@ -106,6 +106,53 @@ public sealed class UpdateAthleteAccountTests : IAsyncDisposable
         Assert.Equal(newPhone, dbAthlete.PhoneNumber);
     }
 
+    [Fact]
+    public async Task Given_DisabledAthleteWithLockout_When_ReactivatingAthlete_Then_AthleteCanLoginImmediately_AndLockoutCleared()
+    {
+        // arrange: PF y atleta inicialmente desactivado y con Lockout activo
+        var pf = await _factory.SeedUserAsync("pf.acc04@protraining.com", "PF Acc 04", "PreparadorFisico", "PasswordSegura123!");
+        var athlete = await _factory.SeedUserAsync("atleta.acc04@protraining.com", "Atleta Acc 04", "Atleta", "PasswordSegura123!", pfId: pf.Id);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User>>();
+            var dbUser = await userManager.FindByIdAsync(athlete.Id.ToString());
+            Assert.NotNull(dbUser);
+            dbUser.IsActive = false;
+            await userManager.SetLockoutEndDateAsync(dbUser, DateTimeOffset.UtcNow.AddMinutes(15));
+            await userManager.AccessFailedAsync(dbUser);
+            await userManager.UpdateAsync(dbUser);
+        }
+
+        var pfLogin = await LoginUserAsync(pf.Email!, "PasswordSegura123!");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pfLogin.AccessToken);
+
+        // act: reactivar atleta
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/users/athletes/{athlete.Id}/status",
+            new UpdateAthleteUserStatusRequestDto(IsActive: true));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // assert: el atleta puede iniciar sesión de inmediato y su Lockout está limpio
+        var clientAnom = _factory.CreateClient();
+        var loginResponse = await clientAnom.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequestDto("atleta.acc04@protraining.com", "PasswordSegura123!", "device-acc04"));
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User>>();
+            var verifiedUser = await userManager.FindByIdAsync(athlete.Id.ToString());
+            Assert.NotNull(verifiedUser);
+            Assert.True(verifiedUser.IsActive);
+            Assert.False(await userManager.IsLockedOutAsync(verifiedUser));
+            Assert.Equal(0, verifiedUser.AccessFailedCount);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _factory.DisposeAsync();

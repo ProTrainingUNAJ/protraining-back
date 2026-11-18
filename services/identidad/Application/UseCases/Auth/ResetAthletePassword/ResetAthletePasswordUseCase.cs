@@ -31,9 +31,15 @@ public class ResetAthletePasswordUseCase(
 
         // 2. Buscar al atleta por su Id
         var athlete = await userManager.FindByIdAsync(athleteId.ToString());
-        if (athlete is null || !athlete.IsActive)
+        if (athlete is null)
         {
             throw new AthleteNotFoundException();
+        }
+
+        // Si la cuenta estaba inactiva, la generación de credencial provisoria por su PF la reactiva
+        if (!athlete.IsActive)
+        {
+            athlete.IsActive = true;
         }
 
         // 3. Aislamiento Multitenant: verificar que el atleta pertenezca al PF autenticado
@@ -69,8 +75,9 @@ public class ResetAthletePasswordUseCase(
                 throw new DomainException($"No se pudo resetear la contraseña: {errors}");
             }
 
-            // 7. Reiniciar contador de intentos fallidos
+            // 7. Reiniciar contador de intentos fallidos y levantar cualquier bloqueo por lockout previo
             await userManager.ResetAccessFailedCountAsync(athlete);
+            await userManager.SetLockoutEndDateAsync(athlete, null);
 
             // 8. Revocar todos los refresh tokens activos del atleta (cierre de todas sus sesiones)
             await refreshTokenRepository.RevokeAllActiveByUserAsync(athlete.Id, cancellationToken);
