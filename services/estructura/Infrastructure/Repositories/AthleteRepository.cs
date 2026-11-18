@@ -32,9 +32,27 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
 
     public async Task<Athlete?> GetByAccountIdAsync(Guid accountId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
-            await context.Athletes
+        {
+            var candidates = await context.Athletes
                 .Include(athlete => athlete.DigitalConsent)
-                .FirstOrDefaultAsync(athlete => athlete.AccountId == accountId, cancellationToken));
+                .Where(athlete => athlete.AccountId == accountId)
+                .ToListAsync(cancellationToken);
+
+            if (candidates.Count == 0) return null;
+            if (candidates.Count == 1) return candidates[0];
+
+            var candidateIds = candidates.Select(c => c.Id).ToList();
+            var enrolledIds = await context.AthleteCategories
+                .Where(ac => candidateIds.Contains(ac.AthleteId))
+                .Select(ac => ac.AthleteId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var enrolled = candidates.FirstOrDefault(c => enrolledIds.Contains(c.Id) && c.Active)
+                           ?? candidates.FirstOrDefault(c => enrolledIds.Contains(c.Id));
+
+            return enrolled ?? candidates.FirstOrDefault(c => c.Active) ?? candidates[0];
+        });
 
     public Task AddAsync(Athlete athlete, CancellationToken cancellationToken = default)
     {
@@ -79,19 +97,38 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
 
             var athleteIds = athletes.Select(a => a.Id).ToList();
 
-            var categoriesByAthlete = await context.AthleteCategories
+            var athleteCategories = await context.AthleteCategories
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(ac => athleteIds.Contains(ac.AthleteId) && ac.DeletedAt == null)
-                .GroupBy(ac => ac.AthleteId)
-                .Select(g => new { AthleteId = g.Key, CategoryId = g.Select(x => x.CategoryId).FirstOrDefault() })
-                .ToDictionaryAsync(x => x.AthleteId, x => (Guid?)x.CategoryId, cancellationToken);
+                .Join(
+                    context.Categories.IgnoreQueryFilters().Where(c => c.DeletedAt == null),
+                    ac => new { ac.CategoryId, ac.PfId },
+                    c => new { CategoryId = c.Id, c.PfId },
+                    (ac, c) => new { ac.AthleteId, ac.CategoryId, ac.CreatedAt }
+                )
+                .OrderBy(x => x.CreatedAt)
+                .ThenBy(x => x.CategoryId)
+                .ToListAsync(cancellationToken);
 
-            return (IReadOnlyList<InternalAthleteSummaryDto>)athletes.Select(a => new InternalAthleteSummaryDto(
-                a.Id,
-                a.PfId,
-                categoriesByAthlete.TryGetValue(a.Id, out var catId) ? catId : null,
-                a.Active
-            )).ToList();
+            var categoriesByAthlete = athleteCategories
+                .GroupBy(x => x.AthleteId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<Guid>)g.Select(x => x.CategoryId).Distinct().ToList());
+
+            return (IReadOnlyList<InternalAthleteSummaryDto>)athletes.Select(a =>
+            {
+                var catIds = categoriesByAthlete.TryGetValue(a.Id, out var list)
+                    ? list
+                    : Array.Empty<Guid>();
+
+                return new InternalAthleteSummaryDto(
+                    a.Id,
+                    a.PfId,
+                    catIds.Count > 0 ? catIds[0] : null,
+                    a.Active,
+                    catIds);
+            }).ToList();
         });
 }

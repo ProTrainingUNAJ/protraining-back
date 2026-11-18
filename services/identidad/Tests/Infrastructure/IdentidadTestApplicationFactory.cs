@@ -116,11 +116,16 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<UpdateHabitsRecommendationsUseCase>();
                 services.AddScoped<GetPfHabitsRecommendationsUseCase>();
                 services.AddScoped<RegisterByInvitationUseCase>();
+                services.AddScoped<Application.UseCases.Auth.RegisterPf.RegisterPfUseCase>();
+                services.AddScoped<Application.UseCases.Auth.ConfirmEmail.ConfirmEmailUseCase>();
+                services.AddScoped<Application.UseCases.Auth.ResendConfirmation.ResendConfirmationUseCase>();
                 services.AddScoped<ChangePasswordUseCase>();
                 services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
                 services.AddScoped<ResetAthletePasswordUseCase>();
                 services.AddScoped<ForgotPasswordUseCase>();
                 services.AddScoped<ResetPasswordWithTokenUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase>();
+                services.AddScoped<Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase>();
                 services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
                 services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();

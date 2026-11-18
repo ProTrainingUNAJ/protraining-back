@@ -49,8 +49,13 @@ public class LoginUseCase(
         // 4. si la contrasena fue correcta, reiniciar el contador de fallos a cero
         await userManager.ResetAccessFailedCountAsync(user);
 
-        // 5. obtener roles y generar JWT centralizado con rol por defecto y duracion
+        // 5. obtener roles y validar confirmación de correo para PF (KAN-601)
         var roles = await userManager.GetRolesAsync(user);
+        if (roles.Contains("PreparadorFisico") && !user.EmailConfirmed)
+        {
+            throw new EmailNotConfirmedException();
+        }
+
         var generatedToken = jwtTokenGenerator.GenerateToken(user, roles);
 
         // 6. generar el token plano y persistir su hash SHA-256 para este dispositivo

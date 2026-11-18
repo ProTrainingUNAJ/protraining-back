@@ -9,8 +9,9 @@ public sealed record ApplyAthleteSessionAdjustmentRequest(
     Guid AthleteId,
     DateOnly Date,
     string? Note,
-    IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
-    Guid? TrainingPlanId = null
+    IReadOnlyList<AthleteSessionAdjustmentItemDto>? Items = null,
+    Guid? TrainingPlanId = null,
+    int? LoadReductionPercentage = null
 );
 
 public sealed record AthleteSessionAdjustmentResponseDto(
@@ -20,5 +21,6 @@ public sealed record AthleteSessionAdjustmentResponseDto(
     DateOnly Date,
     string? Note,
     IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
-    Guid? TrainingPlanId = null
+    Guid? TrainingPlanId = null,
+    int? LoadReductionPercentage = null
 );

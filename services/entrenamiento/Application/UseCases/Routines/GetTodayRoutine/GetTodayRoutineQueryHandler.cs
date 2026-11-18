@@ -102,27 +102,28 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 };
             }
 
-            // Resolver si el PF aprobó un ajuste del día para este atleta y sesión (KAN-452)
+            // Resolver si el PF aprobó un ajuste del día para este atleta y sesión (KAN-452, KAN-478)
             var replacementsByOriginal = new Dictionary<Guid, Guid>();
             var substituteExercisesById = new Dictionary<Guid, Domain.Entities.Exercise>();
             bool adjustedByCoach = false;
             string? adjustmentNote = null;
+            AthleteSessionAdjustment? activeAdjustment = null;
 
             if (adjustmentRepository != null)
             {
-                var adjustment = await adjustmentRepository.GetBySessionAthleteAndDateAsNoTrackingAsync(
+                activeAdjustment = await adjustmentRepository.GetBySessionAthleteAndDateAsNoTrackingAsync(
                     routine.Id,
                     athleteId,
                     date,
                     cancellationToken);
 
-                if (adjustment != null)
+                if (activeAdjustment != null)
                 {
-                    var parsedItems = ParseAdjustmentItems(adjustment.Items);
-                    if (parsedItems.Count > 0)
+                    var parsedItems = ParseAdjustmentItems(activeAdjustment.Items);
+                    if (parsedItems.Count > 0 || activeAdjustment.LoadReductionPercentage.HasValue || !string.IsNullOrWhiteSpace(activeAdjustment.Note))
                     {
                         adjustedByCoach = true;
-                        adjustmentNote = adjustment.Note;
+                        adjustmentNote = activeAdjustment.Note;
 
                         foreach (var item in parsedItems)
                         {
@@ -170,6 +171,10 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(athleteId, effectiveExerciseId, cancellationToken);
 
                 decimal percentage = prescribed.TargetPercentage ?? 100m;
+                if (activeAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
+                {
+                    percentage = Math.Round(percentage * (100m - reduction) / 100m, 2);
+                }
 
                 var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
 
@@ -182,7 +187,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     // Si el ejercicio tiene test/marca de tiempo
                     decimal? bestTestTime = activeRecord?.Weight;
 
-                    var timeResult = calculator.CalculateTimeTarget(bestTestTime, prescribed.TargetPercentage);
+                    var timeResult = calculator.CalculateTimeTarget(bestTestTime, percentage);
 
                     targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
 

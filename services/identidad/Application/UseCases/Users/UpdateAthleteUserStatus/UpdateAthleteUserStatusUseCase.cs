@@ -43,6 +43,12 @@ public class UpdateAthleteUserStatusUseCase(
             athlete.SecurityStamp = Guid.NewGuid().ToString();
             await refreshTokenRepository.RevokeAllActiveByUserAsync(athlete.Id, cancellationToken);
         }
+        else
+        {
+            // Al reactivar al atleta, desbloquear cualquier lockout previo y reiniciar intentos fallidos
+            await userManager.SetLockoutEndDateAsync(athlete, null);
+            await userManager.ResetAccessFailedCountAsync(athlete);
+        }
 
         var result = await userManager.UpdateAsync(athlete);
         if (!result.Succeeded)

@@ -835,6 +835,36 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans/{id}/pdf:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Descargar o imprimir rutina en PDF
+      description: Genera y devuelve un archivo PDF formateado e imprimible con la estructura de la planificacion para uso en cancha o pizarra. Requiere rol PreparadorFisico.
+      operationId: getTrainingPlanPdf
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la planificacion.
+      responses:
+        "200":
+          description: Archivo PDF generado exitosamente.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/training-plans/schedule:
     get:
       tags:
@@ -2553,7 +2583,6 @@ components:
       required:
         - athleteId
         - date
-        - items
       properties:
         athleteId:
           type: string
@@ -2573,9 +2602,16 @@ components:
           type: string
           nullable: true
           example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        loadReductionPercentage:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          description: Porcentaje de reducción de carga sugerido por aviso preventivo (ej. 20%).
+          example: 20
         items:
           type: array
-          minItems: 1
+          nullable: true
           items:
             $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
@@ -2614,6 +2650,10 @@ components:
         adjustedByCoach:
           type: boolean
           example: true
+        loadReductionPercentage:
+          type: integer
+          nullable: true
+          example: 20
         note:
           type: string
           nullable: true
@@ -2732,6 +2772,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2847,6 +2902,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2926,3 +2996,18 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]

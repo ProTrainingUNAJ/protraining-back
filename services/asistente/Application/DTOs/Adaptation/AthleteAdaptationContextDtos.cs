@@ -37,7 +37,8 @@ public sealed record AdaptationChangeDto(
     Guid FinalExerciseId,
     string FinalExerciseName,
     string Zone,
-    string Reason);
+    string Reason,
+    IReadOnlyList<AuthorizedSubstituteDto>? AvailableSubstitutes = null);
 
 public sealed record AthleteAdaptationContextDto(
     Guid AthleteId,

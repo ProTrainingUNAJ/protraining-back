@@ -453,6 +453,50 @@ public sealed class ResetAthletePasswordTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NotFound, allowedResponse.StatusCode); // 404 porque el PF no tiene teléfono, pero NO 401 ni 403
     }
 
+    [Fact]
+    public async Task RP17_Given_DisabledAthleteWithLockout_When_ResettingPassword_Then_AccountReactivated_LockoutCleared_AndCanLoginWithTempPassword()
+    {
+        // 1. Arrange: PF y Atleta inicialmente desactivado y con Lockout activo
+        var pf = await _factory.SeedUserAsync("pf.rp17@protraining.com", "Profesor RP17", "PreparadorFisico", "PasswordSegura123!");
+        var athlete = await _factory.SeedUserAsync("atleta.rp17@protraining.com", "Atleta RP17", "Atleta", "PasswordSegura123!", pfId: pf.Id);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User>>();
+            var dbUser = await userManager.FindByIdAsync(athlete.Id.ToString());
+            Assert.NotNull(dbUser);
+            dbUser.IsActive = false;
+            await userManager.SetLockoutEndDateAsync(dbUser, DateTimeOffset.UtcNow.AddMinutes(15));
+            await userManager.AccessFailedAsync(dbUser);
+            await userManager.UpdateAsync(dbUser);
+        }
+
+        // 2. PF resetea la contraseña del atleta
+        var pfLogin = await LoginUserAsync(pf.Email!, "PasswordSegura123!");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pfLogin.AccessToken);
+
+        var resetResponse = await _client.PostAsync($"/api/v1/auth/athletes/{athlete.Id}/reset-password", null);
+        Assert.Equal(HttpStatusCode.OK, resetResponse.StatusCode);
+        var resetResult = await resetResponse.Content.ReadFromJsonAsync<ResetAthletePasswordResponseDto>();
+        Assert.NotNull(resetResult);
+        Assert.True(resetResult.MustChangePassword);
+
+        // 3. Assert: cuenta reactivada, lockout eliminado y el atleta puede loguearse de inmediato con la clave temporal
+        _client.DefaultRequestHeaders.Authorization = null;
+        var tempLogin = await LoginUserAsync(athlete.Email!, resetResult.TemporaryPassword);
+        Assert.True(tempLogin.User.MustChangePassword);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User>>();
+            var verifiedUser = await userManager.FindByIdAsync(athlete.Id.ToString());
+            Assert.NotNull(verifiedUser);
+            Assert.True(verifiedUser.IsActive, "El atleta debe quedar reactivado al generarle credencial temporal.");
+            Assert.False(await userManager.IsLockedOutAsync(verifiedUser), "El lockout debe estar cancelado.");
+            Assert.Equal(0, verifiedUser.AccessFailedCount);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _factory.DisposeAsync();

@@ -32,11 +32,26 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
+    public async Task<TrainingPlan?> GetWithDetailsNoTrackingByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.TrainingPlans
+            .AsNoTracking()
+            .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
+                .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
+                    .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
+                        .ThenInclude(e => e.Exercise)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+    }
+
     public async Task<List<TrainingPlan>> ListAsync(CancellationToken cancellationToken = default)
     {
         return await _context.TrainingPlans
             .AsNoTracking()
             .Where(p => !p.IsTemplate)
+            .Include(p => p.Weeks)
+                .ThenInclude(w => w.Sessions)
+                    .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(e => e.Exercise)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -80,11 +95,31 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         await _context.PlanAssignments.AddAsync(assignment, cancellationToken);
     }
 
+    public async Task<PlanAssignment?> GetAssignmentByIdAsync(Guid assignmentId, CancellationToken cancellationToken = default)
+    {
+        return await _context.PlanAssignments
+            .FirstOrDefaultAsync(a => a.Id == assignmentId, cancellationToken);
+    }
+
+    public void RemoveAssignment(PlanAssignment assignment)
+    {
+        _context.PlanAssignments.Remove(assignment);
+    }
+
+    public void Remove(TrainingPlan plan)
+    {
+        _context.TrainingPlans.Remove(plan);
+    }
+
     public async Task<List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.TrainingPlans
             .AsNoTracking()
             .Where(t => t.IsTemplate)
+            .Include(p => p.Weeks)
+                .ThenInclude(w => w.Sessions)
+                    .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(e => e.Exercise)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }

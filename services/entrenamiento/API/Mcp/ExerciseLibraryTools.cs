@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Application.DTOs.Exercise;
 using Application.DTOs.Mcp;
+using Application.UseCases.Exercise.GetRestrictionsByZone;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.SearchCatalogExercises;
 using Microsoft.Extensions.Logging;
@@ -14,6 +15,7 @@ namespace API.Mcp;
 public sealed class ExerciseLibraryTools(
     SearchCatalogExercisesQueryHandler searchCatalogExercisesQueryHandler,
     GetSubstitutesByZoneQueryHandler getSubstitutesByZoneQueryHandler,
+    GetRestrictionsByZoneQueryHandler getRestrictionsByZoneQueryHandler,
     ILogger<ExerciseLibraryTools> logger)
 {
     [McpServerTool(
@@ -92,6 +94,45 @@ public sealed class ExerciseLibraryTools(
             logger.LogInformation(
                 "ObtenerSustitutos devolvió {Count} sustitutos.",
                 result.Substitutes.Count);
+
+            return result;
+        }
+        catch (Domain.Exceptions.DomainException ex)
+        {
+            throw new McpException(ex.Message);
+        }
+    }
+
+    [McpServerTool(
+        Name = "ObtenerRestricciones",
+        Title = "Obtener restricciones de ejercicios por zona",
+        ReadOnly = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
+    [Description(
+        "Obtiene las restricciones de ejercicios asociadas a una zona de dolor o molestia (por ejemplo, rodilla, hombros, espalda_baja). " +
+        "Devuelve la zona consultada y los ejercicios contraindicados con su nivel mínimo de dolor, motivo y sustitutos disponibles.")]
+    public async Task<ZoneRestrictionsResultDto> GetRestrictions(
+        [Description("Zona de dolor o molestia. Ejemplos: «rodilla», «hombros», «espalda_baja», «cuádriceps».")]
+        string zona,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(zona))
+        {
+            throw new McpException("Indicá una zona válida. Ejemplo: «rodilla».");
+        }
+
+        try
+        {
+            var result = await getRestrictionsByZoneQueryHandler.Handle(
+                new GetRestrictionsByZoneQuery(zona),
+                cancellationToken);
+
+            // Solo métricas: no se registran datos de personas.
+            logger.LogInformation(
+                "ObtenerRestricciones devolvió {Count} restricciones para la zona {Zone}.",
+                result.Restrictions.Count,
+                result.Zone);
 
             return result;
         }

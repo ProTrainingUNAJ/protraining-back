@@ -107,6 +107,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("items");
 
+                    b.Property<int?>("LoadReductionPercentage")
+                        .HasColumnType("integer")
+                        .HasColumnName("load_reduction_percentage");
+
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")

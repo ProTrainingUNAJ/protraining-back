@@ -28,15 +28,14 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
         var targetDate = command.TargetDate ?? ArgentinaTime.Today;
         var fromDate = targetDate.AddDays(-6);
         var toDate = targetDate;
-        var d1Target = targetDate.AddDays(1);
-        var d2Target = targetDate.AddDays(2);
+        var d3Target = targetDate.AddDays(3);
 
         logger.LogInformation(
-            "Iniciando análisis diario de sobrecarga y calendario para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd} (D-1: {D1Date:yyyy-MM-dd}, D-2: {D2Date:yyyy-MM-dd}).",
+            "Iniciando análisis diario de sobrecarga y calendario para la ventana {FromDate:yyyy-MM-dd} a {ToDate:yyyy-MM-dd} (Ventana de partidos: {TargetDate:yyyy-MM-dd} a {D3Date:yyyy-MM-dd}).",
             fromDate,
             toDate,
-            d1Target,
-            d2Target);
+            targetDate,
+            d3Target);
 
         // 1. Obtener los atletas activos desde Estructura (incluye su PfId)
         var athletes = await structureAthleteClient.GetAthletesAsync(cancellationToken);
@@ -61,22 +60,44 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
             return new ProcessDailyOverloadAnalysisResult(athletes.Count, 0, 0);
         }
 
-        // 3. Consultar calendario de partidos próximos en Estructura para correlación D-2 (#178 · KAN-473)
+        // 3. Consultar calendario de partidos próximos en Estructura (#178 · KAN-473 / #182 · KAN-477)
+        // Consolidar todas las categorías activas de todos los atletas sin duplicados
         var categoryIds = athletes
-            .Where(a => a.CategoryId.HasValue && a.CategoryId.Value != Guid.Empty)
-            .Select(a => a.CategoryId!.Value)
+            .SelectMany(a => a.AllCategoryIds)
             .Distinct()
             .ToList();
 
         var matchDatesByCategory = new Dictionary<Guid, IReadOnlyList<DateOnly>>();
+        var categoryCalendarFailed = new HashSet<Guid>();
+
         foreach (var categoryId in categoryIds)
         {
-            var matchDates = await structureCalendarClient.GetMatchDatesAsync(
-                categoryId,
-                d1Target,
-                d2Target,
-                cancellationToken);
-            matchDatesByCategory[categoryId] = matchDates;
+            try
+            {
+                var matchDates = await structureCalendarClient.GetMatchDatesAsync(
+                    categoryId,
+                    targetDate,
+                    d3Target,
+                    cancellationToken);
+                matchDatesByCategory[categoryId] = matchDates;
+            }
+            catch (Application.Exceptions.StructureServiceUnavailableException ex) when (ex.Message.Contains("Acceso denegado"))
+            {
+                logger.LogError(
+                    ex,
+                    "Fallo de autorización al consultar el calendario en Estructura para la categoría {CategoryId}. Token de servicio inválido o sin permisos.",
+                    categoryId);
+                throw;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                categoryCalendarFailed.Add(categoryId);
+                logger.LogWarning(
+                    ex,
+                    "No se pudo consultar el calendario de partidos en Estructura para la categoría {CategoryId}. " +
+                    "Se evaluarán las reglas de sobrecarga sin confirmar la ausencia de partidos.",
+                    categoryId);
+            }
         }
 
         var checkInsByAthlete = checkIns
@@ -124,30 +145,41 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
                         c.HasActiveInjury
                     )).ToList();
 
-                    // Verificar si la categoría del atleta tiene partido en D-2 (dentro de 2 días)
+                    // Verificar si el calendario estuvo disponible para las categorías del atleta
+                    var athleteCategories = athlete.AllCategoryIds;
+                    var calendarFailedForAthlete = athleteCategories.Count > 0 &&
+                        athleteCategories.All(cId => categoryCalendarFailed.Contains(cId));
+
+                    if (calendarFailedForAthlete)
+                    {
+                        logger.LogInformation(
+                            "El calendario de partidos no estuvo disponible para el atleta {AthleteId}; se evaluarán únicamente reglas estándar sin contexto de fixture.",
+                            athlete.Id);
+                    }
+
+                    // Consolidar los partidos de todas las categorías activas del atleta en la ventana D0..D+3 (#182 · KAN-477)
+                    var athleteMatches = athleteCategories
+                        .SelectMany(catId => matchDatesByCategory.TryGetValue(catId, out var dates) ? dates : [])
+                        .Where(d => d >= targetDate && d <= d3Target)
+                        .Distinct()
+                        .OrderBy(d => d)
+                        .ToList();
+
                     DateOnly? upcomingMatchDate = null;
                     int? daysUntilMatch = null;
-                    if (athlete.CategoryId.HasValue &&
-                        matchDatesByCategory.TryGetValue(athlete.CategoryId.Value, out var categoryMatches))
+                    if (athleteMatches.Count > 0)
                     {
-                        if (categoryMatches.Contains(d1Target))
-                        {
-                            upcomingMatchDate = d1Target;
-                            daysUntilMatch = 1;
-                        }
-                        else if (categoryMatches.Contains(d2Target))
-                        {
-                            upcomingMatchDate = d2Target;
-                            daysUntilMatch = 2;
-                        }
+                        upcomingMatchDate = athleteMatches[0];
+                        daysUntilMatch = upcomingMatchDate.Value.DayNumber - targetDate.DayNumber;
                     }
 
                     var patternResult = OverloadPatternDetector.Detect(
                         athlete.Id,
                         records,
-                        hasMatchInTwoDays: upcomingMatchDate.HasValue,
+                        hasMatchInTwoDays: daysUntilMatch.HasValue && daysUntilMatch.Value is 1 or 2,
                         matchDate: upcomingMatchDate,
-                        daysUntilMatch: daysUntilMatch);
+                        daysUntilMatch: daysUntilMatch,
+                        hasUpcomingMatchInProximity: upcomingMatchDate.HasValue);
 
                     if (!patternResult.HasPattern)
                     {
@@ -180,7 +212,7 @@ public sealed class ProcessDailyOverloadAnalysisCommandHandler(
                         type: patternResult.Type,
                         suggestedAdjustmentType: patternResult.SuggestedAdjustmentType,
                         suggestedAdjustmentPercentage: patternResult.SuggestedAdjustmentPercentage,
-                        categoryId: athlete.CategoryId,
+                        categoryId: athlete.CategoryId ?? (athlete.AllCategoryIds.Count > 0 ? athlete.AllCategoryIds[0] : null),
                         generatedAtUtc: DateTime.UtcNow);
 
                     await alertRepository.AddAsync(alert, cancellationToken);

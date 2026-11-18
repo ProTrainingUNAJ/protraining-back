@@ -45,6 +45,9 @@ public class UsersControllerTests
         var updatePhoneUseCase = new Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase(
             _mockUserManager.Object, _mockCurrentUser.Object);
 
+        var updateProfileUseCase = new Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase(_mockUserManager.Object);
+        var deactivateAccountUseCase = new Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase(_mockUserManager.Object, _mockRefreshTokenRepo.Object);
+
         _controller = new UsersController(
             new UpdateWhatsAppPhoneUseCase(_mockUserManager.Object),
             new GetPfContactUseCase(_mockUserManager.Object),
@@ -57,7 +60,9 @@ public class UsersControllerTests
             deletePhotoHandler,
             updateStatusUseCase,
             updateEmailUseCase,
-            updatePhoneUseCase);
+            updatePhoneUseCase,
+            updateProfileUseCase,
+            deactivateAccountUseCase);
     }
 
     // Roles que exige el atributo [Authorize] puesto en el método del controller.

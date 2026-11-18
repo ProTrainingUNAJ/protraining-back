@@ -783,6 +783,107 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{athleteId}/trends:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar tendencias semanales individuales de wellness y carga
+      description: >
+        Devuelve las tendencias semanales (lunes a domingo en hora de Argentina) de wellness compuesto (1..5)
+        y carga total UA Foster de un atleta. Por defecto retorna las últimas 4 semanas incluida la actual.
+      operationId: getAthleteWeeklyTrends
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: weeks
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 4
+            minimum: 1
+            maximum: 24
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Tendencias semanales del atleta obtenidas con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteWeeklyTrendsResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{categoryId}/trends:
+    get:
+      tags:
+        - Evolution and Benchmark
+      summary: Consultar tendencias semanales grupales de wellness y carga por categoría
+      description: >
+        Devuelve las tendencias semanales agregadas de una categoría. El wellness grupal se calcula como
+        el promedio de los promedios semanales individuales de los atletas que reportaron (igual peso por atleta)
+        y la carga grupal como la suma semanal de cargas UA Foster de los atletas distintos de la categoría.
+      operationId: getCategoryWeeklyTrends
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: weeks
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 4
+            minimum: 1
+            maximum: 24
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Tendencias semanales de la categoría obtenidas con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryWeeklyTrendsResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/field-test-sessions:
     get:
       tags:
@@ -1472,6 +1573,27 @@ components:
           items:
             $ref: '#/components/schemas/AthleteAttendanceSummary'
 
+    AttendanceActivityDetail:
+      type: object
+      required:
+        - type
+        - name
+        - minutes
+      properties:
+        type:
+          type: string
+          example: "Gym"
+        name:
+          type: string
+          example: "Gimnasio"
+        minutes:
+          type: integer
+          example: 60
+        rpe:
+          type: integer
+          nullable: true
+          example: 8
+
     AthleteAttendanceSummary:
       type: object
       required:
@@ -1487,6 +1609,16 @@ components:
         status:
           type: string
           enum: [Present, NoRecord]
+        totalMinutes:
+          type: integer
+          example: 60
+        totalLoad:
+          type: integer
+          example: 480
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttendanceActivityDetail'
 
     AthleteTrafficLightSummary:
       type: object
@@ -2054,6 +2186,149 @@ components:
             type: array
             items:
               type: string
+    WellnessMetricsBreakdown:
+      type: object
+      required:
+        - sleepQuality
+        - sleepHours
+        - muscleSoreness
+        - fatigueLevel
+        - moodRate
+        - stressLevel
+      properties:
+        sleepQuality:
+          type: number
+          format: double
+        sleepHours:
+          type: number
+          format: double
+        muscleSoreness:
+          type: number
+          format: double
+        fatigueLevel:
+          type: number
+          format: double
+        moodRate:
+          type: number
+          format: double
+        stressLevel:
+          type: number
+          format: double
+
+    WeeklyTrendPoint:
+      type: object
+      required:
+        - weekStartDate
+        - weekEndDate
+        - checkInCount
+        - loadCount
+      properties:
+        weekStartDate:
+          type: string
+          format: date
+        weekEndDate:
+          type: string
+          format: date
+        averageWellness:
+          type: number
+          format: double
+          nullable: true
+        totalLoad:
+          type: integer
+          nullable: true
+        totalMinutes:
+          type: integer
+          nullable: true
+        checkInCount:
+          type: integer
+        loadCount:
+          type: integer
+        wellnessBreakdown:
+          $ref: '#/components/schemas/WellnessMetricsBreakdown'
+          nullable: true
+
+    AthleteWeeklyTrendsResponse:
+      type: object
+      required:
+        - athleteId
+        - from
+        - to
+        - weeks
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyTrendPoint'
+
+    CategoryWeeklyTrendPoint:
+      type: object
+      required:
+        - weekStartDate
+        - weekEndDate
+        - checkInCount
+        - loadCount
+        - activeReportingAthletes
+      properties:
+        weekStartDate:
+          type: string
+          format: date
+        weekEndDate:
+          type: string
+          format: date
+        averageWellness:
+          type: number
+          format: double
+          nullable: true
+        totalLoad:
+          type: integer
+          nullable: true
+        totalMinutes:
+          type: integer
+          nullable: true
+        checkInCount:
+          type: integer
+        loadCount:
+          type: integer
+        activeReportingAthletes:
+          type: integer
+        wellnessBreakdown:
+          $ref: '#/components/schemas/WellnessMetricsBreakdown'
+          nullable: true
+
+    CategoryWeeklyTrendsResponse:
+      type: object
+      required:
+        - categoryId
+        - athleteCount
+        - from
+        - to
+        - weeks
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        athleteCount:
+          type: integer
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryWeeklyTrendPoint'
+
     CategoryAveragesResponse:
       type: object
       required:

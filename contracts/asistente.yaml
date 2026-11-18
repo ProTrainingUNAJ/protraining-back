@@ -97,6 +97,45 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/alerts/{alertId}/apply:
+    post:
+      tags:
+        - Preventive Alerts
+      summary: Aplicar ajuste de aviso preventivo en un clic
+      description: >
+        Aplica la modificación sugerida por el aviso preventivo directamente en Entrenamiento
+        generando la variante de sesión para el atleta (#183 · KAN-478).
+        Requiere rol PreparadorFisico.
+      operationId: applyAlertAdjustment
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ajuste aplicado exitosamente en Entrenamiento y aviso marcado como aplicado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Ajuste preventivo aplicado exitosamente en Entrenamiento."
+                  alertId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "Applied"
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/alerts/scan:
     post:
       tags:
@@ -762,6 +801,11 @@ components:
         reviewed:
           type: boolean
           example: false
+        suggestedAdjustmentType:
+          type: string
+          nullable: true
+          enum: [LoadReduction, RoutineAdjustment, Rest]
+          example: "RoutineAdjustment"
 
     TodayAdjustmentRequest:
       type: object
@@ -888,6 +932,12 @@ components:
           items:
             type: string
           example: ["Movilidad de cadera", "Core"]
+        baseExercises:
+          type: array
+          nullable: true
+          description: Ejercicios de la rutina base de la categoría o sesión a comparar y adaptar individualmente (KAN-464).
+          items:
+            $ref: '#/components/schemas/SuggestedRoutineExercise'
 
     SuggestedRoutineExercise:
       type: object
@@ -948,6 +998,12 @@ components:
         reason:
           type: string
           example: "Sustitución por restricción activa en la zona indicada"
+        availableSubstitutes:
+          type: array
+          nullable: true
+          description: Lista ordenada de sustitutos autorizados del catálogo para ese ejercicio y zona (KAN-464).
+          items:
+            $ref: '#/components/schemas/AuthorizedSubstituteContext'
 
     RoutineAdaptationResponse:
       type: object
@@ -992,6 +1048,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdaptationChange'
+        baseExercises:
+          type: array
+          nullable: true
+          description: Ejercicios originales de la rutina base de la categoría antes de aplicar la adaptación individual (KAN-464).
+          items:
+            $ref: '#/components/schemas/SuggestedRoutineExercise'
 
     ActiveInjuryContext:
       type: object
@@ -1425,7 +1487,7 @@ components:
           example: "Consumir al menos 2.5 litros de agua y procurar 8 horas de sueño continuo."
         legalDisclaimer:
           type: string
-          example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista. ProTraining no promueve el consumo de suplementos."
+          example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
         approvedByPf:
           type: boolean
           example: false

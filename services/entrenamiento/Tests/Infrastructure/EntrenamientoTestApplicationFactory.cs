@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Headers;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using API.Controllers;
@@ -29,7 +29,10 @@ using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
+using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetPlanPdf;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -102,6 +105,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
                 services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
                 services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+                services.AddSingleton<ITrainingPlanPdfGenerator, TrainingPlanPdfGenerator>();
                 services.AddSingleton<IExerciseMediaCatalog>(ExerciseMediaCatalog.Empty);
 
                 services.AddHttpContextAccessor();
@@ -111,9 +115,12 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<ListExercisesQueryHandler>();
                 services.AddScoped<AssignPlanCommandHandler>();
+                services.AddScoped<DeletePlanAssignmentCommandHandler>();
+                services.AddScoped<DeleteTrainingPlanCommandHandler>();
                 services.AddScoped<CreateTrainingPlanCommandHandler>();
                 services.AddScoped<UpdateTrainingPlanCommandHandler>();
                 services.AddScoped<GetTrainingPlanQueryHandler>();
+                services.AddScoped<GetTrainingPlanPdfQueryHandler>();
                 services.AddScoped<ListTrainingPlansQueryHandler>();
                 services.AddScoped<GetPlanScheduleQueryHandler>();
                 services.AddScoped<ListPlanAssignmentsQueryHandler>();

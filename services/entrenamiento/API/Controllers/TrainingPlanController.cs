@@ -2,7 +2,10 @@ using Application.DTOs.TrainingPlans;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
+using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetPlanPdf;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -31,6 +34,9 @@ public class TrainingPlanController : ControllerBase
     private readonly ListPlanTemplatesQueryHandler _listPlansTemplatesHandler;
     private readonly ApplyPlanTemplateCommandHandler _applyPlanTemplateHandler;
     private readonly ListPlanAssignmentsQueryHandler _listAssignmentsHandler;
+    private readonly DeletePlanAssignmentCommandHandler _deleteAssignmentHandler;
+    private readonly DeleteTrainingPlanCommandHandler _deletePlanHandler;
+    private readonly GetTrainingPlanPdfQueryHandler _getPlanPdfHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -42,7 +48,10 @@ public class TrainingPlanController : ControllerBase
         SavePlanAsTemplateCommandHandler savePlanAsTemplateHandler,
         ListPlanTemplatesQueryHandler listPlanTemplatesHandler,
         ApplyPlanTemplateCommandHandler applyPlanTemplateHandler,
-        ListPlanAssignmentsQueryHandler listAssignmentsHandler)
+        ListPlanAssignmentsQueryHandler listAssignmentsHandler,
+        DeletePlanAssignmentCommandHandler deleteAssignmentHandler,
+        DeleteTrainingPlanCommandHandler deletePlanHandler,
+        GetTrainingPlanPdfQueryHandler getPlanPdfHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -54,6 +63,9 @@ public class TrainingPlanController : ControllerBase
         _listPlansTemplatesHandler = listPlanTemplatesHandler;
         _applyPlanTemplateHandler = applyPlanTemplateHandler;
         _listAssignmentsHandler = listAssignmentsHandler;
+        _deleteAssignmentHandler = deleteAssignmentHandler;
+        _deletePlanHandler = deletePlanHandler;
+        _getPlanPdfHandler = getPlanPdfHandler;
     }
 
     [HttpPost]
@@ -72,12 +84,28 @@ public class TrainingPlanController : ControllerBase
         return Ok(plan);
     }
 
+    [HttpGet("{id:guid}/pdf")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> GetPlanPdf(Guid id, CancellationToken cancellationToken = default)
+    {
+        var pdf = await _getPlanPdfHandler.Handle(new GetTrainingPlanPdfQuery(id), cancellationToken);
+        return File(pdf.Content, pdf.ContentType, pdf.FileName);
+    }
+
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "PreparadorFisico")]
     public async Task<ActionResult<TrainingPlanDetailDto>> UpdatePlan(Guid id, [FromBody] SaveTrainingPlanRequest request, CancellationToken cancellationToken = default)
     {
         var plan = await _updatePlanHandler.Handle(new UpdateTrainingPlanCommand(id, request), cancellationToken);
         return Ok(plan);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> DeletePlan(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _deletePlanHandler.Handle(new DeleteTrainingPlanCommand(id), cancellationToken);
+        return NoContent();
     }
 
     [HttpGet]
@@ -123,6 +151,14 @@ public class TrainingPlanController : ControllerBase
         return Created(
             $"/api/v1/training-plans/assignments/{assignment.AssignmentId}",
             AssignmentResponse(assignment, "Plan asignado exitosamente."));
+    }
+
+    [HttpDelete("assignments/{assignmentId:guid}")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> DeleteAssignment(Guid assignmentId, CancellationToken cancellationToken = default)
+    {
+        await _deleteAssignmentHandler.Handle(new DeletePlanAssignmentCommand(assignmentId), cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("{id:guid}/save-as-template")]

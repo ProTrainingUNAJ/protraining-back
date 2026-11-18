@@ -95,7 +95,8 @@ public class TrainingSessionController : ControllerBase
             Date: adjustment.Date,
             Note: adjustment.Note,
             Items: items,
-            TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null));
+            TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
+            LoadReductionPercentage: adjustment.LoadReductionPercentage));
     }
 
     // Aplicarlo en la rutina del atleta al aprobar el ajuste del día (KAN-452, KAN-463)

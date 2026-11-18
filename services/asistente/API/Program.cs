@@ -5,6 +5,7 @@ using API.HealthChecks;
 using API.Middleware;
 using API.Services;
 using Application.Interfaces.Services;
+using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
 using Application.UseCases.Alerts.GetAlertById;
 using Application.UseCases.Alerts.GetAlerts;
@@ -92,6 +93,15 @@ builder.Services.AddHttpClient<ITrainingPlanServiceClient, Infrastructure.Servic
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+builder.Services.AddHttpClient<IExerciseLibraryMcpClient, Infrastructure.Services.Mcp.ExerciseLibraryMcpClient>(client =>
+{
+    var uriString = trainingUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 {
@@ -149,6 +159,7 @@ builder.Services.AddScoped<RecordDayAdjustmentDecisionCommandHandler>();
 builder.Services.AddScoped<GetAlertsQueryHandler>();
 builder.Services.AddScoped<GetAlertByIdQueryHandler>();
 builder.Services.AddScoped<ReviewAlertCommandHandler>();
+builder.Services.AddScoped<ApplyAlertAdjustmentCommandHandler>();
 builder.Services.AddScoped<CreatePreventiveAlertCommandHandler>();
 builder.Services.AddScoped<ProcessDailyOverloadAnalysisCommandHandler>();
 builder.Services.AddHostedService<DailyOverloadAnalysisWorker>();

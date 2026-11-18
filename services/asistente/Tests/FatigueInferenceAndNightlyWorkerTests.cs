@@ -102,7 +102,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([matchDate]);
 
         PreventiveAlert? persistedAlert = null;
@@ -182,7 +182,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
 
         // ESCENARIO A: Con partido en 2 días (D-2)
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([targetDate.AddDays(2)]);
 
         PreventiveAlert? alertWithMatch = null;
@@ -195,7 +195,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
 
         // ESCENARIO B: Sin partido próximo en el calendario
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]); // Calendario vacío
 
         PreventiveAlert? alertWithoutMatch = null;
@@ -355,7 +355,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([targetDate.AddDays(2)]);
 
         PreventiveAlert? savedAlert = null;
@@ -466,7 +466,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([targetDate.AddDays(1)]); // Partido mañana (D-1)
 
         var worker = CreateWorkerInstance();
@@ -512,7 +512,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([targetDate.AddDays(2)]);
 
         PreventiveAlert? savedAlert = null;
@@ -621,7 +621,7 @@ public sealed class FatigueInferenceAndNightlyWorkerTests
             .ReturnsAsync(checkIns);
 
         _calendarMock
-            .Setup(c => c.GetMatchDatesAsync(categoryId, targetDate.AddDays(1), targetDate.AddDays(2), It.IsAny<CancellationToken>()))
+            .Setup(c => c.GetMatchDatesAsync(categoryId, It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([targetDate.AddDays(2)]);
 
         PreventiveAlert? savedAlert = null;

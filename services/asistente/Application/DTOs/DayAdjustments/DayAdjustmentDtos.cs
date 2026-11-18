@@ -50,5 +50,6 @@ public sealed record ApplyAthleteAdjustmentRequestRemoteDto(
     Guid AthleteId,
     DateOnly Date,
     string? Note,
-    IReadOnlyList<ApplyAthleteAdjustmentItemRemoteDto> Items
+    IReadOnlyList<ApplyAthleteAdjustmentItemRemoteDto>? Items = null,
+    int? LoadReductionPercentage = null
 );
