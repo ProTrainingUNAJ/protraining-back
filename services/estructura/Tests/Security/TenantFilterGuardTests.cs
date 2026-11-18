@@ -27,6 +27,8 @@ public sealed class TenantFilterGuardTests
         ["AthleteCategoryRepository.cs"] = "Seguimiento (rol Servicio) lista los atletas de una categoría para la comparación anónima del atleta con su grupo (KAN-578).",
         ["AthletePhotoRepository.cs"] = "Permite a clientes públicos y etiquetas <img> cargar la foto de perfil en WebP sin requerir un PF autenticado (KAN-512).",
         ["OrganizationPhotoRepository.cs"] = "Permite a clientes públicos y etiquetas <img> cargar el logo de la organización en WebP sin requerir un PF autenticado (KAN-512).",
+        ["PendingPurgeRepository.cs"] = "El worker de purga procesa atletas pendientes en segundo plano sin un PF autenticado (KAN-498).",
+        ["EstructuraPurgeRepository.cs"] = "Servicio de purga definitiva de datos locales del atleta en Estructura (KAN-498).",
     };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.

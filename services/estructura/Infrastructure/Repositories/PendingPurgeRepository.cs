@@ -16,13 +16,14 @@ public sealed class PendingPurgeRepository(AppDbContext context) : IPendingPurge
     public async Task<IReadOnlyList<PendingPurge>> ListPendingAsync(CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.PendingPurges
-                .AsNoTracking()
-                .Where(p => p.Status == PendingPurge.PendingStatus)
+                .IgnoreQueryFilters()
+                .Where(p => p.Status == PendingPurge.PendingStatus && p.DeletedAt == null)
                 .OrderBy(p => p.CreatedAt)
                 .ToListAsync(cancellationToken));
 
     public async Task<PendingPurge?> GetByAthleteIdAsync(Guid athleteId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.PendingPurges
-                .FirstOrDefaultAsync(p => p.AthleteId == athleteId, cancellationToken));
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(p => p.AthleteId == athleteId && p.DeletedAt == null, cancellationToken));
 }
