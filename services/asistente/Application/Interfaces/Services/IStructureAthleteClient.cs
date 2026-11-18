@@ -27,12 +27,26 @@ public sealed record StructureAthleteSummaryDto(
     }
 }
 
+/// <summary>
+/// Estado del permiso del tutor para recomendar hábitos y alimentación a un atleta (#201 · KAN-496).
+/// </summary>
+public sealed record StructureAthleteHabitsPermissionDto(
+    bool IsMinor,
+    bool AllowsHabitsRecommendations);
+
 public interface IStructureAthleteClient
 {
     /// <summary>
     /// Verifica si un atleta existe y pertenece al preparador físico autenticado (KAN-423 / KAN-431).
     /// </summary>
     Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene si el atleta es menor de edad y si su tutor autorizó las recomendaciones de hábitos (#201 · KAN-496).
+    /// Devuelve <c>null</c> cuando Estructura no responde (404, 5xx, timeout) o el atleta no existe:
+    /// el consumidor debe asumir que no hay permiso y no generar recomendación (fail-closed).
+    /// </summary>
+    Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Obtiene la lista de atletas activos para el análisis del worker nocturno (#177 · KAN-472).
