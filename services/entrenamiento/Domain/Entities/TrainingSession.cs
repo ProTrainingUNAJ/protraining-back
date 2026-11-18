@@ -83,4 +83,45 @@ public class TrainingSession : BaseEntity
     {
         _prescribedExercises.Remove(exercise);
     }
+
+    /// <summary>
+    /// Consolida en esta sesión (sesión primaria del día) los ejercicios prescritos de todos los bloques del día (KAN-587).
+    /// Asegura orden correlativo sin colisiones y conserva la información de horario y notas técnicas.
+    /// </summary>
+    public void ConsolidateWithDaySessions(IReadOnlyList<TrainingSession> daySessions)
+    {
+        if (daySessions == null || daySessions.Count <= 1)
+            return;
+
+        var allPrescribed = daySessions
+            .OrderBy(s => s.Order)
+            .SelectMany(s => s.PrescribedExercises.OrderBy(pe => pe.Order))
+            .ToList();
+
+        _prescribedExercises.Clear();
+        int seqOrder = 1;
+        foreach (var pe in allPrescribed)
+        {
+            pe.UpdateOrder(seqOrder++);
+            _prescribedExercises.Add(pe);
+        }
+
+        if (StartTime == null)
+        {
+            var sessionWithTime = daySessions.FirstOrDefault(s => s.StartTime != null);
+            if (sessionWithTime != null)
+            {
+                StartTime = sessionWithTime.StartTime;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(CoachNotes))
+        {
+            var sessionWithNotes = daySessions.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.CoachNotes));
+            if (sessionWithNotes != null)
+            {
+                CoachNotes = sessionWithNotes.CoachNotes;
+            }
+        }
+    }
 }

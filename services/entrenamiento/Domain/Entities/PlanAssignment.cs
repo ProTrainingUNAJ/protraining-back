@@ -40,6 +40,7 @@ public class PlanAssignment : BaseEntity
 
     // Sesión que toca en una fecha: la semana sale de los días desde el inicio (semana 1 = los
     // primeros 7 días) y la sesión, del día de la semana. Necesita el plan con semanas y sesiones.
+    // Soporta múltiples bloques por día (KAN-587), consolidando en la sesión primaria todos los ejercicios prescritos.
     public TrainingSession? SessionOn(DateOnly date)
     {
         if (date < StartDate)
@@ -47,9 +48,28 @@ public class PlanAssignment : BaseEntity
 
         var weekNumber = WeekNumberOn(date);
 
-        return Plan.Weeks
-            .FirstOrDefault(week => week.WeekNumber == weekNumber)?
-            .Sessions.FirstOrDefault(session => session.DayOfWeek == date.DayOfWeek);
+        var week = Plan.Weeks.FirstOrDefault(w => w.WeekNumber == weekNumber);
+        if (week == null)
+            return null;
+
+        var daySessions = week.Sessions
+            .Where(s => s.DayOfWeek == date.DayOfWeek)
+            .OrderBy(s => s.Order)
+            .ToList();
+
+        if (daySessions.Count == 0)
+            return null;
+
+        if (daySessions.Count == 1)
+            return daySessions[0];
+
+        // Múltiples bloques configurados para este día (KAN-587):
+        // Priorizamos como sesión primaria la primera que tenga ejercicios prescritos, o la primera por orden.
+        var primarySession = daySessions.FirstOrDefault(s => s.PrescribedExercises.Count > 0) ?? daySessions[0];
+
+        primarySession.ConsolidateWithDaySessions(daySessions);
+
+        return primarySession;
     }
 
     public int WeekNumberOn(DateOnly date) => (date.DayNumber - StartDate.DayNumber) / 7 + 1;
