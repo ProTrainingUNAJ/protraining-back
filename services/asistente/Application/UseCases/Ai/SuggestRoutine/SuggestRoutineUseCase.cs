@@ -79,16 +79,25 @@ public sealed class SuggestRoutineUseCase(
         }
 
         var response = await ExecuteAsync(request with { AdaptationContext = context }, cancellationToken);
-        var warnings = response.AdaptationWarnings is { Count: > 0 }
-            ? response.AdaptationWarnings
+        var baseWarningList = response.AdaptationWarnings is { Count: > 0 }
+            ? response.AdaptationWarnings.ToList()
             : context.Restrictions.Count == 0
-                ? Array.Empty<string>()
-                : new[] { "La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta." };
+                ? new List<string>()
+                : new List<string> { "La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta." };
+
+        foreach (var estimatedWarning in BuildEstimatedAndMissingRecordWarnings(
+                     context.CurrentRecords,
+                     response.BaseExercises ?? response.Exercises,
+                     response.Exercises))
+        {
+            if (!baseWarningList.Contains(estimatedWarning))
+                baseWarningList.Add(estimatedWarning);
+        }
 
         return response with
         {
             BaseExercises = response.BaseExercises ?? response.Exercises,
-            AdaptationWarnings = warnings
+            AdaptationWarnings = baseWarningList
         };
     }
 
@@ -267,6 +276,15 @@ public sealed class SuggestRoutineUseCase(
             warnings.Add("La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta.");
         }
 
+        foreach (var recordWarning in BuildEstimatedAndMissingRecordWarnings(
+                     context.CurrentRecords,
+                     baseExercises,
+                     adaptedExercises))
+        {
+            if (!warnings.Contains(recordWarning))
+                warnings.Add(recordWarning);
+        }
+
         var goalText = string.IsNullOrWhiteSpace(request.Goal)
             ? "Adaptación individual de rutina base"
             : request.Goal.Trim();
@@ -298,6 +316,85 @@ public sealed class SuggestRoutineUseCase(
             AdaptationChanges: changes,
             BaseExercises: baseExercises.ToList());
     }
+
+    private static IReadOnlyList<string> BuildEstimatedAndMissingRecordWarnings(
+        IReadOnlyList<AthleteRecordRemoteDto>? currentRecords,
+        IReadOnlyList<SuggestedExerciseDto>? baseExercises,
+        IReadOnlyList<SuggestedExerciseDto>? adaptedExercises)
+    {
+        if (currentRecords is not { Count: > 0 })
+            return [];
+
+        var warnings = new List<string>();
+        var alertedEstimatedExerciseIds = new HashSet<Guid>();
+        var alertedEstimatedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var candidateExercises = (baseExercises ?? [])
+            .Concat(adaptedExercises ?? [])
+            .ToList();
+
+        foreach (var exercise in candidateExercises)
+        {
+            var matched = FindMatchingRecord(currentRecords, exercise);
+            if (matched is null || !IsEstimatedOrigin(matched.Origin))
+                continue;
+
+            var alreadyAlerted =
+                (matched.ExerciseId != Guid.Empty && !alertedEstimatedExerciseIds.Add(matched.ExerciseId)) ||
+                (!string.IsNullOrWhiteSpace(matched.ExerciseName) && !alertedEstimatedNames.Add(matched.ExerciseName.Trim()));
+
+            if (alreadyAlerted)
+                continue;
+
+            warnings.Add(
+                $"Alerta de dato estimado: el 1RM de {matched.ExerciseName} ({matched.WeightOneRepMaxKg:0.##} kg) es estimado; la carga se calcula con escalón conservador (90%).");
+        }
+
+        if (warnings.Count == 0)
+        {
+            foreach (var record in currentRecords.Where(r => IsEstimatedOrigin(r.Origin)))
+            {
+                var alreadyAlerted =
+                    (record.ExerciseId != Guid.Empty && !alertedEstimatedExerciseIds.Add(record.ExerciseId)) ||
+                    (!string.IsNullOrWhiteSpace(record.ExerciseName) && !alertedEstimatedNames.Add(record.ExerciseName.Trim()));
+
+                if (alreadyAlerted)
+                    continue;
+
+                warnings.Add(
+                    $"Alerta de dato estimado: el 1RM de {record.ExerciseName} ({record.WeightOneRepMaxKg:0.##} kg) es estimado; la carga se calcula con escalón conservador (90%).");
+            }
+        }
+
+        return warnings;
+    }
+
+    private static AthleteRecordRemoteDto? FindMatchingRecord(
+        IReadOnlyList<AthleteRecordRemoteDto> records,
+        SuggestedExerciseDto exercise)
+    {
+        if (exercise.ExerciseId is { } exerciseId && exerciseId != Guid.Empty)
+        {
+            var byId = records.FirstOrDefault(r => r.ExerciseId == exerciseId);
+            if (byId is not null)
+                return byId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(exercise.ExerciseName))
+        {
+            var targetName = exercise.ExerciseName.Trim();
+            return records.FirstOrDefault(r =>
+                !string.IsNullOrWhiteSpace(r.ExerciseName) &&
+                string.Equals(r.ExerciseName.Trim(), targetName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return null;
+    }
+
+    private static bool IsEstimatedOrigin(string? origin) =>
+        !string.IsNullOrWhiteSpace(origin) &&
+        (origin.Contains("Estimated", StringComparison.OrdinalIgnoreCase) ||
+         origin.Contains("Estimad", StringComparison.OrdinalIgnoreCase));
 
     private static string BuildAdaptationReason(
         ExerciseRestrictionContextDto restriction,
