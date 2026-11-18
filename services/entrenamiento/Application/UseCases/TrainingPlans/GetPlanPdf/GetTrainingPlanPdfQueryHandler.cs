@@ -9,6 +9,11 @@ public sealed class GetTrainingPlanPdfQueryHandler(
     ITrainingPlanRepository planRepository,
     ITrainingPlanPdfGenerator pdfGenerator)
 {
+    private static readonly char[] DisallowedFileNameChars =
+        Path.GetInvalidFileNameChars()
+            .Union(new[] { '/', '\\', ':', '*', '?', '"', '<', '>', '|', ';', ',' })
+            .ToArray();
+
     public async Task<TrainingPlanPdfDto> Handle(
         GetTrainingPlanPdfQuery query,
         CancellationToken cancellationToken = default)
@@ -19,7 +24,7 @@ public sealed class GetTrainingPlanPdfQueryHandler(
 
         var content = pdfGenerator.Generate(plan);
 
-        var rawName = string.Join("_", plan.Name.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries)).Trim();
+        var rawName = string.Join("_", plan.Name.Split(DisallowedFileNameChars, StringSplitOptions.RemoveEmptyEntries)).Trim();
         var safeName = string.IsNullOrWhiteSpace(rawName) ? "rutina" : rawName.Replace(' ', '_');
 
         return new TrainingPlanPdfDto(content, $"{safeName}.pdf");
