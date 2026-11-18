@@ -20,7 +20,8 @@ public sealed class CreateDayAdjustmentCommandHandler(
     IDayAdjustmentRepository dayAdjustmentRepository,
     GetDayConflictsQueryHandler getDayConflictsHandler,
     IAiService aiService,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    IExerciseLibraryMcpClient? exerciseLibraryMcpClient = null)
 {
     public async Task<DayAdjustmentResponseDto> HandleAsync(
         CreateDayAdjustmentCommand command,
@@ -59,14 +60,28 @@ public sealed class CreateDayAdjustmentCommandHandler(
 
         foreach (var conflict in conflictsResponse.Conflicts)
         {
-            if (conflict.Substitutes is null || conflict.Substitutes.Count == 0)
+            var availableSubstitutes = conflict.Substitutes;
+            if ((availableSubstitutes is null || availableSubstitutes.Count == 0)
+                && exerciseLibraryMcpClient is not null
+                && !string.IsNullOrWhiteSpace(conflict.Zone))
+            {
+                var mcpResult = await exerciseLibraryMcpClient.GetSubstitutesAsync(
+                    conflict.Zone,
+                    cancellationToken);
+
+                availableSubstitutes = mcpResult.Substitutes
+                    .Select(s => new Application.DTOs.DayConflicts.DayConflictSubstituteDto(s.ExerciseId, s.Name))
+                    .ToList();
+            }
+
+            if (availableSubstitutes is null || availableSubstitutes.Count == 0)
             {
                 throw new DomainException(
                     $"No hay ejercicios sustitutos habilitados para '{conflict.Name}' en la zona '{conflict.Zone}'.");
             }
 
             // Regla determinística: elegir siempre el primer sustituto de la lista habilitada (KAN-387)
-            var firstSubstitute = conflict.Substitutes[0];
+            var firstSubstitute = availableSubstitutes[0];
 
             items.Add(new DayAdjustmentItemDto(
                 OriginalExerciseId: conflict.ExerciseId,
@@ -78,7 +93,7 @@ public sealed class CreateDayAdjustmentCommandHandler(
                 Zone: conflict.Zone,
                 PainLevel: conflict.PainLevel,
                 Reason: conflict.Reason,
-                AvailableSubstitutes: conflict.Substitutes));
+                AvailableSubstitutes: availableSubstitutes));
         }
 
         var (justification, provider) = await aiService.GenerateDayAdjustmentJustificationAsync(
