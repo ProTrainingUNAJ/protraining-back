@@ -3,6 +3,7 @@ using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.DeleteAssignment;
+using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
@@ -33,6 +34,7 @@ public class TrainingPlanController : ControllerBase
     private readonly ApplyPlanTemplateCommandHandler _applyPlanTemplateHandler;
     private readonly ListPlanAssignmentsQueryHandler _listAssignmentsHandler;
     private readonly DeletePlanAssignmentCommandHandler _deleteAssignmentHandler;
+    private readonly DeleteTrainingPlanCommandHandler _deletePlanHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -45,7 +47,8 @@ public class TrainingPlanController : ControllerBase
         ListPlanTemplatesQueryHandler listPlanTemplatesHandler,
         ApplyPlanTemplateCommandHandler applyPlanTemplateHandler,
         ListPlanAssignmentsQueryHandler listAssignmentsHandler,
-        DeletePlanAssignmentCommandHandler deleteAssignmentHandler)
+        DeletePlanAssignmentCommandHandler deleteAssignmentHandler,
+        DeleteTrainingPlanCommandHandler deletePlanHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -58,6 +61,7 @@ public class TrainingPlanController : ControllerBase
         _applyPlanTemplateHandler = applyPlanTemplateHandler;
         _listAssignmentsHandler = listAssignmentsHandler;
         _deleteAssignmentHandler = deleteAssignmentHandler;
+        _deletePlanHandler = deletePlanHandler;
     }
 
     [HttpPost]
@@ -82,6 +86,14 @@ public class TrainingPlanController : ControllerBase
     {
         var plan = await _updatePlanHandler.Handle(new UpdateTrainingPlanCommand(id, request), cancellationToken);
         return Ok(plan);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> DeletePlan(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _deletePlanHandler.Handle(new DeleteTrainingPlanCommand(id), cancellationToken);
+        return NoContent();
     }
 
     [HttpGet]

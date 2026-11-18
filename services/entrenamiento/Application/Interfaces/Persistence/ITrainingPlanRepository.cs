@@ -14,5 +14,6 @@ public interface ITrainingPlanRepository
     Task AddAssignmentAsync(PlanAssignment assignment, CancellationToken cancellationToken = default);
     Task<PlanAssignment?> GetAssignmentByIdAsync(Guid assignmentId, CancellationToken cancellationToken = default);
     void RemoveAssignment(PlanAssignment assignment);
+    void Remove(TrainingPlan plan);
     Task <List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default);
 }
