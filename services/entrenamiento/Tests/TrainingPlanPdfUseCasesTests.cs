@@ -76,7 +76,7 @@ public class TrainingPlanPdfUseCasesTests
         var queryHandler = new GetTrainingPlanPdfQueryHandler(_planRepoMock.Object, _pdfGeneratorMock.Object);
 
         var controller = new API.Controllers.TrainingPlanController(
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, queryHandler);
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, queryHandler);
 
         // ACT
         var result = await controller.GetPlanPdf(planId);

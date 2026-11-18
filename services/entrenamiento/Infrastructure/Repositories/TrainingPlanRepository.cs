@@ -106,6 +106,11 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         _context.PlanAssignments.Remove(assignment);
     }
 
+    public void Remove(TrainingPlan plan)
+    {
+        _context.TrainingPlans.Remove(plan);
+    }
+
     public async Task<List<TrainingPlan>> ListTemplatesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.TrainingPlans
