@@ -93,7 +93,9 @@ public static class PlanDraftMapper
                         CoachNotes: s.CoachNotes,
                         Exercises: (s.Exercises ?? [])
                             .Select(e => new SaveTrainingPlanExerciseRequestDto(
-                                ExerciseId: e.ExerciseId,
+                                ExerciseId: e.ExerciseId is { } exerciseId && exerciseId != Guid.Empty
+                                    ? exerciseId
+                                    : throw new DomainException($"El ejercicio '{e.ExerciseName ?? "sin nombre"}' todavía no tiene un exerciseId válido para guardar el plan."),
                                 Order: e.Order,
                                 Sets: e.Sets,
                                 Reps: e.Reps,

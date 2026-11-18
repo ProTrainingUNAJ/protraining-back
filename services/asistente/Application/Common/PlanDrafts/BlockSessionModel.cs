@@ -17,10 +17,12 @@ public enum SessionBlockType
 /// Representa un ejercicio dentro de un bloque funcional seleccionado por índice numérico (1..N).
 /// </summary>
 public sealed record BlockExerciseItemDto(
-    [property: JsonPropertyName("exerciseIndex")] int ExerciseIndex,
+    [property: JsonPropertyName("exerciseIndex")] int? ExerciseIndex,
     [property: JsonPropertyName("sets")] int Sets,
     [property: JsonPropertyName("reps")] int Reps,
-    [property: JsonPropertyName("targetPercentage")] decimal? TargetPercentage = null
+    [property: JsonPropertyName("targetPercentage")] decimal? TargetPercentage = null,
+    [property: JsonPropertyName("exerciseName")] string? ExerciseName = null,
+    [property: JsonPropertyName("muscleGroup")] string? MuscleGroup = null
 );
 
 /// <summary>

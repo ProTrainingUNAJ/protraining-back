@@ -26,6 +26,7 @@ public sealed class TrainingPlanServiceClient(
     public const string TrainingPlansPath = "api/v1/training-plans";
     public const string AssignmentsPath = "api/v1/training-plans/assignments";
     public const string RestrictionsCheckPath = "api/v1/exercises/restrictions/check";
+    public const string ExercisesPath = "api/v1/exercises";
     public const string CreatePlanErrorMessage = "No se pudo crear la planificación, probá de nuevo";
     public const string TrainingUnavailableMessage = "El microservicio de Entrenamiento no se encuentra disponible.";
 
@@ -42,6 +43,15 @@ public sealed class TrainingPlanServiceClient(
     private sealed record AssignedTrainingPlanRemoteDto(
         [property: JsonPropertyName("assignmentId")] Guid? AssignmentId = null,
         [property: JsonPropertyName("id")] Guid? Id = null
+    );
+
+    private sealed record ExerciseRemoteDto(
+        [property: JsonPropertyName("id")] Guid Id,
+        [property: JsonPropertyName("name")] string Name
+    );
+
+    private sealed record PaginatedExercisesRemoteDto(
+        [property: JsonPropertyName("items")] List<ExerciseRemoteDto>? Items = null
     );
 
     public async Task<Guid> CreatePlanAsync(
@@ -397,5 +407,76 @@ public sealed class TrainingPlanServiceClient(
                     throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
             }
         }
+    }
+
+    public async Task<Guid> EnsureExerciseCreatedAsync(
+    CreateExerciseRemoteRequestDto request,
+    CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.PostAsJsonAsync(ExercisesPath, request, JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                "Error de comunicación con Entrenamiento al crear el ejercicio '{ExerciseName}': {ErrorType}.",
+                request.Name,
+                ex.GetType().Name);
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage, ex);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                return await FindExistingExerciseIdByNameAsync(request.Name, cancellationToken);
+            }
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                throw new UnauthorizedAccessException();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogError(
+                    "Entrenamiento respondió {StatusCode} al crear el ejercicio '{ExerciseName}'.",
+                    (int)response.StatusCode,
+                    request.Name);
+                throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<ExerciseRemoteDto>(JsonOptions, cancellationToken);
+            if (created is null || created.Id == Guid.Empty)
+                throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+
+            return created.Id;
+        }
+    }
+
+    private async Task<Guid> FindExistingExerciseIdByNameAsync(
+        string exerciseName,
+        CancellationToken cancellationToken)
+    {
+        var searchUrl = $"{ExercisesPath}?search={Uri.EscapeDataString(exerciseName)}&pageSize=20";
+        using var response = await httpClient.GetAsync(searchUrl, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
+
+        var page = await response.Content.ReadFromJsonAsync<PaginatedExercisesRemoteDto>(JsonOptions, cancellationToken);
+        var match = page?.Items?.FirstOrDefault(e =>
+            string.Equals(e.Name.Trim(), exerciseName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (match is null || match.Id == Guid.Empty)
+            throw new DomainException($"Ya existe un ejercicio llamado '{exerciseName}', pero no se pudo obtener su identificador.");
+
+        return match.Id;
     }
 }

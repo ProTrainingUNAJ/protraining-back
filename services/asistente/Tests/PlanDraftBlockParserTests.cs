@@ -164,4 +164,75 @@ public sealed class PlanDraftBlockParserTests
         Assert.Equal("Plan con Fences", content.Name);
         Assert.Equal(DayOfWeek.Friday, content.Weeks[0].Sessions[0].DayOfWeek);
     }
+
+    [Fact]
+    public void Given_UncatalogedExerciseWithNameAndMuscleGroup_When_Parsing_Then_IncludesAsReference()
+    {
+        var catalog = CreateSampleCatalog();
+        var json = """
+        {
+          "name": "Plan con Referencia",
+          "objective": "Potencia",
+          "justificationSummary": "Incluye ejercicio nuevo como referencia",
+          "modelSessions": [
+            {
+              "name": "Sesión 1",
+              "dayOfWeek": "Lunes",
+              "order": 1,
+              "warmUp": [],
+              "strengthA": [
+                { "exerciseIndex": null, "exerciseName": "Hip Thrust Unilateral", "muscleGroup": "Piernas", "sets": 4, "reps": 8, "targetPercentage": 75 }
+              ],
+              "strengthB": [],
+              "accessories": []
+            }
+          ]
+        }
+        """;
+
+        var (isValid, content, error) = PlanDraftBlockParser.ParseAndExpand(json, catalog, requestedWeeks: 2);
+
+        Assert.True(isValid, error);
+        Assert.NotNull(content);
+        var exercise = Assert.Single(content.Weeks[0].Sessions[0].Exercises);
+        Assert.Null(exercise.ExerciseId);
+        Assert.True(exercise.IsReference);
+        Assert.Equal("Hip Thrust Unilateral", exercise.ExerciseName);
+        Assert.Equal("Piernas", exercise.MuscleGroup);
+    }
+
+    [Fact]
+    public void Given_ExerciseWithNullIndexAndExistingCatalogName_When_Parsing_Then_LinksExistingCatalogId()
+    {
+        var catalog = CreateSampleCatalog();
+        var json = """
+        {
+          "name": "Plan con Nombre Existente",
+          "objective": "Fuerza",
+          "justificationSummary": "Resuelve por nombre si ya existe en catálogo",
+          "modelSessions": [
+            {
+              "name": "Sesión 1",
+              "dayOfWeek": "Martes",
+              "order": 1,
+              "warmUp": [],
+              "strengthA": [
+                { "exerciseIndex": null, "exerciseName": "  sentadilla trasera ", "muscleGroup": "Piernas", "sets": 4, "reps": 6, "targetPercentage": 80 }
+              ],
+              "strengthB": [],
+              "accessories": []
+            }
+          ]
+        }
+        """;
+
+        var (isValid, content, error) = PlanDraftBlockParser.ParseAndExpand(json, catalog, requestedWeeks: 1);
+
+        Assert.True(isValid, error);
+        Assert.NotNull(content);
+        var exercise = Assert.Single(content.Weeks[0].Sessions[0].Exercises);
+        Assert.Equal(catalog[0].Id, exercise.ExerciseId);
+        Assert.False(exercise.IsReference);
+        Assert.Equal("Sentadilla Trasera", exercise.ExerciseName);
+    }
 }

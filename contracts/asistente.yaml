@@ -1195,7 +1195,6 @@ components:
     PlanDraftExercise:
       type: object
       required:
-        - exerciseId
         - order
         - sets
         - reps
@@ -1203,6 +1202,7 @@ components:
         exerciseId:
           type: string
           format: uuid
+          nullable: true
           example: "11111111-1111-1111-1111-111111111111"
         order:
           type: integer
@@ -1224,6 +1224,18 @@ components:
           minimum: 0
           maximum: 100
           example: 75.0
+        exerciseName:
+          type: string
+          nullable: true
+          example: "Hip Thrust Unilateral"
+        isReference:
+          type: boolean
+          default: false
+          example: false
+        muscleGroup:
+          type: string
+          nullable: true
+          example: "Piernas"
 
     PlanDraftSession:
       type: object

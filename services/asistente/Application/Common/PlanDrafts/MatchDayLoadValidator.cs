@@ -83,7 +83,7 @@ public sealed class MatchDayLoadValidator : IMatchDayLoadValidator
                     {
                         var originalPct = exercise.TargetPercentage.Value;
                         var cappedPct = maxAllowedPct.Value;
-                        var exerciseLabel = ResolveExerciseLabel(exercise.ExerciseId, exerciseNames);
+                        var exerciseLabel = ResolveExerciseLabel(exercise, exerciseNames);
 
                         var note = string.Create(
                             CultureInfo.InvariantCulture,
@@ -125,16 +125,22 @@ public sealed class MatchDayLoadValidator : IMatchDayLoadValidator
         return weekStart.AddDays(daysOffset);
     }
 
-    private static string ResolveExerciseLabel(Guid exerciseId, IReadOnlyDictionary<Guid, string>? exerciseNames)
+    private static string ResolveExerciseLabel(PlanDraftExerciseDto exercise, IReadOnlyDictionary<Guid, string>? exerciseNames)
     {
-        if (exerciseNames is not null &&
+        if (exercise.ExerciseId is { } exerciseId &&
+            exerciseNames is not null &&
             exerciseNames.TryGetValue(exerciseId, out var name) &&
             !string.IsNullOrWhiteSpace(name))
         {
             return name;
         }
 
-        return $"ejercicio {exerciseId}";
+        if (!string.IsNullOrWhiteSpace(exercise.ExerciseName))
+        {
+            return exercise.ExerciseName.Trim();
+        }
+
+        return $"ejercicio {exercise.ExerciseId}";
     }
 
     private static string? AppendCoachNotes(string? existingNotes, IReadOnlyList<string> sessionCorrections)

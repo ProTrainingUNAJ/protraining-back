@@ -143,19 +143,81 @@ public static class PlanDraftBlockParser
 
         foreach (var item in blockItems)
         {
-            // Traducir número en lista (1..N) a ejercicio real del catálogo
-            var exercise = ResolveCatalogExercise(item.ExerciseIndex, catalog);
-            if (exercise == null)
+            var sets = item.Sets > 0 ? item.Sets : defaultSets;
+            var reps = item.Reps > 0 ? item.Reps : defaultReps;
+            var pct = item.TargetPercentage ?? defaultPct;
+
+            // Si viene un índice válido (1..N), resolvemos directo del catálogo
+            var byIndex = item.ExerciseIndex is > 0
+                ? ResolveCatalogExercise(item.ExerciseIndex.Value, catalog)
+                : null;
+            if (byIndex != null)
             {
-                return $"El ejercicio con índice {item.ExerciseIndex} no existe en el catálogo disponible (1..{catalog.Count}).";
+                targetList.Add(new PlanDraftExerciseDto(
+                    ExerciseId: byIndex.Id,
+                    Order: currentOrder++,
+                    Sets: sets,
+                    Reps: reps,
+                    TargetPercentage: pct,
+                    ExerciseName: byIndex.Name,
+                    IsReference: false,
+                    MuscleGroup: byIndex.MuscleGroup
+                ));
+                continue;
             }
 
+            // Si no vino un índice válido, buscamos por nombre (por si ya existe en el catálogo)
+            if (!string.IsNullOrWhiteSpace(item.ExerciseName))
+            {
+                var normalizedTarget = TextNormalizer.Normalize(item.ExerciseName);
+                var byName = catalog.FirstOrDefault(c =>
+                    TextNormalizer.Normalize(c.Name) == normalizedTarget);
+                if (byName != null)
+                {
+                    targetList.Add(new PlanDraftExerciseDto(
+                        ExerciseId: byName.Id,
+                        Order: currentOrder++,
+                        Sets: sets,
+                        Reps: reps,
+                        TargetPercentage: pct,
+                        ExerciseName: byName.Name,
+                        IsReference: false,
+                        MuscleGroup: byName.MuscleGroup
+                    ));
+                    continue;
+                }
+
+                // Si no existe en el catálogo -> se trae como ejercicio de referencia
+                targetList.Add(new PlanDraftExerciseDto(
+                    ExerciseId: null,
+                    Order: currentOrder++,
+                    Sets: sets,
+                    Reps: reps,
+                    TargetPercentage: pct,
+                    ExerciseName: item.ExerciseName.Trim(),
+                    IsReference: true,
+                    MuscleGroup: string.IsNullOrWhiteSpace(item.MuscleGroup) ? null : item.MuscleGroup.Trim()
+                ));
+                continue;
+            }
+
+            // Fallback si vino índice 0 sin exerciseName (retrocompatibilidad)
+            var zeroFallback = item.ExerciseIndex.HasValue
+                ? ResolveCatalogExercise(item.ExerciseIndex.Value, catalog)
+                : null;
+            if (zeroFallback == null)
+            {
+                return $"El ejercicio con índice {item.ExerciseIndex} no existe en el catálogo disponible (1..{catalog.Count}) y no trajo 'exerciseName'.";
+            }
             targetList.Add(new PlanDraftExerciseDto(
-                ExerciseId: exercise.Id,
+                ExerciseId: zeroFallback.Id,
                 Order: currentOrder++,
-                Sets: item.Sets > 0 ? item.Sets : defaultSets,
-                Reps: item.Reps > 0 ? item.Reps : defaultReps,
-                TargetPercentage: item.TargetPercentage ?? defaultPct
+                Sets: sets,
+                Reps: reps,
+                TargetPercentage: pct,
+                ExerciseName: zeroFallback.Name,
+                IsReference: false,
+                MuscleGroup: zeroFallback.MuscleGroup
             ));
         }
 
