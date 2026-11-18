@@ -103,8 +103,10 @@ public sealed class ExerciseSemanticValidator(
         ICollection<string> messages,
         ICollection<ExerciseSemanticValidationItemResult> itemResults)
     {
+        var baseExercises = routine.BaseExercises ?? routine.Exercises.ToList();
+
         if (context.Restrictions.Count == 0)
-            return new(routine, false);
+            return new(routine with { BaseExercises = baseExercises }, false);
 
         var restrictionsByExercise = context.Restrictions
             .Where(r => r.Substitutes.Count > 0)
@@ -141,7 +143,8 @@ public sealed class ExerciseSemanticValidator(
                 substitute.ExerciseId,
                 substitute.Name,
                 restriction.Zone ?? string.Empty,
-                message));
+                message,
+                restriction.Substitutes));
             itemResults.Add(new ExerciseSemanticValidationItemResult(
                 exercise,
                 adapted,
@@ -172,7 +175,8 @@ public sealed class ExerciseSemanticValidator(
                     substitute.ExerciseId,
                     substitute.Name,
                     restriction.Zone ?? string.Empty,
-                    message));
+                    message,
+                    restriction.Substitutes));
                 itemResults.Add(new ExerciseSemanticValidationItemResult(
                     proposed,
                     adapted,
@@ -187,6 +191,7 @@ public sealed class ExerciseSemanticValidator(
             routine with
         {
             Exercises = exercises,
+            BaseExercises = baseExercises,
             WasAdapted = adaptedAny,
             AdaptationWarnings = messages.Where(message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase)).ToList(),
             AdaptationChanges = changes
