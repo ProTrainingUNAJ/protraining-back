@@ -55,5 +55,22 @@ public class InternalEndpointsBlockingTests : IClassFixture<WebApplicationFactor
         var response = await _client.GetAsync("/health");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Theory]
+    [InlineData("/identidad/api/v1/auth/register-pf")]
+    [InlineData("/identidad/api/v1/auth/register-by-invitation")]
+    [InlineData("/identidad/api/v1/auth/confirm-email")]
+    [InlineData("/identidad/api/v1/auth/resend-confirmation")]
+    [InlineData("/identidad/api/v1/auth/forgot-password")]
+    [InlineData("/identidad/api/v1/auth/reset-password")]
+    public async Task Given_PublicAuthEndpoint_WithExpiredToken_When_SentToGateway_Then_DoesNotBlockWith401Unauthorized(string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "invalid_or_expired_token");
+        request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _client.SendAsync(request);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 }
 
