@@ -53,4 +53,12 @@ public sealed class PrescribedExercise : BaseEntity
         TargetPercentage = targetPercentage;
         ExerciseId = exerciseId;
     }
+
+    public void UpdateOrder(int order)
+    {
+        if (order <= 0)
+            throw new DomainException("El orden debe ser mayor a cero.");
+
+        Order = order;
+    }
 }

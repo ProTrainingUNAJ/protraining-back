@@ -42,6 +42,7 @@ public class TrainingSessionRepository : ITrainingSessionRepository
                         (a.CategoryId.HasValue && categoryIds.Contains(a.CategoryId.Value)))
             .OrderByDescending(a => a.AthleteId.HasValue) // Prioridad: plan asignado directo al atleta
             .ThenByDescending(a => a.StartDate)          // Luego el más reciente
+            .ThenByDescending(a => a.CreatedAt)          // En caso de empate de fecha, la asignación creada más recientemente
             .ToListAsync(cancellationToken);
 
         // 2. La primera asignación (en ese orden) que tenga sesión en la fecha pedida
@@ -78,6 +79,7 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
+                        .ThenInclude(s => s.PrescribedExercises)
             .Where(a => a.PfId == pfId && a.DeletedAt == null && a.Plan.DeletedAt == null)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);
