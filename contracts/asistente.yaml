@@ -932,6 +932,12 @@ components:
           items:
             type: string
           example: ["Movilidad de cadera", "Core"]
+        baseExercises:
+          type: array
+          nullable: true
+          description: Ejercicios de la rutina base de la categoría o sesión a comparar y adaptar individualmente (KAN-464).
+          items:
+            $ref: '#/components/schemas/SuggestedRoutineExercise'
 
     SuggestedRoutineExercise:
       type: object
@@ -992,6 +998,12 @@ components:
         reason:
           type: string
           example: "Sustitución por restricción activa en la zona indicada"
+        availableSubstitutes:
+          type: array
+          nullable: true
+          description: Lista ordenada de sustitutos autorizados del catálogo para ese ejercicio y zona (KAN-464).
+          items:
+            $ref: '#/components/schemas/AuthorizedSubstituteContext'
 
     RoutineAdaptationResponse:
       type: object
@@ -1036,6 +1048,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdaptationChange'
+        baseExercises:
+          type: array
+          nullable: true
+          description: Ejercicios originales de la rutina base de la categoría antes de aplicar la adaptación individual (KAN-464).
+          items:
+            $ref: '#/components/schemas/SuggestedRoutineExercise'
 
     ActiveInjuryContext:
       type: object

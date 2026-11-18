@@ -20,7 +20,8 @@ public sealed record RoutineSuggestionRequestDto(
     [property: JsonPropertyName("muscleGroupEmphasis")] List<string>? MuscleGroupEmphasis = null,
     [property: JsonIgnore] IReadOnlyList<CatalogExerciseDto>? AvailableExercises = null,
     [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null,
-    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null
+    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null,
+    [property: JsonPropertyName("baseExercises")] IReadOnlyList<SuggestedExerciseDto>? BaseExercises = null
 );
 
 public sealed record SuggestedExerciseDto(
@@ -41,5 +42,6 @@ public sealed record RoutineSuggestionResponseDto(
     [property: JsonPropertyName("id")] Guid? Id = null,
     [property: JsonPropertyName("wasAdapted")] bool WasAdapted = false,
     [property: JsonPropertyName("adaptationWarnings")] IReadOnlyList<string>? AdaptationWarnings = null,
-    [property: JsonPropertyName("adaptationChanges")] IReadOnlyList<AdaptationChangeDto>? AdaptationChanges = null
+    [property: JsonPropertyName("adaptationChanges")] IReadOnlyList<AdaptationChangeDto>? AdaptationChanges = null,
+    [property: JsonPropertyName("baseExercises")] IReadOnlyList<SuggestedExerciseDto>? BaseExercises = null
 );
