@@ -39,9 +39,20 @@ public class ApproveRecordProposalCommandHandler
         }
 
         var activeRecord = await _athleteRecordRepository.GetActiveRecordAsync(proposal.AthleteId, proposal.ExerciseId, cancellationToken);
-        if (activeRecord == null || activeRecord.Weight != proposal.CurrentWeight)
+        if (proposal.CurrentRecordId.HasValue)
         {
-            throw new ConflictException("El récord cambió; revisá la propuesta");
+            if (activeRecord == null || activeRecord.Id != proposal.CurrentRecordId.Value)
+            {
+                throw new ConflictException("El récord cambió; revisá la propuesta");
+            }
+        }
+        else
+        {
+            // Compatibilidad hacia atrás para propuestas previas con CurrentRecordId nulo
+            if (activeRecord == null || activeRecord.Weight != proposal.CurrentWeight)
+            {
+                throw new ConflictException("El récord cambió; revisá la propuesta");
+            }
         }
 
         var exerciseName = proposal.Exercise?.Name
