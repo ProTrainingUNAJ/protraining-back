@@ -13,6 +13,7 @@ using Application.UseCases.AthleteRecord.PreviewRecordsImport;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.CheckRestrictions;
+using Application.UseCases.Exercise.GetRestrictionsByZone;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.ListExercises;
@@ -120,6 +121,7 @@ builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
 builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
 builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
 builder.Services.AddScoped<GetSubstitutesByZoneQueryHandler>();
+builder.Services.AddScoped<GetRestrictionsByZoneQueryHandler>();
 
 // E51: servidor MCP (Streamable HTTP, sin estado) para la biblioteca de ejercicios.
 // Se expone en /mcp y el gateway ya lo publica como /entrenamiento/mcp.
