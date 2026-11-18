@@ -61,6 +61,31 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetTrainingPlanPdf_PfAIntentandoDescargarPdfDePfB_Retorna404()
+    {
+        // Act: PF A intenta descargar la rutina en PDF del plan del PF B
+        var response = await _clientPfA.GetAsync($"/api/v1/training-plans/{_dataB.Plan.Id}/pdf");
+
+        // Assert: Aislamiento KAN-502 / KAN-505: siempre 404
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTrainingPlanPdf_PfBDescargandoSuPropioPdf_Retorna200YContentTypePdf()
+    {
+        // Act: PF B descarga el PDF de su propio plan
+        var response = await _clientPfB.GetAsync($"/api/v1/training-plans/{_dataB.Plan.Id}/pdf");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/pdf", response.Content.Headers.ContentType?.MediaType);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(bytes.Take(4).ToArray()));
+    }
+
+    [Fact]
     public async Task GetTrainingPlanById_ComparacionIdDeBVsIdInventado_MismoStatusYMismoCuerpo()
     {
         // Criterio KAN-429: DADO un id de B y un id inventado CUANDO el PF A los consulta ENTONCES las dos respuestas son iguales

@@ -5,6 +5,7 @@ using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.DeleteAssignment;
 using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetPlanPdf;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -35,6 +36,7 @@ public class TrainingPlanController : ControllerBase
     private readonly ListPlanAssignmentsQueryHandler _listAssignmentsHandler;
     private readonly DeletePlanAssignmentCommandHandler _deleteAssignmentHandler;
     private readonly DeleteTrainingPlanCommandHandler _deletePlanHandler;
+    private readonly GetTrainingPlanPdfQueryHandler _getPlanPdfHandler;
 
     public TrainingPlanController(
         AssignPlanCommandHandler assignPlanHandler,
@@ -48,7 +50,8 @@ public class TrainingPlanController : ControllerBase
         ApplyPlanTemplateCommandHandler applyPlanTemplateHandler,
         ListPlanAssignmentsQueryHandler listAssignmentsHandler,
         DeletePlanAssignmentCommandHandler deleteAssignmentHandler,
-        DeleteTrainingPlanCommandHandler deletePlanHandler)
+        DeleteTrainingPlanCommandHandler deletePlanHandler,
+        GetTrainingPlanPdfQueryHandler getPlanPdfHandler)
     {
         _assignPlanHandler = assignPlanHandler;
         _createPlanHandler = createPlanHandler;
@@ -62,6 +65,7 @@ public class TrainingPlanController : ControllerBase
         _listAssignmentsHandler = listAssignmentsHandler;
         _deleteAssignmentHandler = deleteAssignmentHandler;
         _deletePlanHandler = deletePlanHandler;
+        _getPlanPdfHandler = getPlanPdfHandler;
     }
 
     [HttpPost]
@@ -78,6 +82,14 @@ public class TrainingPlanController : ControllerBase
     {
         var plan = await _getPlanHandler.Handle(new GetTrainingPlanQuery(id), cancellationToken);
         return Ok(plan);
+    }
+
+    [HttpGet("{id:guid}/pdf")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<IActionResult> GetPlanPdf(Guid id, CancellationToken cancellationToken = default)
+    {
+        var pdf = await _getPlanPdfHandler.Handle(new GetTrainingPlanPdfQuery(id), cancellationToken);
+        return File(pdf.Content, pdf.ContentType, pdf.FileName);
     }
 
     [HttpPut("{id:guid}")]

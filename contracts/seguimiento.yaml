@@ -1573,6 +1573,27 @@ components:
           items:
             $ref: '#/components/schemas/AthleteAttendanceSummary'
 
+    AttendanceActivityDetail:
+      type: object
+      required:
+        - type
+        - name
+        - minutes
+      properties:
+        type:
+          type: string
+          example: "Gym"
+        name:
+          type: string
+          example: "Gimnasio"
+        minutes:
+          type: integer
+          example: 60
+        rpe:
+          type: integer
+          nullable: true
+          example: 8
+
     AthleteAttendanceSummary:
       type: object
       required:
@@ -1588,6 +1609,16 @@ components:
         status:
           type: string
           enum: [Present, NoRecord]
+        totalMinutes:
+          type: integer
+          example: 60
+        totalLoad:
+          type: integer
+          example: 480
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttendanceActivityDetail'
 
     AthleteTrafficLightSummary:
       type: object

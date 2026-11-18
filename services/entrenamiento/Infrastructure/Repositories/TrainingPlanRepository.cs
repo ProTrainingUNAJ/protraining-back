@@ -32,6 +32,17 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
+    public async Task<TrainingPlan?> GetWithDetailsNoTrackingByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.TrainingPlans
+            .AsNoTracking()
+            .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
+                .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
+                    .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
+                        .ThenInclude(e => e.Exercise)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+    }
+
     public async Task<List<TrainingPlan>> ListAsync(CancellationToken cancellationToken = default)
     {
         return await _context.TrainingPlans
