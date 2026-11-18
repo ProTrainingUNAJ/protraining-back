@@ -93,6 +93,15 @@ builder.Services.AddHttpClient<ITrainingPlanServiceClient, Infrastructure.Servic
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+builder.Services.AddHttpClient<IExerciseLibraryMcpClient, Infrastructure.Services.Mcp.ExerciseLibraryMcpClient>(client =>
+{
+    var uriString = trainingUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 {
