@@ -261,7 +261,7 @@ public class RecordPerformedSetsCommandHandlerTests
     [Fact]
     public async Task Given_TimedPass_When_RecordingTimeSeconds_Then_PersistsPerformedSetWithTimeAndSetNumber()
     {
-        // KAN-457: Registrar el tiempo real de la pasada cronometrada
+        // Registrar el tiempo real de la pasada cronometrada
         IEnumerable<PerformedSet>? capturedSets = null;
         _performedSetRepoMock
             .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
@@ -294,7 +294,7 @@ public class RecordPerformedSetsCommandHandlerTests
     [Fact]
     public async Task Given_BodyweightSet_When_RecordingZeroWeight_Then_PersistsPerformedSetAndDoesNotTriggerEpley()
     {
-        // KAN-566: Permitir series con peso corporal (0 kg) sin disparar cálculo de Epley
+        // Permitir series con peso corporal (0 kg) sin disparar cálculo de Epley
         IEnumerable<PerformedSet>? capturedSets = null;
         _performedSetRepoMock
             .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
@@ -343,7 +343,7 @@ public class RecordPerformedSetsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Given_AthleteWithActiveApprovedVariant_When_RecordingSetsForSubstitute_Then_Succeeds()
+    public async Task RecordsSets_WhenExerciseComesFromApprovedVariant()
     {
         var substituteId = Guid.NewGuid();
         var today = Domain.Common.ArgentinaTime.Today;

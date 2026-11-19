@@ -362,7 +362,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_AthleteRoutine_When_PFHasCustomVideo_Then_ResolvesPFVideo()
     {
-        // KAN-380: El atleta ve el video de su PF para el ejercicio prescrito
+        // El atleta ve el video de su PF para el ejercicio prescrito
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 5);
         var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
@@ -388,7 +388,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_AthleteRoutine_When_PFHasNoCustomVideo_Then_FallsBackToCatalogVideo()
     {
-        // KAN-380: Si el PF no cargó video propio, el atleta ve el del catálogo
+        // Si el PF no cargó video propio, el atleta ve el del catálogo
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 5);
         var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
@@ -414,7 +414,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_RoutineWithCatalogExercise_When_MediaCatalogHasIt_Then_ReturnsItsIllustrations()
     {
-        // KAN-549: el atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
+        // El atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 12);
         var exercise = Exercise.Create("Sentadilla con barra", "Piernas",
@@ -441,7 +441,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_RoutineWithPerformedSets_When_Queried_Then_ReturnsPerformedSetsWithTimeSeconds()
     {
-        // KAN-457: "Mi rutina" lee las series realizadas del back con time_seconds
+        // "Mi rutina" lee las series realizadas del back con time_seconds
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 11);
         var exercise = Exercise.Create("Pasadas 100m", "Velocidad");
@@ -476,9 +476,9 @@ public class GetTodayRoutineQueryHandlerTests
     }
 
     [Fact]
-    public async Task Given_LucasWithApprovedVariantAndMateoWithoutVariantInSameCategory_When_BothQueryTodayRoutine_Then_LucasReceivesLegPress120KgAndMateoReceivesSquat80Kg()
+    public async Task AthleteVariant_AppliesOnlyToAthleteWithApprovedVariant()
     {
-        // KAN-469: DADO Lucas (variante aprobada Prensa de piernas 120 kg) y Mateo (sin variante, Sentadilla 80 kg)
+        // DADO Lucas (variante aprobada Prensa de piernas 120 kg) y Mateo (sin variante, Sentadilla 80 kg)
         // en la misma categoría CUANDO ambos consultan la rutina de hoy ENTONCES cada uno recibe su ejercicio y carga.
         var lucasId = Guid.NewGuid();
         var mateoId = Guid.NewGuid();
@@ -566,7 +566,7 @@ public class GetTodayRoutineQueryHandlerTests
     }
 
     [Fact]
-    public async Task Given_AthleteWithVariantAndDailyAdjustment_When_QueryTodayRoutine_Then_DailyAdjustmentTakesPrecedence()
+    public async Task DailyAdjustment_OverridesAthleteVariant()
     {
         var athleteId = Guid.NewGuid();
         var today = Domain.Common.ArgentinaTime.Today;
