@@ -1796,6 +1796,11 @@ components:
         phone:
           type: string
           example: "+54 11 5555-1234"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (sin @, entre 5 y 32 caracteres).
+          example: "lucas_fernandez"
         isMinor:
           type: boolean
           example: false
@@ -1852,6 +1857,11 @@ components:
         phone:
           type: string
           example: "+54 11 5555-1234"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (sin @, entre 5 y 32 caracteres).
+          example: "lucas_fernandez"
         isMinor:
           type: boolean
           example: false
@@ -1888,6 +1898,11 @@ components:
         emergencyContact:
           type: string
           example: "Padre: +54 11 2222-3333"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (opcional, enviar cadena vacía para limpiar).
+          example: "lucas_fernandez"
 
     MedicalRecord:
       type: object

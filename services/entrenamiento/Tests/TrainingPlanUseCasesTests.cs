@@ -95,7 +95,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal("Controlar técnica en descenso", session1.CoachNotes);
         Assert.Single(session1.Exercises);
         Assert.Equal(4, session1.Exercises[0].Sets);
-        Assert.Equal(5, session1.Exercises[0].Reps);
+        Assert.Equal("5", session1.Exercises[0].Reps);
 
         var session2 = week.Sessions[1];
         Assert.Equal("Viernes", session2.Name);
@@ -104,7 +104,7 @@ public class TrainingPlanUseCasesTests
         Assert.Null(session2.CoachNotes);
         Assert.Single(session2.Exercises);
         Assert.Equal(3, session2.Exercises[0].Sets);
-        Assert.Equal(8, session2.Exercises[0].Reps);
+        Assert.Equal("8", session2.Exercises[0].Reps);
 
         _planRepoMock.Verify(r => r.AddAsync(It.IsAny<TrainingPlan>(), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -206,7 +206,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(DayOfWeek.Monday, updatedResult.Weeks[0].Sessions[0].DayOfWeek);
         Assert.Equal("Controlar tempo", updatedResult.Weeks[0].Sessions[0].CoachNotes);
         Assert.Single(updatedResult.Weeks[0].Sessions[0].Exercises);
-        Assert.Equal(10, updatedResult.Weeks[0].Sessions[0].Exercises[0].Reps);
+        Assert.Equal("10", updatedResult.Weeks[0].Sessions[0].Exercises[0].Reps);
 
         Assert.Equal("Fuerza Hipertrofia", getResult.Name);
         Assert.Equal("Fase 2", getResult.Objective);
@@ -296,7 +296,7 @@ public class TrainingPlanUseCasesTests
         Assert.Single(session1.Exercises);
         Assert.Equal(originalExerciseId, session1.Exercises[0].Id);
         Assert.Equal(5, session1.Exercises[0].Sets);
-        Assert.Equal(8, session1.Exercises[0].Reps);
+        Assert.Equal("8", session1.Exercises[0].Reps);
 
         // Sesión 2: Es nueva, tiene un ID nuevo diferente a la sesión 1
         var session2 = result.Weeks[0].Sessions[1];
@@ -357,7 +357,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(initialWeek.Id, result.Weeks[0].Id);
         Assert.Equal(initialSession.Id, result.Weeks[0].Sessions[0].Id);
         Assert.Equal(initialExercise.Id, result.Weeks[0].Sessions[0].Exercises[0].Id);
-        Assert.Equal(12, result.Weeks[0].Sessions[0].Exercises[0].Reps);
+        Assert.Equal("12", result.Weeks[0].Sessions[0].Exercises[0].Reps);
     }
 
     [Fact]

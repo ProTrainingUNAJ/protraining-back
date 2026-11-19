@@ -160,6 +160,11 @@ namespace Infrastructure.Data.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("TelegramUsername")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("telegram_username");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 

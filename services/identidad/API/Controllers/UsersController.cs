@@ -91,17 +91,17 @@ public class UsersController(
             return Unauthorized();
         }
 
-        var phoneNumber = await getPfContactUseCase.ExecuteAsync(pfId.Value);
-        if (phoneNumber is null)
+        var contact = await getPfContactUseCase.ExecuteAsync(pfId.Value);
+        if (contact is null)
         {
             return NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,
-                Title = "Tu preparador todavía no cargó su WhatsApp."
+                Title = "Tu preparador todavía no cargó sus canales de contacto."
             });
         }
 
-        return Ok(new PfContactDto(phoneNumber));
+        return Ok(contact);
     }
 
     /// <summary>

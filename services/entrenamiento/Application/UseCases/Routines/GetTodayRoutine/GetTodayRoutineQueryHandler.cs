@@ -24,6 +24,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
         private readonly IAthleteSessionAdjustmentRepository? adjustmentRepository;
         private readonly IExerciseRepository? exerciseRepository;
         private readonly IPerformedSetRepository performedSetRepository;
+        private readonly IAthleteVariantRepository? athleteVariantRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
         private readonly IExerciseMediaCatalog? exerciseMediaCatalog;
@@ -37,7 +38,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             IPerformedSetRepository performedSetRepository,
             IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
             IExerciseRepository? exerciseRepository = null,
-            IExerciseMediaCatalog? exerciseMediaCatalog = null)
+            IExerciseMediaCatalog? exerciseMediaCatalog = null,
+            IAthleteVariantRepository? athleteVariantRepository = null)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
@@ -49,6 +51,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             this.performedSetRepository = performedSetRepository;
             // Sin catálogo de ilustraciones (KAN-549), la rutina se ve con las fotos de siempre.
             this.exerciseMediaCatalog = exerciseMediaCatalog;
+            this.athleteVariantRepository = athleteVariantRepository;
         }
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
@@ -109,6 +112,21 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             string? adjustmentNote = null;
             AthleteSessionAdjustment? activeAdjustment = null;
 
+            bool adaptedByVariant = false;
+            if (athleteVariantRepository != null)
+            {
+                var activeVariants = await athleteVariantRepository.GetActiveApprovedByAthleteAsync(athleteId, date, cancellationToken);
+
+                foreach (var variant in activeVariants)
+                {
+                    if (variant.OriginalExerciseId != Guid.Empty && variant.SubstituteExerciseId != Guid.Empty)
+                    {
+                        replacementsByOriginal[variant.OriginalExerciseId] = variant.SubstituteExerciseId;
+                        adaptedByVariant = true;
+                    }
+                }
+            }
+
             if (adjustmentRepository != null)
             {
                 activeAdjustment = await adjustmentRepository.GetBySessionAthleteAndDateAsNoTrackingAsync(
@@ -132,15 +150,15 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                                 replacementsByOriginal[item.OriginalExerciseId] = item.SubstituteExerciseId;
                             }
                         }
-
-                        if (exerciseRepository != null && replacementsByOriginal.Count > 0)
-                        {
-                            var substituteIds = replacementsByOriginal.Values.Distinct().ToList();
-                            var loadedSubstitutes = await exerciseRepository.ListByIdsAsync(substituteIds, cancellationToken);
-                            substituteExercisesById = loadedSubstitutes.ToDictionary(e => e.Id);
-                        }
                     }
                 }
+            }
+
+            if (exerciseRepository != null && replacementsByOriginal.Count > 0)
+            {
+                var substituteIds = replacementsByOriginal.Values.Distinct().ToList();
+                var loadedSubstitutes = await exerciseRepository.ListByIdsAsync(substituteIds, cancellationToken);
+                substituteExercisesById = loadedSubstitutes.ToDictionary(e => e.Id);
             }
 
             var exercisesDto = new List<TodayRoutineExerciseDto>();
@@ -227,7 +245,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     SecondaryMuscles = effectiveExercise?.SecondaryMuscles.ToList() ?? [],
                     ExerciseType = exerciseType,
                     Sets = prescribed.Sets,
-                    Reps = prescribed.Reps,
+                    Reps = int.TryParse(prescribed.Reps, out var parsedReps) ? parsedReps : (int.TryParse(prescribed.Reps.Split('-')[0].Trim(), out var minReps) ? minReps : 0),
+                    RepsRange = prescribed.Reps,
                     Percentage = (double)percentage,
                     WeightKg = totalWeight,
                     BarWeight = barWeight,
@@ -259,7 +278,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 Date = date,
                 SessionId = routine.Id,
                 HasActiveInjuries = false,
-                RoutineAdapted = adjustedByCoach,
+                RoutineAdapted = adjustedByCoach || adaptedByVariant,
                 AdjustedByCoach = adjustedByCoach,
                 AdjustmentNote = adjustmentNote,
                 CoachNotes = effectiveCoachNotes,

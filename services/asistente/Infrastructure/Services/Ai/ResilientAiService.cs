@@ -12,7 +12,6 @@ using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +19,8 @@ namespace Infrastructure.Services.Ai;
 
 /// <summary>
 /// Orquesta la cadena resiliente de proveedores de IA para el Asistente:
-/// 1. Ollama (modelo local en Docker)
-/// 2. Google Gemini (respaldo en la nube)
+/// 1. Agente de IA con OpenAI (Azure Gateway gpt-4.1-mini)
+/// 2. Agente de IA con Google Gemini (respaldo en la nube)
 /// 3. Motor de reglas determinísticas locales (respaldo final garantizado)
 /// Asegura alta disponibilidad, tiempos límites independientes por proveedor, validación semántica de ejercicios y registro del origen.
 /// </summary>
@@ -34,54 +33,55 @@ public sealed class ResilientAiService : IAiService
     private readonly IAiAuditService? _auditService;
     private readonly IExerciseCatalogService? _catalogService;
     private readonly IAiQuotaService? _quotaService;
+    private readonly IStructureAthleteClient? _structureAthleteClient;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, null, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
@@ -89,13 +89,13 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
@@ -103,8 +103,9 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
-        ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient)
     {
     }
 
@@ -135,8 +136,9 @@ public sealed class ResilientAiService : IAiService
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
-        ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger, structureAthleteClient)
     {
     }
 
@@ -148,7 +150,8 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
-        ILogger<ResilientAiService> logger)
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
     {
         _providers = providers;
         _semanticValidator = semanticValidator;
@@ -157,6 +160,7 @@ public sealed class ResilientAiService : IAiService
         _auditService = auditService;
         _catalogService = catalogService;
         _quotaService = quotaService;
+        _structureAthleteClient = structureAthleteClient;
         _logger = logger;
     }
 
@@ -358,7 +362,7 @@ public sealed class ResilientAiService : IAiService
                 }
 
                 // 2. Almacenar la propuesta validada en caché en memoria (KAN-368)
-                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (Ollama o Gemini),
+                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (OpenAI o Gemini),
                 // excluyendo deliberadamente las reglas determinísticas para no degradar el servicio si la IA se recupera.
                 if (_responseCache != null &&
                     request.AdaptationContext is null &&
@@ -709,6 +713,32 @@ public sealed class ResilientAiService : IAiService
         if (request.ApprovedFoods is { Count: 0 })
         {
             throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
+        }
+
+        // Verificación del permiso del tutor en atletas menores (#201 · KAN-496):
+        // si no se puede verificar o el tutor no autorizó, no se genera ninguna recomendación (fail-closed).
+        if (request.AthleteId.HasValue)
+        {
+            var permission = _structureAthleteClient is not null
+                ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
+                : null;
+
+            if (permission is null)
+            {
+                _logger.LogWarning(
+                    "No se pudo verificar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    request.AthleteId.Value);
+                throw new DomainException(
+                    $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
+            }
+
+            if (permission.IsMinor && !permission.AllowsHabitsRecommendations)
+            {
+                _logger.LogWarning(
+                    "El atleta {AthleteId} es menor de edad y su tutor no autorizó las recomendaciones de alimentación. No se generará recomendación (KAN-496).",
+                    request.AthleteId.Value);
+                throw new DomainException("El atleta es menor de edad y su tutor no autorizó las recomendaciones de alimentación.");
+            }
         }
 
         // Verificación de cuota diaria en memoria por PF (KAN-510)

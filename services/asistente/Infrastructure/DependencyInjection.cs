@@ -3,13 +3,15 @@ using Application.Interfaces.Services;
 using Infrastructure.Data;
 using Infrastructure.Services;
 using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Agent;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Adaptation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Infrastructure;
@@ -53,20 +55,82 @@ public static class DependencyInjection
         services.AddScoped<IPfDecisionRepository, Infrastructure.Data.Repositories.PfDecisionRepository>();
         services.AddScoped<IPreventiveAlertRepository, Infrastructure.Data.Repositories.PreventiveAlertRepository>();
         services.AddScoped<IDayAdjustmentRepository, Infrastructure.Data.Repositories.DayAdjustmentRepository>();
+        services.AddScoped<IAthleteRecommendationRepository, Infrastructure.Data.Repositories.AthleteRecommendationRepository>();
         services.AddScoped<IMatchDayLoadValidator, Application.Common.PlanDrafts.MatchDayLoadValidator>();
 
         services.AddMemoryCache();
+        services.AddHttpClient();
         services.Configure<Infrastructure.Services.Ai.Cache.AiCacheOptions>(configuration.GetSection(Infrastructure.Services.Ai.Cache.AiCacheOptions.SectionName));
         services.Configure<Infrastructure.Services.Ai.Quota.AiQuotaOptions>(configuration.GetSection(Infrastructure.Services.Ai.Quota.AiQuotaOptions.SectionName));
-        services.Configure<OllamaOptions>(configuration.GetSection(OllamaOptions.SectionName));
+        services.Configure<AgentOptions>(configuration.GetSection(AgentOptions.SectionName));
         services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
 
         services.AddSingleton<IAiResponseCache, Infrastructure.Services.Ai.Cache.AiResponseMemoryCache>();
         services.AddSingleton<IAiQuotaService, Infrastructure.Services.Ai.Quota.AiQuotaService>();
-        services.AddHttpClient<OllamaClient>();
-        services.AddHttpClient<GeminiClient>();
         services.AddScoped<RuleBasedAiClient>();
         services.AddScoped<IExerciseSemanticValidator, Application.Common.Ai.ExerciseSemanticValidator>();
+
+        // Cadena ordenada de proveedores del agente (OpenAI -> Gemini -> Reglas)
+        services.AddScoped<IReadOnlyList<IAiClient>>(sp =>
+        {
+            var agentOptions = sp.GetRequiredService<IOptions<AgentOptions>>().Value;
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var mcpClient = sp.GetRequiredService<IExerciseLibraryMcpClient>();
+            var auditService = sp.GetRequiredService<IAiAuditService>();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            var catalogService = sp.GetService<IExerciseCatalogService>();
+            var ruleBasedClient = sp.GetRequiredService<RuleBasedAiClient>();
+
+            var list = new List<IAiClient>();
+
+            foreach (var provider in agentOptions.Providers)
+            {
+                var resolvedKey = provider.ApiKey;
+                if (string.IsNullOrWhiteSpace(resolvedKey))
+                {
+                    if (provider.Name.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
+                    {
+                        resolvedKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                    }
+                    else if (provider.Name.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
+                    {
+                        resolvedKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? configuration["Gemini:ApiKey"];
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(resolvedKey))
+                {
+                    // Si no tiene clave configurada, se saltea sin error según protocolo
+                    continue;
+                }
+
+                var providerConfig = new AgentProviderOptions
+                {
+                    Name = provider.Name,
+                    BaseUrl = provider.BaseUrl,
+                    Model = provider.Model,
+                    ApiKey = resolvedKey,
+                    TimeoutSeconds = provider.TimeoutSeconds > 0 ? provider.TimeoutSeconds : agentOptions.TimeoutSeconds
+                };
+
+                var httpClient = httpClientFactory.CreateClient($"Agent_{provider.Name}");
+                var agentLogger = loggerFactory.CreateLogger<GenericAgentAiClient>();
+
+                list.Add(new GenericAgentAiClient(
+                    providerConfig,
+                    httpClient,
+                    mcpClient,
+                    auditService,
+                    agentLogger,
+                    catalogService,
+                    agentOptions.MaxToolCalls));
+            }
+
+            // Motor de reglas determinísticas locales como respaldo final garantizado
+            list.Add(ruleBasedClient);
+            return list;
+        });
+
         services.AddScoped<IAiService, ResilientAiService>();
         services.AddScoped<IAthleteAdaptationContextService, AthleteAdaptationContextService>();
 

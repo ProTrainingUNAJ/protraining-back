@@ -3,8 +3,8 @@ namespace Asistente.Tests;
 using Application.Common.Ai;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
+using Infrastructure.Services.Ai.Agent;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Xunit;
 
 /// <summary>
@@ -221,13 +221,13 @@ public sealed class SportPromptEvaluationTests
     {
         // Arrange
         var geminiOptions = new GeminiOptions();
-        var ollamaOptions = new OllamaOptions();
+        var agentOptions = new AgentOptions();
 
         // Assert
         Assert.Equal(0.2, geminiOptions.Temperature);
         Assert.Equal(1200, geminiOptions.MaxOutputTokens);
-        Assert.Equal(0.2, ollamaOptions.Temperature);
-        Assert.Equal(1200, ollamaOptions.MaxOutputTokens);
+        Assert.Equal(6, agentOptions.MaxToolCalls);
+        Assert.Equal(40, agentOptions.TimeoutSeconds);
     }
 
     [Fact]
@@ -237,10 +237,10 @@ public sealed class SportPromptEvaluationTests
         const int gatewayHardLimitSeconds = 100;
         const int frontendLimitSeconds = 120;
 
-        var geminiTimeout = new GeminiOptions().TimeoutSeconds;
-        var ollamaTimeout = new OllamaOptions().TimeoutSeconds;
+        var openAiTimeout = new AgentOptions().TimeoutSeconds;
+        var geminiTimeout = new AgentOptions().TimeoutSeconds;
 
-        var totalChainTimeout = geminiTimeout + ollamaTimeout;
+        var totalChainTimeout = openAiTimeout + geminiTimeout;
 
         // Assert: La suma de timeouts debe ser estrictamente menor a los 100 s del gateway
         Assert.True(totalChainTimeout < gatewayHardLimitSeconds, $"El timeout total ({totalChainTimeout}s) excede el gateway ({gatewayHardLimitSeconds}s).");

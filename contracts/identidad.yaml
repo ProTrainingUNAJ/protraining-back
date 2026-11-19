@@ -757,6 +757,11 @@ components:
           nullable: true
           description: Número de teléfono de WhatsApp normalizado (solo dígitos).
           example: "5491123456789"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram normalizado (sin @).
+          example: "profe_juan"
         mustChangePassword:
           type: boolean
           description: Indica si el usuario debe cambiar obligatoriamente su contraseña antes de acceder a la aplicación.
@@ -883,13 +888,17 @@ components:
           
     PfContact:
       type: object
-      required:
-        - phoneNumber
       properties:
         phoneNumber:
           type: string
+          nullable: true
           description: Número de WhatsApp del preparador físico (solo dígitos, con código de país).
           example: "5491123456789"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del preparador físico (sin @, entre 5 y 32 caracteres).
+          example: "profe_juan"
 
     
 
@@ -1084,6 +1093,10 @@ components:
           type: string
           nullable: true
           example: "+54 9 11 9988-7766"
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "profe_juan"
 
     ProfileResponse:
       type: object
@@ -1104,6 +1117,10 @@ components:
           type: string
           nullable: true
           example: "5491199887766"
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "profe_juan"
 
     DeactivateAccountRequest:
       type: object

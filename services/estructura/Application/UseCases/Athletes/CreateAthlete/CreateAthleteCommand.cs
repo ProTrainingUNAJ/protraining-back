@@ -16,7 +16,8 @@ public sealed record CreateAthleteCommand(
     string? GuardianPhone = null,
     bool AllowsPhysicalTraining = true,
     bool AllowsHabitsRecommendations = false,
-    string? EmergencyContact = null);
+    string? EmergencyContact = null,
+    string? TelegramUsername = null);
 
 public sealed class CreateAthleteCommandHandler(IAthleteRepository repository, IUnitOfWork unitOfWork)
 {
@@ -33,14 +34,16 @@ public sealed class CreateAthleteCommandHandler(IAthleteRepository repository, I
                 command.GuardianPhone,
                 command.AllowsPhysicalTraining,
                 command.AllowsHabitsRecommendations,
-                command.EmergencyContact)
+                command.EmergencyContact,
+                telegramUsername: command.TelegramUsername)
             : Athlete.CreateAdult(
                 command.FirstName,
                 command.LastName,
                 command.Email,
                 command.Phone,
                 signsInitialConsent: false,
-                command.EmergencyContact);
+                command.EmergencyContact,
+                telegramUsername: command.TelegramUsername);
 
         await repository.AddAsync(athlete, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

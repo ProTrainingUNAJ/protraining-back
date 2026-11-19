@@ -25,6 +25,7 @@ public class RecordPerformedSetsCommandHandler
     private readonly IPerformedSetRepository _performedSetRepository;
     private readonly IRecordProposalRepository _recordProposalRepository;
     private readonly IAthleteSessionAdjustmentRepository? _adjustmentRepository;
+    private readonly IAthleteVariantRepository? _variantRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public RecordPerformedSetsCommandHandler(
@@ -34,7 +35,8 @@ public class RecordPerformedSetsCommandHandler
         IPerformedSetRepository performedSetRepository,
         IRecordProposalRepository recordProposalRepository,
         IUnitOfWork unitOfWork,
-        IAthleteSessionAdjustmentRepository? adjustmentRepository = null)
+        IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
+        IAthleteVariantRepository? variantRepository = null)
     {
         _structureClient = structureClient;
         _trainingSessionRepository = trainingSessionRepository;
@@ -43,6 +45,7 @@ public class RecordPerformedSetsCommandHandler
         _recordProposalRepository = recordProposalRepository;
         _unitOfWork = unitOfWork;
         _adjustmentRepository = adjustmentRepository;
+        _variantRepository = variantRepository;
     }
 
     public async Task<RecordPerformedSetsResponseDto> Handle(RecordPerformedSetsCommand command, CancellationToken cancellationToken = default)
@@ -69,6 +72,22 @@ public class RecordPerformedSetsCommandHandler
 
         // Validar que los ejercicios pertenezcan a la sesión de hoy (considerando ajustes aprobados por el PF, KAN-452)
         var validExerciseIds = session.PrescribedExercises.Select(p => p.ExerciseId).ToHashSet();
+
+        if (_variantRepository != null)
+        {
+            var activeVariants = await _variantRepository.GetActiveApprovedByAthleteAsync(
+                athleteId,
+                today,
+                cancellationToken);
+
+            foreach (var variant in activeVariants)
+            {
+                if (variant.SubstituteExerciseId != Guid.Empty)
+                {
+                    validExerciseIds.Add(variant.SubstituteExerciseId);
+                }
+            }
+        }
 
         if (_adjustmentRepository != null)
         {
@@ -143,7 +162,7 @@ public class RecordPerformedSetsCommandHandler
                             // Se reemplaza solo si la nueva es mayor
                             if (proposed1Rm.Value > existingPending.ProposedWeight)
                             {
-                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps);
+                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps, activeRecord.Id);
                                 await _recordProposalRepository.UpdateAsync(existingPending, cancellationToken);
                                 proposalsCount++;
                             }
@@ -156,7 +175,8 @@ public class RecordPerformedSetsCommandHandler
                                 currentWeight: activeRecord.Weight,
                                 proposedWeight: proposed1Rm.Value,
                                 performedWeight: weight,
-                                performedReps: reps);
+                                performedReps: reps,
+                                currentRecordId: activeRecord.Id);
 
                             await _recordProposalRepository.AddAsync(proposal, cancellationToken);
                             proposalsCount++;

@@ -31,7 +31,8 @@ public static class AthleteMappings
                     athlete.DigitalConsent.AllowsProfilePhoto)
                 : null,
             athlete.HasPhoto,
-            athlete.PhotoUpdatedAt);
+            athlete.PhotoUpdatedAt,
+            athlete.TelegramUsername);
 
     public static MedicalRecordDto ToMedicalRecordDto(Guid athleteId, MedicalRecord? record) =>
         record is null

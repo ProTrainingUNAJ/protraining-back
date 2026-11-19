@@ -42,4 +42,8 @@ public interface ITrainingPlanServiceClient
         Guid sessionId,
         ApplyAthleteAdjustmentRequestRemoteDto request,
         CancellationToken cancellationToken = default);
+
+    Task<Guid> EnsureExerciseCreatedAsync(
+        CreateExerciseRemoteRequestDto request,
+        CancellationToken cancellationToken);
 }

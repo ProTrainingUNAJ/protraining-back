@@ -137,12 +137,28 @@ public class UsersControllerTests
     {
         var pfId = Guid.NewGuid();
         _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
-        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null };
+        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null, TelegramUsername = null };
         _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
 
         var result = await _controller.GetPfContact();
 
         Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWhosePfHasTelegramOnly_When_GetPfContact_Then_ReturnsTelegram()
+    {
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
+        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null, TelegramUsername = "profe_juan" };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetPfContact();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<PfContactDto>(ok.Value);
+        Assert.Null(dto.PhoneNumber);
+        Assert.Equal("profe_juan", dto.TelegramUsername);
     }
 
     [Fact]

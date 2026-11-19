@@ -204,4 +204,91 @@ public sealed class AthleteAdaptationUseCaseSecurityTests
         Assert.Equal("rodilla", change.Zone);
         Assert.Equal("Prensa de piernas", change.FinalExerciseName);
     }
+
+    [Fact]
+    public async Task Given_AthleteWithEstimatedRecord_When_BaseRoutineAdaptationIsGenerated_Then_IncludesEstimatedRecordAlertWarning()
+    {
+        var lucasId = Guid.NewGuid();
+        var squatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+        var legPressId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure
+            .Setup(client => client.IsOwnAthleteAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService
+            .Setup(service => service.GetAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                lucasId,
+                [
+                    new ActiveInjuryRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        "rodilla",
+                        "Dolor en tendón rotuliano",
+                        DateTime.UtcNow.AddDays(-3),
+                        DateTime.UtcNow.AddDays(7),
+                        "Active",
+                        null,
+                        DateTime.UtcNow.AddDays(-3))
+                ],
+                [
+                    new AthleteRecordRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        squatId,
+                        "Sentadilla con barra",
+                        110m,
+                        "EstimatedEpley",
+                        DateTime.UtcNow.AddDays(-5),
+                        true),
+                    new AthleteRecordRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        benchId,
+                        "Press de banca con barra - Agarre medio",
+                        85m,
+                        "Estimated",
+                        DateTime.UtcNow.AddDays(-5),
+                        true)
+                ],
+                [
+                    new ExerciseRestrictionContextDto(
+                        squatId,
+                        "rodilla",
+                        "Reduce estrés en tendón rotuliano",
+                        [new AuthorizedSubstituteDto(legPressId, "Prensa de piernas")])
+                ]));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object);
+
+        var result = await useCase.ExecuteAdaptationAsync(
+            new RoutineSuggestionRequestDto(
+                AthleteId: lucasId,
+                Goal: "Fuerza base",
+                BaseExercises:
+                [
+                    new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 75m, squatId),
+                    new SuggestedExerciseDto("Press de banca con barra - Agarre medio", 4, 6, 70m, benchId)
+                ]));
+
+        Assert.True(result.WasAdapted);
+        Assert.NotNull(result.AdaptationWarnings);
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            warning => warning.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("Sentadilla con barra", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("110 kg", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            warning => warning.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("Press de banca con barra - Agarre medio", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("85 kg", StringComparison.OrdinalIgnoreCase));
+    }
 }

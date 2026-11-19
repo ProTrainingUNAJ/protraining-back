@@ -118,7 +118,8 @@ public sealed class CreatePlanDraftCommandHandler(
                         .SelectMany(w => w.Sessions ?? [])
                         .SelectMany(s => s.Exercises ?? [])
                         .Select(e => e.ExerciseId)
-                        .Where(id => id != Guid.Empty)
+                        .Where(id => id.HasValue && id.Value != Guid.Empty)
+                        .Select(id => id!.Value)
                         .Distinct()
                         .ToList();
 

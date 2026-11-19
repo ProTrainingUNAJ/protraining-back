@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryInvitationRepository, CategoryInvitationRepository>();
         services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
         services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+        services.AddScoped<IEstructuraPurgeRepository, EstructuraPurgeRepository>();
         services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
         services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
         services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
