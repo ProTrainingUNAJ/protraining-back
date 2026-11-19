@@ -11,6 +11,8 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$ProjectPath = Join-Path $RepoRoot "services\estructura\Tests\Estructura.Tests.csproj"
 
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Cyan
@@ -52,7 +54,7 @@ Write-Host "  - Estructura:    DataPurgeWorker / ProcessPendingPurgesCommandHand
 
 Write-Host ""
 Write-Host "[3/4] Ejecutando suite de pruebas de integracion E2E automatizada en C#..." -ForegroundColor Yellow
-$testResult = dotnet test services/estructura/Tests/Estructura.Tests.csproj --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
+$testResult = dotnet test "$ProjectPath" --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
 Write-Host $testResult -ForegroundColor Gray
 
 if ($LASTEXITCODE -eq 0) {
