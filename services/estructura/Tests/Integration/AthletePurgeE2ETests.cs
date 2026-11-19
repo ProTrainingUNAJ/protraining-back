@@ -110,6 +110,15 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         return athleteId;
     }
 
+    private async Task<ProcessPendingPurgesResult> ExecutePurgeCommandAsync(int retentionDays = 0)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var purgeHandler = scope.ServiceProvider.GetRequiredService<ProcessPendingPurgesCommandHandler>();
+        return await purgeHandler.HandleAsync(
+            new ProcessPendingPurgesCommand(RetentionDays: retentionDays),
+            CancellationToken.None);
+    }
+
     [Fact]
     public async Task Given_AthleteWithDataInAll5Services_When_SoftDeletedAndPurgeRuns_Then_DisappearsFromAllServices()
     {
@@ -181,17 +190,10 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         // -----------------------------------------------------------------------------------------
         // 2. ACT (Paso 2): Correr el Job de Purga (RetentionDays = 0 para elegibilidad inmediata)
         // -----------------------------------------------------------------------------------------
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var purgeHandler = scope.ServiceProvider.GetRequiredService<ProcessPendingPurgesCommandHandler>();
-            var purgeResult = await purgeHandler.HandleAsync(
-                new ProcessPendingPurgesCommand(RetentionDays: 0),
-                CancellationToken.None);
-
-            Assert.True(purgeResult.TotalEvaluated >= 1);
-            Assert.True(purgeResult.PurgedSuccessfully >= 1);
-            Assert.Equal(0, purgeResult.FailedOrPostponed);
-        }
+        var purgeResult = await ExecutePurgeCommandAsync(retentionDays: 0);
+        Assert.True(purgeResult.TotalEvaluated >= 1);
+        Assert.True(purgeResult.PurgedSuccessfully >= 1);
+        Assert.Equal(0, purgeResult.FailedOrPostponed);
 
         // -----------------------------------------------------------------------------------------
         // 3. ASSERT: Verificación total en los 5 servicios (Criterio de aceptación)
@@ -267,16 +269,9 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
             .ReturnsAsync(new ServicePurgeResult("Seguimiento", false, 500, "Internal Server Error"));
 
         // Act: Correr job de purga
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var purgeHandler = scope.ServiceProvider.GetRequiredService<ProcessPendingPurgesCommandHandler>();
-            var result = await purgeHandler.HandleAsync(
-                new ProcessPendingPurgesCommand(RetentionDays: 0),
-                CancellationToken.None);
-
-            Assert.Equal(1, result.FailedOrPostponed);
-            Assert.Equal(0, result.PurgedSuccessfully);
-        }
+        var result = await ExecutePurgeCommandAsync(retentionDays: 0);
+        Assert.Equal(1, result.FailedOrPostponed);
+        Assert.Equal(0, result.PurgedSuccessfully);
 
         // Assert: En Estructura los datos locales NO fueron borrados para permitir reintentos consistentes
         using (var dbContext = _factory.CreateDbContext())
@@ -304,16 +299,9 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         // No sembramos nada en SimulatedExternalServiceStore -> responderá 404 para los 4 servicios
 
         // Act
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var purgeHandler = scope.ServiceProvider.GetRequiredService<ProcessPendingPurgesCommandHandler>();
-            var result = await purgeHandler.HandleAsync(
-                new ProcessPendingPurgesCommand(RetentionDays: 0),
-                CancellationToken.None);
-
-            Assert.Equal(1, result.PurgedSuccessfully);
-            Assert.Equal(0, result.FailedOrPostponed);
-        }
+        var result = await ExecutePurgeCommandAsync(retentionDays: 0);
+        Assert.Equal(1, result.PurgedSuccessfully);
+        Assert.Equal(0, result.FailedOrPostponed);
 
         // Assert: La purga se completa correctamente por idempotencia
         using (var dbContext = _factory.CreateDbContext())

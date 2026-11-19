@@ -57,11 +57,17 @@ Write-Host "[3/4] Ejecutando suite de pruebas de integracion E2E automatizada en
 $testResult = dotnet test "$ProjectPath" --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
 Write-Host $testResult -ForegroundColor Gray
 
-if ($LASTEXITCODE -eq 0) {
+if ($LASTEXITCODE -eq 0 -and $allOnline) {
     Write-Host ""
     Write-Host "[4/4] Criterio de Aceptacion KAN-501:" -ForegroundColor Yellow
     Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningun servicio." -ForegroundColor Cyan
-    Write-Host "  -> ESTADO: VERIFICADO Y SUPERADO (Tests E2E pasando exitosamente en Estructura)" -ForegroundColor Green
+    Write-Host "  -> ESTADO: VERIFICADO Y SUPERADO (5 servicios Docker en linea y Tests E2E en verde)" -ForegroundColor Green
+    Write-Host ""
+} elseif ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "[4/4] Criterio de Aceptacion KAN-501:" -ForegroundColor Yellow
+    Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningun servicio." -ForegroundColor Cyan
+    Write-Host "  -> ESTADO: VERIFICADO EN PRUEBAS AUTOMATIZADAS (Aviso: Levantar docker compose up -d para prueba live multi-servicio)" -ForegroundColor Yellow
     Write-Host ""
 } else {
     Write-Host ""
