@@ -1,11 +1,10 @@
-# Microservicio Asistente · IA, bloques y progresión semanal
+# Microservicio Asistente · IA, Agente MCP y Progresión Semanal
 
-> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 3
-
-> **Estado de proveedores:** la implementación actual mantiene Ollama y Gemini por compatibilidad
-> durante la transición. La cadena objetivo es **agente compatible con OpenAI → Gemini → reglas**.
-> Ollama no debe agregarse a nuevos flujos. Las mediciones históricas de Ollama que siguen en este documento
-> son evidencia de la decisión anterior, no una recomendación para la arquitectura nueva.
+> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 3 · **Arquitectura IA Oficial (KAN-600):**
+> 
+> La cadena oficial de IA es **Agente OpenAI (`gpt-4.1-mini` vía Azure Gateway) → Agente Gemini (OpenAI compat) → Reglas determinísticas locales**.
+> El agente resuelve la planificación ejecutando llamadas a herramientas (*tool calling*) contra el servidor MCP de Entrenamiento (`/entrenamiento/mcp`).
+> Ollama fue removido de la arquitectura activa y de `docker-compose.yml` siguiendo el feedback de la Demo 2 y la decisión de PM. Las mediciones históricas que se conservan abajo se mantienen como evidencia comparativa.
 
 ## Decisión Sprint 3: caso de uso, proveedor y límites
 
@@ -259,53 +258,53 @@ Cada modelo fue sometido a solicitudes idénticas de planificación deportiva me
 
 ## 6. Configuración y Uso
 
-### Configuración por Defecto (Estándar del Equipo)
-En `.env` y `services/asistente/API/appsettings.json`, el modelo configurado es `llama3.2:1b`:
+### Configuración del Agente de IA (Estándar Sprint 3)
+En `.env` local y en `services/asistente/API/appsettings.json`, el agente se configura mediante la lista ordenada de proveedores:
 
 ```ini
-# .env
-OLLAMA_MODEL=llama3.2:1b
-OLLAMA_TIMEOUT_SECONDS=15
+# .env (local, nunca se commitea al repositorio)
+OPENAI_API_KEY=tu_clave_de_azure_openai_gateway
+OPENAI_BASE_URL=https://rs-ai-gateway-unaj.azure-api.net/unaj-llm/openai/deployments/gpt-4.1-mini/?api-version=2025-03-01-preview
+OPENAI_MODEL=gpt-4.1-mini
+
+GEMINI_API_KEY=tu_clave_de_google_aistudio
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-### Cómo levantarlo con Docker Compose
-Ollama se encuentra aislado bajo el perfil `ia` para no penalizar a quienes no trabajen con inteligencia artificial:
-
-```bash
-# Levantar el microservicio Asistente junto con Ollama y la descarga automática del modelo elegido
-docker compose --profile ia up -d asistente ollama ollama-model
-
-# Verificar que el modelo seleccionado esté cargado
-curl http://localhost:11434/api/tags
-```
-
-### Cambio a `llama3.2:3b` para desarrolladores con GPU dedicada
-Si tu equipo cuenta con GPU dedicada (NVIDIA RTX / Apple Silicon) y deseas utilizar `llama3.2:3b`:
-1. Modifica en tu `.env` local: `OLLAMA_MODEL=llama3.2:3b`.
-2. Reinicia el contenedor: `docker compose --profile ia up -d ollama-model`.
+### Protocolo de Invocación con MCP
+El agente opera en un bucle interactivo de toma de decisiones:
+1. Recibe el objetivo, semanas y días solicitados por el preparador físico.
+2. Consulta dinámicamente las herramientas del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerSustitutos`, `ObtenerRestricciones`).
+3. Respeta un tope máximo obligatorio de 6 llamadas a tools por solicitud.
+4. Genera el borrador en JSON estricto para las sesiones modelo de la semana 1.
+5. El motor determinístico en C# (`WeeklyProgressionEngine`) proyecta y calcula intensidades, descargas y semanas subsiguientes.
 
 ---
 
-## 7. Cadena Resiliente de Proveedores y Respaldo Determinístico (`#080 / KAN-375`)
+## 7. Cadena Resiliente de Proveedores y Respaldo Determinístico
 
 Para garantizar alta disponibilidad continua ante fallos locales o interrupciones de red, el microservicio implementa una conmutación jerárquica en `ResilientAiService`:
 
 ```mermaid
 graph TD
-    A["Petición de Rutina (POST /suggest-routine)"] --> B{"¿Hit en Caché SHA-256? (#073 / KAN-368)"}
+    A["Petición de Planificación / Rutina"] --> B{"¿Hit en Caché SHA-256? (#073 / KAN-368)"}
     B -- Sí --> C["Retornar respuesta desde memoria RAM (~1 ms)"]
-    B -- No --> D["Paso 1: Ollama (Modelo local Llama)"]
+    B -- No --> D["Paso 1: Agente OpenAI (gpt-4.1-mini vía Gateway UNAJ)"]
+    D -- "Tool Calls" --> MCP["MCP Entrenamiento (/entrenamiento/mcp)"]
+    MCP --> D
     D -- Éxito --> E["Validar Semántica y Guardar en Caché"]
-    D -- "Falla (HTTP 500, Timeout, Red caída)" --> F["Paso 2: Google Gemini (Nube)"]
+    D -- "Falla (Sin clave, 500, Timeout > 40s)" --> F["Paso 2: Agente Gemini (OpenAI compat)"]
+    F -- "Tool Calls" --> MCP
     F -- Éxito --> E
-    F -- "Falla (HTTP 500, Cuota 429, Timeout)" --> G["Paso 3: Motor de Reglas Determinísticas"]
+    F -- "Falla (Sin clave, 500, 429, Timeout > 40s)" --> G["Paso 3: Motor de Reglas Determinísticas"]
     G --> H["Retornar propuesta de respaldo (ProviderUsed: 'Reglas')"]
     E --> I["Retornar propuesta de IA al usuario"]
 ```
 
 ### Comportamiento ante Caídas
-1. **Ollama caído:** Si el contenedor de Ollama no responde, supera el tiempo límite configurado o devuelve error 500/JSON malformado, la solicitud conmuta automáticamente a **Google Gemini**.
-2. **Gemini caído / Cuota agotada:** Si la API de Google Gemini no está disponible o agota su cuota gratuita (HTTP 429), la solicitud degrada al **Motor Determinístico de Reglas**.
-3. **Ambos proveedores caídos:** El motor de reglas (`RuleBasedAiClient`) resuelve la solicitud en milisegundos con ejercicios anatómica y metodológicamente coherentes con el objetivo.
+1. **OpenAI caído o sin clave:** Si el gateway de OpenAI no responde, supera el tiempo límite configurado o carece de `OPENAI_API_KEY`, la solicitud conmuta automáticamente y sin error a **Agente Gemini**.
+2. **Gemini caído / Cuota agotada:** Si el endpoint de Gemini no está disponible o agota su cuota (HTTP 429), la solicitud degrada de inmediato al **Motor Determinístico de Reglas**.
+3. **Ambos proveedores de IA caídos:** El motor de reglas (`RuleBasedAiClient`) resuelve la solicitud en milisegundos con ejercicios anatómica y metodológicamente coherentes con el objetivo deportivo.
 4. **Propagación de cancelación:** Si el cliente cancela la petición HTTP (`CancellationToken`), la operación aborta inmediatamente con `OperationCanceledException` sin enmascararla como falla de proveedor.
 

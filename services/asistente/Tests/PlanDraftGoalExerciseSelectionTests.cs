@@ -12,8 +12,8 @@ using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Agent;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -234,7 +234,7 @@ public sealed class PlanDraftGoalExerciseSelectionTests
     #region Criterio 2: Reglas determinísticas con grupos y trainingDays
 
     [Fact]
-    public async Task Given_OllamaAndGeminiDown_When_GeneratingWithRules_Then_SessionsHaveCorrespondingGroupExercisesAndRespectsTrainingDays()
+    public async Task Given_ExternalAgentsDown_When_GeneratingWithRules_Then_SessionsHaveCorrespondingGroupExercisesAndRespectsTrainingDays()
     {
         // Arrange
         var catalogMock = new Mock<IExerciseCatalogService>();
@@ -435,20 +435,20 @@ public sealed class PlanDraftGoalExerciseSelectionTests
         var ruleClient = new RuleBasedAiClient(Mock.Of<IAiAuditService>(), Mock.Of<ILogger<RuleBasedAiClient>>(), catalogMock.Object);
 
         // Mock IA Providers fallando / retornando null
-        var ollamaMock = new Mock<IAiClient>();
-        ollamaMock.Setup(o => o.ProviderName).Returns("Ollama");
-        ollamaMock
+        var openAiAgentMock = new Mock<IAiClient>();
+        openAiAgentMock.Setup(o => o.ProviderName).Returns("Agente (OpenAI)");
+        openAiAgentMock
             .Setup(o => o.TryGeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<IReadOnlyList<DateOnly>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlanDraftContentDto?)null);
 
         var geminiMock = new Mock<IAiClient>();
-        geminiMock.Setup(g => g.ProviderName).Returns("Gemini");
+        geminiMock.Setup(g => g.ProviderName).Returns("Agente (Gemini)");
         geminiMock
             .Setup(g => g.TryGeneratePlanDraftAsync(It.IsAny<CreatePlanDraftRequestDto>(), It.IsAny<IReadOnlyList<DateOnly>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlanDraftContentDto?)null);
 
         var resilientService = new ResilientAiService(
-            providers: [ollamaMock.Object, geminiMock.Object, ruleClient],
+            providers: [openAiAgentMock.Object, geminiMock.Object, ruleClient],
             semanticValidator: null,
             responseCache: null,
             currentUser: null,

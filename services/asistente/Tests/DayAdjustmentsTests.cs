@@ -15,8 +15,8 @@ using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Agent;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Seguimiento;
 using Infrastructure.Services.Training;
@@ -230,38 +230,35 @@ public sealed class DayAdjustmentsTests
     }
 
     // =========================================================================
-    // CRITERIO 3: Ollama y Gemini apagados -> igual sale con justificación por reglas
+    // CRITERIO 3: Agentes OpenAI y Gemini apagados -> igual sale con justificación por reglas
     // =========================================================================
     [Fact]
-    public async Task Given_OllamaAndGeminiOff_When_PfRequestsDayAdjustmentProposal_Then_GeneratesDeterministicRuleProposalAndIsIdempotentForToday()
+    public async Task Given_OpenAiAndGeminiAgentsOff_When_PfRequestsDayAdjustmentProposal_Then_GeneratesDeterministicRuleProposalAndIsIdempotentForToday()
     {
         var store = new List<DayAdjustment>();
         var repo = new InMemoryTenantDayAdjustmentRepository(store, () => PfId);
         var uowMock = new Mock<IUnitOfWork>();
 
         var auditMock = new Mock<IAiAuditService>();
-        var ollamaHttp = new FakeHttpHandler(_ => throw new HttpRequestException("Ollama apagado"));
-        var geminiHttp = new FakeHttpHandler(_ => throw new HttpRequestException("Gemini apagado"));
+        var openAiMock = new Mock<IAiClient>();
+        openAiMock.Setup(c => c.ProviderName).Returns("Agente (OpenAI)");
+        openAiMock
+            .Setup(c => c.TryGenerateDayAdjustmentJustificationAsync(It.IsAny<IReadOnlyList<DayAdjustmentItemDto>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
 
-        var ollamaClient = new OllamaClient(
-            new HttpClient(ollamaHttp),
-            Options.Create(new OllamaOptions { BaseUrl = "http://localhost:11434", Model = "llama3", TimeoutSeconds = 1 }),
-            auditMock.Object,
-            NullLogger<OllamaClient>.Instance);
-
-        var geminiClient = new GeminiClient(
-            new HttpClient(geminiHttp),
-            Options.Create(new GeminiOptions { ApiKey = "", Model = "gemini-2.5-flash", TimeoutSeconds = 1 }),
-            auditMock.Object,
-            NullLogger<GeminiClient>.Instance);
+        var geminiMock = new Mock<IAiClient>();
+        geminiMock.Setup(c => c.ProviderName).Returns("Agente (Gemini)");
+        geminiMock
+            .Setup(c => c.TryGenerateDayAdjustmentJustificationAsync(It.IsAny<IReadOnlyList<DayAdjustmentItemDto>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
 
         var rulesClient = new RuleBasedAiClient(
             auditMock.Object,
             NullLogger<RuleBasedAiClient>.Instance);
 
         var aiService = new ResilientAiService(
-            ollamaClient,
-            geminiClient,
+            openAiMock.Object,
+            geminiMock.Object,
             rulesClient,
             NullLogger<ResilientAiService>.Instance);
 
