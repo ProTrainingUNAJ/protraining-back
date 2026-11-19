@@ -67,15 +67,18 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
     private readonly IWebPushClientWrapper? _customWebPushClient;
     private readonly TimeProvider _timeProvider;
     private readonly IAthletePurgeDispatcher? _customPurgeDispatcher;
+    private readonly IExternalServicePurgeClient? _customExternalPurgeClient;
 
     public EstructuraTestApplicationFactory(
         IWebPushClientWrapper? customWebPushClient = null,
         TimeProvider? customTimeProvider = null,
-        IAthletePurgeDispatcher? customPurgeDispatcher = null)
+        IAthletePurgeDispatcher? customPurgeDispatcher = null,
+        IExternalServicePurgeClient? customExternalPurgeClient = null)
     {
         _customWebPushClient = customWebPushClient;
         _timeProvider = customTimeProvider ?? TimeProvider.System;
         _customPurgeDispatcher = customPurgeDispatcher;
+        _customExternalPurgeClient = customExternalPurgeClient;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -142,6 +145,11 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 if (_customPurgeDispatcher is not null)
                 {
                     services.AddScoped<IAthletePurgeDispatcher>(_ => _customPurgeDispatcher);
+                }
+                else if (_customExternalPurgeClient is not null)
+                {
+                    services.AddScoped<IExternalServicePurgeClient>(_ => _customExternalPurgeClient);
+                    services.AddScoped<IAthletePurgeDispatcher, AthletePurgeDispatcher>();
                 }
                 else
                 {
