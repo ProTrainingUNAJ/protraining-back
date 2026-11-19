@@ -347,6 +347,9 @@ public class RoutineResolutionIntegrationTests
             Assert.Equal("Prensa de piernas", ex1.Name);
             Assert.Equal(150.0, ex1.Current1RmKg);
             Assert.Equal(120.0, ex1.WeightKg);
+            Assert.True(ex1.IsAdapted);
+            Assert.Equal("Sentadilla", ex1.OriginalExerciseName);
+            Assert.Equal("Variante aprobada por molestia de rodilla", ex1.AdaptationReason);
 
             // Atleta 2 ve intacta la rutina base del plantel
             Assert.False(payloadAthlete2.RoutineAdapted);
@@ -356,6 +359,9 @@ public class RoutineResolutionIntegrationTests
             Assert.Equal("Sentadilla", ex2.Name);
             Assert.Equal(100.0, ex2.Current1RmKg);
             Assert.Equal(80.0, ex2.WeightKg);
+            Assert.False(ex2.IsAdapted);
+            Assert.Null(ex2.OriginalExerciseName);
+            Assert.Null(ex2.AdaptationReason);
         }
     }
 }

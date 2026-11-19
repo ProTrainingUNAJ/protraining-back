@@ -2189,6 +2189,20 @@ components:
           description: Series o pasadas ya registradas hoy para este ejercicio (KAN-457).
           items:
             $ref: '#/components/schemas/TodayRoutinePerformedSet'
+        isAdapted:
+          type: boolean
+          description: Indica si el ejercicio fue adaptado con una variante personalizada o ajuste (KAN-471).
+          example: true
+        originalExerciseName:
+          type: string
+          nullable: true
+          description: Nombre del ejercicio original prescrito antes de aplicar la variante.
+          example: "Sentadilla"
+        adaptationReason:
+          type: string
+          nullable: true
+          description: Motivo o nota de la adaptación aplicada al ejercicio.
+          example: "Variante aprobada por molestia de rodilla"
 
     TodayRoutineResponse:
       type: object
