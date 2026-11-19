@@ -95,7 +95,7 @@ services:
       Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-true}
       Smtp__FromEmail: ${SMTP_FROM_EMAIL:-soporte.pro.training@gmail.com}
       Smtp__FromName: ${SMTP_FROM_NAME:-ProTraining}
-      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://127.0.0.1:5173/}
     ports: ["8081:8080"]
     depends_on:
       db-identidad: { condition: service_healthy }
