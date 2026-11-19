@@ -159,7 +159,7 @@ services:
       Ai__Agent__Providers__0__ApiKey: ${OPENAI_API_KEY:-}
       Ai__Agent__Providers__1__Name: Gemini
       Ai__Agent__Providers__1__BaseUrl: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
-      Ai__Agent__Providers__1__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
+      Ai__Agent__Providers__1__Model: ${GEMINI_MODEL:-gemini-3.8-flash}
       Ai__Agent__Providers__1__ApiKey: ${GEMINI_API_KEY:-}
       Worker__DailyOverloadAnalysis__Hour: 0
     ports: ["8085:8080"]

@@ -117,7 +117,7 @@ public sealed class GenericAgentAiClient : IAiClient
                 Model = _providerOptions.Model,
                 Messages = conversation,
                 Tools = toolCallsCount < _maxToolCalls && availableTools.Count > 0 ? availableTools : null,
-                ToolChoice = toolCallsCount >= _maxToolCalls ? "none" : null,
+                ToolChoice = null,
                 ResponseFormat = new OpenAiResponseFormat { Type = "json_object" },
                 Temperature = 0.2
             };
@@ -619,6 +619,17 @@ public sealed class GenericAgentAiClient : IAiClient
         else
         {
             pathPart = trimmed.TrimEnd('/');
+        }
+
+        // Si es el gateway de Azure OpenAI de la cátedra y no trae el path de deployments
+        if (trimmed.Contains("azure-api.net", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.Contains("/openai/deployments/", StringComparison.OrdinalIgnoreCase))
+        {
+            var apiVersionQuery = queryString.Contains("api-version", StringComparison.OrdinalIgnoreCase)
+                ? queryString
+                : (string.IsNullOrEmpty(queryString) ? "?api-version=2025-03-01-preview" : $"{queryString}&api-version=2025-03-01-preview");
+
+            return new Uri($"{pathPart}/openai/deployments/gpt-4.1-mini/chat/completions{apiVersionQuery}", UriKind.Absolute);
         }
 
         return new Uri($"{pathPart}/chat/completions{queryString}", UriKind.Absolute);
