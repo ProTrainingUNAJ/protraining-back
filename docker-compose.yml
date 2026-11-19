@@ -96,6 +96,7 @@ services:
       Smtp__FromEmail: ${SMTP_FROM_EMAIL:-soporte.pro.training@gmail.com}
       Smtp__FromName: ${SMTP_FROM_NAME:-ProTraining}
       Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://127.0.0.1:5173/}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
     ports: ["8081:8080"]
     depends_on:
       db-identidad: { condition: service_healthy }

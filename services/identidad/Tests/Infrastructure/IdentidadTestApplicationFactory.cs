@@ -110,6 +110,9 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<LoginUseCase>();
                 services.AddScoped<GoogleLoginUseCase>();
+                services.AddScoped<LinkGoogleAccountUseCase>();
+                services.AddScoped<UnlinkGoogleAccountUseCase>();
+                services.AddScoped<GetGoogleLinkStatusUseCase>();
                 services.AddScoped<RefreshUseCase>();
                 services.AddScoped<UpdateWhatsAppPhoneUseCase>();
                 services.AddScoped<GetPfContactUseCase>();

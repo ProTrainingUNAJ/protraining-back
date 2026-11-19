@@ -67,6 +67,9 @@ builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<GoogleLoginUseCase>();
+builder.Services.AddScoped<LinkGoogleAccountUseCase>();
+builder.Services.AddScoped<UnlinkGoogleAccountUseCase>();
+builder.Services.AddScoped<GetGoogleLinkStatusUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();

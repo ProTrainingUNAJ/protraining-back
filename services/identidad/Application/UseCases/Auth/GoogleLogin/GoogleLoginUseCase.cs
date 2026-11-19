@@ -11,7 +11,8 @@ using Microsoft.AspNetCore.Identity;
 namespace Application.UseCases.Auth.GoogleLogin;
 
 /// <summary>
-/// Caso de uso que autentica a un usuario existente mediante Google ID Token (KAN-541).
+/// Caso de uso que autentica únicamente a un usuario existente que ya tenga Google vinculado explícitamente (KAN-541).
+/// No crea usuarios nuevos ni vincula cuentas automáticamente por correo.
 /// </summary>
 public class GoogleLoginUseCase(
     UserManager<User> userManager,
@@ -19,7 +20,9 @@ public class GoogleLoginUseCase(
     IRefreshTokenRepository refreshTokenRepository,
     IGoogleTokenValidator googleTokenValidator)
 {
-    private const string GoogleProvider = "Google";
+    public const string GoogleProvider = "Google";
+    public const string UnlinkedAccountMessage =
+        "Esta cuenta de Google no está vinculada. Iniciá sesión con tu usuario y contraseña y vinculala desde tu perfil.";
 
     public async Task<LoginResponseDto> ExecuteAsync(
         GoogleLoginRequestDto request,
@@ -46,73 +49,31 @@ public class GoogleLoginUseCase(
             throw new InvalidCredentialsException("El token de Google no contiene la información de identidad requerida.");
         }
 
-        // 2. Exigir correo verificado por Google
         if (!payload.EmailVerified)
         {
             throw new InvalidCredentialsException("El correo de Google no está verificado.");
         }
 
-        var cleanEmail = payload.Email.Trim().ToLowerInvariant();
-
-        // 3. Buscar si la cuenta de Google ya está vinculada mediante su identificador estable (sub)
+        // 2. Buscar únicamente por vínculo explícito mediante Google Subject (sub)
         var user = await userManager.FindByLoginAsync(GoogleProvider, payload.Subject);
-
-        if (user != null)
+        if (user == null)
         {
-            // Validar que la cuenta esté activa y no bloqueada
-            if (!user.IsActive)
-            {
-                throw new InvalidCredentialsException("No encontramos una cuenta habilitada para iniciar sesión con Google.");
-            }
-
-            if (await userManager.IsLockedOutAsync(user))
-            {
-                throw new InvalidCredentialsException("La cuenta se encuentra bloqueada.");
-            }
-        }
-        else
-        {
-            // 4. Si no está vinculada, buscar por correo (vinculación automática controlada)
-            user = await userManager.FindByEmailAsync(cleanEmail);
-
-            // Restricción obligatoria: NO registrar usuarios nuevos automáticamente
-            if (user == null || !user.IsActive)
-            {
-                throw new InvalidCredentialsException("No encontramos una cuenta habilitada para iniciar sesión con Google.");
-            }
-
-            if (await userManager.IsLockedOutAsync(user))
-            {
-                throw new InvalidCredentialsException("La cuenta se encuentra bloqueada.");
-            }
-
-            // Verificar que el usuario no tenga ya otra identidad de Google vinculada
-            var existingLogins = await userManager.GetLoginsAsync(user);
-            var existingGoogleLogin = existingLogins.FirstOrDefault(l => l.LoginProvider == GoogleProvider);
-            if (existingGoogleLogin != null && existingGoogleLogin.ProviderKey != payload.Subject)
-            {
-                throw new InvalidCredentialsException("La cuenta ya está vinculada a otra identidad de Google.");
-            }
-
-            // Registrar el vínculo de forma persistente en user_logins
-            var addLoginResult = await userManager.AddLoginAsync(
-                user,
-                new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
-
-            if (!addLoginResult.Succeeded)
-            {
-                throw new DomainException("No se pudo vincular la cuenta de Google.");
-            }
+            throw new InvalidCredentialsException(UnlinkedAccountMessage);
         }
 
-        // 5. Reiniciar contador de intentos fallidos
+        // 3. Validar estado de cuenta (activo, no bloqueado, y email confirmado para PF)
+        var roles = await AccountAccessValidator.EnsureAccountCanAuthenticateAsync(
+            userManager,
+            user,
+            UnlinkedAccountMessage);
+
+        // 4. Reiniciar contador de intentos fallidos
         await userManager.ResetAccessFailedCountAsync(user);
 
-        // 6. Obtener roles y emitir JWT propio de ProTraining
-        var roles = await userManager.GetRolesAsync(user);
+        // 5. Emitir JWT propio de ProTraining (con sub, role y pf_id internos)
         var generatedToken = jwtTokenGenerator.GenerateToken(user, roles);
 
-        // 7. Generar y persistir refresh token de 30 días
+        // 6. Generar y persistir refresh token de 30 días
         var deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
             ? Guid.NewGuid().ToString()
             : request.DeviceId.Trim();
@@ -130,7 +91,6 @@ public class GoogleLoginUseCase(
         await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
         await refreshTokenRepository.SaveChangesAsync(cancellationToken);
 
-        // 8. Retornar respuesta compatible con el login tradicional
         return new LoginResponseDto(
             AccessToken: generatedToken.AccessToken,
             RefreshToken: refreshTokenValue,

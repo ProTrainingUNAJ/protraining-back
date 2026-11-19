@@ -24,6 +24,9 @@ namespace API.Controllers;
 public class AuthController(
     LoginUseCase loginUseCase,
     GoogleLoginUseCase googleLoginUseCase,
+    LinkGoogleAccountUseCase linkGoogleAccountUseCase,
+    UnlinkGoogleAccountUseCase unlinkGoogleAccountUseCase,
+    GetGoogleLinkStatusUseCase getGoogleLinkStatusUseCase,
     RefreshUseCase refreshTokenUseCase,
     RegisterByInvitationUseCase registerByInvitationUseCase,
     RegisterPfUseCase registerPfUseCase,
@@ -52,6 +55,71 @@ public class AuthController(
         CancellationToken cancellationToken)
     {
         var response = await googleLoginUseCase.ExecuteAsync(request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Consulta si el usuario autenticado tiene una cuenta de Google vinculada (KAN-541).
+    /// </summary>
+    [HttpGet("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetGoogleLinkStatus()
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await getGoogleLinkStatusUseCase.ExecuteAsync(currentUser.UserId.Value);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Vincula explícitamente una cuenta de Google a la cuenta ProTraining autenticada,
+    /// exigiendo reautenticación mediante contraseña actual (KAN-541).
+    /// </summary>
+    [HttpPost("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> LinkGoogleAccount(
+        [FromBody] LinkGoogleAccountRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await linkGoogleAccountUseCase.ExecuteAsync(
+            currentUser.UserId.Value,
+            request,
+            cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Desvincula la cuenta de Google del usuario autenticado exigiendo contraseña actual (KAN-541).
+    /// </summary>
+    [HttpDelete("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UnlinkGoogleAccount([FromBody] UnlinkGoogleAccountRequestDto request)
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await unlinkGoogleAccountUseCase.ExecuteAsync(currentUser.UserId.Value, request);
         return Ok(response);
     }
 
