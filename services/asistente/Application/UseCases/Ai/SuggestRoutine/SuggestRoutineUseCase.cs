@@ -28,23 +28,7 @@ public sealed class SuggestRoutineUseCase(
         if (request.AthleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es obligatorio.");
 
-        if (string.IsNullOrWhiteSpace(request.Goal))
-            throw new DomainException("El objetivo de entrenamiento es obligatorio.");
-
-        var previousDecisions = request.PreviousPfDecisions;
-        if (previousDecisions is null && pfDecisionRepository != null)
-        {
-            var decisions = await pfDecisionRepository.GetRecentAsync(
-                request.AthleteId,
-                cancellationToken: cancellationToken);
-            previousDecisions = PfDecisionContextMapper.Map(decisions);
-        }
-
-        var normalizedRequest = request with
-        {
-            Goal = request.Goal.Trim(),
-            PreviousPfDecisions = previousDecisions
-        };
+        var normalizedRequest = await BuildNormalizedRequestAsync(request, cancellationToken);
 
         var aiResponse = await aiService.SuggestRoutineAsync(normalizedRequest, cancellationToken);
 
@@ -74,36 +58,165 @@ public sealed class SuggestRoutineUseCase(
 
         if (request.BaseExercises is { Count: > 0 } baseExercises)
         {
-            context = await EnrichContextForBaseExercisesAsync(context, baseExercises, cancellationToken);
+            context = await EnrichContextForExercisesAsync(context, baseExercises, cancellationToken);
             return await BuildAdaptedResponseFromBaseRoutineAsync(request, baseExercises, context, cancellationToken);
         }
 
-        var response = await ExecuteAsync(request with { AdaptationContext = context }, cancellationToken);
-        var baseWarningList = response.AdaptationWarnings is { Count: > 0 }
-            ? response.AdaptationWarnings.ToList()
+        var normalizedRequest = (await BuildNormalizedRequestAsync(request, cancellationToken)) with
+        {
+            AdaptationContext = context
+        };
+
+        var aiResponse = await aiService.SuggestRoutineAsync(normalizedRequest, cancellationToken);
+
+        // Post-chequeo biomecánico sobre los ejercicios propuestos por la IA (por si propuso ejercicios sin récord 1RM previo)
+        if (trainingPlanServiceClient is not null &&
+            context.ActiveInjuries.Count > 0 &&
+            aiResponse.Exercises.Count > 0)
+        {
+            var enrichedContext = await EnrichContextForExercisesAsync(context, aiResponse.Exercises, cancellationToken);
+            if (enrichedContext.Restrictions.Count > context.Restrictions.Count)
+            {
+                context = enrichedContext;
+                aiResponse = ApplyAdditionalRestrictions(aiResponse, context);
+            }
+        }
+
+        var persistedDraftId = await TryPersistDraftAsync(
+            aiResponse.AthleteId,
+            normalizedRequest.Goal,
+            aiResponse.ProposedTitle,
+            aiResponse.JustificationSummary,
+            aiResponse.ProviderUsed,
+            aiResponse.Exercises,
+            cancellationToken);
+
+        var baseWarningList = aiResponse.AdaptationWarnings is { Count: > 0 }
+            ? aiResponse.AdaptationWarnings.ToList()
             : context.Restrictions.Count == 0
                 ? new List<string>()
                 : new List<string> { "La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta." };
 
         foreach (var estimatedWarning in BuildEstimatedAndMissingRecordWarnings(
                      context.CurrentRecords,
-                     response.BaseExercises ?? response.Exercises,
-                     response.Exercises))
+                     aiResponse.BaseExercises ?? aiResponse.Exercises,
+                     aiResponse.Exercises))
         {
             if (!baseWarningList.Contains(estimatedWarning))
                 baseWarningList.Add(estimatedWarning);
         }
 
-        return response with
+        return aiResponse with
         {
-            BaseExercises = response.BaseExercises ?? response.Exercises,
+            Id = persistedDraftId ?? aiResponse.Id,
+            BaseExercises = aiResponse.BaseExercises ?? aiResponse.Exercises,
             AdaptationWarnings = baseWarningList
         };
     }
 
-    private async Task<AthleteAdaptationContextDto> EnrichContextForBaseExercisesAsync(
+    private async Task<RoutineSuggestionRequestDto> BuildNormalizedRequestAsync(
+        RoutineSuggestionRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Goal))
+            throw new DomainException("El objetivo de entrenamiento es obligatorio.");
+
+        var previousDecisions = request.PreviousPfDecisions;
+        if (previousDecisions is null && pfDecisionRepository != null)
+        {
+            var decisions = await pfDecisionRepository.GetRecentAsync(
+                request.AthleteId,
+                cancellationToken: cancellationToken);
+            previousDecisions = PfDecisionContextMapper.Map(decisions);
+        }
+
+        return request with
+        {
+            Goal = request.Goal.Trim(),
+            PreviousPfDecisions = previousDecisions
+        };
+    }
+
+    private static RoutineSuggestionResponseDto ApplyAdditionalRestrictions(
+        RoutineSuggestionResponseDto response,
+        AthleteAdaptationContextDto context)
+    {
+        var (updatedExercises, changes, warnings, adaptedAny) = AdaptRestrictedExercises(
+            response.Exercises,
+            context,
+            response.AdaptationChanges,
+            response.AdaptationWarnings);
+
+        if (!adaptedAny)
+            return response;
+
+        return response with
+        {
+            Exercises = updatedExercises,
+            BaseExercises = response.BaseExercises ?? response.Exercises.ToList(),
+            WasAdapted = true,
+            AdaptationWarnings = warnings,
+            AdaptationChanges = changes
+        };
+    }
+
+    private static (List<SuggestedExerciseDto> Exercises, List<AdaptationChangeDto> Changes, List<string> Warnings, bool AdaptedAny)
+        AdaptRestrictedExercises(
+            IReadOnlyList<SuggestedExerciseDto> sourceExercises,
+            AthleteAdaptationContextDto context,
+            IReadOnlyList<AdaptationChangeDto>? existingChanges = null,
+            IReadOnlyList<string>? existingWarnings = null)
+    {
+        var restrictionsByExercise = context.Restrictions
+            .Where(r => r.Substitutes.Count > 0)
+            .GroupBy(r => r.ExerciseId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var adaptedExercises = new List<SuggestedExerciseDto>(sourceExercises.Count);
+        var changes = existingChanges?.ToList() ?? [];
+        var warnings = existingWarnings?.ToList() ?? [];
+        var adaptedAny = false;
+
+        foreach (var exercise in sourceExercises)
+        {
+            if (exercise.ExerciseId is { } exId &&
+                exId != Guid.Empty &&
+                restrictionsByExercise.TryGetValue(exId, out var restriction))
+            {
+                var substitute = restriction.Substitutes[0];
+                adaptedExercises.Add(exercise with
+                {
+                    ExerciseId = substitute.ExerciseId,
+                    ExerciseName = substitute.Name,
+                    IsReference = false
+                });
+
+                var reason = BuildAdaptationReason(restriction, substitute.Name);
+                if (!warnings.Contains(reason))
+                    warnings.Add(reason);
+
+                changes.Add(new AdaptationChangeDto(
+                    exercise.ExerciseId,
+                    exercise.ExerciseName,
+                    substitute.ExerciseId,
+                    substitute.Name,
+                    restriction.Zone ?? string.Empty,
+                    reason,
+                    restriction.Substitutes));
+                adaptedAny = true;
+            }
+            else
+            {
+                adaptedExercises.Add(exercise);
+            }
+        }
+
+        return (adaptedExercises, changes, warnings, adaptedAny);
+    }
+
+    private async Task<AthleteAdaptationContextDto> EnrichContextForExercisesAsync(
         AthleteAdaptationContextDto context,
-        IReadOnlyList<SuggestedExerciseDto> baseExercises,
+        IReadOnlyList<SuggestedExerciseDto> targetExercises,
         CancellationToken cancellationToken)
     {
         if (trainingPlanServiceClient is null || context.ActiveInjuries.Count == 0)
@@ -113,7 +226,7 @@ public sealed class SuggestRoutineUseCase(
             .Select(r => r.ExerciseId)
             .ToHashSet();
 
-        var missingExerciseIds = baseExercises
+        var missingExerciseIds = targetExercises
             .Where(e => e.ExerciseId.HasValue && e.ExerciseId.Value != Guid.Empty && !existingRestrictedIds.Contains(e.ExerciseId.Value))
             .Select(e => e.ExerciseId!.Value)
             .Distinct()
@@ -230,46 +343,7 @@ public sealed class SuggestRoutineUseCase(
         AthleteAdaptationContextDto context,
         CancellationToken cancellationToken)
     {
-        var restrictionsByExercise = context.Restrictions
-            .Where(r => r.Substitutes.Count > 0)
-            .GroupBy(r => r.ExerciseId)
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var adaptedExercises = new List<SuggestedExerciseDto>(baseExercises.Count);
-        var changes = new List<AdaptationChangeDto>();
-        var warnings = new List<string>();
-
-        foreach (var baseEx in baseExercises)
-        {
-            if (baseEx.ExerciseId is { } exId &&
-                exId != Guid.Empty &&
-                restrictionsByExercise.TryGetValue(exId, out var restriction))
-            {
-                var substitute = restriction.Substitutes[0];
-                var adapted = baseEx with
-                {
-                    ExerciseId = substitute.ExerciseId,
-                    ExerciseName = substitute.Name,
-                    IsReference = false
-                };
-                adaptedExercises.Add(adapted);
-
-                var reason = BuildAdaptationReason(restriction, substitute.Name);
-                warnings.Add(reason);
-                changes.Add(new AdaptationChangeDto(
-                    baseEx.ExerciseId,
-                    baseEx.ExerciseName,
-                    substitute.ExerciseId,
-                    substitute.Name,
-                    restriction.Zone ?? string.Empty,
-                    reason,
-                    restriction.Substitutes));
-            }
-            else
-            {
-                adaptedExercises.Add(baseEx);
-            }
-        }
+        var (adaptedExercises, changes, warnings, _) = AdaptRestrictedExercises(baseExercises, context);
 
         if (warnings.Count == 0 && context.Restrictions.Count > 0)
         {
