@@ -30,6 +30,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<RecordProposal> RecordProposals => Set<RecordProposal>();
     public DbSet<ExerciseVideo> ExerciseVideos => Set<ExerciseVideo>();
     public DbSet<AthleteSessionAdjustment> AthleteSessionAdjustments => Set<AthleteSessionAdjustment>();
+    public DbSet<AthleteVariant> AthleteVariants => Set<AthleteVariant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

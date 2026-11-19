@@ -145,6 +145,67 @@ namespace Infrastructure.Data.Migrations
                     b.ToTable("athlete_session_adjustments", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.AthleteVariant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_approved");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OriginalExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_exercise_id");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("SubstituteExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("substitute_exercise_id");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "OriginalExerciseId", "IsApproved", "IsActive")
+                        .HasDatabaseName("IX_athlete_variants_athlete_original_status");
+
+                    b.ToTable("athlete_variants", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Exercise", b =>
                 {
                     b.Property<Guid>("Id")

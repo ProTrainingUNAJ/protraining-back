@@ -341,5 +341,41 @@ public class RecordPerformedSetsCommandHandlerTests
         var ex = await Assert.ThrowsAsync<DomainException>(() => handler.Handle(command));
         Assert.Equal("El peso no puede ser negativo.", ex.Message);
     }
+
+    [Fact]
+    public async Task Given_AthleteWithActiveApprovedVariant_When_RecordingSetsForSubstitute_Then_Succeeds()
+    {
+        var substituteId = Guid.NewGuid();
+        var today = Domain.Common.ArgentinaTime.Today;
+        var variant = AthleteVariant.Create(_athleteId, _exerciseId, substituteId, true, true, today.AddDays(-3));
+
+        var variantRepoMock = new Mock<IAthleteVariantRepository>();
+        variantRepoMock
+            .Setup(r => r.GetActiveApprovedByAthleteAsync(_athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([variant]);
+
+        var handler = new RecordPerformedSetsCommandHandler(
+            _structureClientMock.Object,
+            _sessionRepoMock.Object,
+            _athleteRecordRepoMock.Object,
+            _performedSetRepoMock.Object,
+            _proposalRepoMock.Object,
+            _unitOfWorkMock.Object,
+            variantRepository: variantRepoMock.Object);
+
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto { ExerciseId = substituteId, SetNumber = 1, Weight = 120m, Reps = 8 }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        _performedSetRepoMock.Verify(
+            r => r.AddRangeAsync(
+                It.Is<IEnumerable<PerformedSet>>(sets => sets.Any(s => s.ExerciseId == substituteId && s.Weight == 120m)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
 
