@@ -54,7 +54,7 @@ public sealed class SmtpEmailSender(
     {
         var baseUrl = configuration["Frontend:BaseUrl"]
             ?? configuration["Frontend__BaseUrl"]
-            ?? "http://localhost:3000";
+            ?? "http://127.0.0.1:5173";
 
         var encodedEmail = Uri.EscapeDataString(toEmail);
         var encodedToken = Uri.EscapeDataString(resetToken);
@@ -155,10 +155,11 @@ public sealed class SmtpEmailSender(
     {
         var baseUrl = configuration["Frontend:BaseUrl"]
             ?? configuration["Frontend__BaseUrl"]
-            ?? "http://localhost:3000";
+            ?? "http://127.0.0.1:5173";
 
         var encodedToken = Uri.EscapeDataString(confirmationToken);
-        var confirmLink = $"{baseUrl.TrimEnd('/')}/confirmar-email?userId={userId}&token={encodedToken}";
+        var encodedEmail = Uri.EscapeDataString(toEmail);
+        var confirmLink = $"{baseUrl.TrimEnd('/')}/confirmar-email?userId={userId}&token={encodedToken}&email={encodedEmail}";
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(_options.FromName, _options.FromEmail));
