@@ -513,7 +513,8 @@ public class GetTodayRoutineQueryHandlerTests
             legPress.Id,
             isApproved: true,
             isActive: true,
-            validFrom: today.AddDays(-7));
+            validFrom: today.AddDays(-7),
+            note: "Variante aprobada por molestia de rodilla");
 
         var variantRepoMock = new Mock<IAthleteVariantRepository>();
         variantRepoMock
@@ -557,12 +558,18 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.Equal(legPress.Id, lucasEx.ExerciseId);
         Assert.Equal("Prensa de piernas", lucasEx.Name);
         Assert.Equal(120.0, lucasEx.WeightKg);
+        Assert.True(lucasEx.IsAdapted);
+        Assert.Equal("Sentadilla", lucasEx.OriginalExerciseName);
+        Assert.Equal("Variante aprobada por molestia de rodilla", lucasEx.AdaptationReason);
 
         Assert.False(mateoRoutine.RoutineAdapted);
         var mateoEx = Assert.Single(mateoRoutine.Exercises);
         Assert.Equal(squat.Id, mateoEx.ExerciseId);
         Assert.Equal("Sentadilla", mateoEx.Name);
         Assert.Equal(80.0, mateoEx.WeightKg);
+        Assert.False(mateoEx.IsAdapted);
+        Assert.Null(mateoEx.OriginalExerciseName);
+        Assert.Null(mateoEx.AdaptationReason);
     }
 
     [Fact]
@@ -628,5 +635,8 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.Equal(hackSquat.Id, ex.ExerciseId);
         Assert.Equal("Sentadilla Hack", ex.Name);
         Assert.Equal(80.0, ex.WeightKg);
+        Assert.True(ex.IsAdapted);
+        Assert.Equal("Sentadilla", ex.OriginalExerciseName);
+        Assert.Equal("Ajuste puntual de hoy", ex.AdaptationReason);
     }
 }
