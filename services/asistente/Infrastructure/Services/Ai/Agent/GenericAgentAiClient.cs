@@ -54,7 +54,7 @@ public sealed class GenericAgentAiClient : IAiClient
         _aiAuditService = aiAuditService ?? throw new ArgumentNullException(nameof(aiAuditService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _catalogService = catalogService;
-        _maxToolCalls = maxToolCalls > 0 ? maxToolCalls : 6;
+        _maxToolCalls = maxToolCalls > 0 ? maxToolCalls : 10;
     }
 
     public string ProviderName =>
@@ -183,33 +183,43 @@ public sealed class GenericAgentAiClient : IAiClient
             var assistantMessage = choice.Message;
 
             // Verificar si el modelo solicitó invocar herramientas MCP
-            if (assistantMessage.ToolCalls is { Count: > 0 } && toolCallsCount < _maxToolCalls)
+            if (assistantMessage.ToolCalls is { Count: > 0 })
             {
                 conversation.Add(assistantMessage);
 
                 foreach (var toolCall in assistantMessage.ToolCalls)
                 {
-                    if (toolCallsCount >= _maxToolCalls)
+                    if (toolCallsCount < _maxToolCalls)
                     {
-                        _logger.LogInformation("Se alcanzó el límite de {Limit} llamadas a tools MCP por pedido.", _maxToolCalls);
-                        break;
+                        var toolStopwatch = Stopwatch.StartNew();
+                        var toolResult = await ExecuteToolCallAsync(toolCall, cancellationToken);
+                        toolStopwatch.Stop();
+                        toolCallsCount++;
+
+                        conversation.Add(OpenAiChatMessage.CreateTool(toolCall.Id, toolResult));
+
+                        // Registro auditable de la ejecución de la herramienta MCP
+                        await SafeAuditAsync(
+                            prompt: $"ToolCall: {toolCall.Function.Name}({toolCall.Function.Arguments})",
+                            latencyMs: toolStopwatch.ElapsedMilliseconds,
+                            isValid: true,
+                            validationResult: $"McpTool:{toolCall.Function.Name}",
+                            response: toolResult,
+                            athleteId: request.AthleteId);
                     }
+                    else
+                    {
+                        // Si se superó el límite, respondemos a la herramienta informando que proceda al plan final,
+                        // cumpliendo estrictamente el protocolo de OpenAI (cada tool_call_id debe tener respuesta).
+                        _logger.LogInformation(
+                            "Límite de {Limit} llamadas a tools alcanzado. Notificando a la tool {ToolId} para proceder.",
+                            _maxToolCalls,
+                            toolCall.Id);
 
-                    var toolStopwatch = Stopwatch.StartNew();
-                    var toolResult = await ExecuteToolCallAsync(toolCall, cancellationToken);
-                    toolStopwatch.Stop();
-                    toolCallsCount++;
-
-                    conversation.Add(OpenAiChatMessage.CreateTool(toolCall.Id, toolResult));
-
-                    // Registro auditable de la ejecución de la herramienta MCP
-                    await SafeAuditAsync(
-                        prompt: $"ToolCall: {toolCall.Function.Name}({toolCall.Function.Arguments})",
-                        latencyMs: toolStopwatch.ElapsedMilliseconds,
-                        isValid: true,
-                        validationResult: $"McpTool:{toolCall.Function.Name}",
-                        response: toolResult,
-                        athleteId: request.AthleteId);
+                        conversation.Add(OpenAiChatMessage.CreateTool(
+                            toolCall.Id,
+                            "{\"status\": \"limit_reached\", \"message\": \"Límite de herramientas alcanzado. Proceda a generar el JSON final del plan de entrenamiento con los ejercicios disponibles.\"}"));
+                    }
                 }
 
                 continue;
@@ -262,6 +272,24 @@ public sealed class GenericAgentAiClient : IAiClient
                 var directContent = PlanDraftMapper.DeserializeContent(cleanedJson);
                 if (directContent?.Weeks is { Count: > 0 })
                 {
+                    // Asegurar IsReference = true para cualquier ejercicio sin ExerciseId válido (KAN-467)
+                    var normalizedWeeks = directContent.Weeks.Select(w => new PlanDraftWeekDto(
+                        w.WeekNumber,
+                        (w.Sessions ?? []).Select(s => new PlanDraftSessionDto(
+                            s.Name,
+                            s.DayOfWeek,
+                            s.Order,
+                            s.CoachNotes,
+                            (s.Exercises ?? []).Select(e =>
+                                (!e.ExerciseId.HasValue || e.ExerciseId.Value == Guid.Empty)
+                                    ? e with { IsReference = true }
+                                    : e
+                            ).ToList()
+                        )).ToList()
+                    )).ToList();
+
+                    directContent = directContent with { Weeks = normalizedWeeks };
+
                     await SafeAuditAsync(
                         prompt: $"PlanDraft: {request.Goal}",
                         latencyMs: overallStopwatch.ElapsedMilliseconds,
@@ -599,32 +627,66 @@ public sealed class GenericAgentAiClient : IAiClient
         var targetUri = ResolveChatCompletionsUri(_providerOptions.BaseUrl);
         var jsonContent = JsonSerializer.Serialize(payload, JsonOptions);
 
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUri)
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            Content = new StringContent(jsonContent, Encoding.UTF8, "application/json")
-        };
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUri)
+            {
+                Content = new StringContent(jsonContent, Encoding.UTF8, "application/json")
+            };
 
-        if (!string.IsNullOrWhiteSpace(_providerOptions.ApiKey))
-        {
-            requestMessage.Headers.TryAddWithoutValidation("api-key", _providerOptions.ApiKey);
-            requestMessage.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_providerOptions.ApiKey}");
+            if (!string.IsNullOrWhiteSpace(_providerOptions.ApiKey))
+            {
+                requestMessage.Headers.TryAddWithoutValidation("api-key", _providerOptions.ApiKey);
+                requestMessage.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_providerOptions.ApiKey}");
+            }
+
+            using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < maxAttempts)
+            {
+                var rateLimitBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                // Parsear los segundos exactos pedidos por el gateway de Azure (ej. "Try again in 22 seconds.")
+                var delaySeconds = 8;
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    rateLimitBody,
+                    @"Try again in (\d+) seconds",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var parsedSec))
+                {
+                    delaySeconds = Math.Clamp(parsedSec + 1, 1, 30);
+                }
+
+                _logger.LogWarning(
+                    "El proveedor {Provider} respondió con estado HTTP 429 (límite de tokens por ventana). Mensaje: {ErrorBody}. Esperando {Seconds}s antes del reintento (intento {Attempt}/{MaxAttempts})...",
+                    ProviderName,
+                    rateLimitBody,
+                    delaySeconds,
+                    attempt,
+                    maxAttempts);
+
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+                continue;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning(
+                    "El proveedor {Provider} respondió con estado HTTP {StatusCode}: {ErrorBody}",
+                    ProviderName,
+                    (int)response.StatusCode,
+                    errorBody);
+                return null;
+            }
+
+            var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+            return JsonSerializer.Deserialize<OpenAiChatResponse>(responseString, JsonOptions);
         }
 
-        using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning(
-                "El proveedor {Provider} respondió con estado HTTP {StatusCode}: {ErrorBody}",
-                ProviderName,
-                (int)response.StatusCode,
-                errorBody);
-            return null;
-        }
-
-        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<OpenAiChatResponse>(responseString, JsonOptions);
+        return null;
     }
 
     private async Task<string> ExecuteToolCallAsync(

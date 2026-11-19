@@ -9,9 +9,9 @@ public sealed class AgentOptions
     public const string SectionName = "Ai:Agent";
 
     /// <summary>
-    /// Cantidad máxima permitida de ejecuciones de herramientas MCP por pedido (obligatorio: 6).
+    /// Cantidad máxima permitida de ejecuciones de herramientas MCP por pedido (default: 10).
     /// </summary>
-    public int MaxToolCalls { get; set; } = 6;
+    public int MaxToolCalls { get; set; } = 10;
 
     /// <summary>
     /// Tiempo límite total por defecto en segundos para la interacción con el proveedor (default: 40s).
