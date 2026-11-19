@@ -34,6 +34,22 @@ public static class PlanDraftMapper
     {
         var content = parsedContent ?? DeserializeContent(draft.Content);
 
+        // Asegurar que cualquier ejercicio sin ID oficial se marque como referencia (KAN-467)
+        var normalizedWeeks = (content.Weeks ?? []).Select(w => new PlanDraftWeekDto(
+            w.WeekNumber,
+            (w.Sessions ?? []).Select(s => new PlanDraftSessionDto(
+                s.Name,
+                s.DayOfWeek,
+                s.Order,
+                s.CoachNotes,
+                (s.Exercises ?? []).Select(e =>
+                    (!e.ExerciseId.HasValue || e.ExerciseId.Value == Guid.Empty)
+                        ? e with { IsReference = true }
+                        : e
+                ).ToList()
+            )).ToList()
+        )).ToList();
+
         return new PlanDraftResponseDto(
             Id: draft.Id,
             CategoryId: draft.CategoryId,
@@ -46,7 +62,7 @@ public static class PlanDraftMapper
             Name: content.Name,
             Objective: content.Objective,
             JustificationSummary: content.JustificationSummary,
-            Weeks: content.Weeks,
+            Weeks: normalizedWeeks,
             Warnings: [.. ProviderWarnings(draft.Provider), .. warnings ?? []]
         );
     }

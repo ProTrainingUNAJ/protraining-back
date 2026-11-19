@@ -20,7 +20,9 @@ public static class AgentPromptBuilder
            - Tenés a tu disposición herramientas MCP conectadas a la base oficial de ejercicios de ProTraining.
            - Antes de armar la planificación, utilizá la herramienta 'BuscarEjercicios' filtrando por músculo, equipamiento o nombre para obtener ejercicios válidos con sus IDs reales (GUID).
            - Si existen zonas de dolor o lesión reportadas, utilizá 'ObtenerRestricciones' y 'ObtenerSustitutos' para asegurar ejercicios biomecánicamente seguros.
-           - Nunca inventes GUIDs de ejercicios; utilizá los IDs devueltos por las herramientas.
+           - Para ejercicios oficiales del catálogo, utilizá siempre los IDs (GUID) devueltos por las herramientas.
+           - Si el preparador físico solicita explícitamente ejercicios que no existen en el catálogo tras buscarlos con la herramienta (ej. Curl Nórdico, Plancha Copenhagen, etc.), asignales "exerciseId": null en el JSON y su "exerciseName" solicitado. ProTraining los creará automáticamente como ejercicios de referencia nuevos (isReference).
+           - Nunca inventes GUIDs falsos de ejercicios; si no existe en el catálogo, poné "exerciseId": null.
 
         2. METODOLOGÍA DEPORTIVA:
            - Diseñá las sesiones modelo de la primera semana respetando la secuencia funcional:
@@ -52,8 +54,8 @@ public static class AgentPromptBuilder
                      "coachNotes": "Indicaciones para el preparador físico",
                      "exercises": [
                        {
-                         "exerciseId": "GUID_DEL_CATALOGO",
-                         "exerciseName": "Nombre oficial devuelto por la tool",
+                         "exerciseId": "GUID_DEL_CATALOGO (o null si es nuevo)",
+                         "exerciseName": "Nombre oficial o solicitado",
                          "order": 1,
                          "sets": 4,
                          "reps": 6,

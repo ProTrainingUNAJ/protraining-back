@@ -86,7 +86,9 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
                 {
                     a.Id,
                     a.PfId,
-                    a.Active
+                    a.Active,
+                    a.FirstName,
+                    a.LastName
                 })
                 .ToListAsync(cancellationToken);
 
@@ -128,7 +130,10 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
                     a.PfId,
                     catIds.Count > 0 ? catIds[0] : null,
                     a.Active,
-                    catIds);
+                    catIds,
+                    a.FirstName,
+                    a.LastName,
+                    $"{a.FirstName} {a.LastName}".Trim());
             }).ToList();
         });
 }
