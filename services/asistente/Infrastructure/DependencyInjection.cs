@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<IPreventiveAlertRepository, Infrastructure.Data.Repositories.PreventiveAlertRepository>();
         services.AddScoped<IDayAdjustmentRepository, Infrastructure.Data.Repositories.DayAdjustmentRepository>();
         services.AddScoped<IAthleteRecommendationRepository, Infrastructure.Data.Repositories.AthleteRecommendationRepository>();
+        services.AddScoped<IAsistentePurgeRepository, Infrastructure.Data.Repositories.AsistentePurgeRepository>();
         services.AddScoped<IMatchDayLoadValidator, Application.Common.PlanDrafts.MatchDayLoadValidator>();
 
         services.AddMemoryCache();
