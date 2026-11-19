@@ -536,19 +536,26 @@ public sealed class ExerciseSemanticValidatorTests
         }
         """;
 
-        var handler = new TestHttpMessageHandler(fakeAiResponseJson);
-        var httpClient = new HttpClient(handler);
-        var ollamaOptions = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Ollama.OllamaOptions { BaseUrl = "http://localhost:11434", Model = "llama3.2:3b", TimeoutSeconds = 10 });
-        var auditService = new Mock<Application.Interfaces.Services.IAiAuditService>().Object;
+        var primaryMock = new Mock<IAiClient>();
+        primaryMock.Setup(p => p.ProviderName).Returns("Agente (OpenAI)");
+        primaryMock.Setup(p => p.TrySuggestRoutineAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RoutineSuggestionResponseDto(
+                athleteId,
+                "Fuerza Piernas",
+                "Sobrecarga progresiva",
+                [new SuggestedExerciseDto("Sentadilla trasera con barra", 4, 6, 80.0m, ExerciseId: nonCatalogedId)],
+                "Agente (OpenAI)"
+            ));
 
-        var ollamaClient = new Infrastructure.Services.Ai.Ollama.OllamaClient(httpClient, ollamaOptions, auditService, NullLogger<Infrastructure.Services.Ai.Ollama.OllamaClient>.Instance);
-        var geminiOptions = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Gemini.GeminiOptions { ApiKey = "", Model = "gemini-1.5-flash" });
-        var geminiClient = new Infrastructure.Services.Ai.Gemini.GeminiClient(new HttpClient(), geminiOptions, auditService, NullLogger<Infrastructure.Services.Ai.Gemini.GeminiClient>.Instance);
+        var secondaryMock = new Mock<IAiClient>();
+        secondaryMock.Setup(s => s.ProviderName).Returns("Agente (Gemini)");
+
+        var auditService = new Mock<Application.Interfaces.Services.IAiAuditService>().Object;
         var rulesClient = new RuleBasedAiClient(auditService, NullLogger<RuleBasedAiClient>.Instance);
 
         var resilientService = new Infrastructure.Services.Ai.ResilientAiService(
-            ollamaClient,
-            geminiClient,
+            primaryMock.Object,
+            secondaryMock.Object,
             rulesClient,
             _validator,
             NullLogger<Infrastructure.Services.Ai.ResilientAiService>.Instance
@@ -558,7 +565,7 @@ public sealed class ExerciseSemanticValidatorTests
         var result = await resilientService.SuggestRoutineAsync(request);
 
         // Assert: ResilientAiService retorna la rutina con el ejercicioId corregido al correspondiente del catálogo
-        Assert.Equal("Ollama", result.ProviderUsed);
+        Assert.Equal("Agente (OpenAI)", result.ProviderUsed);
         var exercise = Assert.Single(result.Exercises);
         Assert.NotNull(exercise.ExerciseId);
         Assert.NotEqual(nonCatalogedId, exercise.ExerciseId);

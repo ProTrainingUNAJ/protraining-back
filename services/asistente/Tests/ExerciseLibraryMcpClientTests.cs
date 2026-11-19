@@ -13,7 +13,6 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Services.Ai;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Infrastructure.Services.Mcp;
 using Microsoft.AspNetCore.Builder;

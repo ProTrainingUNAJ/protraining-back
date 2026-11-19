@@ -12,7 +12,6 @@ using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +19,8 @@ namespace Infrastructure.Services.Ai;
 
 /// <summary>
 /// Orquesta la cadena resiliente de proveedores de IA para el Asistente:
-/// 1. Ollama (modelo local en Docker)
-/// 2. Google Gemini (respaldo en la nube)
+/// 1. Agente de IA con OpenAI (Azure Gateway gpt-4.1-mini)
+/// 2. Agente de IA con Google Gemini (respaldo en la nube)
 /// 3. Motor de reglas determinísticas locales (respaldo final garantizado)
 /// Asegura alta disponibilidad, tiempos límites independientes por proveedor, validación semántica de ejercicios y registro del origen.
 /// </summary>
@@ -38,51 +37,51 @@ public sealed class ResilientAiService : IAiService
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, null, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
@@ -90,13 +89,13 @@ public sealed class ResilientAiService : IAiService
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
@@ -106,7 +105,7 @@ public sealed class ResilientAiService : IAiService
         IAiQuotaService? quotaService,
         ILogger<ResilientAiService> logger,
         IStructureAthleteClient? structureAthleteClient = null)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient)
     {
     }
 
@@ -363,7 +362,7 @@ public sealed class ResilientAiService : IAiService
                 }
 
                 // 2. Almacenar la propuesta validada en caché en memoria (KAN-368)
-                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (Ollama o Gemini),
+                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (OpenAI o Gemini),
                 // excluyendo deliberadamente las reglas determinísticas para no degradar el servicio si la IA se recupera.
                 if (_responseCache != null &&
                     request.AdaptationContext is null &&
