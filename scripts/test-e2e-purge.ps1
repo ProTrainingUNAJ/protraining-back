@@ -26,7 +26,7 @@ Write-Host " [PROTRAINING] VERIFICACIÓN E2E DE PURGA DE ATLETA (KAN-501)" -Fore
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 # 1. Comprobar disponibilidad de contenedores / puertos
-Write-Host "[1/5] Verificando conectividad con los servicios..." -ForegroundColor Yellow
+Write-Host "[1/4] Verificando conectividad con los servicios Docker..." -ForegroundColor Yellow
 
 $services = @(
     @{ Name = "Estructura"; Url = "$EstructuraUrl/health" },
@@ -43,33 +43,29 @@ foreach ($s in $services) {
         Write-Host "  -> $($s.Name): ONLINE (HTTP 200)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  -> $($s.Name): No responde en $($s.Url) ($($_.Exception.Message))" -ForegroundColor DarkYellow
+        Write-Host "  -> $($s.Name): Offline / No responde en $($s.Url)" -ForegroundColor DarkYellow
         $allOnline = $false
     }
 }
 
-if (-not $allOnline) {
-    Write-Host "`n[AVISO] Algunos servicios HTTP no están corriendo en los puertos locales mapeados." -ForegroundColor Yellow
-    Write-Host "Para correr la suite de integración completa E2E automatizada en C#:" -ForegroundColor Cyan
-    Write-Host "  dotnet test services/estructura/Tests/Estructura.Tests.csproj --filter FullyQualifiedName~AthletePurgeE2ETests`n" -ForegroundColor White
-}
-
 # 2. Resumen de endpoints de purga implementados y verificados
-Write-Host "[2/5] Endpoints internos de purga verificados en el circuito:" -ForegroundColor Yellow
+Write-Host "`n[2/4] Endpoints internos de purga verificados en el circuito:" -ForegroundColor Yellow
 Write-Host "  - Identidad:     DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
 Write-Host "  - Entrenamiento: DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
 Write-Host "  - Seguimiento:   DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
 Write-Host "  - Asistente:     DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
 Write-Host "  - Estructura:    DataPurgeWorker / ProcessPendingPurgesCommandHandler [Local wipe]" -ForegroundColor White
 
-Write-Host "`n[3/5] Verificación mediante suite de integración automatizada:" -ForegroundColor Yellow
-Write-Host "Ejecutando tests de integración E2E en Estructura..." -ForegroundColor DarkCyan
+Write-Host "`n[3/4] Ejecutando suite de pruebas de integración E2E automatizada en C#..." -ForegroundColor Yellow
+$testResult = dotnet test services/estructura/Tests/Estructura.Tests.csproj --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
+Write-Host $testResult -ForegroundColor Gray
 
-$testOutput = dotnet test services/estructura/Tests/Estructura.Tests.csproj --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
-Write-Host $testOutput -ForegroundColor Gray
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n[4/4] Criterio de Aceptación KAN-501:" -ForegroundColor Yellow
+    Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningún servicio." -ForegroundColor Cyan
+    Write-Host "  -> ESTADO: VERIFICADO Y SUPERADO (Tests E2E pasando exitosamente en Estructura)`n" -ForegroundColor Green
+} else {
+    Write-Host "`n[4/4] Criterio de Aceptación KAN-501: FALLIDO" -ForegroundColor Red
+}
 
-Write-Host "`n[4/5] Criterio de Aceptación KAN-501:" -ForegroundColor Yellow
-Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningún servicio." -ForegroundColor Cyan
-Write-Host "  -> Estado: VERIFICADO Y SUPERADO (3/3 casos cubiertos: Flujo completo, Resiliencia/Abort y Idempotencia 404)`n" -ForegroundColor Green
-
-Write-Host "[5/5] Fin de la verificación.`n" -ForegroundColor Cyan
+Write-Host "Fin de la verificación.`n" -ForegroundColor Cyan

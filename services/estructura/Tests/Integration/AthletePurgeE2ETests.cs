@@ -25,46 +25,41 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
 {
     private sealed class SimulatedExternalServiceStore
     {
-        // Almacenes en memoria simulando las entidades de los 4 servicios externos asociados al athleteId
-        public HashSet<Guid> IdentidadAthletes { get; } = [];
-        public HashSet<Guid> EntrenamientoAthletes { get; } = [];
-        public HashSet<Guid> SeguimientoAthletes { get; } = [];
-        public HashSet<Guid> AsistenteAthletes { get; } = [];
+        private static readonly string[] TargetServices = ["Identidad", "Entrenamiento", "Seguimiento", "Asistente"];
+        private readonly Dictionary<string, HashSet<Guid>> _serviceData = new()
+        {
+            ["Identidad"] = [],
+            ["Entrenamiento"] = [],
+            ["Seguimiento"] = [],
+            ["Asistente"] = []
+        };
 
         public List<string> DispatchCallsRecorded { get; } = [];
 
         public void SeedAthleteAcrossAllExternalServices(Guid athleteId)
         {
-            IdentidadAthletes.Add(athleteId);
-            EntrenamientoAthletes.Add(athleteId);
-            SeguimientoAthletes.Add(athleteId);
-            AsistenteAthletes.Add(athleteId);
+            foreach (var service in TargetServices)
+            {
+                _serviceData[service].Add(athleteId);
+            }
         }
+
+        public bool ContainsAthlete(string serviceName, Guid athleteId) =>
+            _serviceData.TryGetValue(serviceName, out var store) && store.Contains(athleteId);
 
         public ServicePurgeResult ProcessPurge(string serviceName, Guid athleteId)
         {
             DispatchCallsRecorded.Add(serviceName);
 
-            return serviceName switch
+            if (!_serviceData.TryGetValue(serviceName, out var store))
             {
-                "Identidad" => IdentidadAthletes.Remove(athleteId)
-                    ? new ServicePurgeResult("Identidad", true, 200)
-                    : new ServicePurgeResult("Identidad", true, 404), // Idempotente
+                return new ServicePurgeResult(serviceName, false, 400, "Servicio desconocido");
+            }
 
-                "Entrenamiento" => EntrenamientoAthletes.Remove(athleteId)
-                    ? new ServicePurgeResult("Entrenamiento", true, 200)
-                    : new ServicePurgeResult("Entrenamiento", true, 404),
-
-                "Seguimiento" => SeguimientoAthletes.Remove(athleteId)
-                    ? new ServicePurgeResult("Seguimiento", true, 200)
-                    : new ServicePurgeResult("Seguimiento", true, 404),
-
-                "Asistente" => AsistenteAthletes.Remove(athleteId)
-                    ? new ServicePurgeResult("Asistente", true, 200)
-                    : new ServicePurgeResult("Asistente", true, 404),
-
-                _ => new ServicePurgeResult(serviceName, false, 400, "Servicio desconocido")
-            };
+            // Si el atleta existía se remueve (200 OK); si no existía, responde 404 (idempotencia)
+            return store.Remove(athleteId)
+                ? new ServicePurgeResult(serviceName, true, 200)
+                : new ServicePurgeResult(serviceName, true, 404);
         }
     }
 
@@ -91,6 +86,30 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         _clientPf = _factory.CreateAuthenticatedClient(_pfId);
     }
 
+    private async Task<Guid> CreateAthleteAsync(string email)
+    {
+        var createRequest = new CreateAthleteRequest(
+            FirstName: "Atleta",
+            LastName: "Test",
+            Email: email,
+            Phone: "+5491188990011",
+            IsMinor: false);
+
+        var createResponse = await _clientPf.PostAsJsonAsync("/api/v1/athletes", createRequest);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var createdAthlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(createdAthlete);
+        return createdAthlete.Id;
+    }
+
+    private async Task<Guid> CreateAndSoftDeleteAthleteAsync(string email)
+    {
+        var athleteId = await CreateAthleteAsync(email);
+        var deleteResponse = await _clientPf.DeleteAsync($"/api/v1/athletes/{athleteId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        return athleteId;
+    }
+
     [Fact]
     public async Task Given_AthleteWithDataInAll5Services_When_SoftDeletedAndPurgeRuns_Then_DisappearsFromAllServices()
     {
@@ -99,18 +118,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         // -----------------------------------------------------------------------------------------
 
         // 1.a) Servicio 1 (Estructura): Crear Atleta mediante API
-        var createRequest = new CreateAthleteRequest(
-            FirstName: "Federico",
-            LastName: "Gomez",
-            Email: "federico.gomez.e2e@test.com",
-            Phone: "+5491188990011",
-            IsMinor: false);
-
-        var createResponse = await _clientPf.PostAsJsonAsync("/api/v1/athletes", createRequest);
-        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
-        var createdAthlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
-        Assert.NotNull(createdAthlete);
-        var athleteId = createdAthlete.Id;
+        var athleteId = await CreateAthleteAsync("federico.gomez.e2e@test.com");
 
         // 1.b) Asociar categoría y ficha médica en Estructura
         using (var dbContext = _factory.CreateDbContext(_pfId))
@@ -144,10 +152,10 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
 
         // 1.c) Servicios 2, 3, 4 y 5 (Identidad, Entrenamiento, Seguimiento, Asistente): Sembrar datos
         _simulatedStore.SeedAthleteAcrossAllExternalServices(athleteId);
-        Assert.Contains(athleteId, _simulatedStore.IdentidadAthletes);
-        Assert.Contains(athleteId, _simulatedStore.EntrenamientoAthletes);
-        Assert.Contains(athleteId, _simulatedStore.SeguimientoAthletes);
-        Assert.Contains(athleteId, _simulatedStore.AsistenteAthletes);
+        Assert.True(_simulatedStore.ContainsAthlete("Identidad", athleteId));
+        Assert.True(_simulatedStore.ContainsAthlete("Entrenamiento", athleteId));
+        Assert.True(_simulatedStore.ContainsAthlete("Seguimiento", athleteId));
+        Assert.True(_simulatedStore.ContainsAthlete("Asistente", athleteId));
 
         // -----------------------------------------------------------------------------------------
         // 2. ACT (Paso 1): Dar de baja lógica al atleta
@@ -167,7 +175,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
                 .FirstOrDefaultAsync(p => p.AthleteId == athleteId);
 
             Assert.NotNull(pendingPurge);
-            Assert.Equal("Pending", pendingPurge.Status);
+            Assert.Equal(PendingPurge.PendingStatus, pendingPurge.Status);
         }
 
         // -----------------------------------------------------------------------------------------
@@ -190,10 +198,10 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         // -----------------------------------------------------------------------------------------
 
         // 3.a) Verificación en los 4 servicios externos: Los almacenes quedaron vacíos para este atleta
-        Assert.DoesNotContain(athleteId, _simulatedStore.IdentidadAthletes);
-        Assert.DoesNotContain(athleteId, _simulatedStore.EntrenamientoAthletes);
-        Assert.DoesNotContain(athleteId, _simulatedStore.SeguimientoAthletes);
-        Assert.DoesNotContain(athleteId, _simulatedStore.AsistenteAthletes);
+        Assert.False(_simulatedStore.ContainsAthlete("Identidad", athleteId));
+        Assert.False(_simulatedStore.ContainsAthlete("Entrenamiento", athleteId));
+        Assert.False(_simulatedStore.ContainsAthlete("Seguimiento", athleteId));
+        Assert.False(_simulatedStore.ContainsAthlete("Asistente", athleteId));
 
         // Se comprobó que el dispatcher invocó a los 4 servicios en orden
         Assert.Contains("Identidad", _simulatedStore.DispatchCallsRecorded);
@@ -247,19 +255,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
     public async Task Given_ExternalServiceFails_When_PurgeRuns_Then_AbortsAndPreservesLocalDataForRetry()
     {
         // Arrange: Atleta dado de baja
-        var createRequest = new CreateAthleteRequest(
-            FirstName: "Matias",
-            LastName: "Rojas",
-            Email: "matias.rojas.e2e@test.com",
-            Phone: "+5491144556677",
-            IsMinor: false);
-
-        var createResponse = await _clientPf.PostAsJsonAsync("/api/v1/athletes", createRequest);
-        var createdAthlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
-        Assert.NotNull(createdAthlete);
-        var athleteId = createdAthlete.Id;
-
-        await _clientPf.DeleteAsync($"/api/v1/athletes/{athleteId}");
+        var athleteId = await CreateAndSoftDeleteAthleteAsync("matias.rojas.e2e@test.com");
 
         // Simulamos que Seguimiento falla con error 500
         _mockPurgeClient
@@ -294,7 +290,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(p => p.AthleteId == athleteId);
             Assert.NotNull(pendingPurge);
-            Assert.Equal("Pending", pendingPurge.Status); // Sigue pendiente
+            Assert.Equal(PendingPurge.PendingStatus, pendingPurge.Status); // Sigue pendiente
             Assert.Null(pendingPurge.ProcessedAt);
         }
     }
@@ -303,19 +299,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
     public async Task Given_ExternalServicesReturn404_When_PurgeRuns_Then_TreatsAsIdempotentSuccessAndCompletesPurge()
     {
         // Arrange: Atleta que no existía en servicios externos (ej. recién registrado y borrado antes de interactuar)
-        var createRequest = new CreateAthleteRequest(
-            FirstName: "Cristian",
-            LastName: "Medina",
-            Email: "cristian.medina.e2e@test.com",
-            Phone: "+5491133221100",
-            IsMinor: false);
-
-        var createResponse = await _clientPf.PostAsJsonAsync("/api/v1/athletes", createRequest);
-        var createdAthlete = await createResponse.Content.ReadFromJsonAsync<AthleteDto>();
-        Assert.NotNull(createdAthlete);
-        var athleteId = createdAthlete.Id;
-
-        await _clientPf.DeleteAsync($"/api/v1/athletes/{athleteId}");
+        var athleteId = await CreateAndSoftDeleteAthleteAsync("cristian.medina.e2e@test.com");
 
         // No sembramos nada en SimulatedExternalServiceStore -> responderá 404 para los 4 servicios
 
