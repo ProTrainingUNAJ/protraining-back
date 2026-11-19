@@ -22,6 +22,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
     public DbSet<PlanAssignment> PlanAssignments => Set<PlanAssignment>();
     public DbSet<TrainingWeek> TrainingWeeks => Set<TrainingWeek>();
     public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
+    public DbSet<TrainingBlock> TrainingBlocks => Set<TrainingBlock>();
     public DbSet<PrescribedExercise> PrescribedExercises => Set<PrescribedExercise>();
     public DbSet<ExerciseRestriction> ExerciseRestrictions => Set<ExerciseRestriction>();
     public DbSet<ExerciseSubstitute> ExerciseSubstitutes => Set<ExerciseSubstitute>();

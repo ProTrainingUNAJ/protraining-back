@@ -27,8 +27,9 @@ public class TrainingPlanRepository : ITrainingPlanRepository
         return await _context.TrainingPlans
             .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
                 .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
-                    .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
-                        .ThenInclude(e => e.Exercise)
+                    .ThenInclude(s => s.Blocks.OrderBy(b => b.Order))
+                        .ThenInclude(b => b.PrescribedExercises.OrderBy(e => e.Order))
+                            .ThenInclude(e => e.Exercise)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
@@ -38,8 +39,9 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .AsNoTracking()
             .Include(p => p.Weeks.OrderBy(w => w.WeekNumber))
                 .ThenInclude(w => w.Sessions.OrderBy(s => s.Order))
-                    .ThenInclude(s => s.PrescribedExercises.OrderBy(e => e.Order))
-                        .ThenInclude(e => e.Exercise)
+                    .ThenInclude(s => s.Blocks.OrderBy(b => b.Order))
+                        .ThenInclude(b => b.PrescribedExercises.OrderBy(e => e.Order))
+                            .ThenInclude(e => e.Exercise)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
@@ -50,8 +52,9 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .Where(p => !p.IsTemplate)
             .Include(p => p.Weeks)
                 .ThenInclude(w => w.Sessions)
-                    .ThenInclude(s => s.PrescribedExercises)
-                        .ThenInclude(e => e.Exercise)
+                    .ThenInclude(s => s.Blocks)
+                        .ThenInclude(b => b.PrescribedExercises)
+                            .ThenInclude(e => e.Exercise)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
