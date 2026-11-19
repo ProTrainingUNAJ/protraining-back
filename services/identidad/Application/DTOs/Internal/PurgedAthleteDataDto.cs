@@ -8,4 +8,5 @@ public sealed record PurgedAthleteDataDto(
     int UsersCount,
     int RefreshTokensCount,
     int PhotosCount,
-    int TotalRecordsPurged);
+    int TotalRecordsPurged,
+    int UserRolesCount = 0);

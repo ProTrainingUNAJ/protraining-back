@@ -141,14 +141,31 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
             PfId = null
         };
         _context.Users.Add(pfUser);
+
+        var pfPhoto = UserPhoto.Create(pfUserId, [9, 9, 9], "image/webp", 3);
+        _context.UserPhotos.Add(pfPhoto);
+
+        var pfToken = new RefreshToken
+        {
+            UserId = pfUserId,
+            Token = "pf-token-123",
+            DeviceId = "device-pf",
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        };
+        _context.RefreshTokens.Add(pfToken);
+
         await _context.SaveChangesAsync();
 
         // Act
         var result = await _repository.PurgeAthleteDataAsync(pfUserId);
 
-        // Assert: no se borra el PF
+        // Assert: no se borra el PF ni sus fotos ni sus tokens
         Assert.Equal(0, result.UsersCount);
+        Assert.Equal(0, result.PhotosCount);
+        Assert.Equal(0, result.RefreshTokensCount);
         Assert.Equal(0, result.TotalRecordsPurged);
         Assert.True(await _context.Users.AnyAsync(u => u.Id == pfUserId));
+        Assert.True(await _context.UserPhotos.AnyAsync(p => p.UserId == pfUserId));
+        Assert.True(await _context.RefreshTokens.AnyAsync(r => r.UserId == pfUserId));
     }
 }
