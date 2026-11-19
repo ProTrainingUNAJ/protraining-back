@@ -1,8 +1,11 @@
 using Application.DTOs.Recommendations;
+using Application.UseCases.Recommendations.ApproveRecommendation;
+using Application.UseCases.Recommendations.DiscardRecommendation;
 using Application.UseCases.Recommendations.GenerateAthleteRecommendations;
 using Application.UseCases.Recommendations.GenerateCategoryRecommendations;
 using Application.UseCases.Recommendations.GetRecommendationById;
 using Application.UseCases.Recommendations.GetRecommendations;
+using Application.UseCases.Recommendations.UpdateRecommendation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -10,8 +13,8 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 namespace API.Controllers;
 
 /// <summary>
-/// Motor de recomendaciones de entrenamiento a partir del perfil frente al grupo y tendencias (#196 · KAN-491).
-/// Todas las recomendaciones nacen pendientes de aprobación del Preparador Físico.
+/// Motor y revisión de recomendaciones de entrenamiento para el Preparador Físico (#196 · KAN-491, #197 · KAN-492).
+/// Todas las recomendaciones nacen pendientes de aprobación del PF y solo se muestran al atleta al aprobarlas.
 /// </summary>
 [Authorize(Roles = "PreparadorFisico")]
 [ApiController]
@@ -20,7 +23,10 @@ public sealed class RecommendationsController(
     GenerateAthleteRecommendationsCommandHandler generateAthleteHandler,
     GenerateCategoryRecommendationsCommandHandler generateCategoryHandler,
     GetRecommendationsQueryHandler getRecommendationsHandler,
-    GetRecommendationByIdQueryHandler getRecommendationByIdHandler) : ControllerBase
+    GetRecommendationByIdQueryHandler getRecommendationByIdHandler,
+    UpdateRecommendationCommandHandler updateRecommendationHandler,
+    ApproveRecommendationCommandHandler approveRecommendationHandler,
+    DiscardRecommendationCommandHandler discardRecommendationHandler) : ControllerBase
 {
     /// <summary>
     /// Ejecuta el motor de recomendaciones para un atleta analizando su perfil frente al grupo y tendencias semanales.
@@ -113,6 +119,70 @@ public sealed class RecommendationsController(
     {
         var result = await getRecommendationByIdHandler.HandleAsync(
             new GetRecommendationByIdQuery(id),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Edita el título y el texto de una recomendación pendiente antes de aprobarla (#197 · KAN-492).
+    /// </summary>
+    [HttpPut("recommendations/{id:guid}")]
+    [ProducesResponseType(typeof(AthleteRecommendationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AthleteRecommendationResponseDto>> Update(
+        Guid id,
+        [FromBody] UpdateRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await updateRecommendationHandler.HandleAsync(
+            new UpdateRecommendationCommand(id, request.Title, request.RecommendationText),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Aprueba una recomendación pendiente (con edición opcional) y la habilita para que el atleta la vea en su app (#197 · KAN-492).
+    /// </summary>
+    [HttpPost("recommendations/{id:guid}/approve")]
+    [ProducesResponseType(typeof(AthleteRecommendationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AthleteRecommendationResponseDto>> Approve(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ApproveRecommendationRequestDto? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await approveRecommendationHandler.HandleAsync(
+            new ApproveRecommendationCommand(id, request?.Title, request?.RecommendationText),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Descarta una recomendación pendiente para que nunca llegue al atleta (#197 · KAN-492).
+    /// </summary>
+    [HttpPost("recommendations/{id:guid}/discard")]
+    [ProducesResponseType(typeof(AthleteRecommendationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AthleteRecommendationResponseDto>> Discard(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await discardRecommendationHandler.HandleAsync(
+            new DiscardRecommendationCommand(id),
             cancellationToken);
 
         return Ok(result);

@@ -90,4 +90,16 @@ public static class RecommendationMapper
             UpdatedAt: entity.UpdatedAt,
             ReviewedAtUtc: entity.ReviewedAtUtc);
     }
+
+    public static MyRecommendationResponseDto ToMyResponseDto(AthleteRecommendation entity) =>
+        new(
+            Id: entity.Id,
+            CategoryId: entity.CategoryId,
+            CategoryName: entity.CategoryName,
+            Type: entity.Type.ToString(),
+            Title: entity.Title,
+            Reason: entity.Reason,
+            RecommendationText: entity.RecommendationText,
+            ReviewedAtUtc: entity.ReviewedAtUtc,
+            CreatedAt: entity.CreatedAt);
 }

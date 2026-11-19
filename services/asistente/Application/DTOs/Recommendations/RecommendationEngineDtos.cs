@@ -67,3 +67,32 @@ public sealed record RunCategoryRecommendationEngineResponseDto(
     int GeneratedCount,
     int ExistingPendingCount,
     IReadOnlyList<AthleteRecommendationResponseDto> Recommendations);
+
+/// <summary>
+/// Solicitud para editar el título y texto de una recomendación pendiente (#197 · KAN-492).
+/// El motivo (reason) se mantiene inmutable como evidencia objetiva calculada por el motor.
+/// </summary>
+public sealed record UpdateRecommendationRequestDto(
+    string Title,
+    string RecommendationText);
+
+/// <summary>
+/// Solicitud opcional para editar y aprobar una recomendación en un solo paso (#197 · KAN-492).
+/// </summary>
+public sealed record ApproveRecommendationRequestDto(
+    string? Title = null,
+    string? RecommendationText = null);
+
+/// <summary>
+/// Recomendación aprobada por el preparador físico visible para el atleta en su app (#197 · KAN-492).
+/// </summary>
+public sealed record MyRecommendationResponseDto(
+    Guid Id,
+    Guid? CategoryId,
+    string? CategoryName,
+    string Type,
+    string Title,
+    string Reason,
+    string RecommendationText,
+    DateTime? ReviewedAtUtc,
+    DateTime CreatedAt);

@@ -223,5 +223,36 @@ public sealed class StructureAthleteClientTests
 
         await Assert.ThrowsAsync<StructureServiceUnavailableException>(() => errorClient.GetAthleteCategoriesAsync(Guid.NewGuid()));
     }
+
+    [Fact]
+    public async Task GetMyAthleteIdAsync_Handles200_404_And_500Properly()
+    {
+        var expectedAthleteId = Guid.NewGuid();
+        var okHandler = new DelegatingTestHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                $$"""{"athleteId":"{{expectedAthleteId}}","firstName":"Lucas","lastName":"Gómez","fullName":"Lucas Gómez","active":true,"categories":[]}""",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        var okClient = new StructureAthleteClient(
+            new HttpClient(okHandler) { BaseAddress = new Uri("http://estructura:8080/") },
+            NullLogger<StructureAthleteClient>.Instance);
+
+        var resolvedId = await okClient.GetMyAthleteIdAsync();
+        Assert.Equal(expectedAthleteId, resolvedId);
+        Assert.Equal("http://estructura:8080/api/v1/me", okHandler.LastRequest!.RequestUri!.ToString());
+
+        var notFoundClient = new StructureAthleteClient(
+            new HttpClient(new DelegatingTestHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound))) { BaseAddress = new Uri("http://estructura:8080/") },
+            NullLogger<StructureAthleteClient>.Instance);
+        Assert.Null(await notFoundClient.GetMyAthleteIdAsync());
+
+        var errorClient = new StructureAthleteClient(
+            new HttpClient(new DelegatingTestHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))) { BaseAddress = new Uri("http://estructura:8080/") },
+            NullLogger<StructureAthleteClient>.Instance);
+        await Assert.ThrowsAsync<StructureServiceUnavailableException>(() => errorClient.GetMyAthleteIdAsync());
+    }
 }
 

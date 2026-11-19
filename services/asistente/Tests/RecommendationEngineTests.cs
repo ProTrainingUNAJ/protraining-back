@@ -5,10 +5,13 @@ using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
+using Application.UseCases.Recommendations.ApproveRecommendation;
+using Application.UseCases.Recommendations.DiscardRecommendation;
 using Application.UseCases.Recommendations.GenerateAthleteRecommendations;
 using Application.UseCases.Recommendations.GenerateCategoryRecommendations;
 using Application.UseCases.Recommendations.GetRecommendationById;
 using Application.UseCases.Recommendations.GetRecommendations;
+using Application.UseCases.Recommendations.UpdateRecommendation;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -49,6 +52,9 @@ public sealed class RecommendationEngineTests
             return Task.FromResult(match);
         }
 
+        public Task<AthleteRecommendation?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken = default) =>
+            GetByIdAsNoTrackingAsync(id, cancellationToken);
+
         public Task<IReadOnlyList<AthleteRecommendation>> ListAsync(
             Guid? athleteId = null,
             Guid? categoryId = null,
@@ -71,6 +77,19 @@ public sealed class RecommendationEngineTests
                 .OrderByDescending(r => r.CreatedAt)
                 .ToList();
 
+            return Task.FromResult(result);
+        }
+
+        public Task<IReadOnlyList<AthleteRecommendation>> ListApprovedByAthleteAsync(
+            Guid athleteId,
+            CancellationToken cancellationToken = default)
+        {
+            var pfId = currentPfId();
+            IReadOnlyList<AthleteRecommendation> result = store
+                .Where(r => r.PfId == pfId && r.DeletedAt == null && r.AthleteId == athleteId && r.Status == RecommendationStatus.Approved)
+                .OrderByDescending(r => r.ReviewedAtUtc ?? r.UpdatedAt)
+                .ThenByDescending(r => r.CreatedAt)
+                .ToList();
             return Task.FromResult(result);
         }
 
@@ -563,7 +582,10 @@ public sealed class RecommendationEngineTests
             new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, aiMock.Object, uow),
             new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, aiMock.Object, uow),
             new GetRecommendationsQueryHandler(repository),
-            new GetRecommendationByIdQueryHandler(repository));
+            new GetRecommendationByIdQueryHandler(repository),
+            new UpdateRecommendationCommandHandler(repository, uow),
+            new ApproveRecommendationCommandHandler(repository, uow),
+            new DiscardRecommendationCommandHandler(repository, uow));
 
         // Primera ejecución genera 1 -> 201 Created
         var firstAction = await controller.GenerateForAthlete(AthleteId);
