@@ -22,6 +22,12 @@ public sealed class AthleteRecommendationRepository(AppDbContext dbContext) : IA
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
+    public async Task<AthleteRecommendation?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.AthleteRecommendations
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AthleteRecommendation>> ListAsync(
         Guid? athleteId = null,
         Guid? categoryId = null,
@@ -47,6 +53,21 @@ public sealed class AthleteRecommendationRepository(AppDbContext dbContext) : IA
 
         return await query
             .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AthleteRecommendation>> ListApprovedByAthleteAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            return [];
+
+        return await dbContext.AthleteRecommendations
+            .AsNoTracking()
+            .Where(r => r.AthleteId == athleteId && r.Status == RecommendationStatus.Approved)
+            .OrderByDescending(r => r.ReviewedAtUtc ?? r.UpdatedAt)
+            .ThenByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 

@@ -866,6 +866,144 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Recommendations
+      summary: Editar título y texto de una recomendación pendiente
+      description: >
+        Permite al preparador físico editar el título y el texto de una recomendación mientras se
+        encuentre en estado Pending (#197 · KAN-492). El motivo objetivo (reason) permanece inmutable.
+      operationId: updateRecommendation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la recomendación.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecommendationRequest'
+      responses:
+        "200":
+          description: Recomendación actualizada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteRecommendation'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/recommendations/{id}/approve:
+    post:
+      tags:
+        - Recommendations
+      summary: Aprobar una recomendación pendiente y enviarla al atleta
+      description: >
+        Aprueba una recomendación en estado Pending (opcionalmente aplicando cambios de título o texto
+        en el mismo paso) para que quede visible en la app del atleta (#197 · KAN-492).
+      operationId: approveRecommendation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la recomendación.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRecommendationRequest'
+      responses:
+        "200":
+          description: Recomendación aprobada y visible para el atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteRecommendation'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/recommendations/{id}/discard:
+    post:
+      tags:
+        - Recommendations
+      summary: Descartar una recomendación pendiente
+      description: >
+        Marca una recomendación en estado Pending como Discarded para archivarla sin mostrarla
+        nunca al atleta (#197 · KAN-492).
+      operationId: discardRecommendation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único de la recomendación.
+      responses:
+        "200":
+          description: Recomendación descartada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AthleteRecommendation'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/me/recommendations:
+    get:
+      tags:
+        - Recommendations
+      summary: Listar recomendaciones aprobadas del atleta autenticado
+      description: >
+        Devuelve únicamente las recomendaciones aprobadas por el preparador físico para el atleta
+        autenticado (#197 · KAN-492). Resuelve la identidad del atleta desde Estructura GET /api/v1/me.
+      operationId: listMyRecommendations
+      responses:
+        "200":
+          description: Lista de recomendaciones aprobadas del atleta ordenadas por fecha de aprobación descendente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyRecommendation'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /api/health:
     get:
@@ -2219,3 +2357,78 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AthleteRecommendation'
+
+    UpdateRecommendationRequest:
+      type: object
+      required:
+        - title
+        - recommendationText
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          example: "Ajuste semanal de potencia de salto"
+        recommendationText:
+          type: string
+          maxLength: 2000
+          example: "Esta semana vamos a sumar dos bloques cortos de saltos pliométricos controlados al inicio de la sesión."
+
+    ApproveRecommendationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          nullable: true
+          example: "Ajuste semanal de potencia de salto"
+        recommendationText:
+          type: string
+          maxLength: 2000
+          nullable: true
+          example: "Esta semana vamos a sumar dos bloques cortos de saltos pliométricos controlados al inicio de la sesión."
+
+    MyRecommendation:
+      type: object
+      required:
+        - id
+        - type
+        - title
+        - reason
+        - recommendationText
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "22222222-2222-2222-2222-222222222222"
+        categoryName:
+          type: string
+          nullable: true
+          example: "Primera División"
+        type:
+          type: string
+          enum: [Training, Habits]
+          example: "Training"
+        title:
+          type: string
+          example: "Ajuste semanal de potencia de salto"
+        reason:
+          type: string
+          example: "salto por debajo del promedio"
+        recommendationText:
+          type: string
+          example: "Esta semana vamos a sumar dos bloques cortos de saltos pliométricos controlados al inicio de la sesión."
+        reviewedAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-19T19:15:00Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-11-19T18:00:00Z"

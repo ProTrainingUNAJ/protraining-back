@@ -75,4 +75,10 @@ public interface IStructureAthleteClient
     /// Obtiene los identificadores de los atletas activos de una categoría sin datos personales (#196 · KAN-491).
     /// </summary>
     Task<IReadOnlyList<StructureCategoryAthleteDto>> GetCategoryAthletesAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resuelve el identificador de atleta del usuario autenticado (rol Atleta) consultando GET /api/v1/me en Estructura (#197 · KAN-492).
+    /// Devuelve null si el usuario todavía no tiene un perfil de atleta vinculado (404).
+    /// </summary>
+    Task<Guid?> GetMyAthleteIdAsync(CancellationToken cancellationToken = default);
 }

@@ -254,6 +254,21 @@ public sealed class StructureAthleteClient(
             ?? [];
     }
 
+    private sealed record StructureMeApiResponse(
+        [property: JsonPropertyName("athleteId")] Guid AthleteId);
+
+    public async Task<Guid?> GetMyAthleteIdAsync(CancellationToken cancellationToken = default)
+    {
+        var me = await GetFromStructureAsync<StructureMeApiResponse>(
+            relativeUrl: "api/v1/me",
+            returnNullOn404: true,
+            notFoundMessage: "No se encontró un perfil de atleta vinculado al usuario autenticado.",
+            operationDescription: "resolver el perfil del atleta autenticado",
+            cancellationToken: cancellationToken);
+
+        return me is not null && me.AthleteId != Guid.Empty ? me.AthleteId : null;
+    }
+
     private async Task<T?> GetFromStructureAsync<T>(
         string relativeUrl,
         bool returnNullOn404,
