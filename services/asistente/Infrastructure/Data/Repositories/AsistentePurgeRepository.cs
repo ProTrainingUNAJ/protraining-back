@@ -3,7 +3,7 @@ using Application.Interfaces.Persistence;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Repositories;
+namespace Infrastructure.Data.Repositories;
 
 /// <summary>
 /// Implementación de purga física de datos de un atleta en Asistente (#205 · KAN-500).

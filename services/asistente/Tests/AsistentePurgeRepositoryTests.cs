@@ -1,7 +1,7 @@
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Data;
-using Infrastructure.Repositories;
+using Infrastructure.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Moq;
