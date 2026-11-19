@@ -23,6 +23,12 @@ public sealed class ExerciseMuscleFilterPostgresTests : IAsyncLifetime
     private Exercise _squat = null!;
     private Exercise _deadlift = null!;
     private Exercise _legExtension = null!;
+    private Exercise _benchPress = null!;
+    private Exercise _pushUp = null!;
+    private Exercise _plank = null!;
+    private Exercise _crunch = null!;
+    private Exercise _militaryPress = null!;
+    private Exercise _lateralRaise = null!;
 
     public async Task InitializeAsync()
     {
@@ -54,7 +60,48 @@ public sealed class ExerciseMuscleFilterPostgresTests : IAsyncLifetime
             secondaryMuscles: ["glúteos"]
         );
 
-        await context.Exercises.AddRangeAsync(_squat, _legExtension, _deadlift);
+        // KAN-633: Ejercicios de pecho, core y hombros (en inglés y español en base)
+        _benchPress = Exercise.Create(
+            name: "Press de Banca",
+            muscleGroup: "Pecho",
+            primaryMuscles: ["chest"]
+        );
+
+        _pushUp = Exercise.Create(
+            name: "Flexiones de Brazo",
+            muscleGroup: "Pecho",
+            primaryMuscles: ["pecho"]
+        );
+
+        _plank = Exercise.Create(
+            name: "Plancha Frontal",
+            muscleGroup: "Core",
+            primaryMuscles: ["abdominals"]
+        );
+
+        _crunch = Exercise.Create(
+            name: "Crunch Abdominal",
+            muscleGroup: "Core",
+            primaryMuscles: ["abdominales"]
+        );
+
+        _militaryPress = Exercise.Create(
+            name: "Press Militar",
+            muscleGroup: "Hombros",
+            primaryMuscles: ["shoulders"]
+        );
+
+        _lateralRaise = Exercise.Create(
+            name: "Vuelos Laterales",
+            muscleGroup: "Hombros",
+            primaryMuscles: ["hombros"]
+        );
+
+        await context.Exercises.AddRangeAsync(
+            _squat, _legExtension, _deadlift,
+            _benchPress, _pushUp,
+            _plank, _crunch,
+            _militaryPress, _lateralRaise);
         await context.SaveChangesAsync();
     }
 
@@ -113,6 +160,60 @@ public sealed class ExerciseMuscleFilterPostgresTests : IAsyncLifetime
         Assert.Equal(2, result.TotalCount);
         Assert.Contains(result.Items, e => e.Id == _squat.Id);
         Assert.Contains(result.Items, e => e.Id == _legExtension.Id);
+    }
+
+    [Fact]
+    [Trait("Category", "RequiresDocker")]
+    public async Task Given_RealPostgreSql_When_FilteringByPecho_Then_ReturnsMatchesBothEnglishAndSpanish()
+    {
+        await using var context = new AppDbContext(_options, _currentUser.Object);
+
+        // KAN-633: Pedimos por ?muscle=pecho
+        var result = await CreateHandler(context).Handle(new ListExercisesQuery
+        {
+            Muscle = "pecho"
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, e => e.Id == _benchPress.Id);
+        Assert.Contains(result.Items, e => e.Id == _pushUp.Id);
+        Assert.DoesNotContain(result.Items, e => e.Id == _squat.Id);
+    }
+
+    [Fact]
+    [Trait("Category", "RequiresDocker")]
+    public async Task Given_RealPostgreSql_When_FilteringByAbdominales_Then_ReturnsMatchesBothEnglishAndSpanish()
+    {
+        await using var context = new AppDbContext(_options, _currentUser.Object);
+
+        // KAN-633: Pedimos por ?muscle=abdominales
+        var result = await CreateHandler(context).Handle(new ListExercisesQuery
+        {
+            Muscle = "abdominales"
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, e => e.Id == _plank.Id);
+        Assert.Contains(result.Items, e => e.Id == _crunch.Id);
+        Assert.DoesNotContain(result.Items, e => e.Id == _squat.Id);
+    }
+
+    [Fact]
+    [Trait("Category", "RequiresDocker")]
+    public async Task Given_RealPostgreSql_When_FilteringByHombros_Then_ReturnsMatchesBothEnglishAndSpanish()
+    {
+        await using var context = new AppDbContext(_options, _currentUser.Object);
+
+        // KAN-633: Pedimos por ?muscle=hombros
+        var result = await CreateHandler(context).Handle(new ListExercisesQuery
+        {
+            Muscle = "hombros"
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, e => e.Id == _militaryPress.Id);
+        Assert.Contains(result.Items, e => e.Id == _lateralRaise.Id);
+        Assert.DoesNotContain(result.Items, e => e.Id == _squat.Id);
     }
 }
 
