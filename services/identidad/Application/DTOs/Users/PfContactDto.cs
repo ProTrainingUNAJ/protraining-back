@@ -1,3 +1,3 @@
-﻿namespace Application.DTOs.Users;
+namespace Application.DTOs.Users;
 
-public sealed record PfContactDto(string PhoneNumber);
+public sealed record PfContactDto(string? PhoneNumber, string? TelegramUsername = null);

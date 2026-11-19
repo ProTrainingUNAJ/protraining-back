@@ -10,4 +10,5 @@ public record UserDto(
     string Role,
     Guid? PfId,
     string? PhoneNumber = null,
-    bool MustChangePassword = false);
+    bool MustChangePassword = false,
+    string? TelegramUsername = null);

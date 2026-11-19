@@ -11,4 +11,5 @@ public sealed record CreateAthleteRequest(
     string? GuardianPhone = null,
     bool AllowsPhysicalTraining = true,
     bool AllowsHabitsRecommendations = false,
-    string? EmergencyContact = null);
+    string? EmergencyContact = null,
+    string? TelegramUsername = null);

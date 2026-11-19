@@ -1,21 +1,23 @@
 namespace Application.DTOs.Users;
 
 /// <summary>
-/// Solicitud de actualización de perfil para el Preparador Físico (KAN-601).
+/// Solicitud de actualización de perfil para el Preparador Físico (KAN-601 / KAN-503).
 /// </summary>
 public sealed record UpdateProfileRequestDto(
     string FullName,
-    string? Phone = null
+    string? Phone = null,
+    string? TelegramUsername = null
 );
 
 /// <summary>
-/// Respuesta de actualización de perfil de usuario (KAN-601).
+/// Respuesta de actualización de perfil de usuario (KAN-601 / KAN-503).
 /// </summary>
 public sealed record ProfileResponseDto(
     Guid Id,
     string Email,
     string FullName,
-    string? PhoneNumber
+    string? PhoneNumber,
+    string? TelegramUsername = null
 );
 
 /// <summary>

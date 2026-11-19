@@ -1,5 +1,6 @@
 using Domain.Common;
 using Domain.Exceptions;
+using Domain.Services;
 
 namespace Domain.Entities;
 
@@ -9,6 +10,7 @@ public sealed class Athlete : BaseEntity
     public string LastName { get; private set; } = string.Empty;
     public string Email { get; private set; } = string.Empty;
     public string Phone { get; private set; } = string.Empty;
+    public string? TelegramUsername { get; private set; }
     public bool IsMinor { get; private set; }
     public string? EmergencyContact { get; private set; }
     public bool Active { get; private set; } = true;
@@ -55,10 +57,12 @@ public sealed class Athlete : BaseEntity
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
         string? emergencyContact = null,
-        bool allowsProfilePhoto = true)
+        bool allowsProfilePhoto = true,
+        string? telegramUsername = null)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
+        athlete.UpdateTelegramUsername(telegramUsername);
         athlete.IsMinor = true;
 
         athlete.DigitalConsent = DigitalConsent.RegisterForMinor(
@@ -79,10 +83,12 @@ public sealed class Athlete : BaseEntity
         string? lastName,
         string? email,
         string? phone,
-        string? emergencyContact = null)
+        string? emergencyContact = null,
+        string? telegramUsername = null)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
+        athlete.UpdateTelegramUsername(telegramUsername);
         athlete.IsMinor = true;
         return athlete;
     }
@@ -94,10 +100,12 @@ public sealed class Athlete : BaseEntity
         string? phone,
         bool signsInitialConsent = false,
         string? emergencyContact = null,
-        bool allowsProfilePhoto = true)
+        bool allowsProfilePhoto = true,
+        string? telegramUsername = null)
     {
         var athlete = new Athlete();
         athlete.ValidateAndAssignPersonalData(firstName, lastName, email, phone, emergencyContact);
+        athlete.UpdateTelegramUsername(telegramUsername);
         athlete.IsMinor = false;
 
         if (signsInitialConsent)
@@ -236,7 +244,7 @@ public sealed class Athlete : BaseEntity
         AccountId = accountId;
     }
 
-    public void UpdateContactInfo(string? phone, string? emergencyContact)
+    public void UpdateContactInfo(string? phone, string? emergencyContact, string? telegramUsername = null)
     {
         var cleanPhone = phone?.Trim();
         if (string.IsNullOrWhiteSpace(cleanPhone) || cleanPhone.Length > 50)
@@ -244,6 +252,22 @@ public sealed class Athlete : BaseEntity
 
         Phone = cleanPhone;
         EmergencyContact = emergencyContact?.Trim();
+
+        if (telegramUsername is not null)
+        {
+            UpdateTelegramUsername(telegramUsername);
+        }
+    }
+
+    public void UpdateTelegramUsername(string? telegramUsername)
+    {
+        var (isValid, normalized, errorMessage) = TelegramUsernameNormalizer.ValidateAndNormalize(telegramUsername);
+        if (!isValid)
+        {
+            throw new DomainException(errorMessage ?? "El usuario de Telegram no es válido.");
+        }
+
+        TelegramUsername = normalized;
     }
 
     public void SetActive(bool active) => Active = active;

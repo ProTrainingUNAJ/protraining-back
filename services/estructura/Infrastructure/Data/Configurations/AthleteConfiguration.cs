@@ -30,6 +30,10 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
             .HasMaxLength(50)
             .IsRequired();
 
+        builder.Property(athlete => athlete.TelegramUsername)
+            .HasColumnName("telegram_username")
+            .HasMaxLength(32);
+
         builder.Property(athlete => athlete.IsMinor)
             .HasColumnName("is_minor")
             .IsRequired();
