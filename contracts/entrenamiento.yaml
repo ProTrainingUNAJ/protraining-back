@@ -2091,46 +2091,6 @@ components:
           items:
             $ref: '#/components/schemas/RoutineItemRequest'
 
-    RoutineTemplate:
-      type: object
-      required:
-        - id
-        - name
-        - goal
-        - exercisesCount
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "a8b7c6d5-e4f3-2a1b-0c9d-8e7f6a5b4c3d"
-        name:
-          type: string
-          example: "Pretemporada Bloque Fuerza Semana 1-4"
-        goal:
-          type: string
-          example: "Fuerza Máxima e Hipertrofia Funcional"
-        exercisesCount:
-          type: integer
-          example: 6
-
-    CreateRoutineTemplateRequest:
-      type: object
-      required:
-        - name
-        - goal
-        - items
-      properties:
-        name:
-          type: string
-          example: "Pretemporada Bloque Fuerza Semana 1-4"
-        goal:
-          type: string
-          example: "Fuerza Máxima"
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/RoutineItemRequest'
-
     TodayRoutineExercise:
       type: object
       required:
@@ -2696,13 +2656,59 @@ components:
           type: integer
           example: 4
         reps:
-          type: integer
-          example: 5
+          type: string
+          description: Número o rango de repeticiones (ej. "10", "6-8", "8-10").
+          example: "6-8"
         targetPercentage:
           type: number
           format: decimal
           nullable: true
           example: 80.0
+        intensityType:
+          type: string
+          enum: [RPE, RIR]
+          nullable: true
+          description: Métrica de esfuerzo subjetivo elegida por el PF para este ejercicio.
+          example: "RPE"
+        targetRpe:
+          type: number
+          format: decimal
+          nullable: true
+          description: Escala de percepción del esfuerzo RPE (1 a 10).
+          example: 8.5
+        targetRir:
+          type: integer
+          nullable: true
+          description: Repeticiones en reserva RIR (0 a 5).
+          example: 2
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas o indicaciones específicas para la semana.
+          example: "Pausa de 2 seg en la concéntrica"
+
+    TrainingBlockRequest:
+      type: object
+      required:
+        - title
+        - order
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del bloque existente (opcional). Si no se envía, se empareja por orden.
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseRequest'
 
     TrainingSessionRequest:
       type: object
@@ -2736,6 +2742,10 @@ components:
           nullable: true
           description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
           example: "18:00:00"
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingBlockRequest'
         exercises:
           type: array
           items:
@@ -2821,13 +2831,59 @@ components:
           type: integer
           example: 4
         reps:
-          type: integer
-          example: 5
+          type: string
+          description: Número o rango de repeticiones (ej. "10", "6-8", "8-10").
+          example: "6-8"
         targetPercentage:
           type: number
           format: decimal
           nullable: true
           example: 80.0
+        intensityType:
+          type: string
+          enum: [RPE, RIR]
+          nullable: true
+          description: Métrica de esfuerzo subjetivo elegida por el PF para este ejercicio.
+          example: "RPE"
+        targetRpe:
+          type: number
+          format: decimal
+          nullable: true
+          description: Escala de percepción del esfuerzo RPE (1 a 10).
+          example: 8.5
+        targetRir:
+          type: integer
+          nullable: true
+          description: Repeticiones en reserva RIR (0 a 5).
+          example: 2
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas o indicaciones específicas para la semana.
+          example: "Pausa de 2 seg en la concéntrica"
+
+    TrainingBlockDetail:
+      type: object
+      required:
+        - id
+        - title
+        - order
+        - exercises
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseDetail'
 
     TrainingSessionDetail:
       type: object
@@ -2836,6 +2892,7 @@ components:
         - name
         - order
         - dayOfWeek
+        - blocks
         - exercises
       properties:
         id:
@@ -2860,6 +2917,10 @@ components:
           nullable: true
           description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
           example: "18:00:00"
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingBlockDetail'
         exercises:
           type: array
           items:

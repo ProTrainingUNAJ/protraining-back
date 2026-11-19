@@ -19,6 +19,7 @@ namespace Application.DTOs.Routines
         public ExerciseType ExerciseType { get; set; } = ExerciseType.Weight;
         public int Sets { get; set; }
         public int Reps { get; set; }
+        public string? RepsRange { get; set; }
         public double Percentage { get; set; }
         public double? WeightKg { get; set; }
         public double? BarWeight { get; set; }

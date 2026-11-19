@@ -17,7 +17,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
     public async Task<TrainingSession?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.TrainingSessions
-            .Include(s => s.PrescribedExercises)
+            .Include(s => s.Blocks)
+                .ThenInclude(b => b.PrescribedExercises)
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
@@ -36,8 +37,9 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-                        .ThenInclude(s => s.PrescribedExercises.OrderBy(pe => pe.Order))
-                            .ThenInclude(pe => pe.Exercise)
+                        .ThenInclude(s => s.Blocks.OrderBy(b => b.Order))
+                            .ThenInclude(b => b.PrescribedExercises.OrderBy(pe => pe.Order))
+                                .ThenInclude(pe => pe.Exercise)
             .Where(a => a.AthleteId == athleteId ||
                         (a.CategoryId.HasValue && categoryIds.Contains(a.CategoryId.Value)))
             .OrderByDescending(a => a.AthleteId.HasValue) // Prioridad: plan asignado directo al atleta
@@ -59,7 +61,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-                        .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(s => s.Blocks)
+                            .ThenInclude(b => b.PrescribedExercises)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);
     }
@@ -79,7 +82,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-                        .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(s => s.Blocks)
+                            .ThenInclude(b => b.PrescribedExercises)
             .Where(a => a.PfId == pfId && a.DeletedAt == null && a.Plan.DeletedAt == null)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);

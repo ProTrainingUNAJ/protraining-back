@@ -8,13 +8,24 @@ public record PrescribedExerciseDto(
     string ExerciseName,
     int Order,
     int Sets,
-    int Reps,
+    string Reps,
     decimal? TargetPercentage,
     ExerciseType ExerciseType = ExerciseType.Weight,
     List<string>? Images = null,
     List<string>? PrimaryMuscles = null,
     List<string>? SecondaryMuscles = null,
-    string? MuscleGroup = null
+    string? MuscleGroup = null,
+    string? IntensityType = null,
+    decimal? TargetRpe = null,
+    int? TargetRir = null,
+    string? Notes = null
+);
+
+public record TrainingBlockDto(
+    Guid Id,
+    string Title,
+    int Order,
+    List<PrescribedExerciseDto> Exercises
 );
 
 public record TrainingPlanSessionDto(
@@ -23,9 +34,23 @@ public record TrainingPlanSessionDto(
     int Order,
     DayOfWeek DayOfWeek,
     string? CoachNotes,
+    List<TrainingBlockDto> Blocks,
     List<PrescribedExerciseDto> Exercises,
     TimeOnly? StartTime = null
-);
+)
+{
+    public TrainingPlanSessionDto(
+        Guid id,
+        string name,
+        int order,
+        DayOfWeek dayOfWeek,
+        string? coachNotes,
+        List<PrescribedExerciseDto> exercises,
+        TimeOnly? startTime = null)
+        : this(id, name, order, dayOfWeek, coachNotes, [], exercises, startTime)
+    {
+    }
+}
 
 public record TrainingPlanWeekDto(
     Guid Id,
