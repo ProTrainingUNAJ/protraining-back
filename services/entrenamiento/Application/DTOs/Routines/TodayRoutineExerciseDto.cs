@@ -1,4 +1,3 @@
-
 using Domain.Entities;
 
 namespace Application.DTOs.Routines
@@ -11,8 +10,7 @@ namespace Application.DTOs.Routines
         public string? VideoUrl { get; set; }
         // Fotos del ejercicio (inicio y fin del movimiento), las mismas que la biblioteca
         public List<string> Images { get; set; } = [];
-
-        // Ilustraciones o animaciones de terceros, en orden de preferencia (KAN-549).
+        // Ilustraciones o animaciones de terceros, en orden de preferencia.
         public List<Application.DTOs.Exercise.ExerciseMediaDto> Media { get; set; } = [];
         public List<string> PrimaryMuscles { get; set; } = [];
         public List<string> SecondaryMuscles { get; set; } = [];
@@ -29,6 +27,9 @@ namespace Application.DTOs.Routines
         public double? TargetTimeSeconds { get; set; }
         public double? BestMarkSeconds { get; set; }
         public List<TodayRoutinePerformedSetDto> PerformedSets { get; set; } = [];
+        public bool IsAdapted { get; set; }
+        public string? OriginalExerciseName { get; set; }
+        public string? AdaptationReason { get; set; }
     }
 
     public class TodayRoutinePerformedSetDto

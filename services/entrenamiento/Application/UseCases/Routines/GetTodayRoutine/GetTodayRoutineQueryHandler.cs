@@ -108,6 +108,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             // Resolver si el PF aprobó un ajuste del día para este atleta y sesión (KAN-452, KAN-478)
             var replacementsByOriginal = new Dictionary<Guid, Guid>();
             var substituteExercisesById = new Dictionary<Guid, Domain.Entities.Exercise>();
+            var variantReasons = new Dictionary<Guid, string?>();
             bool adjustedByCoach = false;
             string? adjustmentNote = null;
             AthleteSessionAdjustment? activeAdjustment = null;
@@ -122,6 +123,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     if (variant.OriginalExerciseId != Guid.Empty && variant.SubstituteExerciseId != Guid.Empty)
                     {
                         replacementsByOriginal[variant.OriginalExerciseId] = variant.SubstituteExerciseId;
+                        variantReasons[variant.OriginalExerciseId] = variant.Note;
                         adaptedByVariant = true;
                     }
                 }
@@ -148,6 +150,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                             if (item.OriginalExerciseId != Guid.Empty && item.SubstituteExerciseId != Guid.Empty)
                             {
                                 replacementsByOriginal[item.OriginalExerciseId] = item.SubstituteExerciseId;
+                                variantReasons[item.OriginalExerciseId] = string.IsNullOrWhiteSpace(activeAdjustment.Note)
+                                                                          ? "Ajuste aplicado por tu PF para la sesión de hoy."
+                                                                          : activeAdjustment.Note.Trim();
                             }
                         }
                     }
@@ -179,11 +184,17 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             {
                 var effectiveExerciseId = prescribed.ExerciseId;
                 var effectiveExercise = prescribed.Exercise;
+                bool isAdapted = false;
+                string? originalExerciseName = null;
+                string? adaptationReason = null;
 
                 if (replacementsByOriginal.TryGetValue(prescribed.ExerciseId, out var substituteId))
                 {
                     effectiveExerciseId = substituteId;
                     substituteExercisesById.TryGetValue(substituteId, out effectiveExercise);
+                    isAdapted = true;
+                    originalExerciseName = prescribed.Exercise?.Name;
+                    variantReasons.TryGetValue(prescribed.ExerciseId, out adaptationReason);
                 }
 
                 var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(athleteId, effectiveExerciseId, cancellationToken);
@@ -192,6 +203,12 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 if (activeAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
                 {
                     percentage = Math.Round(percentage * (100m - reduction) / 100m, 2);
+                    var reductionText = $"Reducción de carga del {reduction}%";
+                    adaptationReason = string.IsNullOrWhiteSpace(adaptationReason)
+                        ? (string.IsNullOrWhiteSpace(activeAdjustment.Note)
+                            ? reductionText
+                            : $"{activeAdjustment.Note.Trim()} ({reductionText})")
+                        : $"{adaptationReason} · {reductionText}";
                 }
 
                 var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
@@ -263,7 +280,10 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                         Reps = p.Reps,
                         TimeSeconds = p.TimeSeconds
                     })
-                    .ToList()
+                    .ToList(),
+                    IsAdapted = isAdapted,
+                    OriginalExerciseName = originalExerciseName,
+                    AdaptationReason = adaptationReason
                 });
             }
 
