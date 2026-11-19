@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
         services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
         services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+        services.AddScoped<IAthleteVariantRepository, AthleteVariantRepository>();
         services.AddSingleton<ITrainingPlanPdfGenerator, TrainingPlanPdfGenerator>();
 
         // Ilustraciones de los ejercicios del catálogo (KAN-549): tabla fija, se lee una vez.
