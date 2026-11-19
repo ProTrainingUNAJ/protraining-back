@@ -12,6 +12,8 @@ public sealed class IdentidadPurgeRepository(AppDbContext context) : IIdentidadP
 {
     public async Task<PurgedAthleteDataDto> PurgeAthleteDataAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+
         int photosCount = await context.UserPhotos
             .Where(p => p.UserId == athleteId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -20,9 +22,16 @@ public sealed class IdentidadPurgeRepository(AppDbContext context) : IIdentidadP
             .Where(r => r.UserId == athleteId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        int usersCount = await context.Users
-            .Where(u => u.Id == athleteId)
+        await context.UserRoles
+            .Where(ur => ur.UserId == athleteId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        // Seguridad: solo purga usuarios con rol de atleta (PfId asignado al PF dueño)
+        int usersCount = await context.Users
+            .Where(u => u.Id == athleteId && u.PfId != null)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
 
         int totalRecordsPurged = photosCount + refreshTokensCount + usersCount;
 

@@ -126,4 +126,29 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
         Assert.Equal(0, result.PhotosCount);
         Assert.Equal(0, result.TotalRecordsPurged);
     }
+
+    [Fact]
+    public async Task Given_PfUserWithoutPfId_When_Purging_Then_PfUserIsNotDeleted()
+    {
+        // Arrange: un usuario PF no tiene PfId asignado
+        var pfUserId = Guid.NewGuid();
+        var pfUser = new User
+        {
+            Id = pfUserId,
+            UserName = "coach@protraining.test",
+            Email = "coach@protraining.test",
+            FullName = "Profesor Principal",
+            PfId = null
+        };
+        _context.Users.Add(pfUser);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _repository.PurgeAthleteDataAsync(pfUserId);
+
+        // Assert: no se borra el PF
+        Assert.Equal(0, result.UsersCount);
+        Assert.Equal(0, result.TotalRecordsPurged);
+        Assert.True(await _context.Users.AnyAsync(u => u.Id == pfUserId));
+    }
 }

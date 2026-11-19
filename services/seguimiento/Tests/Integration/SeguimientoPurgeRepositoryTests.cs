@@ -194,7 +194,9 @@ public sealed class SeguimientoPurgeRepositoryTests : IDisposable
         Assert.Equal(1, result.DailyLoadsCount);
         Assert.Equal(1, result.FieldTestResultsCount);
         Assert.Equal(1, result.AttendancesCount);
-        Assert.Equal(6, result.TotalRecordsPurged);
+        Assert.Equal(1, result.CheckInInjuryPainsCount);
+        Assert.Equal(1, result.InjuryStatusChangesCount);
+        Assert.Equal(8, result.TotalRecordsPurged);
 
         // Verificar que en la base de datos no queda nada del atleta purgado
         Assert.False(await _context.CheckIns.IgnoreQueryFilters().AnyAsync(c => c.AthleteId == targetAthleteId));

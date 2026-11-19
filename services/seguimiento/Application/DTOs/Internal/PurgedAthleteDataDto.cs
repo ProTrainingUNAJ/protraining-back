@@ -10,5 +10,7 @@ public sealed record PurgedAthleteDataDto(
     int InjuriesCount,
     int FieldTestResultsCount,
     int AttendancesCount,
-    int TotalRecordsPurged);
+    int TotalRecordsPurged,
+    int CheckInInjuryPainsCount = 0,
+    int InjuryStatusChangesCount = 0);
 

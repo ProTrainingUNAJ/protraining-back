@@ -15,6 +15,8 @@ public sealed class SeguimientoPurgeRepository(AppDbContext context) : ISeguimie
     {
         return await PersistenceErrors.ExecuteAsync(async () =>
         {
+            await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+
             var checkInIds = await context.CheckIns.IgnoreQueryFilters()
                 .Where(c => c.AthleteId == athleteId)
                 .Select(c => c.Id)
@@ -26,9 +28,10 @@ public sealed class SeguimientoPurgeRepository(AppDbContext context) : ISeguimie
                 .ToListAsync(cancellationToken);
 
             // 1. Eliminar dolores de check-in asociados al atleta (por checkInId o por injuryId)
+            int checkInInjuryPainsCount = 0;
             if (checkInIds.Count > 0 || injuryIds.Count > 0)
             {
-                await context.CheckInInjuryPains.IgnoreQueryFilters()
+                checkInInjuryPainsCount = await context.CheckInInjuryPains.IgnoreQueryFilters()
                     .Where(p => checkInIds.Contains(p.CheckInId) || injuryIds.Contains(p.InjuryId))
                     .ExecuteDeleteAsync(cancellationToken);
             }
@@ -43,9 +46,10 @@ public sealed class SeguimientoPurgeRepository(AppDbContext context) : ISeguimie
             }
 
             // 3. Eliminar cambios de estado de lesiones
+            int injuryStatusChangesCount = 0;
             if (injuryIds.Count > 0)
             {
-                await context.AthleteInjuryStatusChanges.IgnoreQueryFilters()
+                injuryStatusChangesCount = await context.AthleteInjuryStatusChanges.IgnoreQueryFilters()
                     .Where(c => injuryIds.Contains(c.InjuryId))
                     .ExecuteDeleteAsync(cancellationToken);
             }
@@ -74,7 +78,15 @@ public sealed class SeguimientoPurgeRepository(AppDbContext context) : ISeguimie
                 .Where(a => a.AthleteId == athleteId)
                 .ExecuteDeleteAsync(cancellationToken);
 
-            int totalRecordsPurged = checkInsCount + injuriesCount + dailyLoadsCount + fieldTestResultsCount + attendancesCount;
+            await tx.CommitAsync(cancellationToken);
+
+            int totalRecordsPurged = checkInsCount
+                + injuriesCount
+                + dailyLoadsCount
+                + fieldTestResultsCount
+                + attendancesCount
+                + checkInInjuryPainsCount
+                + injuryStatusChangesCount;
 
             return new PurgedAthleteDataDto(
                 athleteId,
@@ -83,7 +95,9 @@ public sealed class SeguimientoPurgeRepository(AppDbContext context) : ISeguimie
                 injuriesCount,
                 fieldTestResultsCount,
                 attendancesCount,
-                totalRecordsPurged);
+                totalRecordsPurged,
+                checkInInjuryPainsCount,
+                injuryStatusChangesCount);
         });
     }
 }

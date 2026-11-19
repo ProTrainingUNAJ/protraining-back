@@ -13,6 +13,8 @@ public sealed class EntrenamientoPurgeRepository(AppDbContext context) : IEntren
 {
     public async Task<PurgedAthleteDataDto> PurgeAthleteDataAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+
         // 1. Eliminar series ejecutadas (PerformedSets)
         int performedSetsCount = await context.PerformedSets.IgnoreQueryFilters()
             .Where(p => p.AthleteId == athleteId)
@@ -37,6 +39,8 @@ public sealed class EntrenamientoPurgeRepository(AppDbContext context) : IEntren
         int planAssignmentsCount = await context.PlanAssignments.IgnoreQueryFilters()
             .Where(p => p.AthleteId == athleteId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
 
         int totalRecordsPurged = performedSetsCount + recordProposalsCount + athleteRecordsCount + sessionAdjustmentsCount + planAssignmentsCount;
 
