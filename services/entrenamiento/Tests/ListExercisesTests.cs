@@ -648,6 +648,126 @@ public class ListExercisesTests : IAsyncLifetime
         }
     }
 
+    // ==========================================
+    // KAN-633: Equivalencias de Músculos y Submúsculos
+    // ==========================================
+
+    [Theory]
+    [InlineData("pecho")]
+    [InlineData("Pecho")]
+    [InlineData("pectoral")]
+    [InlineData("pectorales")]
+    public async Task Repository_ListAsync_ConFiltroPechoYVariantes_EncuentraEjerciciosTantoEnInglesComoEnEspanol(string inputMuscle)
+    {
+        // Ejercicio 1 con primaryMuscles en inglés técnico (como en free-exercise-db)
+        var benchPress = Exercise.Create("Press de Banca", "Pecho", primaryMuscles: ["chest"]);
+        // Ejercicio 2 con primaryMuscles en español
+        var pushUp = Exercise.Create("Flexiones de Brazo", "Pecho", primaryMuscles: ["pecho"]);
+        // Ejercicio no relacionado
+        var squat = Exercise.Create("Sentadilla Trasera", "Piernas", primaryMuscles: ["cuadríceps"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(benchPress, pushUp, squat);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Pecho", inputMuscle, null, false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Press de Banca");
+            Assert.Contains(items, e => e.Name == "Flexiones de Brazo");
+            Assert.DoesNotContain(items, e => e.Name == "Sentadilla Trasera");
+        }
+    }
+
+    [Theory]
+    [InlineData("abdominales")]
+    [InlineData("Abdominales")]
+    [InlineData("abdomen")]
+    [InlineData("core")]
+    public async Task Repository_ListAsync_ConFiltroAbdominalesYVariantes_EncuentraEjerciciosTantoEnInglesComoEnEspanol(string inputMuscle)
+    {
+        var plank = Exercise.Create("Plancha Frontal", "Core", primaryMuscles: ["abdominals"]);
+        var crunch = Exercise.Create("Crunch Abdominal", "Core", primaryMuscles: ["abdominales"]);
+        var lunge = Exercise.Create("Estocadas", "Piernas", primaryMuscles: ["quadriceps"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(plank, crunch, lunge);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Core", inputMuscle, null, false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Plancha Frontal");
+            Assert.Contains(items, e => e.Name == "Crunch Abdominal");
+            Assert.DoesNotContain(items, e => e.Name == "Estocadas");
+        }
+    }
+
+    [Theory]
+    [InlineData("hombros")]
+    [InlineData("Hombros")]
+    [InlineData("deltoides")]
+    [InlineData("hombro")]
+    public async Task Repository_ListAsync_ConFiltroHombrosYVariantes_EncuentraEjerciciosTantoEnInglesComoEnEspanol(string inputMuscle)
+    {
+        var militaryPress = Exercise.Create("Press Militar", "Hombros", primaryMuscles: ["shoulders"]);
+        var lateralRaise = Exercise.Create("Vuelos Laterales", "Hombros", primaryMuscles: ["hombros"]);
+        var curl = Exercise.Create("Curl de Bíceps", "Brazos", primaryMuscles: ["biceps"]);
+
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddRangeAsync(militaryPress, lateralRaise, curl);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListAsync(null, null, "Hombros", inputMuscle, null, false, 1, 20);
+
+            Assert.Equal(2, totalCount);
+            Assert.Contains(items, e => e.Name == "Press Militar");
+            Assert.Contains(items, e => e.Name == "Vuelos Laterales");
+            Assert.DoesNotContain(items, e => e.Name == "Curl de Bíceps");
+        }
+    }
+
+    [Fact]
+    public async Task Repository_ListBasesAsync_ConFiltroPecho_RetornaBasesConVariantesCoincidentes()
+    {
+        var baseExercise = Exercise.Create("Press de Banca con Barra", "Pecho", primaryMuscles: ["chest"]);
+        await using (var seedContext = CreateContext())
+        {
+            await seedContext.Exercises.AddAsync(baseExercise);
+            await seedContext.SaveChangesAsync();
+
+            var variant = Exercise.Create("Press de Banca Inclinado", "Pecho", primaryMuscles: ["chest"]);
+            variant.AssignAsVariantOf(baseExercise, "Inclinado");
+            await seedContext.Exercises.AddAsync(variant);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var actContext = CreateContext())
+        {
+            var repo = new ExerciseRepository(actContext);
+            var (items, totalCount) = await repo.ListBasesAsync(null, null, "Pecho", "pecho", null, false, 1, 20);
+
+            Assert.Equal(1, totalCount);
+            Assert.Single(items);
+            Assert.Equal(baseExercise.Id, items[0].Id);
+        }
+    }
+
     [Fact]
     public async Task Handler_ListExercises_Isolation_PFA_SetsVideo_PFB_SeesCatalogVideo()
     {
