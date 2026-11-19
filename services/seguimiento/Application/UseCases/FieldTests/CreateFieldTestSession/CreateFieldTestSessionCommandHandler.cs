@@ -39,12 +39,12 @@ public sealed class CreateFieldTestSessionCommandHandler(
                 ?? throw new DomainException("Una o más pruebas del catálogo no existen.");
         }
 
+        // El estado nace Planned por defecto en la entidad (KAN-580: setter privado).
         var session = new FieldTestSession
         {
             CategoryId = command.CategoryId,
             Date = command.Date,
-            Name = command.Name,
-            Status = FieldTestSessionStatus.Planned
+            Name = command.Name
         };
 
         var sessionTests = command.Tests

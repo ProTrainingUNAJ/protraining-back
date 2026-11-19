@@ -10,7 +10,10 @@ public class FieldTestSession : BaseEntity
     public Guid CategoryId { get; set; }
     public DateTime Date { get; set; }
     public string Name { get; set; } = string.Empty;
-    public FieldTestSessionStatus Status { get; set; } = FieldTestSessionStatus.Planned;
+    // setter privado (KAN-580): el estado solo cambia por TransitionTo, que valida la
+    // máquina de estados. Ningún caso de uso puede escribirlo directo (ni siquiera con
+    // un inicializador de objeto).
+    public FieldTestSessionStatus Status { get; private set; } = FieldTestSessionStatus.Planned;
 
     // Únicas transiciones permitidas (KAN-568): estricta y secuencial,
     // solo Planificada → En curso → Cerrada, sin saltos ni reaperturas.
