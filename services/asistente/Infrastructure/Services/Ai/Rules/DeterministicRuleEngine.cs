@@ -145,7 +145,7 @@ public static class DeterministicRuleEngine
                 "Se aplicó una plantilla balanceada de acondicionamiento físico funcional con cargas submáximas seguras (60-70%)."
         };
 
-        return $"Propuesta generada mediante motor de reglas determinísticas (plantilla basada en objetivo: '{rawGoal}'). {rationale} Criterio activado como respaldo ante indisponibilidad de proveedores de IA.";
+        return $"Propuesta generada mediante motor de reglas determinísticas (plantilla basada en objetivo: '{rawGoal}'). {rationale}";
     }
 
     private static List<SuggestedExerciseDto> BuildExercises(GoalCategory category, TargetArea targetArea)

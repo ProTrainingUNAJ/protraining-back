@@ -82,6 +82,7 @@ public class RecordPerformedSetsCommandHandlerTests
         Assert.Equal(1, result.RecordedSetsCount);
         Assert.Equal(1, result.ProposalsGeneratedCount);
         Assert.NotNull(capturedProposal);
+        Assert.Equal(currentRecord.Id, capturedProposal.CurrentRecordId);
         Assert.Equal(100m, capturedProposal.CurrentWeight);
         Assert.Equal(107.5m, capturedProposal.ProposedWeight);
         Assert.Equal(90m, capturedProposal.PerformedWeight);
@@ -288,6 +289,57 @@ public class RecordPerformedSetsCommandHandlerTests
         Assert.Equal(0, set.Reps);
         _performedSetRepoMock.Verify(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_BodyweightSet_When_RecordingZeroWeight_Then_PersistsPerformedSetAndDoesNotTriggerEpley()
+    {
+        // KAN-566: Permitir series con peso corporal (0 kg) sin disparar cálculo de Epley
+        IEnumerable<PerformedSet>? capturedSets = null;
+        _performedSetRepoMock
+            .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PerformedSet>, CancellationToken>((sets, _) => capturedSets = sets);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                Weight = 0m,
+                Reps = 12
+            }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(0, result.ProposalsGeneratedCount);
+        Assert.NotNull(capturedSets);
+        var set = Assert.Single(capturedSets);
+        Assert.Equal(0m, set.Weight);
+        Assert.Equal(12, set.Reps);
+        _proposalRepoMock.Verify(r => r.AddAsync(It.IsAny<RecordProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+        _performedSetRepoMock.Verify(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_NegativeWeight_When_RecordingSet_Then_ThrowsDomainException()
+    {
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                Weight = -5m,
+                Reps = 10
+            }
+        ]);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.Handle(command));
+        Assert.Equal("El peso no puede ser negativo.", ex.Message);
     }
 }
 
