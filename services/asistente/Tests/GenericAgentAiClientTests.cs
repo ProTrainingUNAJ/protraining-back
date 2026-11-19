@@ -5,6 +5,7 @@ using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.Mcp;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Services.Ai;
@@ -500,6 +501,219 @@ public sealed class GenericAgentAiClientTests : IDisposable
             log.ValidationResult == "SuccessDayAdjustment" &&
             log.PromptTokens == 50 &&
             log.CompletionTokens == 30), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_ValidTrainingRecommendationFromAgent_When_Generated_Then_ValidatesAndAudits()
+    {
+        // Arrange
+        var innerJson = JsonSerializer.Serialize(new
+        {
+            title = "Refuerzo de salto vertical",
+            reason = "salto por debajo del promedio",
+            recommendationText = "Se detectó salto por debajo del promedio (34 cm vs 42 cm). Sumá dos bloques semanales de pliometría progresiva."
+        });
+
+        var completionJson = JsonSerializer.Serialize(new
+        {
+            id = "chatcmpl-rec-train",
+            choices = new[]
+            {
+                new
+                {
+                    index = 0,
+                    message = new { role = "assistant", content = innerJson },
+                    finish_reason = "stop"
+                }
+            },
+            usage = new { prompt_tokens = 90, completion_tokens = 40, total_tokens = 130 }
+        });
+
+        _wireMockServer
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(completionJson));
+
+        var client = new GenericAgentAiClient(
+            new AgentProviderOptions
+            {
+                Name = "OpenAI",
+                BaseUrl = $"{_wireMockServer.Url}/v1",
+                Model = "gpt-4.1-mini",
+                ApiKey = "test-key",
+                TimeoutSeconds = 10
+            },
+            new HttpClient(),
+            _mcpMock.Object,
+            _auditMock.Object,
+            NullLogger<GenericAgentAiClient>.Instance);
+
+        var request = new TrainingRecommendationRequestDto(
+            Reason: "salto por debajo del promedio",
+            Metrics: [new ProfileMetricComparisonDto("Salto Vertical CMJ (cm)", 34, 42, "cm", -19.0, "Por debajo del promedio (-19.0%)")],
+            CategoryName: "Primera División",
+            SuggestedFocus: "Incorporar pliometría de bajo impacto",
+            AthleteId: Guid.NewGuid());
+
+        // Act
+        var result = await client.TryGenerateTrainingRecommendationAsync(request);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Agente (OpenAI)", result!.ProviderUsed);
+        Assert.Equal("salto por debajo del promedio", result.Reason);
+        Assert.Contains("34 cm vs 42 cm", result.RecommendationText);
+
+        _auditMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Agente (OpenAI)" &&
+            log.IsValid &&
+            log.ValidationResult == "Valido" &&
+            log.PromptTokens == 90 &&
+            log.CompletionTokens == 40), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_TrainingRecommendationWithSupplement_When_AgentResponds_Then_RejectsAndFallsBackToRules()
+    {
+        // Arrange
+        var innerJson = JsonSerializer.Serialize(new
+        {
+            title = "Potencia y suplementación",
+            reason = "salto por debajo del promedio",
+            recommendationText = "Agregá creatina y proteína en polvo después de entrenar."
+        });
+
+        var completionJson = JsonSerializer.Serialize(new
+        {
+            id = "chatcmpl-rec-bad",
+            choices = new[]
+            {
+                new
+                {
+                    index = 0,
+                    message = new { role = "assistant", content = innerJson },
+                    finish_reason = "stop"
+                }
+            }
+        });
+
+        _wireMockServer
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(completionJson));
+
+        var agentClient = new GenericAgentAiClient(
+            new AgentProviderOptions
+            {
+                Name = "OpenAI",
+                BaseUrl = $"{_wireMockServer.Url}/v1",
+                Model = "gpt-4.1-mini",
+                ApiKey = "test-key",
+                TimeoutSeconds = 10
+            },
+            new HttpClient(),
+            _mcpMock.Object,
+            _auditMock.Object,
+            NullLogger<GenericAgentAiClient>.Instance);
+
+        var rulesClient = new RuleBasedAiClient(_auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+        var resilient = new ResilientAiService(
+            [agentClient, rulesClient],
+            semanticValidator: null,
+            responseCache: null,
+            NullLogger<ResilientAiService>.Instance);
+
+        var request = new TrainingRecommendationRequestDto(
+            Reason: "salto por debajo del promedio",
+            Metrics: [new ProfileMetricComparisonDto("Salto Vertical CMJ (cm)", 34, 42, "cm", -19.0)]);
+
+        // Act
+        var result = await resilient.GenerateTrainingRecommendationAsync(request);
+
+        // Assert
+        Assert.Equal("Reglas", result.ProviderUsed);
+        Assert.Equal("salto por debajo del promedio", result.Reason);
+        _auditMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            log.Provider == "Agente (OpenAI)" &&
+            !log.IsValid &&
+            log.ValidationResult == "SuplementoDetectado"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_NutritionRecommendationFromAgent_ValidAndInvalid_Then_EnforcesApprovedFoodsAndDisclaimer()
+    {
+        // Arrange: primero devuelve un alimento no aprobado ("pizza"), luego una válida en segundo test o con ResilientAiService
+        var badInnerJson = JsonSerializer.Serialize(new
+        {
+            suggestedPlateComposition = "Comé pizza con pollo para recuperar energía.",
+            hydrationAndSleepGuidelines = "Tomá 2.5 litros de agua y dormí 8 horas.",
+            mentionedFoods = new[] { "pollo" },
+            legalDisclaimer = "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
+        });
+
+        var goodInnerJson = JsonSerializer.Serialize(new
+        {
+            suggestedPlateComposition = "Armá tu plato con pollo, arroz y zanahoria para cubrir entre 100 g y 140 g de proteína.",
+            hydrationAndSleepGuidelines = "Tomá 2.5 litros de agua y descansá 8 horas.",
+            mentionedFoods = new[] { "pollo", "arroz", "zanahoria" },
+            legalDisclaimer = "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
+        });
+
+        _wireMockServer
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost().WithHeader("Authorization", "Bearer bad-key"))
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(JsonSerializer.Serialize(new
+            {
+                id = "chatcmpl-nut-bad",
+                choices = new[] { new { index = 0, message = new { role = "assistant", content = badInnerJson }, finish_reason = "stop" } }
+            })));
+
+        _wireMockServer
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost().WithHeader("Authorization", "Bearer good-key"))
+            .RespondWith(Response.Create().WithStatusCode(200).WithBody(JsonSerializer.Serialize(new
+            {
+                id = "chatcmpl-nut-good",
+                choices = new[] { new { index = 0, message = new { role = "assistant", content = goodInnerJson }, finish_reason = "stop" } }
+            })));
+
+        var goodClient = new GenericAgentAiClient(
+            new AgentProviderOptions { Name = "OpenAI", BaseUrl = $"{_wireMockServer.Url}/v1", Model = "gpt-4.1-mini", ApiKey = "good-key", TimeoutSeconds = 10 },
+            new HttpClient(),
+            _mcpMock.Object,
+            _auditMock.Object,
+            NullLogger<GenericAgentAiClient>.Instance);
+
+        var badClient = new GenericAgentAiClient(
+            new AgentProviderOptions { Name = "OpenAI", BaseUrl = $"{_wireMockServer.Url}/v1", Model = "gpt-4.1-mini", ApiKey = "bad-key", TimeoutSeconds = 10 },
+            new HttpClient(),
+            _mcpMock.Object,
+            _auditMock.Object,
+            NullLogger<GenericAgentAiClient>.Instance);
+
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: ["pollo", "arroz", "zanahoria"],
+            MinProteinGrams: 100,
+            MaxProteinGrams: 140,
+            HydrationLiters: 2.5,
+            SleepHours: 8);
+
+        // Act & Assert - caso válido
+        var validResult = await goodClient.TryGenerateNutritionRecommendationAsync(request);
+        Assert.NotNull(validResult);
+        Assert.Equal("Agente (OpenAI)", validResult!.ProviderUsed);
+        Assert.Equal("Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista.", validResult.LegalDisclaimer);
+
+        // Act & Assert - caso inválido cae a reglas via ResilientAiService
+        var rulesClient = new RuleBasedAiClient(_auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+        var resilient = new ResilientAiService(
+            [badClient, rulesClient],
+            semanticValidator: null,
+            responseCache: null,
+            NullLogger<ResilientAiService>.Instance);
+
+        var fallbackResult = await resilient.GenerateNutritionRecommendationAsync(request);
+        Assert.Equal("Reglas", fallbackResult.ProviderUsed);
+        _auditMock.Verify(a => a.LogAsync(It.Is<AiLog>(log =>
+            !log.IsValid &&
+            log.ValidationResult == "AlimentoNoAprobado"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static string CreateSimplePlanResponse(string planName)

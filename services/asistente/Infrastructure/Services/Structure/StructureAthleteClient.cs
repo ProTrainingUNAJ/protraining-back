@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Exceptions;
 using Application.Interfaces.Services;
@@ -8,13 +9,18 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Services.Structure;
 
 /// <summary>
-/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431 / KAN-472 / KAN-496).
+/// Cliente HTTP para validar la pertenencia y existencia de atletas en Estructura (KAN-423 / KAN-431 / KAN-472 / KAN-491 / KAN-496).
 /// El aislamiento multi-tenant por PfId se propaga con el token del PF o token de Servicio a través de ForwardAuthorizationHandler.
 /// </summary>
 public sealed class StructureAthleteClient(
     HttpClient httpClient,
     ILogger<StructureAthleteClient> logger) : IStructureAthleteClient
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private sealed record StructureAthleteApiResponse(
         [property: JsonPropertyName("id")] Guid Id,
         [property: JsonPropertyName("pfId")] Guid PfId,
@@ -192,6 +198,124 @@ public sealed class StructureAthleteClient(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error al comunicarse con Estructura para obtener atletas.");
+            throw new StructureServiceUnavailableException("El microservicio de Estructura no se encuentra disponible.", ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<StructureCategoryDto>> GetAthleteCategoriesAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
+
+        var result = await GetFromStructureAsync<List<StructureCategoryDto>>(
+            relativeUrl: $"api/v1/athletes/{athleteId}/categories",
+            returnNullOn404: false,
+            notFoundMessage: "El atleta no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar las categorías del atleta {athleteId}",
+            cancellationToken: cancellationToken);
+
+        return result ?? [];
+    }
+
+    public Task<StructureCategoryDto?> GetCategoryAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (categoryId == Guid.Empty)
+            return Task.FromResult<StructureCategoryDto?>(null);
+
+        return GetFromStructureAsync<StructureCategoryDto>(
+            relativeUrl: $"api/v1/categories/{categoryId}",
+            returnNullOn404: true,
+            notFoundMessage: "La categoría no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar la categoría {categoryId}",
+            cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StructureCategoryAthleteDto>> GetCategoryAthletesAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (categoryId == Guid.Empty)
+            throw new NotFoundException("La categoría no existe o no pertenece al preparador físico autenticado.");
+
+        var athletes = await GetFromStructureAsync<List<StructureCategoryAthleteDto>>(
+            relativeUrl: $"api/v1/categories/{categoryId}/athletes",
+            returnNullOn404: false,
+            notFoundMessage: "La categoría no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar los atletas de la categoría {categoryId}",
+            cancellationToken: cancellationToken);
+
+        return athletes?
+            .Where(a => a.Active && a.Id != Guid.Empty)
+            .ToList()
+            ?? [];
+    }
+
+    private async Task<T?> GetFromStructureAsync<T>(
+        string relativeUrl,
+        bool returnNullOn404,
+        string notFoundMessage,
+        string operationDescription,
+        CancellationToken cancellationToken) where T : class
+    {
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogError("La dirección base de Estructura no está configurada.");
+            throw new StructureServiceUnavailableException("La dirección base del microservicio de Estructura no está configurada.");
+        }
+
+        try
+        {
+            using var response = await httpClient.GetAsync(relativeUrl, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (returnNullOn404)
+                    return null;
+
+                throw new NotFoundException(notFoundMessage);
+            }
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Estructura rechazó la autenticación o permisos al {operationDescription}.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogError(
+                    "Estructura respondió código HTTP {StatusCode} al {Operation}.",
+                    (int)response.StatusCode,
+                    operationDescription);
+                throw new StructureServiceUnavailableException(
+                    $"El microservicio de Estructura no se encuentra disponible (código {(int)response.StatusCode}).");
+            }
+
+            return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (StructureServiceUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al comunicarse con Estructura al {Operation}.", operationDescription);
             throw new StructureServiceUnavailableException("El microservicio de Estructura no se encuentra disponible.", ex);
         }
     }

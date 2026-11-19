@@ -403,15 +403,194 @@ public sealed class GenericAgentAiClient : IAiClient
         return null;
     }
 
+    private const string RecommendationSystemPrompt =
+        "Sos el asistente de ProTraining en Argentina. Tu única tarea es redactar recomendaciones claras siguiendo estrictamente los datos calculados por reglas, la privacidad sin datos personales y el esquema JSON pedido.";
+
     public Task<TrainingRecommendationResponseDto?> TryGenerateTrainingRecommendationAsync(
         TrainingRecommendationRequestDto request,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<TrainingRecommendationResponseDto?>(null);
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
+
+        return GenerateRecommendationCoreAsync(
+            prompt,
+            request.AthleteId,
+            rawText => RecommendationOutputValidator.ValidateTrainingOutput(rawText, request),
+            dto => dto with { ProviderUsed = ProviderName },
+            cancellationToken);
+    }
 
     public Task<NutritionRecommendationResponseDto?> TryGenerateNutritionRecommendationAsync(
         NutritionRecommendationRequestDto request,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<NutritionRecommendationResponseDto?>(null);
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        return GenerateRecommendationCoreAsync(
+            prompt,
+            request.AthleteId,
+            rawText => RecommendationOutputValidator.ValidateNutritionOutput(rawText, request),
+            dto => dto with { ProviderUsed = ProviderName },
+            cancellationToken);
+    }
+
+    private async Task<T?> GenerateRecommendationCoreAsync<T>(
+        string prompt,
+        Guid? athleteId,
+        Func<string, RecommendationValidationResult<T>> validator,
+        Func<T, T> attachProvider,
+        CancellationToken cancellationToken) where T : class
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var stopwatch = Stopwatch.StartNew();
+
+        if (string.IsNullOrWhiteSpace(_providerOptions.ApiKey))
+        {
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "El proveedor {Provider} no tiene ApiKey configurada para recomendación. Pasando al siguiente respaldo.",
+                ProviderName);
+            await SafeAuditAsync(
+                prompt: prompt,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "SinApiKey",
+                athleteId: athleteId,
+                errorMessage: $"El proveedor {ProviderName} no tiene ApiKey configurada.");
+            return null;
+        }
+
+        var requestPayload = new OpenAiChatRequest
+        {
+            Model = _providerOptions.Model,
+            Messages =
+            [
+                OpenAiChatMessage.CreateSystem(RecommendationSystemPrompt),
+                OpenAiChatMessage.CreateUser(prompt)
+            ],
+            Tools = null,
+            ToolChoice = null,
+            ResponseFormat = new OpenAiResponseFormat { Type = "json_object" },
+            Temperature = 0.2
+        };
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Min(25, Math.Max(1, _providerOptions.TimeoutSeconds))));
+
+        try
+        {
+            var response = await SendChatCompletionAsync(requestPayload, timeoutCts.Token);
+            stopwatch.Stop();
+
+            if (response is null)
+            {
+                await SafeAuditAsync(
+                    prompt: prompt,
+                    latencyMs: stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "ErrorHttp",
+                    athleteId: athleteId,
+                    errorMessage: $"El proveedor {ProviderName} devolvió un error HTTP al generar la recomendación.");
+                return null;
+            }
+
+            var promptTokens = response.Usage?.PromptTokens;
+            var completionTokens = response.Usage?.CompletionTokens;
+            var totalTokens = response.Usage?.TotalTokens;
+
+            var rawContent = response.Choices.FirstOrDefault()?.Message.Content;
+            if (string.IsNullOrWhiteSpace(rawContent))
+            {
+                _logger.LogWarning(
+                    "El proveedor {Provider} devolvió contenido vacío al generar recomendación.",
+                    ProviderName);
+                await SafeAuditAsync(
+                    prompt: prompt,
+                    latencyMs: stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: "ContenidoVacio",
+                    athleteId: athleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    totalTokens: totalTokens,
+                    errorMessage: "El contenido generado por la IA vino vacío.");
+                return null;
+            }
+
+            var validationResult = validator(rawContent);
+            if (!validationResult.IsValid || validationResult.Value is null)
+            {
+                _logger.LogWarning(
+                    "La recomendación de {Provider} fue rechazada por el validador ({ValidationCode}): {Error}. Pasando al siguiente respaldo.",
+                    ProviderName,
+                    validationResult.ValidationCode,
+                    validationResult.ErrorMessage);
+                await SafeAuditAsync(
+                    prompt: prompt,
+                    latencyMs: stopwatch.ElapsedMilliseconds,
+                    isValid: false,
+                    validationResult: validationResult.ValidationCode,
+                    response: rawContent,
+                    athleteId: athleteId,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens,
+                    totalTokens: totalTokens,
+                    errorMessage: validationResult.ErrorMessage);
+                return null;
+            }
+
+            await SafeAuditAsync(
+                prompt: prompt,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                isValid: true,
+                validationResult: "Valido",
+                response: rawContent,
+                athleteId: athleteId,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
+                totalTokens: totalTokens);
+
+            return attachProvider(validationResult.Value);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                "El proveedor {Provider} superó el tiempo límite al generar recomendación. Pasando al siguiente respaldo.",
+                ProviderName);
+            await SafeAuditAsync(
+                prompt: prompt,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "Timeout",
+                athleteId: athleteId,
+                errorMessage: "Tiempo límite superado al generar recomendación.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                ex,
+                "Error de comunicación con {Provider} al generar recomendación: {Message}. Pasando al siguiente respaldo.",
+                ProviderName,
+                ex.Message);
+            await SafeAuditAsync(
+                prompt: prompt,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                isValid: false,
+                validationResult: "ErrorComunicacion",
+                athleteId: athleteId,
+                errorMessage: ex.Message);
+            return null;
+        }
+    }
 
     private async Task<OpenAiChatResponse?> SendChatCompletionAsync(
         OpenAiChatRequest payload,

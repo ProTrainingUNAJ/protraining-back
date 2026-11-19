@@ -4,6 +4,7 @@ using System.Text.Json;
 using Application.DTOs.Adaptation;
 using Application.DTOs.Alerts;
 using Application.DTOs.DayConflicts;
+using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
@@ -215,6 +216,108 @@ public sealed class SeguimientoClient(
                 ex,
                 "Error al consultar lesiones del atleta {AthleteId} en Seguimiento.",
                 athleteId);
+            throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage, ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<AthleteFitnessTestRemoteDto>> GetAthleteFitnessTestsAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
+
+        var tests = await GetFromSeguimientoAsync<List<AthleteFitnessTestRemoteDto>>(
+            relativeUrl: $"api/v1/athletes/{athleteId}/fitness-tests",
+            notFoundMessage: "El atleta no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar tests físicos del atleta {athleteId}",
+            cancellationToken: cancellationToken);
+
+        return tests ?? [];
+    }
+
+    public Task<CategoryAveragesRemoteDto?> GetCategoryAveragesAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (categoryId == Guid.Empty)
+            throw new NotFoundException("La categoría no existe o no pertenece al preparador físico autenticado.");
+
+        return GetFromSeguimientoAsync<CategoryAveragesRemoteDto>(
+            relativeUrl: $"api/v1/categories/{categoryId}/averages",
+            notFoundMessage: "La categoría no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar promedios de la categoría {categoryId}",
+            cancellationToken: cancellationToken);
+    }
+
+    public Task<AthleteWeeklyTrendsRemoteDto?> GetAthleteWeeklyTrendsAsync(
+        Guid athleteId,
+        int weeks = 4,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
+
+        return GetFromSeguimientoAsync<AthleteWeeklyTrendsRemoteDto>(
+            relativeUrl: $"api/v1/athletes/{athleteId}/trends?weeks={weeks}",
+            notFoundMessage: "El atleta no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar tendencias semanales del atleta {athleteId}",
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task<T?> GetFromSeguimientoAsync<T>(
+        string relativeUrl,
+        string notFoundMessage,
+        string operationDescription,
+        CancellationToken cancellationToken) where T : class
+    {
+        if (httpClient.BaseAddress is null)
+            throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage);
+
+        try
+        {
+            using var response = await httpClient.GetAsync(relativeUrl, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                throw new NotFoundException(notFoundMessage);
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new UnauthorizedAccessException(
+                    $"Seguimiento rechazó la autenticación o permisos al {operationDescription}.");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogError(
+                    "Seguimiento respondió {StatusCode} al {Operation}.",
+                    (int)response.StatusCode,
+                    operationDescription);
+                throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage);
+            }
+
+            return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (SeguimientoServiceUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Error al comunicarse con Seguimiento al {Operation}.",
+                operationDescription);
             throw new SeguimientoServiceUnavailableException(SeguimientoUnavailableMessage, ex);
         }
     }
