@@ -12,6 +12,7 @@ public class User : IdentityUser<Guid>
     public bool HasPhoto { get; set; } = false;
     public DateTime? PhotoUpdatedAt { get; set; }
     public bool HabitsRecommendationsEnabled { get; set; } = true;
+    public string? TelegramUsername { get; set; }
     public User()
     {
         Id = Guid.NewGuid();

@@ -143,7 +143,8 @@ public class GoogleLoginUseCase(
                 generatedToken.Role,
                 user.PfId ?? user.Id,
                 user.PhoneNumber,
-                user.MustChangePassword
+                user.MustChangePassword,
+                user.TelegramUsername
             )
         );
     }

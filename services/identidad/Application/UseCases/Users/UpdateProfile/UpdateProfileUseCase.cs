@@ -42,8 +42,24 @@ public class UpdateProfileUseCase(UserManager<User> userManager)
             normalizedPhone = null;
         }
 
+        string? normalizedTelegram = user.TelegramUsername;
+        if (!string.IsNullOrWhiteSpace(request.TelegramUsername))
+        {
+            var (isValidTelegram, normalizedTg, telegramError) = TelegramUsernameNormalizer.ValidateAndNormalize(request.TelegramUsername);
+            if (!isValidTelegram)
+            {
+                throw new DomainException(telegramError ?? "El usuario de Telegram no es válido.");
+            }
+            normalizedTelegram = normalizedTg;
+        }
+        else if (request.TelegramUsername is not null && string.IsNullOrWhiteSpace(request.TelegramUsername))
+        {
+            normalizedTelegram = null;
+        }
+
         user.FullName = request.FullName.Trim();
         user.PhoneNumber = normalizedPhone;
+        user.TelegramUsername = normalizedTelegram;
         user.UpdatedAt = DateTime.UtcNow;
 
         var result = await userManager.UpdateAsync(user);
@@ -57,7 +73,8 @@ public class UpdateProfileUseCase(UserManager<User> userManager)
             Id: user.Id,
             Email: user.Email!,
             FullName: user.FullName,
-            PhoneNumber: user.PhoneNumber
+            PhoneNumber: user.PhoneNumber,
+            TelegramUsername: user.TelegramUsername
         );
     }
 }

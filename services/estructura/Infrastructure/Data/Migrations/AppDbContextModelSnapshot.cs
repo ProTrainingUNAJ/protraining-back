@@ -93,6 +93,11 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("photo_updated_at");
 
+                    b.Property<string>("TelegramUsername")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("telegram_username");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PfId");

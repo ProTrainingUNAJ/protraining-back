@@ -14,4 +14,5 @@ public sealed record AthleteDto(
     bool AllowsHabitsRecommendations,
     GuardianConsentDto? GuardianConsent,
     bool HasPhoto = false,
-    DateTime? PhotoUpdatedAt = null);
+    DateTime? PhotoUpdatedAt = null,
+    string? TelegramUsername = null);

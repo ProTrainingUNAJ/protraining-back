@@ -69,7 +69,8 @@ public sealed class AthletesController(
                 request.GuardianPhone,
                 request.AllowsPhysicalTraining,
                 request.AllowsHabitsRecommendations,
-                request.EmergencyContact),
+                request.EmergencyContact,
+                request.TelegramUsername),
             cancellationToken);
 
         return Created($"/api/v1/athletes/{athlete.Id}", athlete);
@@ -101,7 +102,7 @@ public sealed class AthletesController(
         UpdateAthleteRequest request,
         CancellationToken cancellationToken) =>
         Ok(await updateHandler.HandleAsync(
-            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
+            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact, request.TelegramUsername),
             cancellationToken));
 
     [HttpPatch("{id:guid}/status")]

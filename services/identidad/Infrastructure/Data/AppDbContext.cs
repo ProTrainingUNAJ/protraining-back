@@ -39,6 +39,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
             b.Property(u => u.HasPhoto).HasColumnName("has_photo").HasDefaultValue(false);
             b.Property(u => u.PhotoUpdatedAt).HasColumnName("photo_updated_at");
             b.Property(u => u.HabitsRecommendationsEnabled).HasColumnName("habits_recommendations_enabled").HasDefaultValue(true);
+            b.Property(u => u.TelegramUsername).HasColumnName("telegram_username").HasMaxLength(32);
         });
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("roles");
         modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("user_roles");
