@@ -6,8 +6,8 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.UpdatePhone;
-using Application.UseCases.Auth.UpdateHabitsRecommendations;
-using Application.UseCases.Auth.GetPfHabitsRecommendations;
+using Application.UseCases.Users.UpdateHabitsRecommendations;
+using Application.UseCases.Users.GetPfHabitsRecommendations;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -191,5 +191,99 @@ public class UsersControllerTests
     {
         Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateProfile)));
         Assert.Equal("PreparadorFisico,Atleta", RolesOf(nameof(UsersController.UpdateMyTelegram)));
+    }
+
+    // KAN-493: los 3 endpoints de preferencia de recomendaciones de hábitos.
+
+    [Fact]
+    public void Given_HabitsRecommendationsEndpoints_When_CheckingAuthorization_Then_RolesAreEnforced()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateHabitsRecommendations)));
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.GetHabitsRecommendations)));
+        Assert.Equal("Atleta", RolesOf(nameof(UsersController.GetPfHabitsRecommendations)));
+    }
+
+    [Fact]
+    public async Task Given_PfToken_When_UpdatingHabitsRecommendations_Then_PreferenceIsSavedAndReturned()
+    {
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = true };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+        _mockUserManager.Setup(m => m.UpdateAsync(pf)).ReturnsAsync(IdentityResult.Success);
+
+        var result = await _controller.UpdateHabitsRecommendations(new UpdateHabitsRecommendationsRequestDto(false));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value);
+        Assert.False(dto.Enabled);
+        Assert.False(pf.HabitsRecommendationsEnabled);
+        _mockUserManager.Verify(m => m.UpdateAsync(pf), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_MissingPf_When_UpdatingHabitsRecommendations_Then_Returns404WithoutSaving()
+    {
+        _mockCurrentUser.Setup(c => c.UserId).Returns(Guid.NewGuid());
+
+        var result = await _controller.UpdateHabitsRecommendations(new UpdateHabitsRecommendationsRequestDto(false));
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        _mockUserManager.Verify(m => m.UpdateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_PfToken_When_GettingOwnHabitsRecommendations_Then_UsesUserIdAndReturnsPreference()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+        _mockCurrentUser.Setup(c => c.PfId).Returns(athleteId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = false };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetHabitsRecommendations();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.False(Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value).Enabled);
+        _mockUserManager.Verify(m => m.FindByIdAsync(athleteId.ToString()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MissingPf_When_GettingOwnHabitsRecommendations_Then_Returns404()
+    {
+        _mockCurrentUser.Setup(c => c.UserId).Returns(Guid.NewGuid());
+
+        var result = await _controller.GetHabitsRecommendations();
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_AthleteToken_When_GettingPfHabitsRecommendations_Then_UsesPfIdFromToken()
+    {
+        var athleteId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(athleteId);
+        _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = true };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetPfHabitsRecommendations();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.True(Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value).Enabled);
+        _mockUserManager.Verify(m => m.FindByIdAsync(pfId.ToString()), Times.Once);
+        _mockUserManager.Verify(m => m.FindByIdAsync(athleteId.ToString()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_TokenWithoutPfId_When_GettingPfHabitsRecommendations_Then_ReturnsUnauthorized()
+    {
+        _mockCurrentUser.Setup(c => c.PfId).Returns((Guid?)null);
+
+        var result = await _controller.GetPfHabitsRecommendations();
+
+        Assert.IsType<UnauthorizedResult>(result);
     }
 }

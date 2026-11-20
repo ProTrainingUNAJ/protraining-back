@@ -29,9 +29,9 @@ public class SubmitCheckInCommandHandlerTests
                 It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<CheckIn>());
-    _injuries
-        .Setup(repo => repo.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-        .ReturnsAsync(Array.Empty<AthleteInjury>());
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AthleteInjury>());
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -60,6 +60,55 @@ public class SubmitCheckInCommandHandlerTests
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
+    }
+
+    // KAN-487: un check-in con una molestia activa sin puntaje se rechaza (DomainException → 400).
+    [Fact]
+    public async Task HandleAsync_WhenActiveInjuryHasNoScore_ThrowsDomainException_AndDoesNotSave()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "isquiotibiales",
+            Status = InjuryStatus.Active
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var command = CommandValido() with
+        {
+            Injuries = [new SubmitInjuryPain(injury.Id, null)]
+        };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(command));
+
+        Assert.Equal("Falta puntuar el dolor de la molestia.", exception.Message);
+        _checkIns.Verify(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenActiveInjuryIsMissingFromPayload_ThrowsDomainException()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "gemelos",
+            Status = InjuryStatus.Active
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var command = CommandValido() with { Injuries = [] };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(command));
+
+        Assert.Equal("Falta puntuar el dolor de la molestia en gemelos.", exception.Message);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

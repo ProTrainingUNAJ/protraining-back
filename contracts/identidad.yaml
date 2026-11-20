@@ -514,6 +514,123 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/users/me/habits-recommendations:
+    get:
+      tags:
+        - Users
+      summary: Obtener la preferencia de recomendaciones de hábitos del PF autenticado (KAN-493)
+      description: >
+        Devuelve si el preparador físico autenticado tiene habilitadas las recomendaciones
+        de hábitos y alimentación para sus atletas. El valor predeterminado es true.
+      operationId: getMyHabitsRecommendations
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Preferencia actual del preparador físico autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitsRecommendationsStatus'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Usuario no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      tags:
+        - Users
+      summary: Actualizar la preferencia de recomendaciones de hábitos del PF autenticado (KAN-493)
+      description: >
+        Activa o desactiva las recomendaciones de hábitos y alimentación para todos los atletas
+        del preparador físico autenticado. La restricción se aplica en el backend del Asistente.
+      operationId: updateMyHabitsRecommendations
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHabitsRecommendationsRequest'
+      responses:
+        "200":
+          description: Preferencia actualizada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitsRecommendationsStatus'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol PreparadorFisico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Usuario no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/users/me/pf-habits-recommendations:
+    get:
+      tags:
+        - Users
+      summary: Obtener la preferencia de recomendaciones del PF del atleta autenticado (KAN-493)
+      description: >
+        Devuelve si el preparador físico asignado al atleta autenticado habilitó las
+        recomendaciones de hábitos y alimentación. El PF se resuelve desde el claim pf_id del token.
+      operationId: getAthletePfHabitsRecommendations
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Preferencia del preparador físico del atleta autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitsRecommendationsStatus'
+        "401":
+          description: No autenticado, token inválido o token sin preparador físico asignado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Requiere rol Atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: No se encontró el preparador físico del atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/users/me/telegram:
     put:
       tags:
@@ -1329,3 +1446,21 @@ components:
           type: string
           format: password
           example: "PasswordSegura123!"
+
+    HabitsRecommendationsStatus:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          example: true
+
+    UpdateHabitsRecommendationsRequest:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          example: false

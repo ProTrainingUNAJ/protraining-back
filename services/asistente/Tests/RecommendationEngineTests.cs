@@ -241,6 +241,7 @@ public sealed class RecommendationEngineTests
 
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
         structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
 
@@ -277,6 +278,7 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -323,6 +325,7 @@ public sealed class RecommendationEngineTests
 
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
         structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
 
@@ -350,6 +353,7 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -380,6 +384,8 @@ public sealed class RecommendationEngineTests
                 new StructureCategoryAthleteDto(AthleteId, true),
                 new StructureCategoryAthleteDto(SecondAthleteId, true)
             ]);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.SetupHabitsPermission(SecondAthleteId);
 
         var seguimientoMock = new Mock<ISeguimientoClient>();
         seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
@@ -415,6 +421,7 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -445,6 +452,7 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             new Mock<ISeguimientoClient>().Object,
             repository,
             new Mock<IAiService>().Object,
@@ -507,9 +515,11 @@ public sealed class RecommendationEngineTests
         var structureDown = new Mock<IStructureAthleteClient>();
         structureDown.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new StructureServiceUnavailableException("Estructura no disponible."));
+        structureDown.SetupHabitsPermission(AthleteId);
 
         var handlerStructureDown = new GenerateAthleteRecommendationsCommandHandler(
             structureDown.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             new Mock<ISeguimientoClient>().Object,
             repository,
             new Mock<IAiService>().Object,
@@ -522,6 +532,7 @@ public sealed class RecommendationEngineTests
         structureOk.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         structureOk.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
+        structureOk.SetupHabitsPermission(AthleteId);
 
         var seguimientoDown = new Mock<ISeguimientoClient>();
         seguimientoDown.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
@@ -533,6 +544,7 @@ public sealed class RecommendationEngineTests
 
         var handlerSeguimientoDown = new GenerateAthleteRecommendationsCommandHandler(
             structureOk.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoDown.Object,
             repository,
             new Mock<IAiService>().Object,
@@ -554,6 +566,7 @@ public sealed class RecommendationEngineTests
 
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
         structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
         structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
@@ -579,8 +592,8 @@ public sealed class RecommendationEngineTests
                 RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
 
         var controller = new RecommendationsController(
-            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, aiMock.Object, uow),
-            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, aiMock.Object, uow),
+            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, aiMock.Object, uow),
+            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, aiMock.Object, uow),
             new GetRecommendationsQueryHandler(repository),
             new GetRecommendationByIdQueryHandler(repository),
             new UpdateRecommendationCommandHandler(repository, uow),

@@ -2,7 +2,7 @@ using Application.DTOs.Auth;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 
-namespace Application.UseCases.Auth.UpdateHabitsRecommendations;
+namespace Application.UseCases.Users.UpdateHabitsRecommendations;
 
 public class UpdateHabitsRecommendationsUseCase(UserManager<User> userManager)
 {

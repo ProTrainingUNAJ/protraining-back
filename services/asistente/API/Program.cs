@@ -150,6 +150,21 @@ builder.Services.AddHttpClient<ISeguimientoClient, Infrastructure.Services.Segui
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+var identityBaseUrl = builder.Configuration["Services:Identidad:BaseUrl"];
+if (!Uri.TryCreate(identityBaseUrl, UriKind.Absolute, out var identityUri))
+{
+    identityUri = new Uri("http://localhost:8081/");
+}
+
+builder.Services.AddHttpClient<IIdentityHabitsRecommendationsClient, Infrastructure.Services.Identity.IdentityHabitsRecommendationsClient>(client =>
+{
+    var uriString = identityUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddScoped<CreatePlanDraftCommandHandler>();

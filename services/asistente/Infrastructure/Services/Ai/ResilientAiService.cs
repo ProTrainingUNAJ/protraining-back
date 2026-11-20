@@ -34,6 +34,7 @@ public sealed class ResilientAiService : IAiService
     private readonly IExerciseCatalogService? _catalogService;
     private readonly IAiQuotaService? _quotaService;
     private readonly IStructureAthleteClient? _structureAthleteClient;
+    private readonly IIdentityHabitsRecommendationsClient? _identityHabitsClient;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
@@ -104,8 +105,9 @@ public sealed class ResilientAiService : IAiService
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
         ILogger<ResilientAiService> logger,
-        IStructureAthleteClient? structureAthleteClient = null)
-        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient)
+        IStructureAthleteClient? structureAthleteClient = null,
+        IIdentityHabitsRecommendationsClient? identityHabitsClient = null)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient, identityHabitsClient)
     {
     }
 
@@ -151,7 +153,8 @@ public sealed class ResilientAiService : IAiService
         IExerciseCatalogService? catalogService,
         IAiQuotaService? quotaService,
         ILogger<ResilientAiService> logger,
-        IStructureAthleteClient? structureAthleteClient = null)
+        IStructureAthleteClient? structureAthleteClient = null,
+        IIdentityHabitsRecommendationsClient? identityHabitsClient = null)
     {
         _providers = providers;
         _semanticValidator = semanticValidator;
@@ -161,6 +164,7 @@ public sealed class ResilientAiService : IAiService
         _catalogService = catalogService;
         _quotaService = quotaService;
         _structureAthleteClient = structureAthleteClient;
+        _identityHabitsClient = identityHabitsClient;
         _logger = logger;
     }
 
@@ -715,6 +719,19 @@ public sealed class ResilientAiService : IAiService
             throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
         }
 
+        // KAN-493: la preferencia del PF se verifica antes de consultar a cualquier proveedor de IA.
+        // Si Identidad no responde o devuelve false, no se genera nada (fail-closed).
+        var pfEnabled = _identityHabitsClient is not null
+            ? await _identityHabitsClient.GetMyHabitsRecommendationsEnabledAsync(cancellationToken)
+            : null;
+
+        if (pfEnabled is not true)
+        {
+            _logger.LogWarning(
+                "La preferencia de recomendaciones del PF está desactivada o no se pudo consultar. No se generará recomendación de alimentación (fail-closed).");
+            throw new DomainException("Las recomendaciones de hábitos y alimentación están deshabilitadas para este preparador físico.");
+        }
+
         // Verificación del permiso del tutor en atletas menores (#201 · KAN-496):
         // si no se puede verificar o el tutor no autorizó, no se genera ninguna recomendación (fail-closed).
         if (request.AthleteId.HasValue)
@@ -723,21 +740,12 @@ public sealed class ResilientAiService : IAiService
                 ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
                 : null;
 
-            if (permission is null)
+            if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
             {
                 _logger.LogWarning(
-                    "No se pudo verificar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    "El atleta {AthleteId} no tiene habilitadas las recomendaciones (permiso del tutor no verificado o no autorizado). No se generará recomendación de alimentación (KAN-493 / KAN-496).",
                     request.AthleteId.Value);
-                throw new DomainException(
-                    $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
-            }
-
-            if (permission.IsMinor && !permission.AllowsHabitsRecommendations)
-            {
-                _logger.LogWarning(
-                    "El atleta {AthleteId} es menor de edad y su tutor no autorizó las recomendaciones de alimentación. No se generará recomendación (KAN-496).",
-                    request.AthleteId.Value);
-                throw new DomainException("El atleta es menor de edad y su tutor no autorizó las recomendaciones de alimentación.");
+                throw new DomainException("El atleta no tiene autorizadas las recomendaciones de hábitos y alimentación.");
             }
         }
 

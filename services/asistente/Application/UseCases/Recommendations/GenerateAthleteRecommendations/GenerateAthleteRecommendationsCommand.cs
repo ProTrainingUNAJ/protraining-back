@@ -21,6 +21,7 @@ public sealed record GenerateAthleteRecommendationsCommand(
 /// </summary>
 public sealed class GenerateAthleteRecommendationsCommandHandler(
     IStructureAthleteClient structureClient,
+    IIdentityHabitsRecommendationsClient identityClient,
     ISeguimientoClient seguimientoClient,
     IAthleteRecommendationRepository recommendationRepository,
     IAiService aiService,
@@ -44,6 +45,16 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
         var isOwnAthlete = await structureClient.IsOwnAthleteAsync(command.AthleteId, cancellationToken);
         if (!isOwnAthlete)
             throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
+
+        // KAN-493: no se genera ni persiste nada para un atleta con las recomendaciones deshabilitadas.
+        // Se consulta una sola vez la preferencia del PF y se valida al tutor cuando corresponde.
+        var pfEnabled = await identityClient.GetMyHabitsRecommendationsEnabledAsync(cancellationToken);
+        if (pfEnabled is not true)
+            return EmptyResult(command.AthleteId);
+
+        var permission = await structureClient.GetHabitsPermissionAsync(command.AthleteId, cancellationToken);
+        if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
+            return EmptyResult(command.AthleteId);
 
         var categories = await structureClient.GetAthleteCategoriesAsync(command.AthleteId, cancellationToken);
         StructureCategoryDto? targetCategory = null;
@@ -124,4 +135,13 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
             ExistingPendingCount: existingPending.Count,
             Recommendations: responseItems);
     }
+
+    private static RunAthleteRecommendationEngineResponseDto EmptyResult(Guid athleteId) =>
+        new(
+            AthleteId: athleteId,
+            CategoryId: null,
+            CategoryName: null,
+            GeneratedCount: 0,
+            ExistingPendingCount: 0,
+            Recommendations: []);
 }
