@@ -79,15 +79,28 @@ public sealed class AsistenteE2EFactory : WebApplicationFactory<Program>
         return client;
     }
 
-    public static string CreatePfToken(Guid pfId)
+    public HttpClient CreateAthleteClient(Guid athleteId)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CreateToken(athleteId, "Atleta", pfId: null));
+        return client;
+    }
+
+    public static string CreatePfToken(Guid pfId) =>
+        CreateToken(pfId, "PreparadorFisico", pfId);
+
+    public static string CreateToken(Guid sub, string role, Guid? pfId)
     {
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub, pfId.ToString()),
-            new(JwtRegisteredClaimNames.Name, $"PF {pfId:N}"),
-            new("role", "PreparadorFisico"),
-            new("pf_id", pfId.ToString()),
+            new(JwtRegisteredClaimNames.Sub, sub.ToString()),
+            new(JwtRegisteredClaimNames.Name, $"{role} {sub:N}"),
+            new("role", role),
         };
+        if (pfId.HasValue)
+        {
+            claims.Add(new("pf_id", pfId.Value.ToString()));
+        }
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtKey)), SecurityAlgorithms.HmacSha256);
@@ -117,6 +130,8 @@ public sealed class FakeExternalServices
     public Guid CreatedPlanId { get; } = Guid.NewGuid();
     public Guid AssignmentId { get; } = Guid.NewGuid();
     public HttpStatusCode CreatePlanStatus { get; set; } = HttpStatusCode.Created;
+    public ConcurrentDictionary<Guid, Guid> AthleteOwners { get; } = new();
+    public HttpStatusCode? StructureAthleteStatusOverride { get; set; }
 
     public IReadOnlyList<RecordedRequest> To(string host, HttpMethod method, string path) =>
         Requests.Where(r => r.Host == host && r.Method == method && r.PathAndQuery.StartsWith(path, StringComparison.Ordinal)).ToList();
@@ -141,10 +156,41 @@ internal sealed class FakeExternalHandler(FakeExternalServices state) : HttpMess
                     : Json(state.CreatePlanStatus, """{"title":"Entrenamiento no disponible"}"""),
             ("entrenamiento.test", "POST", "/api/v1/training-plans/assignments") =>
                 Json(HttpStatusCode.Created, $$"""{"assignmentId":"{{state.AssignmentId}}"}"""),
+            // Estructura: validación de pertenencia de atleta (KAN-570).
+            ("estructura.test", "GET", var path) when path.StartsWith("/api/v1/athletes/", StringComparison.OrdinalIgnoreCase)
+                && Guid.TryParse(path["/api/v1/athletes/".Length..], out var athleteId) =>
+                HandleGetAthlete(request, athleteId),
             // Estructura: sin partidos en el período.
             ("estructura.test", "GET", _) => Json(HttpStatusCode.OK, "[]"),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
+    }
+
+    private HttpResponseMessage HandleGetAthlete(HttpRequestMessage request, Guid athleteId)
+    {
+        if (state.StructureAthleteStatusOverride.HasValue)
+        {
+            return Json(state.StructureAthleteStatusOverride.Value, """{"title":"Estructura no disponible"}""");
+        }
+
+        var token = request.Headers.Authorization?.Parameter;
+        Guid? callerPfId = null;
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+            var pfClaim = jwt.Claims.FirstOrDefault(c => c.Type == "pf_id")?.Value;
+            if (Guid.TryParse(pfClaim, out var parsedPf))
+                callerPfId = parsedPf;
+        }
+
+        if (callerPfId.HasValue
+            && state.AthleteOwners.TryGetValue(athleteId, out var ownerPfId)
+            && ownerPfId == callerPfId.Value)
+        {
+            return Json(HttpStatusCode.OK, $$"""{"id":"{{athleteId}}","pfId":"{{ownerPfId}}"}""");
+        }
+
+        return Json(HttpStatusCode.NotFound, """{"title":"Atleta no encontrado"}""");
     }
 
     private string CatalogPage(Uri uri)

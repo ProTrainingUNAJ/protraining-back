@@ -437,11 +437,17 @@ public sealed class PreventiveAlertsTests
             new Mock<ITrainingPlanServiceClient>().Object,
             new Mock<IUnitOfWork>().Object);
 
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns(PfId);
+
         var controller = new AlertsController(
             new GetAlertsQueryHandler(repoMock.Object),
             new GetAlertByIdQueryHandler(repoMock.Object),
             new ReviewAlertCommandHandler(repoMock.Object, new Mock<IUnitOfWork>().Object),
-            new CreatePreventiveAlertCommandHandler(repoMock.Object, new Mock<IUnitOfWork>().Object),
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, structureMock.Object, currentUserMock.Object, new Mock<IUnitOfWork>().Object),
             applyHandler);
 
         var actionResult = await controller.List(onlyUnreviewed: true);
@@ -467,11 +473,17 @@ public sealed class PreventiveAlertsTests
             new Mock<ITrainingPlanServiceClient>().Object,
             uowMock.Object);
 
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns(PfId);
+
         var controller = new AlertsController(
             new GetAlertsQueryHandler(repoMock.Object),
             new GetAlertByIdQueryHandler(repoMock.Object),
             new ReviewAlertCommandHandler(repoMock.Object, uowMock.Object),
-            new CreatePreventiveAlertCommandHandler(repoMock.Object, uowMock.Object),
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object),
             applyHandler);
 
         var request = new CreatePreventiveAlertRequestDto(
@@ -514,11 +526,17 @@ public sealed class PreventiveAlertsTests
 
         var applyHandler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
 
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns(PfId);
+
         var controller = new AlertsController(
             new GetAlertsQueryHandler(repoMock.Object),
             new GetAlertByIdQueryHandler(repoMock.Object),
             new ReviewAlertCommandHandler(repoMock.Object, uowMock.Object),
-            new CreatePreventiveAlertCommandHandler(repoMock.Object, uowMock.Object),
+            new CreatePreventiveAlertCommandHandler(repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object),
             applyHandler);
 
         var actionResult = await controller.Apply(alert.Id, CancellationToken.None);
@@ -527,6 +545,92 @@ public sealed class PreventiveAlertsTests
 
         Assert.Equal(alert.Id, dto.AlertId);
         Assert.Equal("Applied", dto.Status);
+    }
+
+    [Fact]
+    public async Task Given_AthleteBelongsToAnotherPf_When_CreateAlertCommand_Then_ThrowsNotFoundAndDoesNotPersist()
+    {
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        var uowMock = new Mock<IUnitOfWork>();
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns(PfId);
+
+        var handler = new CreatePreventiveAlertCommandHandler(
+            repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object);
+
+        var request = new CreatePreventiveAlertRequestDto(
+            AthleteId: AthleteId,
+            AthleteName: AthleteName,
+            Reason: ReasonFatigue,
+            Suggestion: SuggestionAdjustment);
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.HandleAsync(new CreatePreventiveAlertCommand(request)));
+
+        repoMock.Verify(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()), Times.Never);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("Critical", null, null)]
+    [InlineData(null, "UnknownType", null)]
+    [InlineData(null, null, "MagicFix")]
+    public async Task Given_InvalidEnumValue_When_CreateAlertCommand_Then_ThrowsDomainExceptionWithoutCallingStructure(
+        string? severity,
+        string? type,
+        string? adjustmentType)
+    {
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        var uowMock = new Mock<IUnitOfWork>();
+        var structureMock = new Mock<IStructureAthleteClient>();
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns(PfId);
+
+        var handler = new CreatePreventiveAlertCommandHandler(
+            repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object);
+
+        var request = new CreatePreventiveAlertRequestDto(
+            AthleteId: AthleteId,
+            AthleteName: AthleteName,
+            Reason: ReasonFatigue,
+            Suggestion: SuggestionAdjustment,
+            Severity: severity,
+            Type: type,
+            SuggestedAdjustmentType: adjustmentType);
+
+        await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new CreatePreventiveAlertCommand(request)));
+
+        structureMock.Verify(s => s.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        repoMock.Verify(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MissingPfId_When_CreateAlertCommand_Then_ThrowsUnauthorizedWithoutCallingStructure()
+    {
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        var uowMock = new Mock<IUnitOfWork>();
+        var structureMock = new Mock<IStructureAthleteClient>();
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.SetupGet(u => u.PfId).Returns((Guid?)null);
+
+        var handler = new CreatePreventiveAlertCommandHandler(
+            repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object);
+
+        var request = new CreatePreventiveAlertRequestDto(
+            AthleteId: AthleteId,
+            AthleteName: AthleteName,
+            Reason: ReasonFatigue,
+            Suggestion: SuggestionAdjustment);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            handler.HandleAsync(new CreatePreventiveAlertCommand(request)));
+
+        structureMock.Verify(s => s.IsOwnAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        repoMock.Verify(r => r.AddAsync(It.IsAny<PreventiveAlert>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
 

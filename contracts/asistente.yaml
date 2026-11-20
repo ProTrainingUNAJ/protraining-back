@@ -66,6 +66,77 @@ paths:
                   $ref: '#/components/schemas/PreventiveAlert'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+        - Preventive Alerts
+      summary: Crear un aviso preventivo
+      description: >
+        Crea y persiste un aviso preventivo para un atleta perteneciente al preparador físico autenticado.
+        El identificador pf_id se obtiene exclusivamente del token JWT autenticado y athleteId se valida
+        contra Estructura antes de persistir. Requiere rol PreparadorFisico.
+      operationId: createAlert
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreventiveAlertRequest'
+      responses:
+        "201":
+          description: Aviso preventivo creado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreventiveAlert'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/alerts/{id}:
+    get:
+      tags:
+        - Preventive Alerts
+      summary: Obtener detalle de un aviso preventivo por ID
+      description: >
+        Devuelve el detalle de un aviso preventivo perteneciente al preparador físico autenticado.
+        Retorna 404 si el aviso no existe o pertenece a otro PF (aislamiento multi-tenant).
+      operationId: getAlertById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador único del aviso preventivo.
+      responses:
+        "200":
+          description: Aviso preventivo recuperado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreventiveAlert'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/alerts/{alertId}/review:
     patch:
@@ -137,32 +208,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
-
-  /api/v1/alerts/scan:
-    post:
-      tags:
-        - Preventive Alerts
-      summary: Disparar escaneo preventivo inmediato
-      description: >
-        Ejecuta el ciclo de análisis heurístico y de IA sobre las sesiones, check-ins,
-        partidos próximos del fixture y lesiones, alertando sobre situaciones críticas.
-      operationId: triggerPreventiveScan
-      responses:
-        "202":
-          description: Análisis preventivo iniciado en segundo plano.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Escaneo preventivo ejecutado correctamente. Se analizaron todos los atletas activos."
-                  alertsGenerated:
-                    type: integer
-                    example: 2
-        "401":
-          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/assistant/today-adjustment:
     post:
@@ -1115,6 +1160,75 @@ components:
           nullable: true
           enum: [LoadReduction, RoutineAdjustment, Rest]
           example: "RoutineAdjustment"
+        suggestedAdjustmentPercentage:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          example: 25
+        status:
+          type: string
+          nullable: true
+          enum: [Pending, Reviewed, Applied, Dismissed]
+          example: "Pending"
+
+    CreatePreventiveAlertRequest:
+      type: object
+      required:
+        - athleteId
+        - athleteName
+        - reason
+        - suggestion
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        athleteName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "Lucas Fernández"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: "Sobrecarga acumulada: 3 sesiones consecutivas con esfuerzo >= 8 y registro de descanso menor a 5 horas."
+        suggestion:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: "Programar una sesión de descarga o movilidad pasiva. Reducir volumen general un 30%."
+        severity:
+          type: string
+          nullable: true
+          enum: [Low, Medium, High]
+          example: "High"
+        type:
+          type: string
+          nullable: true
+          enum: [AccumulatedFatigue, AcuteOverload, InjuryRisk, WellnessAlert]
+          example: "AccumulatedFatigue"
+        suggestedAdjustmentType:
+          type: string
+          nullable: true
+          enum: [LoadReduction, RoutineAdjustment, Rest]
+          example: "LoadReduction"
+        suggestedAdjustmentPercentage:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          example: 25
+        suggestedAdjustmentPayload:
+          type: string
+          nullable: true
+          example: '{"loadReductionPercentage": 25}'
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "22222222-2222-2222-2222-222222222222"
 
     TodayAdjustmentRequest:
       type: object

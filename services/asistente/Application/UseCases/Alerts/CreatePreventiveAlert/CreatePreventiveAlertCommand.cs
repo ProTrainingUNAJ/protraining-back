@@ -1,7 +1,10 @@
 using Application.Common.Alerts;
 using Application.DTOs.Alerts;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
 using Domain.Entities;
+using Domain.Exceptions;
 
 namespace Application.UseCases.Alerts.CreatePreventiveAlert;
 
@@ -9,34 +12,24 @@ public sealed record CreatePreventiveAlertCommand(CreatePreventiveAlertRequestDt
 
 public sealed class CreatePreventiveAlertCommandHandler(
     IPreventiveAlertRepository repository,
+    IStructureAthleteClient structureAthleteClient,
+    ICurrentUser currentUser,
     IUnitOfWork unitOfWork)
 {
     public async Task<PreventiveAlertResponseDto> HandleAsync(
         CreatePreventiveAlertCommand command,
         CancellationToken cancellationToken = default)
     {
+        if (!currentUser.PfId.HasValue || currentUser.PfId.Value == Guid.Empty)
+        {
+            throw new UnauthorizedAccessException("Usuario no autenticado o sin un preparador físico asignado.");
+        }
+
         var dto = command.Dto;
 
-        var severity = AlertSeverity.Medium;
-        if (!string.IsNullOrWhiteSpace(dto.Severity) &&
-            Enum.TryParse<AlertSeverity>(dto.Severity, true, out var parsedSeverity))
-        {
-            severity = parsedSeverity;
-        }
-
-        var type = AlertType.AccumulatedFatigue;
-        if (!string.IsNullOrWhiteSpace(dto.Type) &&
-            Enum.TryParse<AlertType>(dto.Type, true, out var parsedType))
-        {
-            type = parsedType;
-        }
-
-        SuggestedAdjustmentType? adjustmentType = null;
-        if (!string.IsNullOrWhiteSpace(dto.SuggestedAdjustmentType) &&
-            Enum.TryParse<SuggestedAdjustmentType>(dto.SuggestedAdjustmentType, true, out var parsedAdj))
-        {
-            adjustmentType = parsedAdj;
-        }
+        var severity = ParseOptionalEnum<AlertSeverity>(dto.Severity, "severidad") ?? AlertSeverity.Medium;
+        var type = ParseOptionalEnum<AlertType>(dto.Type, "tipo de aviso") ?? AlertType.AccumulatedFatigue;
+        var adjustmentType = ParseOptionalEnum<SuggestedAdjustmentType>(dto.SuggestedAdjustmentType, "tipo de ajuste sugerido");
 
         var alert = PreventiveAlert.Create(
             athleteId: dto.AthleteId,
@@ -51,10 +44,32 @@ public sealed class CreatePreventiveAlertCommandHandler(
             categoryId: dto.CategoryId,
             generatedAtUtc: DateTime.UtcNow);
 
+        var isOwnAthlete = await structureAthleteClient.IsOwnAthleteAsync(dto.AthleteId, cancellationToken);
+        if (!isOwnAthlete)
+        {
+            throw new NotFoundException("El atleta no existe o no pertenece al preparador físico autenticado.");
+        }
+
         await repository.AddAsync(alert, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return AlertMapper.ToResponseDto(alert);
+    }
+
+    private static TEnum? ParseOptionalEnum<TEnum>(string? rawValue, string fieldLabel)
+        where TEnum : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        if (!Enum.TryParse<TEnum>(rawValue.Trim(), true, out var parsed) || !Enum.IsDefined(parsed))
+        {
+            throw new DomainException($"El valor '{rawValue}' no es válido para {fieldLabel}.");
+        }
+
+        return parsed;
     }
 }
 
