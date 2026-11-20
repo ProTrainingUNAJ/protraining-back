@@ -56,8 +56,8 @@ public sealed class EntrenamientoPurgeRepository(AppDbContext context) : IEntren
             athleteRecordsCount,
             sessionAdjustmentsCount,
             planAssignmentsCount,
-            totalRecordsPurged,
-            athleteVariantsCount);
+            athleteVariantsCount,
+            totalRecordsPurged);
     }
 }
 

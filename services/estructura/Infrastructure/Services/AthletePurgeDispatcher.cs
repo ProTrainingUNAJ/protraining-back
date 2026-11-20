@@ -17,7 +17,7 @@ public sealed class AthletePurgeDispatcher(
 
     public async Task<AthletePurgeDispatchResult> DispatchPurgeToExternalServicesAsync(
         Guid athleteId,
-        Guid? accountId = null,
+        Guid? accountId,
         CancellationToken cancellationToken = default)
     {
         var servicesToPurge = GetTargetServices(athleteId, accountId);
@@ -50,13 +50,13 @@ public sealed class AthletePurgeDispatcher(
                     targetId,
                     cancellationToken);
 
-                if (result is not null && result.IsSuccess)
+                if (result.IsSuccess)
                 {
                     success = true;
                     break;
                 }
 
-                lastServiceError = result?.ErrorMessage ?? "Respuesta nula del cliente de purga";
+                lastServiceError = result.ErrorMessage;
                 logger.LogWarning(
                     "Intento {Attempt}/{MaxAttempts} fallido al purgar atleta {AthleteId} en {ServiceName}. Motivo: {Error}",
                     attempt,

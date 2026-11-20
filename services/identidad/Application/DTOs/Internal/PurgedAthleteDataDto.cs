@@ -4,7 +4,7 @@ namespace Application.DTOs.Internal;
 /// Resumen de registros físicos eliminados de un atleta en Identidad (#204 · KAN-499).
 /// </summary>
 public sealed record PurgedAthleteDataDto(
-    Guid AthleteId,
+    Guid AccountId,
     int UsersCount,
     int RefreshTokensCount,
     int PhotosCount,

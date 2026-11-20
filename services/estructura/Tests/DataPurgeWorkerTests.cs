@@ -259,6 +259,33 @@ public sealed class DataPurgeWorkerTests
     }
 
     [Fact]
+    public async Task Given_AthletePurgeDispatcher_When_AccountIdIsNull_Then_SkipsIdentidadAndPurgesRemainingServices()
+    {
+        // Arrange: atleta sin cuenta vinculada en Identidad (accountId == null)
+        var mockClient = new Mock<IExternalServicePurgeClient>();
+        var athleteId = Guid.NewGuid();
+
+        mockClient
+            .Setup(c => c.PurgeAthleteInServiceAsync(It.IsAny<string>(), It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string serviceName, string _, Guid _, CancellationToken _) =>
+                new ServicePurgeResult(serviceName, true, 200));
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var dispatcher = new AthletePurgeDispatcher(mockClient.Object, config, NullLogger<AthletePurgeDispatcher>.Instance);
+
+        // Act
+        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, accountId: null, CancellationToken.None);
+
+        // Assert: omite Identidad limpiamente y purga los otros 3 servicios externos
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.ErrorMessage);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Identidad", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Entrenamiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Seguimiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Asistente", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Given_DataPurgeWorker_When_ProcessPurgesAsyncInvoked_Then_ResolvesHandlerAndReturnsResult()
     {
         // Arrange

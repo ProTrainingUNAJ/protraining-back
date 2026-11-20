@@ -10,6 +10,6 @@ public sealed record PurgedAthleteDataDto(
     int AthleteRecordsCount,
     int SessionAdjustmentsCount,
     int PlanAssignmentsCount,
-    int TotalRecordsPurged,
-    int AthleteVariantsCount = 0);
+    int AthleteVariantsCount,
+    int TotalRecordsPurged);
 

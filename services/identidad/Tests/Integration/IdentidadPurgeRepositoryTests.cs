@@ -96,7 +96,7 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(targetAccountId, result.AthleteId);
+        Assert.Equal(targetAccountId, result.AccountId);
         Assert.Equal(1, result.UsersCount);
         Assert.Equal(1, result.RefreshTokensCount);
         Assert.Equal(1, result.PhotosCount);
@@ -150,7 +150,7 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(athleteId, result.AthleteId);
+        Assert.Equal(athleteId, result.AccountId);
         Assert.Equal(0, result.UsersCount);
         Assert.Equal(0, result.RefreshTokensCount);
         Assert.Equal(0, result.PhotosCount);

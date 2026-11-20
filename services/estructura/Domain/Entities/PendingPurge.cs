@@ -18,7 +18,8 @@ public sealed class PendingPurge : BaseEntity
 
     private PendingPurge() { }
 
-    public static PendingPurge Create(Guid athleteId, Guid? accountId = null, string entityType = "Athlete")
+    // accountId es obligatorio (aunque puede ser null si el atleta nunca tuvo cuenta): así nadie omite Identidad sin querer.
+    public static PendingPurge Create(Guid athleteId, Guid? accountId, string entityType = "Athlete")
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");

@@ -41,7 +41,8 @@ public sealed class InternalAthletesControllerTests
             AthleteRecordsCount: 2,
             SessionAdjustmentsCount: 1,
             PlanAssignmentsCount: 1,
-            TotalRecordsPurged: 8);
+            AthleteVariantsCount: 1,
+            TotalRecordsPurged: 9);
 
         _purgeRepoMock
             .Setup(r => r.PurgeAthleteDataAsync(athleteId, It.IsAny<CancellationToken>()))

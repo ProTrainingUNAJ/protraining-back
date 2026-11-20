@@ -1,5 +1,5 @@
 using Application.DTOs.Internal;
-using Application.Interfaces.Persistence;
+using Application.UseCases.Athletes.PurgeAthlete;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +12,7 @@ namespace API.Controllers;
 [Authorize(Roles = "Servicio")]
 [ApiController]
 [Route("api/v1/internal/athletes")]
-public sealed class InternalAthletesController(IAsistentePurgeRepository purgeRepository) : ControllerBase
+public sealed class InternalAthletesController(PurgeAthleteCommandHandler handler) : ControllerBase
 {
     [HttpDelete("{athleteId:guid}/purge")]
     [ProducesResponseType(typeof(PurgedAthleteDataDto), StatusCodes.Status200OK)]
@@ -20,7 +20,7 @@ public sealed class InternalAthletesController(IAsistentePurgeRepository purgeRe
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<PurgedAthleteDataDto>> PurgeAthlete(Guid athleteId, CancellationToken cancellationToken)
     {
-        var result = await purgeRepository.PurgeAthleteDataAsync(athleteId, cancellationToken);
+        var result = await handler.HandleAsync(new PurgeAthleteCommand(athleteId), cancellationToken);
         return Ok(result);
     }
 }
