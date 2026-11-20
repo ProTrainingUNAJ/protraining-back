@@ -275,11 +275,11 @@ public sealed class SmtpEmailSender(
             await client.SendAsync(message, cancellationToken);
             await client.DisconnectAsync(true, cancellationToken);
 
-            logger.LogInformation("Correo enviado con éxito a {ToEmail} a través de {Host}:{Port}.", toEmail, _options.Host, _options.Port);
+            logger.LogInformation("Correo enviado con éxito a través de {Host}:{Port}.", _options.Host, _options.Port);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error al enviar correo SMTP a {ToEmail} a través de {Host}:{Port}.", toEmail, _options.Host, _options.Port);
+            logger.LogError(ex, "Error al enviar correo SMTP a través de {Host}:{Port}.", _options.Host, _options.Port);
             throw;
         }
     }

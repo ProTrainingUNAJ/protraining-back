@@ -47,6 +47,9 @@ public class DeactivateAccountUseCase(
             throw new DomainException($"Error al desactivar la cuenta: {errors}");
         }
 
+        // Rotar el SecurityStamp para invalidar inmediatamente cualquier token JWT activo (#KAN-601)
+        await userManager.UpdateSecurityStampAsync(user);
+
         // Revocar todos los refresh tokens activos para cerrar todas las sesiones
         await refreshTokenRepository.RevokeAllActiveByUserAsync(user.Id, cancellationToken);
         await refreshTokenRepository.SaveChangesAsync(cancellationToken);

@@ -13,6 +13,7 @@ using Application.UseCases.Auth.ResetAthletePassword;
 using Application.UseCases.Auth.ResetPasswordWithToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace API.Controllers;
 
@@ -267,9 +268,11 @@ public class AuthController(
     /// <returns>HTTP 201 Created con mensaje de confirmación de email o error correspondiente.</returns>
     [HttpPost("register-pf")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthRateLimit")]
     [ProducesResponseType(typeof(RegisterPfResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> RegisterPf(
         [FromBody] RegisterPfRequestDto request,
         CancellationToken cancellationToken)
@@ -305,8 +308,10 @@ public class AuthController(
     /// <returns>HTTP 202 Accepted con mensaje informativo.</returns>
     [HttpPost("resend-confirmation")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthRateLimit")]
     [ProducesResponseType(typeof(ResendConfirmationResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ResendConfirmation(
         [FromBody] ResendConfirmationRequestDto request,
         CancellationToken cancellationToken)
