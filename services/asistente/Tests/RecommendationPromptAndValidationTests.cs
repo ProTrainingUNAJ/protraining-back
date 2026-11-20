@@ -253,6 +253,57 @@ public sealed class RecommendationPromptAndValidationTests
         Assert.Equal("AlimentoNoAprobado", result.ValidationCode);
     }
 
+    [Theory]
+    [InlineData("Armá tu plato con pollo, arroz y una milanesa al horno.")]
+    [InlineData("Sumá unas fetas de salame junto al huevo y la banana.")]
+    [InlineData("Combiná pollo con arroz y burrata artesanal para la cena.")]
+    [InlineData("Comé focaccia junto con el pollo y el arroz.")]
+    public void ValidateNutritionOutput_GivenUnlistedOrExoticUnapprovedFoodInPlateText_ThenRejectsWithUnapprovedFoodCode(string plateWithUnapprovedFood)
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var rawJson = $$"""
+            {
+              "suggestedPlateComposition": "{{plateWithUnapprovedFood}}",
+              "hydrationAndSleepGuidelines": "Tomá 2.5 litros de agua y dormí 8 horas.",
+              "mentionedFoods": ["pollo", "arroz"]
+            }
+            """;
+
+        var result = RecommendationOutputValidator.ValidateNutritionOutput(rawJson, request);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("AlimentoNoAprobado", result.ValidationCode);
+    }
+
+    [Theory]
+    [InlineData("Te conviene comer menos en la cena, usando pollo y arroz.")]
+    [InlineData("Comé menos cantidad de arroz y pollo durante la semana.")]
+    [InlineData("Intentá reducir porciones en el almuerzo con pollo y huevo.")]
+    [InlineData("Achicá tus porciones de arroz y evitá cenar después de entrenar.")]
+    [InlineData("Podés saltearse comidas livianas y priorizar solo pollo con banana.")]
+    public void ValidateNutritionOutput_GivenIndirectRestrictiveEatingPhrases_ThenRejectsWithWeightLossCode(string restrictivePlate)
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Mejorar rendimiento",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var rawJson = $$"""
+            {
+              "suggestedPlateComposition": "{{restrictivePlate}}",
+              "hydrationAndSleepGuidelines": "Tomá 2.5 litros de agua y dormí 8 horas.",
+              "mentionedFoods": ["pollo", "arroz"]
+            }
+            """;
+
+        var result = RecommendationOutputValidator.ValidateNutritionOutput(rawJson, request);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("BajarDePesoDetectado", result.ValidationCode);
+    }
+
     #endregion
 
     #region 3. Validación de Recomendación de Entrenamiento (Perfil frente al grupo)
@@ -345,8 +396,10 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: auditMock.Object,
             catalogService: null,
+            quotaService: null,
             structureAthleteClient: structureMock.Object,
-            logger: NullLogger<ResilientAiService>.Instance);
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
@@ -404,7 +457,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
@@ -427,7 +482,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         await Assert.ThrowsAsync<DomainException>(() =>
             service.GenerateNutritionRecommendationAsync(request));
@@ -454,7 +511,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: auditMock.Object,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateTrainingRecommendationAsync(request);
 
@@ -596,7 +655,10 @@ public sealed class RecommendationPromptAndValidationTests
         return structureMock;
     }
 
-    private static ResilientAiService BuildServiceWith(IReadOnlyList<IAiClient> providers, IStructureAthleteClient? structureClient) =>
+    private static ResilientAiService BuildServiceWith(
+        IReadOnlyList<IAiClient> providers,
+        IStructureAthleteClient? structureClient,
+        IIdentityHabitsRecommendationsClient? identityClient = null) =>
         new(
             providers: providers,
             semanticValidator: null,
@@ -604,8 +666,10 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
+            quotaService: null,
             structureAthleteClient: structureClient,
-            logger: NullLogger<ResilientAiService>.Instance);
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: identityClient ?? HabitsRecommendationsClientFactory.Enabled());
 
     [Fact]
     public async Task GenerateNutritionRecommendationAsync_WhenMinorWithoutTutorPermission_ThrowsDomainException_WithoutCallingProviders()

@@ -32,7 +32,7 @@ public class GetTodayRoutineQueryHandlerTests
             .ReturnsAsync(new Dictionary<Guid, string>());
 
         _performedSetRepoMock
-            .Setup(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PerformedSet>());
     }
 
@@ -466,7 +466,7 @@ public class GetTodayRoutineQueryHandlerTests
         );
 
         _performedSetRepoMock
-            .Setup(r => r.GetByAthleteAndDateAsync(athleteId, date, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(athleteId, date, It.IsAny<CancellationToken>()))
             .ReturnsAsync([performedSet]);
 
         var handler = CreateHandler();

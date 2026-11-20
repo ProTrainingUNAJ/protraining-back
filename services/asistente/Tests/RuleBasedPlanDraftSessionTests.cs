@@ -49,7 +49,7 @@ public sealed class RuleBasedPlanDraftSessionTests
 
         var content = await RuleClient(catalog).TryGeneratePlanDraftAsync(request);
 
-        var legsSession = content!.Weeks[0].Sessions[0];
+        var legsSession = content!.Weeks[0].Sessions.Single(s => s.Name.Contains("Piernas", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(2, legsSession.Exercises.Count);
         Assert.Equal(2, legsSession.Exercises.Select(e => e.ExerciseId).Distinct().Count());
     }

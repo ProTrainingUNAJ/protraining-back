@@ -707,7 +707,12 @@ public sealed class GenericAgentAiClientTests : IDisposable
             [badClient, rulesClient],
             semanticValidator: null,
             responseCache: null,
-            NullLogger<ResilientAiService>.Instance);
+            currentUser: null,
+            auditService: null,
+            catalogService: null,
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var fallbackResult = await resilient.GenerateNutritionRecommendationAsync(request);
         Assert.Equal("Reglas", fallbackResult.ProviderUsed);

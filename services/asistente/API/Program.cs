@@ -4,6 +4,7 @@ using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
+using Application.Common.Recommendations;
 using Application.Interfaces.Services;
 using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
@@ -150,6 +151,21 @@ builder.Services.AddHttpClient<ISeguimientoClient, Infrastructure.Services.Segui
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+var identityBaseUrl = builder.Configuration["Services:Identidad:BaseUrl"];
+if (!Uri.TryCreate(identityBaseUrl, UriKind.Absolute, out var identityUri))
+{
+    identityUri = new Uri("http://localhost:8081/");
+}
+
+builder.Services.AddHttpClient<IIdentityHabitsRecommendationsClient, Infrastructure.Services.Identity.IdentityHabitsRecommendationsClient>(client =>
+{
+    var uriString = identityUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddScoped<CreatePlanDraftCommandHandler>();
@@ -170,6 +186,11 @@ builder.Services.AddScoped<ReviewAlertCommandHandler>();
 builder.Services.AddScoped<ApplyAlertAdjustmentCommandHandler>();
 builder.Services.AddScoped<CreatePreventiveAlertCommandHandler>();
 builder.Services.AddScoped<ProcessDailyOverloadAnalysisCommandHandler>();
+var recommendationsOptions = builder.Configuration
+    .GetSection(RecommendationsOptions.SectionName)
+    .Get<RecommendationsOptions>() ?? new RecommendationsOptions();
+builder.Services.AddSingleton(recommendationsOptions);
+
 builder.Services.AddScoped<GenerateAthleteRecommendationsCommandHandler>();
 builder.Services.AddScoped<GenerateCategoryRecommendationsCommandHandler>();
 builder.Services.AddScoped<GetRecommendationsQueryHandler>();

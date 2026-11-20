@@ -88,7 +88,9 @@ public static class TrainingPlanMapper
             e.IntensityType?.ToString(),
             e.TargetRpe,
             e.TargetRir,
-            e.Notes
+            e.Notes,
+            e.TargetDistanceMeters,
+            e.TargetTimeSeconds
         );
     }
 }

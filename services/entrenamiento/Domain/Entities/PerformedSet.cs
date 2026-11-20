@@ -56,5 +56,13 @@ public class PerformedSet : BaseEntity
             SetNumber = setNumber
         };
     }
+
+    public void UpdateTime(decimal timeSeconds)
+    {
+        if (timeSeconds <= 0)
+            throw new DomainException("El tiempo debe ser mayor a 0 segundos.");
+
+        TimeSeconds = timeSeconds;
+    }
 }
 

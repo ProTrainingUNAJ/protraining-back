@@ -1,7 +1,7 @@
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 
-namespace Application.UseCases.Auth.GetPfHabitsRecommendations;
+namespace Application.UseCases.Users.GetPfHabitsRecommendations;
 
 public class GetPfHabitsRecommendationsUseCase(UserManager<User> userManager)
 {

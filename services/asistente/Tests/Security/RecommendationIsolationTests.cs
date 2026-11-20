@@ -79,14 +79,19 @@ public sealed class RecommendationIsolationTests
             return Task.FromResult(items);
         }
 
-        public Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+        public Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
             IReadOnlyCollection<Guid> athleteIds,
+            IReadOnlyCollection<RecommendationStatus> statuses,
             CancellationToken cancellationToken = default)
         {
+            if (athleteIds.Count == 0 || statuses.Count == 0)
+                return Task.FromResult<IReadOnlyList<AthleteRecommendation>>([]);
+
             var pfId = currentPfId();
-            var set = athleteIds.ToHashSet();
+            var athleteSet = athleteIds.ToHashSet();
+            var statusSet = statuses.ToHashSet();
             IReadOnlyList<AthleteRecommendation> items = store
-                .Where(r => r.PfId == pfId && r.DeletedAt == null && set.Contains(r.AthleteId) && r.Status == RecommendationStatus.Pending)
+                .Where(r => r.PfId == pfId && r.DeletedAt == null && athleteSet.Contains(r.AthleteId) && statusSet.Contains(r.Status))
                 .ToList();
             return Task.FromResult(items);
         }
@@ -137,6 +142,7 @@ public sealed class RecommendationIsolationTests
 
         var athleteHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -144,6 +150,7 @@ public sealed class RecommendationIsolationTests
 
         var categoryHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -216,8 +223,12 @@ public sealed class RecommendationIsolationTests
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(AthleteOfPfA);
+        structureMock.SetupMyHabitsPermission();
 
-        var handler = new GetMyRecommendationsQueryHandler(structureMock.Object, repository);
+        var handler = new GetMyRecommendationsQueryHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            repository);
         var visible = await handler.HandleAsync(new GetMyRecommendationsQuery());
 
         var single = Assert.Single(visible);
