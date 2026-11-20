@@ -55,8 +55,8 @@ paths:
     post:
       tags:
         - Authentication
-      summary: Iniciar sesión o vincular cuenta con Google (KAN-541)
-      description: Autentica mediante un ID Token verificado de Google para usuarios existentes en ProTraining. No realiza auto-registro.
+      summary: Iniciar sesión con Google (KAN-541)
+      description: Autentica únicamente a usuarios existentes que ya tengan su cuenta de Google vinculada explícitamente mediante Google Subject. No vincula automáticamente por correo ni realiza auto-registro.
       operationId: googleLogin
       security: []
       requestBody:
@@ -75,7 +75,112 @@ paths:
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
-          description: Token de Google inválido, expirado o cuenta no autorizada.
+          description: Token de Google inválido, expirado, cuenta no vinculada o no autorizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Correo de Preparador Físico pendiente de confirmación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/google/link:
+    get:
+      tags:
+        - Authentication
+      summary: Consultar estado de vinculación con Google (KAN-541)
+      description: Indica si el usuario autenticado posee una cuenta de Google vinculada sin exponer el Google Subject.
+      operationId: getGoogleLinkStatus
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Estado de vinculación obtenido correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleLinkStatusResponse'
+        "401":
+          description: No autenticado o credenciales inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+        - Authentication
+      summary: Vincular explícitamente cuenta de Google (KAN-541)
+      description: Vincula una cuenta de Google verificada al usuario autenticado, exigiendo reautenticación con contraseña actual y coincidencia de correo.
+      operationId: linkGoogleAccount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkGoogleAccountRequest'
+      responses:
+        "200":
+          description: Cuenta de Google vinculada correctamente (idempotente si ya estaba vinculada al mismo Google Subject).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleLinkStatusResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o credenciales inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Correo de Preparador Físico pendiente de confirmación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "409":
+          description: La cuenta de Google ya está vinculada a otro usuario o el usuario ya tiene otra cuenta de Google vinculada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+        - Authentication
+      summary: Desvincular cuenta de Google (KAN-541)
+      description: Elimina la vinculación de Google del usuario autenticado tras reautenticar con su contraseña actual. No permite desvincular si no existe contraseña local.
+      operationId: unlinkGoogleAccount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlinkGoogleAccountRequest'
+      responses:
+        "200":
+          description: Cuenta de Google desvinculada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleLinkStatusResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o credenciales inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Correo de Preparador Físico pendiente de confirmación.
           content:
             application/json:
               schema:
@@ -692,6 +797,40 @@ components:
           type: string
           description: Identificador del dispositivo cliente para vinculación de sesión y emisión de refresh token.
           example: "device-web-pwa-01"
+    LinkGoogleAccountRequest:
+      type: object
+      required:
+        - idToken
+        - currentPassword
+      properties:
+        idToken:
+          type: string
+          description: ID Token criptográfico emitido por Google Identity Services.
+          example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1NiJ9..."
+        currentPassword:
+          type: string
+          format: password
+          description: Contraseña actual del usuario en ProTraining requerida como reautenticación.
+          example: "PasswordSegura123!"
+    UnlinkGoogleAccountRequest:
+      type: object
+      required:
+        - currentPassword
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: Contraseña actual del usuario en ProTraining requerida como reautenticación.
+          example: "PasswordSegura123!"
+    GoogleLinkStatusResponse:
+      type: object
+      required:
+        - googleLinked
+      properties:
+        googleLinked:
+          type: boolean
+          description: Indica si la cuenta autenticada tiene Google vinculado.
+          example: true
     RegisterByInvitationRequest:
       type: object
       required:
