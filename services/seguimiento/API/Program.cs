@@ -23,6 +23,7 @@ using Application.UseCases.FieldTests.UpdateFieldTestResult;
 using Application.UseCases.FieldTests.UpdateFieldTestSessionStatus;
 using Application.UseCases.Health.GetHealth;
 using Application.UseCases.Injuries.CreateAthleteInjury;
+using Application.UseCases.Injuries.GetActiveInjuriesSummary;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
 using Application.UseCases.Attendance.GetCategoryAttendanceToday;
@@ -105,6 +106,7 @@ builder.Services.AddScoped<ListAthleteFitnessTestsQueryHandler>();
 builder.Services.AddScoped<ListAthleteBestMarksQueryHandler>();
 // Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
 builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
+builder.Services.AddScoped<GetActiveInjuriesSummaryQueryHandler>();
 builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();
 // Máquina de estados estricta de las lesiones (KAN-420): Active → InRecovery → MedicallyCleared.
 builder.Services.AddScoped<UpdateInjuryStatusCommandHandler>();

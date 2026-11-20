@@ -29,7 +29,9 @@ public sealed class StructureAthleteClient(
         [property: JsonPropertyName("lastName")] string? LastName,
         [property: JsonPropertyName("active")] bool Active,
         [property: JsonPropertyName("categoryId")] Guid? CategoryId,
-        [property: JsonPropertyName("categoryIds")] IReadOnlyList<Guid>? CategoryIds = null);
+        [property: JsonPropertyName("categoryIds")] IReadOnlyList<Guid>? CategoryIds = null,
+        [property: JsonPropertyName("weightKg")] double? WeightKg = null,
+        [property: JsonPropertyName("athleticGoal")] string? AthleticGoal = null);
 
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
@@ -271,8 +273,140 @@ public sealed class StructureAthleteClient(
             ?? [];
     }
 
+    /// <summary>
+    /// Perfil físico canónico desde GET /api/v1/athletes/{id}. Se usa el token del PF
+    /// reenviado (ForwardAuthorizationHandler); un atleta ajeno da 404 por el filtro de tenant.
+    /// </summary>
+    public async Task<StructureAthleteProfileDto?> GetAthleteProfileAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty)
+            return null;
+
+        try
+        {
+            var athlete = await GetFromStructureAsync<StructureAthleteApiResponse>(
+                relativeUrl: $"api/v1/athletes/{athleteId}",
+                returnNullOn404: true,
+                notFoundMessage: "El atleta no existe o no pertenece al preparador físico autenticado.",
+                operationDescription: $"consultar el perfil físico del atleta {athleteId}",
+                cancellationToken: cancellationToken);
+
+            return athlete is null
+                ? null
+                : new StructureAthleteProfileDto(athlete.Id, athlete.WeightKg, athlete.AthleticGoal);
+        }
+        catch (StructureServiceUnavailableException ex)
+        {
+            logger.LogWarning(
+                ex,
+                "No se pudo consultar el perfil físico del atleta {AthleteId}; la recomendación se genera sin cantidades.",
+                athleteId);
+            return null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Estructura rechazó la consulta del perfil físico del atleta {AthleteId}; se genera sin cantidades.",
+                athleteId);
+            return null;
+        }
+    }
+
     private sealed record StructureMeApiResponse(
         [property: JsonPropertyName("athleteId")] Guid AthleteId);
+
+    private sealed record StructureMedicalRecordApiResponse(
+        [property: JsonPropertyName("id")] Guid? Id,
+        [property: JsonPropertyName("hasPhysicalFitnessCertificate")] bool HasPhysicalFitnessCertificate,
+        [property: JsonPropertyName("physicalFitnessExpiresAt")] DateOnly? PhysicalFitnessExpiresAt,
+        [property: JsonPropertyName("pathologies")] string? Pathologies,
+        [property: JsonPropertyName("medicalHistory")] string? MedicalHistory,
+        [property: JsonPropertyName("surgeries")] string? Surgeries,
+        // Campos aún no expuestos por Estructura. Si aparecen, se consumen sin tocar el flujo.
+        [property: JsonPropertyName("hasKnownAllergies")] bool? HasKnownAllergies = null,
+        [property: JsonPropertyName("hasKnownConditions")] bool? HasKnownConditions = null);
+
+    /// <summary>
+    /// La ficha médica se lee por el endpoint auditado de Estructura con el token
+    /// del PF (este HttpClient usa ForwardAuthorizationHandler). El token de Servicio no
+    /// tiene acceso a este endpoint, por lo que la lectura solo ocurre en el request del PF.
+    /// Cualquier fallo se reporta como No disponible; nunca como "sin alergias".
+    /// </summary>
+    public async Task<StructureMedicalRecordContextDto> GetMedicalRecordContextAsync(
+        Guid athleteId,
+        string justification,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteId == Guid.Empty || string.IsNullOrWhiteSpace(justification))
+            return UnavailableMedicalRecord();
+
+        if (httpClient.BaseAddress is null)
+        {
+            logger.LogError("La dirección base de Estructura no está configurada; no se puede consultar la ficha médica.");
+            return UnavailableMedicalRecord();
+        }
+
+        try
+        {
+            var url = $"api/v1/athletes/{athleteId}/medical-record/access";
+            using var response = await httpClient.PostAsJsonAsync(
+                url,
+                new { justification },
+                JsonOptions,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning(
+                    "No se pudo verificar la ficha médica del atleta {AthleteId} (HTTP {StatusCode}). Se aplicará derivación profesional (fail-closed).",
+                    athleteId,
+                    (int)response.StatusCode);
+                return UnavailableMedicalRecord();
+            }
+
+            var record = await response.Content.ReadFromJsonAsync<StructureMedicalRecordApiResponse>(
+                JsonOptions,
+                cancellationToken);
+
+            if (record is null)
+            {
+                logger.LogWarning("Estructura devolvió una ficha médica vacía para el atleta {AthleteId}.", athleteId);
+                return UnavailableMedicalRecord();
+            }
+
+            var availability = record.Id.HasValue && record.Id.Value != Guid.Empty
+                ? StructureMedicalRecordAvailability.Available
+                : StructureMedicalRecordAvailability.NoRecord;
+
+            return new StructureMedicalRecordContextDto(
+                availability,
+                record.HasPhysicalFitnessCertificate,
+                record.PhysicalFitnessExpiresAt,
+                record.Pathologies,
+                record.MedicalHistory,
+                record.Surgeries,
+                record.HasKnownAllergies,
+                record.HasKnownConditions);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Error al consultar la ficha médica del atleta {AthleteId}. Se aplicará derivación profesional (fail-closed).",
+                athleteId);
+            return UnavailableMedicalRecord();
+        }
+    }
+
+    private static StructureMedicalRecordContextDto UnavailableMedicalRecord() =>
+        new(StructureMedicalRecordAvailability.Unavailable, false, null, null, null, null);
 
     public async Task<Guid?> GetMyAthleteIdAsync(CancellationToken cancellationToken = default)
     {

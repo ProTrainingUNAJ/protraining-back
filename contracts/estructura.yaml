@@ -257,6 +257,42 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/physical-profile:
+    patch:
+      tags:
+        - Athletes
+      summary: Actualizar peso corporal y objetivo deportivo del atleta
+      description: >-
+        Fuente canónica de peso corporal y objetivo deportivo para recomendaciones de hábitos (KAN-494).
+        Solo PreparadorFisico. `weightKg: null` significa "sin dato" (nunca se inventa un valor);
+        `athleticGoal` acepta solo el vocabulario cerrado documentado. No es información médica:
+        no requiere justificación ni se registra en la auditoría de la ficha médica.
+      operationId: updateAthletePhysicalProfile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhysicalProfileRequest'
+      responses:
+        "200":
+          description: Perfil físico actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{id}/guardian-consent:
     get:
       tags:
@@ -634,6 +670,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UpdateMyTelegramResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/physical-profile:
+    patch:
+      tags:
+        - Me
+      summary: Actualizar mi peso corporal y objetivo deportivo
+      description: >-
+        Autoservicio del atleta (KAN-494). Actualiza el perfil físico del atleta vinculado al token,
+        sin recibir ids en la ruta. Acepta el mismo vocabulario cerrado que el endpoint del PF.
+        `weightKg: null` significa "sin dato"; nunca se calcula un peso por defecto.
+      operationId: updateMyPhysicalProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhysicalProfileRequest'
+      responses:
+        "200":
+          description: Perfil físico actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMyPhysicalProfileResponse'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -1835,6 +1907,30 @@ components:
           nullable: true
           description: Username de Telegram del atleta (sin @, entre 5 y 32 caracteres).
           example: "lucas_fernandez"
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            Peso corporal canónico en kilogramos (KAN-494). null = sin dato; nunca se infiere de
+            1RM, carga de entrenamiento ni objetivos de plan.
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          description: Objetivo deportivo canónico del atleta (vocabulario cerrado, KAN-494).
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Última actualización de peso/objetivo.
         isMinor:
           type: boolean
           example: false
@@ -2188,6 +2284,74 @@ components:
           type: boolean
           description: Indica si el atleta es menor de edad.
           example: false
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: Peso corporal canónico del atleta (KAN-494). null = sin dato.
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          description: Objetivo deportivo canónico del atleta (vocabulario cerrado, KAN-494).
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Última actualización de peso/objetivo.
+
+    UpdatePhysicalProfileRequest:
+      type: object
+      description: >-
+        Perfil físico del atleta (KAN-494). `weightKg: null` borra el dato; no se calcula un peso por defecto.
+        `athleticGoal` sólo acepta el vocabulario cerrado; null/vacío se normaliza a "Objetivo no informado".
+      properties:
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          nullable: true
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+            - ""
+          description: Objetivo deportivo; vacío/null = "Objetivo no informado".
+          example: "Ganar masa muscular"
+
+    UpdateMyPhysicalProfileResponse:
+      type: object
+      properties:
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     UpdateMyTelegramRequest:
       type: object

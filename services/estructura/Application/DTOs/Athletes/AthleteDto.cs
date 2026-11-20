@@ -15,4 +15,7 @@ public sealed record AthleteDto(
     GuardianConsentDto? GuardianConsent,
     bool HasPhoto = false,
     DateTime? PhotoUpdatedAt = null,
-    string? TelegramUsername = null);
+    string? TelegramUsername = null,
+    decimal? WeightKg = null,
+    string? AthleticGoal = null,
+    DateTime? PhysicalProfileUpdatedAt = null);

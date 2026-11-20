@@ -27,6 +27,7 @@ public sealed class TenantFilterGuardTests
         ["ExerciseVariantSeeder.cs"] = "Al arrancar, agrupa las variantes del catálogo compartido de ejercicios (KAN-554), sin PF logueado.",
         ["EnduranceExerciseSeeder.cs"] = "Al arrancar, siembra los ejercicios básicos de carrera y resistencia en el catálogo compartido (KAN-453), sin PF logueado.",
         ["ExerciseTypeClassificationSeeder.cs"] = "Al arrancar, reclasifica el catálogo compartido de ejercicios según el JSON (KAN-453), sin PF logueado.",
+        ["MobilityAndBasicExerciseSeeder.cs"] = "Al arrancar, reclasifica los básicos y siembra ejercicios de movilidad en el catálogo compartido (KAN-590), sin PF logueado.",
         ["TrainingSessionRepository.cs"] = "Endpoint interno del worker de recordatorios (rol Servicio): consulta las asignaciones de un PF que llega por parámetro, sin PF logueado.",
         ["EntrenamientoPurgeRepository.cs"] = "Endpoint interno de purga (rol Servicio): elimina físicamente registros históricos del atleta sin un PF en sesión.",
     };

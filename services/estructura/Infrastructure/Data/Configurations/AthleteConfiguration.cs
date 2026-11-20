@@ -34,6 +34,18 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
             .HasColumnName("telegram_username")
             .HasMaxLength(32);
 
+        builder.Property(athlete => athlete.WeightKg)
+            .HasColumnName("weight_kg")
+            .HasPrecision(5, 2);
+
+        builder.Property(athlete => athlete.AthleticGoal)
+            .HasColumnName("athletic_goal")
+            .HasConversion<string>()
+            .HasMaxLength(32);
+
+        builder.Property(athlete => athlete.PhysicalProfileUpdatedAt)
+            .HasColumnName("physical_profile_updated_at");
+
         builder.Property(athlete => athlete.IsMinor)
             .HasColumnName("is_minor")
             .IsRequired();

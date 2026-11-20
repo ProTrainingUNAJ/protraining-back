@@ -36,6 +36,8 @@ public sealed record TrainingRecommendationResponseDto(
 /// Solicitud para redactar una recomendación de hábitos y alimentación (#083 · KAN-378).
 /// La IA únicamente redacta: los números (proteína, hidratación, sueño) vienen calculados por reglas
 /// y los alimentos provienen exclusivamente de la lista aprobada.
+/// Incluye contexto de seguridad (menor, peso/objetivo, momentos, datos faltantes, derivación).
+/// Campos de peso/objetivo/rangos pueden ser desconocidos si el modelo de datos aún no los provee (TODO).
 /// </summary>
 public sealed record NutritionRecommendationRequestDto(
     string AthleticGoal,
@@ -47,7 +49,15 @@ public sealed record NutritionRecommendationRequestDto(
     double? HydrationLiters = null,
     double? SleepHours = null,
     bool IncludeQuantities = true,
-    Guid? AthleteId = null);
+    Guid? AthleteId = null,
+    // Opcionales, backward-compatible
+    double? WeightKg = null,
+    bool IsMinor = false,
+    string? RecommendationMode = null, // Quantitative | Qualitative | Referral
+    bool RequiresProfessionalReferral = false,
+    IReadOnlyList<string>? ReferralReasons = null,
+    IReadOnlyList<string>? DetectedMoments = null,
+    IReadOnlyList<string>? MissingData = null);
 
 /// <summary>
 /// Recomendación de hábitos y alimentación redactada y validada (#083 · KAN-378).
@@ -58,7 +68,15 @@ public sealed record NutritionRecommendationResponseDto(
     string HydrationAndSleepGuidelines,
     IReadOnlyList<string> MentionedFoods,
     string LegalDisclaimer,
-    string ProviderUsed = "Reglas");
+    string ProviderUsed = "Reglas",
+    // Opcionales, backward-compatible
+    double? MinProteinGrams = null,
+    double? MaxProteinGrams = null,
+    string? RecommendationMode = null,
+    bool RequiresProfessionalReferral = false,
+    IReadOnlyList<string>? ReferralReasons = null,
+    IReadOnlyList<string>? DetectedMoments = null,
+    IReadOnlyList<string>? MissingData = null);
 
 /// <summary>
 /// Resultado de la validación de esquema y de reglas de seguridad sobre la salida generada por la IA (#083 · KAN-378).
