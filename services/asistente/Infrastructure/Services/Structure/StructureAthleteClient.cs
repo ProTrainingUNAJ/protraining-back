@@ -82,11 +82,29 @@ public sealed class StructureAthleteClient(
         [property: JsonPropertyName("isMinor")] bool IsMinor,
         [property: JsonPropertyName("allowsHabitsRecommendations")] bool AllowsHabitsRecommendations);
 
-    public async Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default)
+    public Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
         if (athleteId == Guid.Empty)
-            return null;
+            return Task.FromResult<StructureAthleteHabitsPermissionDto?>(null);
 
+        return GetHabitsPermissionCoreAsync(
+            $"api/v1/athletes/{athleteId}",
+            $"del atleta {athleteId}",
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// El token de un atleta no tiene acceso a GET /api/v1/athletes/{id}: Estructura expone
+    /// su propio estado de consentimiento en GET /api/v1/me/consent (KAN-493).
+    /// </summary>
+    public Task<StructureAthleteHabitsPermissionDto?> GetMyHabitsPermissionAsync(CancellationToken cancellationToken = default) =>
+        GetHabitsPermissionCoreAsync("api/v1/me/consent", "del atleta autenticado", cancellationToken);
+
+    private async Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionCoreAsync(
+        string url,
+        string athleteDescription,
+        CancellationToken cancellationToken)
+    {
         if (httpClient.BaseAddress is null)
         {
             logger.LogError("La dirección base de Estructura no está configurada.");
@@ -95,7 +113,6 @@ public sealed class StructureAthleteClient(
 
         try
         {
-            var url = $"api/v1/athletes/{athleteId}";
             using var response = await httpClient.GetAsync(url, cancellationToken);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -104,9 +121,9 @@ public sealed class StructureAthleteClient(
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning(
-                    "Estructura respondió código HTTP {StatusCode} al consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                    "Estructura respondió código HTTP {StatusCode} al consultar el permiso de recomendaciones {AthleteDescription}. No se generará recomendación (fail-closed).",
                     (int)response.StatusCode,
-                    athleteId);
+                    athleteDescription);
                 return null;
             }
 
@@ -114,8 +131,8 @@ public sealed class StructureAthleteClient(
             if (athlete is null)
             {
                 logger.LogWarning(
-                    "Estructura devolvió una respuesta vacía al consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
-                    athleteId);
+                    "Estructura devolvió una respuesta vacía al consultar el permiso de recomendaciones {AthleteDescription}. No se generará recomendación (fail-closed).",
+                    athleteDescription);
                 return null;
             }
 
@@ -129,8 +146,8 @@ public sealed class StructureAthleteClient(
         {
             logger.LogWarning(
                 ex,
-                "Error al comunicarse con Estructura para consultar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
-                athleteId);
+                "Error al comunicarse con Estructura para consultar el permiso de recomendaciones {AthleteDescription}. No se generará recomendación (fail-closed).",
+                athleteDescription);
             return null;
         }
     }

@@ -13,6 +13,7 @@ using Application.UseCases.CheckIns.ListResolvedInjuries;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -128,6 +129,35 @@ public class CheckInsControllerTests
 
         var created = Assert.IsType<CreatedResult>(result.Result);
         Assert.Equal(201, created.StatusCode);
+    }
+
+    // KAN-487: el middleware traduce esta DomainException a 400 ("sin puntaje → 400").
+    [Fact]
+    public async Task Submit_WithActiveInjuryWithoutScore_ThrowsDomainException_MappedToBadRequest()
+    {
+        var athleteId = Guid.NewGuid();
+        ResponderMe(athleteId);
+        var injury = new AthleteInjury
+        {
+            AthleteId = athleteId,
+            Zone = "isquiotibiales",
+            Status = InjuryStatus.Active
+        };
+        _injuries
+            .Setup(r => r.ListNotClearedByAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var request = RequestValida() with
+        {
+            Injuries = [new SubmitCheckInInjuryPainRequest { InjuryId = injury.Id, Level = null }]
+        };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateController().Submit(athleteId, request, CancellationToken.None));
+
+        Assert.Equal("Falta puntuar el dolor de la molestia.", exception.Message);
+        _checkIns.Verify(r => r.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -345,8 +345,10 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: auditMock.Object,
             catalogService: null,
+            quotaService: null,
             structureAthleteClient: structureMock.Object,
-            logger: NullLogger<ResilientAiService>.Instance);
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
@@ -404,7 +406,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
@@ -427,7 +431,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         await Assert.ThrowsAsync<DomainException>(() =>
             service.GenerateNutritionRecommendationAsync(request));
@@ -454,7 +460,9 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: auditMock.Object,
             catalogService: null,
-            logger: NullLogger<ResilientAiService>.Instance);
+            quotaService: null,
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
 
         var response = await service.GenerateTrainingRecommendationAsync(request);
 
@@ -596,7 +604,10 @@ public sealed class RecommendationPromptAndValidationTests
         return structureMock;
     }
 
-    private static ResilientAiService BuildServiceWith(IReadOnlyList<IAiClient> providers, IStructureAthleteClient? structureClient) =>
+    private static ResilientAiService BuildServiceWith(
+        IReadOnlyList<IAiClient> providers,
+        IStructureAthleteClient? structureClient,
+        IIdentityHabitsRecommendationsClient? identityClient = null) =>
         new(
             providers: providers,
             semanticValidator: null,
@@ -604,8 +615,10 @@ public sealed class RecommendationPromptAndValidationTests
             currentUser: null,
             auditService: null,
             catalogService: null,
+            quotaService: null,
             structureAthleteClient: structureClient,
-            logger: NullLogger<ResilientAiService>.Instance);
+            logger: NullLogger<ResilientAiService>.Instance,
+            identityHabitsClient: identityClient ?? HabitsRecommendationsClientFactory.Enabled());
 
     [Fact]
     public async Task GenerateNutritionRecommendationAsync_WhenMinorWithoutTutorPermission_ThrowsDomainException_WithoutCallingProviders()
