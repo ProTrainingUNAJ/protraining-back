@@ -255,4 +255,33 @@ public sealed class InjuryPersistenceTests : IDisposable
 
         Assert.Single(history);
     }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task Given_MultipleAthletesAndTenants_When_CountingActiveByAthleteIds_Then_CountsOnlyActiveOfCurrentPf()
+    {
+        var secondAthleteId = Guid.NewGuid();
+        var healthyAthleteId = Guid.NewGuid();
+        var otherPfId = Guid.NewGuid();
+
+        // PF actual: 2 lesiones para _athleteId (1 Active, 1 InRecovery) y 1 Active para secondAthleteId
+        await CreateHandler().HandleAsync(Command(_athleteId));
+        var secondInjury = await CreateHandler().HandleAsync(Command(_athleteId) with { Zone = "isquiotibiales" });
+        await CreateStatusHandler().HandleAsync(
+            new UpdateInjuryStatusCommand(secondInjury.Id, InjuryStatus.InRecovery, "Evolucionando bien."));
+        await CreateHandler().HandleAsync(Command(secondAthleteId));
+
+        // Otro PF con lesión Active para healthyAthleteId (no debe contarse para el PF actual)
+        _currentPfId = otherPfId;
+        await CreateHandler().HandleAsync(Command(healthyAthleteId));
+        _currentPfId = _pfId;
+
+        using var db = CreateDbContext();
+        var repo = new AthleteInjuryRepository(db);
+        var counts = await repo.CountActiveByAthleteIdsAsync([_athleteId, secondAthleteId, healthyAthleteId]);
+
+        Assert.Equal(1, counts.GetValueOrDefault(_athleteId, 0));
+        Assert.Equal(1, counts.GetValueOrDefault(secondAthleteId, 0));
+        Assert.Equal(0, counts.GetValueOrDefault(healthyAthleteId, 0));
+    }
 }
