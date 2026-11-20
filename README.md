@@ -26,6 +26,54 @@ Cada servicio tiene la misma estructura en capas (`Domain`, `Application`, `Infr
 
 El CRUD de atletas (`/api/athletes`) es solo un ejemplo y está únicamente en Estructura.
 
+## Arquitectura
+
+```mermaid
+flowchart LR
+    front["PWA (React)<br/>PF y atleta"] -->|"/api/..."| gw["Gateway (YARP)<br/>:8000"]
+
+    gw --> idn["Identidad<br/>login, JWT, Google, tutor"]
+    gw --> est["Estructura<br/>organizaciones, categorías,<br/>atletas, calendario"]
+    gw --> ent["Entrenamiento<br/>ejercicios, planes por bloques,<br/>rutina de hoy, récords"]
+    gw --> seg["Seguimiento<br/>check-in, semáforo,<br/>lesiones, tests"]
+    gw --> asi["Asistente<br/>borradores con IA, avisos,<br/>recomendaciones"]
+
+    idn --- dbi[("identidad")]
+    est --- dbe[("estructura")]
+    ent --- dbn[("entrenamiento")]
+    seg --- dbs[("seguimiento")]
+    asi --- dba[("asistente")]
+
+    asi -->|HTTP| est
+    asi -->|HTTP| seg
+    asi -->|"MCP: busca ejercicios,<br/>restricciones y sustitutos"| ent
+    seg -->|HTTP| est
+
+    asi -->|"1º"| openai["OpenAI"]
+    asi -->|"2º, si falla"| gemini["Gemini"]
+    asi -.->|"3º, sin IA"| reglas["Reglas en C#"]
+
+    idn -->|mails| mail["Mailpit (local)"]
+```
+
+- **Cada servicio tiene su propia base** y ninguno lee la base de otro: se hablan por HTTP. Si uno se cae, los demás siguen andando. Por ejemplo, sin el Asistente siguen funcionando el check-in, el semáforo y "Mi rutina".
+- **Cada PF ve solo sus datos:** todas las entidades tienen `pf_id`, y cada consulta se filtra por el PF del token.
+- **La IA propone y el PF decide.** El Asistente arma los borradores con un **agente** que consulta la biblioteca de ejercicios por **MCP** (una forma estándar de que la IA use herramientas) y prueba los proveedores en orden: OpenAI, después Gemini, y si fallan los dos, **reglas fijas en C#**. A la IA nunca le llega el nombre de un atleta. Los kilos, el semáforo y los avisos los calculan siempre reglas en C#, no la IA.
+
+## Demo de cero, en 3 comandos
+
+Para levantar todo con los datos de la demo (igual en Windows, Mac y Linux; solo hace falta Docker):
+
+```bash
+cp .env.example .env                                 # en Windows (PowerShell): copy .env.example .env
+docker compose up -d --build                         # gateway, 5 servicios, 5 bases y Mailpit
+docker compose --profile seed run --rm seed completo # datos de la demo (ver "Usuarios y datos de prueba")
+```
+
+Con el front clonado al lado (`../protraining-front`), sumá `docker compose --profile front up -d --build` y entrá a `http://localhost:3000`. Los mails (por ejemplo, la confirmación del registro de un PF) se ven en Mailpit: `http://localhost:8025`.
+
+**Claves de IA:** van **solo en tu `.env`**, nunca en el repo (`OPENAI_API_KEY` y `GEMINI_API_KEY`; se piden por privado). Sin claves, la app anda igual: los borradores salen de las reglas.
+
 ## Levantar todo con Docker
 
 ```bash
@@ -70,14 +118,18 @@ En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas est
 | `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
 | `sofia@`, `bruno@`, `diego@protraining.com` | Atletas (Demo 2) | No los crea Identidad: se registran por **invitación** al correr `demo-data.sh`, con la misma contraseña |
 
-Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
+Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh`, con la API y el token del PF.
+
+**Se corre con Docker, igual en Windows, Mac y Linux.** No hace falta instalar bash, curl ni jq: el script corre adentro del contenedor `seed` (perfil `seed` del compose, KAN-479).
 
 ```bash
 docker compose down -v && docker compose up -d --build   # base de cero
-./scripts/demo-data.sh             # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
-./scripts/demo-data.sh checkins    # solo los check-ins de hoy (la mañana del ensayo y de la demo)
-./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
+docker compose --profile seed run --rm seed              # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
+docker compose --profile seed run --rm seed checkins     # solo los check-ins de hoy (la mañana del ensayo y de la demo)
+docker compose --profile seed run --rm seed completo     # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
+
+La primera vez construye la imagen del contenedor (unos segundos). Espera a que los servicios estén sanos antes de empezar. Si en Mac o Linux preferís correrlo directo, sigue andando `./scripts/demo-data.sh [checkins|completo]` (necesita bash, docker, curl y jq).
 
 El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División. Además deja el WhatsApp del PF (para que el atleta vea "Contactar a mi preparador"; con `DEMO_PF_PHONE=+549…` se usa un número real), las lesiones activas de Lucas y Camila y una sesión de tests de campo en curso ("Evaluación de pretemporada", con el salto CMJ y los 30 m cargados y la sentadilla 1RM para cargar en vivo). Para que la evolución muestre curvas, carga historia: tres récords anteriores (hace 12, 8 y 4 semanas) de Martín, Facundo, Joaquín, Lucas y Diego, y tres evaluaciones de campo cerradas (hace 10, 6 y 2 semanas) con salto CMJ, 30 m y Test de Cooper. La API registra cada marca de campo con la hora del momento, así que el script les pone la fecha de su sesión directo en la base de Seguimiento (solo para la demo). Con `completo`, Martín registra 115 kg × 5 en sentadilla y queda una propuesta de récord para aprobar en el inicio del PF (solo los días con sesión: miércoles a viernes).
 

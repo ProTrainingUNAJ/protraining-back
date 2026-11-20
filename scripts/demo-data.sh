@@ -20,13 +20,16 @@
 # Para la evolución: 3 récords anteriores por atleta (Martín, Facundo, Joaquín, Lucas y Diego) y 3 evaluaciones de
 # campo cerradas con salto CMJ, 30 m y Cooper (las fechas de esas marcas se ajustan en la base de Seguimiento).
 #
-# Uso (desde la raíz del repo, con el compose levantado):
-#   ./scripts/demo-data.sh            carga todo lo de arriba (una vez, con la base de cero)
-#   ./scripts/demo-data.sh checkins   solo los check-ins de hoy (correrlo la mañana del ensayo y de la demo)
-#   ./scripts/demo-data.sh completo   lo mismo que sin argumentos, más lo que en la demo se hace en vivo:
-#                                     récord de sentadilla de Lucas, asignación del plan y check-ins de Lucas y Martín
+# Uso recomendado (igual en Windows, Mac y Linux; solo necesita Docker, con el compose levantado):
+#   docker compose --profile seed run --rm seed             carga todo lo de abajo (una vez, con la base de cero)
+#   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy (la mañana del ensayo y de la demo)
+#   docker compose --profile seed run --rm seed completo    lo mismo que sin argumentos, más lo que en la demo se hace
+#                                                           en vivo: récord de Lucas, asignación del plan y check-ins de Lucas y Martín
 #
-# Necesita: docker, curl y jq. Las cuentas las crea el seed de Identidad (IdentityDataSeed).
+# También se puede correr directo desde la raíz del repo (necesita bash, docker, curl y jq):
+#   ./scripts/demo-data.sh [checkins|completo]
+#
+# Las cuentas las crea el seed de Identidad (IdentityDataSeed), con ASPNETCORE_ENVIRONMENT=Development.
 set -euo pipefail
 
 GATEWAY="${GATEWAY:-http://localhost:8000}"
@@ -43,11 +46,31 @@ case "$MODE" in
     ;;
 esac
 
-for tool in docker curl jq; do
+# Dentro del contenedor "seed" (SEED_IN_CONTAINER=1) las bases se tocan con psql por la red interna;
+# desde la compu, con "docker compose exec".
+if [[ -n "${SEED_IN_CONTAINER:-}" ]]; then
+  required_tools=(curl jq psql)
+else
+  required_tools=(docker curl jq)
+fi
+for tool in "${required_tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "Falta '$tool' en el PATH." >&2; exit 1; }
 done
 
 # --- helpers ---------------------------------------------------------------
+
+# run_sql <servicio-de-base> <sql> → corre el SQL en la base de ese servicio (db-estructura → base "estructura")
+run_sql() {
+  local service="$1" sql="$2"
+  if [[ -n "${SEED_IN_CONTAINER:-}" ]]; then
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -q -h "$service" -U "$POSTGRES_USER" -d "${service#db-}" \
+      -v ON_ERROR_STOP=1 -c "$sql"
+  else
+    # El usuario y la base los toma el propio contenedor de la base: no hace falta exportarlos en la compu.
+    docker compose exec -T "$service" sh -c 'psql -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "$1"' \
+      sh "$sql"
+  fi
+}
 
 # login <email> → imprime la respuesta completa del login
 login() {
@@ -94,6 +117,13 @@ athlete_id_of() {
   local token
   token=$(login "$1" | jq -r .accessToken)
   api GET "/estructura/api/v1/me" "$token" | jq -r .athleteId
+}
+
+# active_injury_of <email> → id de su lesión activa. Desde la KAN-487 el check-in tiene que puntuar
+# el dolor de cada lesión activa; en el modo "checkins" las lesiones ya existen y hay que buscarlas.
+active_injury_of() {
+  api GET "/seguimiento/api/v1/athletes/$(athlete_id_of "$1")/injuries?status=Active" "$PF_TOKEN" \
+    | jq -r '.[0].id // empty'
 }
 
 # check_in <email> <json> [días atrás] → check-in con el token del atleta (si ya hizo uno ese día, lo pisa).
@@ -150,6 +180,7 @@ load_check_ins() {
   # Valentina con dolor nuevo en el cuádriceps → amarillo
   check_in valentina@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
   # Camila con lesión activa en el hombro → rojo (está en Alumnos particulares y en Musculación)
+  CAMILA_INJURY_ID="${CAMILA_INJURY_ID:-$(active_injury_of camila@protraining.com)}"
   if [[ -n "${CAMILA_INJURY_ID:-}" ]]; then
     camila_body=$(jq -nc --arg inj "$CAMILA_INJURY_ID" '{sleepHours:8,sleepQuality:4,muscleSoreness:3,fatigueLevel:2,moodRate:3,stressLevel:2,effortRate:5,isSick:false,painZones:"hombros:4",hasActiveInjury:true,injuries:[{injuryId:$inj,level:4}]}')
   else
@@ -216,6 +247,7 @@ fi
 if api GET "/estructura/api/v1/organizations" "$PF_TOKEN" | jq -e '.[] | select(.name == "Club Demo")' >/dev/null; then
   echo "Ya hay datos de la demo cargados (existe \"Club Demo\")." >&2
   echo "Para empezar de cero: docker compose down -v && docker compose up -d --build" >&2
+  echo "y después: docker compose --profile seed run --rm seed" >&2
   echo "Para cargar solo los check-ins de hoy: $0 checkins" >&2
   exit 1
 fi
@@ -269,10 +301,6 @@ echo "  Sofía, Bruno y Diego en Primera División"
 # Vincular cada atleta a su cuenta de Identidad. Lo hace la invitación por QR (Sprint 2);
 # mientras tanto, directo en la base de Estructura (solo desarrollo).
 echo "Vínculo de las cuentas:"
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
 link_sql=""
 for pair in "atleta@protraining.com:$LUCAS_ID" "martin@protraining.com:$MARTIN_ID" \
   "joaquin@protraining.com:$JOAQUIN_ID" "facundo@protraining.com:$FACUNDO_ID" \
@@ -282,7 +310,7 @@ for pair in "atleta@protraining.com:$LUCAS_ID" "martin@protraining.com:$MARTIN_I
   account_id=$(login "$email" | jq -r .user.id)
   link_sql+="update athletes set account_id = '$account_id' where id = '$athlete_id';"
 done
-docker compose exec -T db-estructura psql -q -U "$POSTGRES_USER" -d estructura -v ON_ERROR_STOP=1 -c "$link_sql"
+run_sql db-estructura "$link_sql"
 echo "  6 cuentas vinculadas"
 
 # --- récords y planificación -----------------------------------------------
@@ -447,9 +475,8 @@ for s in "Evaluación inicial|70" "Control de mitad de bloque|42" "Control pre t
   api PATCH "/seguimiento/api/v1/field-test-sessions/$sid/status" "$PF_TOKEN" '{"status":"Closed"}' >/dev/null
   i=$((i + 1))
 done
-docker compose exec -T db-seguimiento sh -c 'psql -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
-  UPDATE field_test_results r SET recorded_at = (s.date + time '\''15:00'\'') AT TIME ZONE '\''UTC'\''
-  FROM field_test_sessions s WHERE r.session_id = s.id AND s.date < CURRENT_DATE"' >/dev/null
+run_sql db-seguimiento "UPDATE field_test_results r SET recorded_at = (s.date + time '15:00') AT TIME ZONE 'UTC'
+  FROM field_test_sessions s WHERE r.session_id = s.id AND s.date < CURRENT_DATE" >/dev/null
 echo "  3 evaluaciones cerradas (hace 10, 6 y 2 semanas): salto CMJ, 30 m y Cooper de Martín, Joaquín, Facundo, Lucas y Diego"
 
 FIELD_SESSION=$(api POST "/seguimiento/api/v1/field-test-sessions" "$PF_TOKEN" \

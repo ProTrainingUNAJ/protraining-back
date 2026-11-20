@@ -51,6 +51,7 @@ using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Text.Json;
+using Infrastructure.Services.Tracking;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -142,6 +143,14 @@ if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
+// Seguimiento por HTTP, con el token del usuario
+var trackingBaseUrl = builder.Configuration["Services:Seguimiento:BaseUrl"];
+if (!Uri.TryCreate(trackingBaseUrl, UriKind.Absolute, out var trackingUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Seguimiento__BaseUrl (URL absoluta).");
+builder.Services.AddHttpClient<ITrackingClient, TrackingClient>(client => client.BaseAddress = trackingUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
 builder.Services.AddScoped<ResolveActiveMembershipsQueryHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 

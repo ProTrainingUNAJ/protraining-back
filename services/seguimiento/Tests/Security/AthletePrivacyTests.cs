@@ -22,6 +22,7 @@ public sealed class AthletePrivacyTests
             "CheckInsController.ListInjuries",
             "CheckInsController.ListResolvedInjuries",
             "AthleteFitnessTestsController.List",
+            "AthleteFitnessTestsController.ListBestMarks",
             "DailyLoadsController.Register",
             "DailyLoadsController.Get",
             "DailyLoadsController.GetWeek",

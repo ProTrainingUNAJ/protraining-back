@@ -1,4 +1,5 @@
 using Application.DTOs.Memberships;
+using Application.DTOs.Tracking;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -37,7 +38,8 @@ public class GetTodayRoutineQueryHandlerTests
 
     private GetTodayRoutineQueryHandler CreateHandler(
         IExerciseVideoRepository? videoRepo = null,
-        IExerciseMediaCatalog? mediaCatalog = null)
+        IExerciseMediaCatalog? mediaCatalog = null,
+        ITrackingClient? trackingClient = null)
     {
         return new(
             _athleteRecordRepoMock.Object,
@@ -46,7 +48,8 @@ public class GetTodayRoutineQueryHandlerTests
             _structureClientMock.Object,
             videoRepo ?? _videoRepoMock.Object,
             _performedSetRepoMock.Object,
-            exerciseMediaCatalog: mediaCatalog
+            exerciseMediaCatalog: mediaCatalog,
+            trackingClient: trackingClient
         );
     }
 
@@ -638,5 +641,83 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.True(ex.IsAdapted);
         Assert.Equal("Sentadilla", ex.OriginalExerciseName);
         Assert.Equal("Ajuste puntual de hoy", ex.AdaptationReason);
+    }
+
+    [Fact]
+    public async Task Given_AtletaConTestCarrera100m14sYPasadasAl90_When_ConsultaRutina_Then_DevuelveMeta15Punto6SinUsarRecord()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // Aunque exista un récord viejo cargado a mano, los ejercicios Distance/Time no deben usarlo.
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, pasadas.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(athleteId, pasadas.Id, 20m, RecordSource.Tested, DateTime.UtcNow));
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackingBestMarkDto(Guid.NewGuid(), "Carrera 100 m", "Pasadas", 14m, "s")]);
+
+        var handler = CreateHandler(trackingClient: trackingMock.Object);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Equal(15.6, ex.TargetTimeSeconds);
+        Assert.Equal(14.0, ex.BestMarkSeconds);
+        Assert.Null(ex.Current1RmKg);
+        trackingMock.Verify(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_AtletaSinTestEnSeguimiento_When_ConsultaRutinaConPasadas_Then_DevuelveSinMeta()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var handler = CreateHandler(trackingClient: trackingMock.Object);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Null(ex.TargetTimeSeconds);
+        Assert.Null(ex.BestMarkSeconds);
+    }
+
+    [Fact]
+    public async Task Given_SeguimientoCaido_When_ConsultaRutinaConPasadas_Then_RespondeRutinaSinMeta()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Time);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // TrackingClient degradado (null o lista vacía cuando Seguimiento no responde)
+        var handler = CreateHandler(trackingClient: null);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Null(ex.TargetTimeSeconds);
+        Assert.Null(ex.BestMarkSeconds);
     }
 }
