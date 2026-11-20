@@ -13,7 +13,8 @@ public static class CatalogTestSeeder
     private static readonly IReadOnlyDictionary<string, string> TargetExercises =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Sentadilla 1RM"] = "Sentadilla con barra"
+            ["Sentadilla 1RM"] = "Sentadilla con barra",
+            ["Carrera 100 m"] = "Pasadas"
         };
 
     public static async Task SeedAsync(AppDbContext context, ILogger logger)
@@ -50,7 +51,7 @@ public static class CatalogTestSeeder
             // Velocidad
             new("Carrera 30 m", MotorCapacity.Velocity, "s", 2),
             new("Sprint 60 m", MotorCapacity.Velocity, "s", 3),
-            new("Carrera 100 m", MotorCapacity.Velocity, "s", 3),
+            new("Carrera 100 m", MotorCapacity.Velocity, "s", 3, targetExerciseName: TargetExercises["Carrera 100 m"]),
             // Resistencia
             new("Test de Cooper (12 min)", MotorCapacity.Endurance, "m", 3),
             new("Test de Bronco", MotorCapacity.Endurance, "m", 3),

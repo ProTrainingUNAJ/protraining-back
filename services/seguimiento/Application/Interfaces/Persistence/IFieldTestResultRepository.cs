@@ -10,5 +10,9 @@ public interface IFieldTestResultRepository
         DateTime? from = null,
         DateTime? to = null,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AthleteBestMarkDto>> ListBestMarksByAthleteAsync(
+    Guid athleteId,
+    CancellationToken cancellationToken = default);
 }
 
