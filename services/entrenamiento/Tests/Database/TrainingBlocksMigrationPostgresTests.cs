@@ -36,10 +36,11 @@ public sealed class TrainingBlocksMigrationPostgresTests
         var planId = Guid.NewGuid();
         var weekId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
-        var exercise1Id = Guid.NewGuid();
-        var exercise2Id = Guid.NewGuid();
         var pe1Id = Guid.NewGuid();
         var pe2Id = Guid.NewGuid();
+
+        var exercise1 = Exercise.Create("Press de Banca", "Pecho");
+        var exercise2 = Exercise.Create("Remo con Barra", "Espalda");
 
         // 1. Aplicamos las migraciones solo hasta ANTES de AddTrainingBlocksAndWeeklyProgression
         await using (var preMigrationContext = new AppDbContext(options, currentUserMock.Object))
@@ -47,10 +48,17 @@ public sealed class TrainingBlocksMigrationPostgresTests
             var migrator = preMigrationContext.Database.GetService<IMigrator>();
             await migrator.MigrateAsync("20261118220837_AddCurrentRecordIdToRecordProposals");
 
+            // Insertamos ejercicios con EF Core para poblar limpiamente todas las columnas NOT NULL (arrays de músculos, origin, etc.)
+            await preMigrationContext.Exercises.AddRangeAsync(exercise1, exercise2);
+            await preMigrationContext.SaveChangesAsync();
+
             // 2. Insertamos datos pre-existentes (plan, semana, sesión y ejercicios directos a sesión)
-            // utilizando SQL directo para simular fielmente el estado pre-migración de la base
+            // utilizando SQL directo para simular fielmente el estado pre-migración de la base (sin training_block_id)
             await using var connection = (Npgsql.NpgsqlConnection)preMigrationContext.Database.GetDbConnection();
-            await connection.OpenAsync();
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
 
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $@"
@@ -63,15 +71,10 @@ public sealed class TrainingBlocksMigrationPostgresTests
                 INSERT INTO training_sessions (id, pf_id, training_week_id, name, order_index, day_of_week, created_at)
                 VALUES ('{sessionId}', '{pfId}', '{weekId}', 'Lunes Torso', 1, 1, NOW());
 
-                INSERT INTO exercises (id, name, muscle_group, origin, created_at)
-                VALUES 
-                    ('{exercise1Id}', 'Press de Banca', 'Pecho', 'Catalog', NOW()),
-                    ('{exercise2Id}', 'Remo con Barra', 'Espalda', 'Catalog', NOW());
-
                 INSERT INTO prescribed_exercises (id, pf_id, training_session_id, exercise_id, order_index, sets, reps, target_percentage, created_at)
                 VALUES 
-                    ('{pe1Id}', '{pfId}', '{sessionId}', '{exercise1Id}', 1, 4, 8, 80.0, NOW()),
-                    ('{pe2Id}', '{pfId}', '{sessionId}', '{exercise2Id}', 2, 3, 10, 70.0, NOW());
+                    ('{pe1Id}', '{pfId}', '{sessionId}', '{exercise1.Id}', 1, 4, 8, 80.0, NOW()),
+                    ('{pe2Id}', '{pfId}', '{sessionId}', '{exercise2.Id}', 2, 3, 10, 70.0, NOW());
             ";
             await cmd.ExecuteNonQueryAsync();
         }
@@ -104,7 +107,7 @@ public sealed class TrainingBlocksMigrationPostgresTests
             Assert.Equal(4, exercises[0].Sets);
             Assert.Equal("8", exercises[0].Reps);
             Assert.Equal(80.0m, exercises[0].TargetPercentage);
-            Assert.Equal(exercise1Id, exercises[0].ExerciseId);
+            Assert.Equal(exercise1.Id, exercises[0].ExerciseId);
             Assert.Equal(principalBlock.Id, exercises[0].TrainingBlockId);
             Assert.Equal(sessionId, exercises[0].TrainingSessionId);
 
@@ -113,7 +116,7 @@ public sealed class TrainingBlocksMigrationPostgresTests
             Assert.Equal(3, exercises[1].Sets);
             Assert.Equal("10", exercises[1].Reps);
             Assert.Equal(70.0m, exercises[1].TargetPercentage);
-            Assert.Equal(exercise2Id, exercises[1].ExerciseId);
+            Assert.Equal(exercise2.Id, exercises[1].ExerciseId);
             Assert.Equal(principalBlock.Id, exercises[1].TrainingBlockId);
             Assert.Equal(sessionId, exercises[1].TrainingSessionId);
         }

@@ -27,6 +27,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
         private readonly IAthleteVariantRepository? athleteVariantRepository;
         private readonly ILoadCalculatorEngine calculator;
         private readonly IStructureClient structureClient;
+        private readonly ITrackingClient? trackingClient;
         private readonly IExerciseMediaCatalog? exerciseMediaCatalog;
 
         public GetTodayRoutineQueryHandler(
@@ -39,7 +40,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
             IExerciseRepository? exerciseRepository = null,
             IExerciseMediaCatalog? exerciseMediaCatalog = null,
-            IAthleteVariantRepository? athleteVariantRepository = null)
+            IAthleteVariantRepository? athleteVariantRepository = null,
+            ITrackingClient? trackingClient = null)
         {
             this.athleteRecordRepository = athleteRecordRepository;
             this.trainingSessionRepository = trainingSessionRepository;
@@ -52,6 +54,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             // Sin catálogo de ilustraciones (KAN-549), la rutina se ve con las fotos de siempre.
             this.exerciseMediaCatalog = exerciseMediaCatalog;
             this.athleteVariantRepository = athleteVariantRepository;
+            this.trackingClient = trackingClient;
         }
 
         public async Task<TodayRoutineResponseDto> Handle(GetTodayRoutineQuery query, CancellationToken cancellationToken = default)
@@ -179,6 +182,26 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 ? (await performedSetRepository.GetByAthleteAndDateAsync(athleteId, date, cancellationToken) ?? [])
                 : [];
 
+            var hasTimedExercise = routine.PrescribedExercises.Any(p =>
+            {
+                var ex = replacementsByOriginal.TryGetValue(p.ExerciseId, out var subId)
+                    && substituteExercisesById.TryGetValue(subId, out var sub)
+                        ? sub
+                        : p.Exercise;
+                return ex?.ExerciseType is ExerciseType.Distance or ExerciseType.Time;
+            });
+
+            var bestMarksByExerciseName = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            if (hasTimedExercise && trackingClient is not null)
+            {
+                var marks = await trackingClient.GetAthleteBestMarksAsync(athleteId, cancellationToken);
+                foreach (var mark in marks)
+                {
+                    if (!string.IsNullOrWhiteSpace(mark.TargetExerciseName))
+                        bestMarksByExerciseName.TryAdd(mark.TargetExerciseName.Trim(), mark.BestValue);
+                }
+            }
+
             // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
             foreach (var prescribed in routine.PrescribedExercises)
             {
@@ -197,7 +220,12 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     variantReasons.TryGetValue(prescribed.ExerciseId, out adaptationReason);
                 }
 
-                var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(athleteId, effectiveExerciseId, cancellationToken);
+                var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
+                bool isTimedExercise = exerciseType is ExerciseType.Distance or ExerciseType.Time;
+
+                var activeRecord = isTimedExercise
+                    ? null
+                    : await athleteRecordRepository.GetActiveRecordAsync(athleteId, effectiveExerciseId, cancellationToken);
 
                 decimal percentage = prescribed.TargetPercentage ?? 100m;
                 if (activeAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
@@ -211,16 +239,17 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                         : $"{adaptationReason} · {reductionText}";
                 }
 
-                var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
-
                 double? targetTime = null;
 
                 double? bestMark = null;
 
-                if (exerciseType == ExerciseType.Distance || exerciseType == ExerciseType.Time)
+                if (isTimedExercise)
                 {
                     // Si el ejercicio tiene test/marca de tiempo
-                    decimal? bestTestTime = activeRecord?.Weight;
+                    decimal? bestTestTime = effectiveExercise?.Name is { } exerciseName
+                        && bestMarksByExerciseName.TryGetValue(exerciseName.Trim(), out var mark)
+                        ? mark
+                        : null;
 
                     var timeResult = calculator.CalculateTimeTarget(bestTestTime, percentage);
 
@@ -229,9 +258,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
                 }
 
-                decimal? current1RmKg = activeRecord?.Weight;
+                decimal? current1RmKg = isTimedExercise ? null : activeRecord?.Weight;
 
-                var source = activeRecord?.Source;
+                var source = isTimedExercise ? null : activeRecord?.Source;
 
                 var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
 
