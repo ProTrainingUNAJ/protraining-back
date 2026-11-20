@@ -261,34 +261,34 @@ public sealed class PlanDraftGoalExerciseSelectionTests
         var week = Assert.Single(content.Weeks);
         Assert.Equal(3, week.Sessions.Count);
 
-        // Sesión 1: Lunes -> Piernas
+        // Sesión 1: Lunes -> Empuje (KAN-605: 3 días = Empuje / Tracción / Piernas)
         var session1 = week.Sessions[0];
         Assert.Equal(DayOfWeek.Monday, session1.DayOfWeek);
-        Assert.Contains("Piernas", session1.Name);
+        Assert.Contains("Empuje", session1.Name);
         Assert.All(session1.Exercises, ex =>
-        {
-            var catalogItem = _sampleCatalog.First(c => c.Id == ex.ExerciseId);
-            Assert.Equal("Piernas", catalogItem.MuscleGroup);
-        });
-
-        // Sesión 2: Miércoles -> Empuje
-        var session2 = week.Sessions[1];
-        Assert.Equal(DayOfWeek.Wednesday, session2.DayOfWeek);
-        Assert.Contains("Empuje", session2.Name);
-        Assert.All(session2.Exercises, ex =>
         {
             var catalogItem = _sampleCatalog.First(c => c.Id == ex.ExerciseId);
             Assert.Contains(catalogItem.MuscleGroup, new[] { "Pecho", "Hombros", "Tríceps" });
         });
 
-        // Sesión 3: Viernes -> Tracción
-        var session3 = week.Sessions[2];
-        Assert.Equal(DayOfWeek.Friday, session3.DayOfWeek);
-        Assert.Contains("Tracción", session3.Name);
-        Assert.All(session3.Exercises, ex =>
+        // Sesión 2: Miércoles -> Tracción
+        var session2 = week.Sessions[1];
+        Assert.Equal(DayOfWeek.Wednesday, session2.DayOfWeek);
+        Assert.Contains("Tracción", session2.Name);
+        Assert.All(session2.Exercises, ex =>
         {
             var catalogItem = _sampleCatalog.First(c => c.Id == ex.ExerciseId);
             Assert.Equal("Espalda", catalogItem.MuscleGroup);
+        });
+
+        // Sesión 3: Viernes -> Piernas
+        var session3 = week.Sessions[2];
+        Assert.Equal(DayOfWeek.Friday, session3.DayOfWeek);
+        Assert.Contains("Piernas", session3.Name);
+        Assert.All(session3.Exercises, ex =>
+        {
+            var catalogItem = _sampleCatalog.First(c => c.Id == ex.ExerciseId);
+            Assert.Equal("Piernas", catalogItem.MuscleGroup);
         });
     }
 

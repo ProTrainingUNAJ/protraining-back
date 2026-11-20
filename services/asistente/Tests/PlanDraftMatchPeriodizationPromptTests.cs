@@ -113,7 +113,7 @@ public sealed class PlanDraftMatchPeriodizationPromptTests
 
         var request = new CreatePlanDraftRequestDto(
             CategoryId: _categoryId,
-            Goal: "Fuerza y Potencia",
+            Goal: "Fuerza máxima",
             Weeks: 1,
             DaysPerWeek: 6,
             StartDate: startDate
@@ -136,22 +136,29 @@ public sealed class PlanDraftMatchPeriodizationPromptTests
         // Sábado (D) NO debe tener sesión de pesas
         Assert.DoesNotContain(week1.Sessions, s => s.DayOfWeek == DayOfWeek.Saturday);
 
-        // Viernes (D-1): Capped <= 60%
+        // Viernes (D-1): Capped <= 60% y nota de semana con partido + D-1
         var fridaySession = week1.Sessions.FirstOrDefault(s => s.DayOfWeek == DayOfWeek.Friday);
         Assert.NotNull(fridaySession);
         Assert.All(fridaySession.Exercises, ex => Assert.Equal(60m, ex.TargetPercentage));
         Assert.Contains("D-1", fridaySession.CoachNotes);
+        Assert.Contains("Semana de partido: carga reducida", fridaySession.CoachNotes);
 
-        // Jueves (D-2): Capped <= 75%
+        // Jueves (D-2): Capped <= 75% (semana con partido: 80% - 10% = 70% <= 75%)
         var thursdaySession = week1.Sessions.FirstOrDefault(s => s.DayOfWeek == DayOfWeek.Thursday);
         Assert.NotNull(thursdaySession);
-        Assert.All(thursdaySession.Exercises, ex => Assert.Equal(75m, ex.TargetPercentage));
+        Assert.All(thursdaySession.Exercises, ex => Assert.True(ex.TargetPercentage <= 75m));
         Assert.Contains("D-2", thursdaySession.CoachNotes);
+        Assert.Contains("Semana de partido: carga reducida", thursdaySession.CoachNotes);
 
-        // Lunes (Normal): 80%
+        // Lunes en semana de partido: carga reducida (-1 serie, -10 %RM respecto a 4x5 al 80% -> 3x5 al 70%)
         var mondaySession = week1.Sessions.FirstOrDefault(s => s.DayOfWeek == DayOfWeek.Monday);
         Assert.NotNull(mondaySession);
-        Assert.All(mondaySession.Exercises, ex => Assert.Equal(80m, ex.TargetPercentage));
+        Assert.All(mondaySession.Exercises, ex =>
+        {
+            Assert.Equal(3, ex.Sets);
+            Assert.Equal(70m, ex.TargetPercentage);
+        });
+        Assert.Contains("Semana de partido: carga reducida", mondaySession.CoachNotes);
     }
 
     [Fact]
