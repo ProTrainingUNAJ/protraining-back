@@ -258,8 +258,9 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
             sets: 3,
             reps: 10,
             targetPercentage: 75m,
-            trainingSessionId: session.Id,
-            exerciseId: catalogExercise.Id);
+            trainingBlockId: session.Id,
+            exerciseId: catalogExercise.Id,
+            trainingSessionId: session.Id);
 
         session.AddPrescribedExercise(prescribed);
         week.AddSession(session);

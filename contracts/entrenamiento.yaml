@@ -2146,6 +2146,11 @@ components:
         reps:
           type: integer
           example: 6
+        repsRange:
+          type: string
+          nullable: true
+          description: Rango o descripción flexible de repeticiones prescritas (ej. "6-8", "10-12", "Fallo") introducido en KAN-585.
+          example: "6-8"
         percentage:
           type: number
           format: double

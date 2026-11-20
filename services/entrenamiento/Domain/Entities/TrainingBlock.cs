@@ -54,6 +54,12 @@ public class TrainingBlock : BaseEntity
         if (_prescribedExercises.Any(e => e.Order == exercise.Order))
             throw new DomainException($"El bloque '{Title}' ya contiene un ejercicio con orden {exercise.Order}.");
 
+        exercise.SetTrainingBlockId(Id);
+        if (!exercise.TrainingSessionId.HasValue || exercise.TrainingSessionId == Guid.Empty)
+        {
+            exercise.SetTrainingSessionId(TrainingSessionId);
+        }
+
         _prescribedExercises.Add(exercise);
     }
 
