@@ -109,4 +109,72 @@ public sealed class AthleteRecommendationRepositoryPostgresTests : IAsyncLifetim
             Assert.Empty(await repo.ListApprovedByAthleteAsync(_athleteBId));
         }
     }
+
+    [Fact]
+    public async Task Given_RecommendationsInMultipleStatusesInPostgres_When_ListingByAthleteIdsAndStatuses_Then_ReturnsMatchingStatusesIsolatedByTenant()
+    {
+        var pending = AthleteRecommendation.Create(
+            athleteId: _athleteAId,
+            title: "Pendiente",
+            reason: "salto por debajo del promedio",
+            recommendationText: "Texto pendiente.",
+            categoryId: _categoryId,
+            categoryName: "Primera División");
+
+        var discarded = AthleteRecommendation.Create(
+            athleteId: _athleteAId,
+            title: "Descartada",
+            reason: "velocidad por debajo del promedio",
+            recommendationText: "Texto descartado.",
+            categoryId: _categoryId,
+            categoryName: "Primera División");
+        discarded.Discard();
+
+        var approved = AthleteRecommendation.Create(
+            athleteId: _athleteAId,
+            title: "Aprobada",
+            reason: "fuerza por debajo del promedio",
+            recommendationText: "Texto aprobado.",
+            categoryId: _categoryId,
+            categoryName: "Primera División");
+        approved.Approve();
+
+        var otherTenantPending = AthleteRecommendation.Create(
+            athleteId: _athleteAId,
+            title: "Otro PF",
+            reason: "resistencia por debajo del promedio",
+            recommendationText: "No visible para PF A.",
+            categoryId: _categoryId,
+            categoryName: "Primera División");
+
+        await using (var pfAContext = CreateContext(_pfAId))
+        {
+            var repo = new AthleteRecommendationRepository(pfAContext);
+            await repo.AddAsync(pending);
+            await repo.AddAsync(discarded);
+            await repo.AddAsync(approved);
+            await pfAContext.SaveChangesAsync();
+        }
+
+        await using (var pfBContext = CreateContext(_pfBId))
+        {
+            var repo = new AthleteRecommendationRepository(pfBContext);
+            await repo.AddAsync(otherTenantPending);
+            await pfBContext.SaveChangesAsync();
+        }
+
+        await using (var queryContext = CreateContext(_pfAId))
+        {
+            var repo = new AthleteRecommendationRepository(queryContext);
+            var results = await repo.ListByAthleteIdsAndStatusesAsync(
+                [_athleteAId],
+                [RecommendationStatus.Pending, RecommendationStatus.Discarded]);
+
+            Assert.Equal(2, results.Count);
+            Assert.Contains(results, r => r.Id == pending.Id && r.Status == RecommendationStatus.Pending);
+            Assert.Contains(results, r => r.Id == discarded.Id && r.Status == RecommendationStatus.Discarded);
+            Assert.DoesNotContain(results, r => r.Id == approved.Id);
+            Assert.DoesNotContain(results, r => r.Id == otherTenantPending.Id);
+        }
+    }
 }

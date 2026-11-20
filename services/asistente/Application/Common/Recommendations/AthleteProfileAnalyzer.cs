@@ -27,8 +27,8 @@ public sealed record ProfileAnalysisResult(
 /// </summary>
 public static class AthleteProfileAnalyzer
 {
-    public const double BelowAverageThresholdPercent = -2.0;
-    public const double AboveAverageThresholdPercent = 2.0;
+    public const double BelowAverageThresholdPercent = RecommendationsOptions.DefaultBelowAverageThresholdPercent;
+    public const double AboveAverageThresholdPercent = 10.0;
     public const double LowWellnessAbsoluteThreshold = 3.0;
     public const double WellnessDropThreshold = -0.5;
     public const double WellnessDropCeiling = 3.5;
@@ -43,12 +43,15 @@ public static class AthleteProfileAnalyzer
     public static ProfileAnalysisResult Analyze(
         IReadOnlyList<AthleteFitnessTestRemoteDto> athleteTests,
         CategoryAveragesRemoteDto? categoryAverages,
-        AthleteWeeklyTrendsRemoteDto? weeklyTrends)
+        AthleteWeeklyTrendsRemoteDto? weeklyTrends,
+        double belowAverageThresholdPercent = BelowAverageThresholdPercent)
     {
         var evaluatedMetrics = new List<ProfileMetricComparisonDto>();
         var physicalGaps = new List<PhysicalGapCandidate>();
 
-        EvaluateGroupProfile(athleteTests, categoryAverages, evaluatedMetrics, physicalGaps);
+        var effectiveBelowThreshold = RecommendationsOptions.NormalizeBelowAverageThreshold(belowAverageThresholdPercent);
+
+        EvaluateGroupProfile(athleteTests, categoryAverages, evaluatedMetrics, physicalGaps, effectiveBelowThreshold);
 
         var (trendsSummary, hasNegativeWellness, hasLoadSpikeWithDrop) = AnalyzeTrends(weeklyTrends);
         var signals = BuildSignals(physicalGaps, trendsSummary, hasNegativeWellness, hasLoadSpikeWithDrop);
@@ -60,7 +63,8 @@ public static class AthleteProfileAnalyzer
         IReadOnlyList<AthleteFitnessTestRemoteDto> athleteTests,
         CategoryAveragesRemoteDto? categoryAverages,
         List<ProfileMetricComparisonDto> evaluatedMetrics,
-        List<PhysicalGapCandidate> physicalGaps)
+        List<PhysicalGapCandidate> physicalGaps,
+        double belowAverageThresholdPercent)
     {
         if (athleteTests.Count == 0 || categoryAverages?.FitnessTests is not { Count: > 0 })
             return;
@@ -97,21 +101,22 @@ public static class AthleteProfileAnalyzer
                 ? Math.Round(((groupAverage - athleteValue) / groupAverage) * 100.0, 1, MidpointRounding.AwayFromZero)
                 : Math.Round(((athleteValue - groupAverage) / groupAverage) * 100.0, 1, MidpointRounding.AwayFromZero);
 
-            var trendLabel = pctDiff switch
-            {
-                < BelowAverageThresholdPercent => string.Format(
+            var aboveAverageThresholdPercent = Math.Abs(belowAverageThresholdPercent);
+
+            var trendLabel = pctDiff < belowAverageThresholdPercent
+                ? string.Format(
                     CultureInfo.InvariantCulture,
                     "Por debajo del promedio ({0:+0.0;-0.0;0.0}%)",
-                    pctDiff),
-                > AboveAverageThresholdPercent => string.Format(
-                    CultureInfo.InvariantCulture,
-                    "Superior al promedio ({0:+0.0;-0.0;0.0}%)",
-                    pctDiff),
-                _ => string.Format(
-                    CultureInfo.InvariantCulture,
-                    "En el promedio ({0:+0.0;-0.0;0.0}%)",
                     pctDiff)
-            };
+                : pctDiff > aboveAverageThresholdPercent
+                    ? string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Superior al promedio ({0:+0.0;-0.0;0.0}%)",
+                        pctDiff)
+                    : string.Format(
+                        CultureInfo.InvariantCulture,
+                        "En el promedio ({0:+0.0;-0.0;0.0}%)",
+                        pctDiff);
 
             var unit = latest.MeasurementUnit.Trim();
             var metric = new ProfileMetricComparisonDto(
@@ -124,7 +129,7 @@ public static class AthleteProfileAnalyzer
 
             evaluatedMetrics.Add(metric);
 
-            if (pctDiff < BelowAverageThresholdPercent)
+            if (pctDiff < belowAverageThresholdPercent)
             {
                 var (reason, focus) = MapGapReasonAndFocus(latest.TestName, latest.MotorCapacity);
                 physicalGaps.Add(new PhysicalGapCandidate(reason, focus, metric, pctDiff));

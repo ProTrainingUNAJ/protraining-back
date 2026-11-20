@@ -25,8 +25,15 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
     ISeguimientoClient seguimientoClient,
     IAthleteRecommendationRepository recommendationRepository,
     IAiService aiService,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    RecommendationsOptions? options = null)
 {
+    private static readonly RecommendationStatus[] DeduplicationStatuses =
+    [
+        RecommendationStatus.Pending,
+        RecommendationStatus.Discarded
+    ];
+
     public async Task<RunCategoryRecommendationEngineResponseDto> HandleAsync(
         GenerateCategoryRecommendationsCommand command,
         CancellationToken cancellationToken = default)
@@ -70,18 +77,25 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
         }
 
         var averagesTask = seguimientoClient.GetCategoryAveragesAsync(category.Id, cancellationToken);
-        var pendingTask = recommendationRepository.ListPendingByAthleteIdsAsync(athleteIds, cancellationToken);
-        await Task.WhenAll(averagesTask, pendingTask);
+        var existingTask = recommendationRepository.ListByAthleteIdsAndStatusesAsync(
+            athleteIds,
+            DeduplicationStatuses,
+            cancellationToken);
+        await Task.WhenAll(averagesTask, existingTask);
 
         var categoryAverages = await averagesTask;
-        var existingPending = await pendingTask;
+        var existingRecommendations = await existingTask;
+        var existingPending = existingRecommendations
+            .Where(r => r.Status == RecommendationStatus.Pending)
+            .ToList();
 
-        var pendingReasonsByAthlete = existingPending
+        var existingReasonsByAthlete = existingRecommendations
             .GroupBy(r => r.AthleteId)
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(r => TextNormalizer.Normalize(r.Reason)).ToHashSet(StringComparer.Ordinal));
 
+        var belowAverageThreshold = (options ?? new RecommendationsOptions()).GetEffectiveBelowAverageThresholdPercent();
         var newlyCreated = new List<AthleteRecommendation>();
         var evaluatedAthletes = 0;
 
@@ -99,15 +113,16 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
             var analysis = AthleteProfileAnalyzer.Analyze(
                 await testsTask,
                 categoryAverages,
-                await trendsTask);
+                await trendsTask,
+                belowAverageThreshold);
 
             if (analysis.Signals.Count == 0)
                 continue;
 
-            if (!pendingReasonsByAthlete.TryGetValue(athleteId, out var existingReasons))
+            if (!existingReasonsByAthlete.TryGetValue(athleteId, out var existingReasons))
             {
                 existingReasons = new HashSet<string>(StringComparer.Ordinal);
-                pendingReasonsByAthlete[athleteId] = existingReasons;
+                existingReasonsByAthlete[athleteId] = existingReasons;
             }
 
             foreach (var signal in analysis.Signals)
