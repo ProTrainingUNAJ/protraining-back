@@ -21,6 +21,7 @@ public sealed record GenerateCategoryRecommendationsCommand(
 /// </summary>
 public sealed class GenerateCategoryRecommendationsCommandHandler(
     IStructureAthleteClient structureClient,
+    IIdentityHabitsRecommendationsClient identityClient,
     ISeguimientoClient seguimientoClient,
     IAthleteRecommendationRepository recommendationRepository,
     IAiService aiService,
@@ -43,6 +44,12 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
 
         var category = await structureClient.GetCategoryAsync(command.CategoryId, cancellationToken)
             ?? throw new NotFoundException("La categoría no existe o no pertenece al preparador físico autenticado.");
+
+        // KAN-493: la preferencia del PF se consulta una sola vez para toda la categoría.
+        // Con la opción desactivada (o Identidad no disponible) no se analiza ningún atleta.
+        var pfEnabled = await identityClient.GetMyHabitsRecommendationsEnabledAsync(cancellationToken);
+        if (pfEnabled is not true)
+            return EmptyResult(category.Id, category.Name);
 
         var categoryAthletes = await structureClient.GetCategoryAthletesAsync(command.CategoryId, cancellationToken);
         var athleteIds = categoryAthletes
@@ -76,9 +83,15 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
                 g => g.Select(r => TextNormalizer.Normalize(r.Reason)).ToHashSet(StringComparer.Ordinal));
 
         var newlyCreated = new List<AthleteRecommendation>();
+        var evaluatedAthletes = 0;
 
         foreach (var athleteId in athleteIds)
         {
+            var permission = await structureClient.GetHabitsPermissionAsync(athleteId, cancellationToken);
+            if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
+                continue;
+
+            evaluatedAthletes++;
             var testsTask = seguimientoClient.GetAthleteFitnessTestsAsync(athleteId, cancellationToken);
             var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(athleteId, weeks, cancellationToken);
             await Task.WhenAll(testsTask, trendsTask);
@@ -135,9 +148,18 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
         return new RunCategoryRecommendationEngineResponseDto(
             CategoryId: category.Id,
             CategoryName: category.Name,
-            EvaluatedAthletes: athleteIds.Count,
+            EvaluatedAthletes: evaluatedAthletes,
             GeneratedCount: newlyCreated.Count,
             ExistingPendingCount: existingPending.Count,
             Recommendations: responseItems);
     }
+
+    private static RunCategoryRecommendationEngineResponseDto EmptyResult(Guid categoryId, string categoryName) =>
+        new(
+            CategoryId: categoryId,
+            CategoryName: categoryName,
+            EvaluatedAthletes: 0,
+            GeneratedCount: 0,
+            ExistingPendingCount: 0,
+            Recommendations: []);
 }

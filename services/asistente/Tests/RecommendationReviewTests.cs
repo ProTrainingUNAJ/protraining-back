@@ -114,8 +114,12 @@ public sealed class RecommendationReviewTests
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(AthleteId);
+        structureMock.SetupMyHabitsPermission();
 
-        var myQueryHandler = new GetMyRecommendationsQueryHandler(structureMock.Object, store);
+        var myQueryHandler = new GetMyRecommendationsQueryHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            store);
         var approveHandler = new ApproveRecommendationCommandHandler(store, store);
 
         // Antes de aprobar: el atleta NO ve la recomendación pendiente
@@ -214,8 +218,12 @@ public sealed class RecommendationReviewTests
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(AthleteId);
+        structureMock.SetupMyHabitsPermission();
 
-        var myQueryHandler = new GetMyRecommendationsQueryHandler(structureMock.Object, store);
+        var myQueryHandler = new GetMyRecommendationsQueryHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            store);
         var visible = await myQueryHandler.HandleAsync(new GetMyRecommendationsQuery());
         Assert.Empty(visible);
     }
@@ -289,7 +297,10 @@ public sealed class RecommendationReviewTests
         unlinkedMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var handlerUnlinked = new GetMyRecommendationsQueryHandler(unlinkedMock.Object, store);
+        var handlerUnlinked = new GetMyRecommendationsQueryHandler(
+            unlinkedMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            store);
         var emptyResult = await handlerUnlinked.HandleAsync(new GetMyRecommendationsQuery());
         Assert.Empty(emptyResult);
 
@@ -297,7 +308,10 @@ public sealed class RecommendationReviewTests
         downMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new StructureServiceUnavailableException("Estructura caído"));
 
-        var handlerDown = new GetMyRecommendationsQueryHandler(downMock.Object, store);
+        var handlerDown = new GetMyRecommendationsQueryHandler(
+            downMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            store);
         await Assert.ThrowsAsync<StructureServiceUnavailableException>(() =>
             handlerDown.HandleAsync(new GetMyRecommendationsQuery()));
     }
@@ -316,8 +330,12 @@ public sealed class RecommendationReviewTests
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(AthleteId);
+        structureMock.SetupMyHabitsPermission();
 
-        var controller = new MeRecommendationsController(new GetMyRecommendationsQueryHandler(structureMock.Object, store));
+        var controller = new MeRecommendationsController(new GetMyRecommendationsQueryHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            store));
         var action = await controller.ListMine();
         var ok = Assert.IsType<OkObjectResult>(action.Result);
         var items = Assert.IsAssignableFrom<IReadOnlyList<MyRecommendationResponseDto>>(ok.Value);
@@ -349,8 +367,8 @@ public sealed class RecommendationReviewTests
         var aiMock = new Mock<IAiService>();
 
         var controller = new RecommendationsController(
-            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, store, aiMock.Object, store),
-            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, store, aiMock.Object, store),
+            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, store, aiMock.Object, store),
+            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, store, aiMock.Object, store),
             new GetRecommendationsQueryHandler(store),
             new GetRecommendationByIdQueryHandler(store),
             new UpdateRecommendationCommandHandler(store, store),

@@ -137,6 +137,7 @@ public sealed class RecommendationIsolationTests
 
         var athleteHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -144,6 +145,7 @@ public sealed class RecommendationIsolationTests
 
         var categoryHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -216,8 +218,12 @@ public sealed class RecommendationIsolationTests
         var structureMock = new Mock<IStructureAthleteClient>();
         structureMock.Setup(s => s.GetMyAthleteIdAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(AthleteOfPfA);
+        structureMock.SetupMyHabitsPermission();
 
-        var handler = new GetMyRecommendationsQueryHandler(structureMock.Object, repository);
+        var handler = new GetMyRecommendationsQueryHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            repository);
         var visible = await handler.HandleAsync(new GetMyRecommendationsQuery());
 
         var single = Assert.Single(visible);

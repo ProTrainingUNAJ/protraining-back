@@ -57,6 +57,13 @@ public interface IStructureAthleteClient
     Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Obtiene si el atleta autenticado es menor y si su tutor autorizó las recomendaciones,
+    /// consultando Estructura GET /api/v1/me/consent con el token del atleta (#201 · KAN-493).
+    /// Devuelve <c>null</c> si no se puede verificar: el consumidor debe bloquear (fail-closed).
+    /// </summary>
+    Task<StructureAthleteHabitsPermissionDto?> GetMyHabitsPermissionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Obtiene la lista de atletas activos para el análisis del worker nocturno (#177 · KAN-472).
     /// </summary>
     Task<IReadOnlyList<StructureAthleteSummaryDto>> GetAthletesAsync(CancellationToken cancellationToken = default);
