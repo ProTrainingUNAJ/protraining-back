@@ -146,41 +146,25 @@ Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 | 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
 | ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
-### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
+### IA del Asistente
 
-El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
+El Asistente arma los borradores de planificación y la justificación del ajuste del día con un **agente**: antes de responder, consulta la biblioteca de ejercicios, las restricciones y los sustitutos por MCP (ver "Servidor MCP" más abajo). Prueba los proveedores **en orden**:
 
-```bash
-docker compose --profile ia up -d
-curl http://localhost:11434/api/tags      # modelos instalados
-```
+1. **OpenAI** (`gpt-4.1-mini`, por el gateway de IA de la UNAJ).
+2. **Gemini**, si OpenAI falla, tarda demasiado o no tiene clave.
+3. **Reglas fijas en C#**, si fallan los dos. La app anda igual sin internet y sin claves.
 
-#### Elección oficial del modelo: `llama3.2:1b` (#079 / KAN-374)
-Tras evaluar comparativamente tres versiones de Meta Llama (`llama3.2:1b`, `llama3.2:3b` y `llama3.1:8b`) con pedidos reales de planificación deportiva, se seleccionó **`llama3.2:1b`** como el modelo estándar y obligatorio por defecto:
+El cliente es **uno solo y genérico**, compatible con la API de OpenAI (Gemini tiene un endpoint compatible). Sumar o cambiar un proveedor es configuración, no código (ver `Ai__Agent__Providers__N__*` en "Variables de entorno").
 
-| Modelo | RAM en Inferencia | Latencia CPU (sin GPU) | Cumplimiento JSON | Veredicto |
-|---|:---:|:---:|:---:|:---:|
-| **`llama3.2:1b`** | **~1.5 GB** | **1.8 s - 2.6 s** | **98 %** | ✅ **Elegido por defecto (demo y laptops del equipo)** |
-| `llama3.2:3b` | ~3.2 GB | 5.2 s - 7.5 s | 99 % | ⚙️ Alternativa soportada en `.env` (si hay GPU) |
-| `llama3.1:8b` | ~6.0 GB | 19.0 s - 38.0 s | 99 % | ❌ Descartado (alto riesgo de OOM y timeout en CPU) |
+Lo que no cambia, con cualquier proveedor:
+- **La IA propone y el PF decide:** el borrador queda como borrador hasta que el PF lo aprueba.
+- **Sin datos personales:** a OpenAI y a Gemini va todo anonimizado, nunca el nombre, el email ni el teléfono de un atleta.
+- **Los cálculos no son IA:** kilos, %RM, redondeo a 2,5 kg, semáforo y elección del sustituto son reglas en C#.
+- Cada pedido a la IA queda en `ai_logs`, con el proveedor, los tokens y la latencia.
 
-> 📖 **Informe técnico completo:** Consulta [services/asistente/README.md](services/asistente/README.md) para ver la matriz de evaluación detallada, consumo de memoria y comandos de prueba.
+**Claves:** `OPENAI_API_KEY` y `GEMINI_API_KEY` van **solo en tu `.env`**. Se piden por privado y nunca se suben al repo, a Jira ni al grupo. Después de cambiarlas: `docker compose up -d asistente` (el `restart` no relee el `.env`).
 
-El Asistente opera con una arquitectura resiliente de 3 niveles:
-1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
-2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
-3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
-
-El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
-
-- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
-- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
-- **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
-- **Memoria RAM requerida:**
-  - En reposo (inactivo): ~200 MB.
-  - En inferencia/ejecución: ~1.5 GB a 1.8 GB de RAM.
-  - *(Como referencia, `llama3.2:3b` requiere ~3.2 GB y `llama3.1:8b` ~6 GB).*
-
+**Para probar:** en el front, "Generar con IA". El borrador dice quién lo armó: "Agente (OpenAI)", "Agente (Gemini)" o "Reglas".
 
 ## Gateway
 
@@ -226,7 +210,10 @@ La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
 
 Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
 
-También se expone la herramienta MCP de solo lectura **`ObtenerSustitutos`**, que recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
+También se exponen dos herramientas MCP de solo lectura más, que usa el agente del Asistente:
+
+- **`ObtenerRestricciones`**: recibe `zona` y devuelve los ejercicios contraindicados para esa zona, con sus sustitutos.
+- **`ObtenerSustitutos`**: recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
 
 Esta ampliación es exclusiva de la superficie MCP: no modifica endpoints REST, esquemas OpenAPI ni contratos que consuma el frontend.
 
@@ -277,9 +264,16 @@ En el `.env` (las usa el compose):
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | Usuario y contraseña de las 5 bases |
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
-| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
-| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
-| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
+| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger y crea las cuentas de demo |
+| `OPENAI_API_KEY` | Clave del agente con OpenAI (la del gateway de IA de la UNAJ). **Solo en tu `.env`**, se pide por privado. Sin clave, se saltea |
+| `OPENAI_BASE_URL`, `OPENAI_MODEL` | URL y modelo de OpenAI. Por defecto, el gateway de la UNAJ con `gpt-4.1-mini` (ver `.env.example`) |
+| `GEMINI_API_KEY` | Clave de Gemini, el segundo proveedor (de aistudio.google.com). **Solo en tu `.env`**. Sin clave, se saltea |
+| `GEMINI_BASE_URL`, `GEMINI_MODEL` | URL compatible con OpenAI y modelo de Gemini |
+| `GOOGLE_CLIENT_ID` | Client ID del login con Google. No es secreto: va en el botón del front y tiene que coincidir con `VITE_GOOGLE_CLIENT_ID` |
+| `FRONTEND_BASE_URL` | URL del front para los links de los mails (confirmación del registro, recuperar contraseña) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_ENABLE_SSL`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Servidor de mails. En local, los mails se ven en **Mailpit** (`http://localhost:8025`). La contraseña real, si se usa, va **solo en tu `.env`** |
+| `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Claves de las notificaciones push (se generan con `npx web-push generate-vapid-keys`) |
+| `DEMO_PF_PHONE` | WhatsApp del PF de la demo (opcional; para el seed) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -290,8 +284,9 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
-| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
-| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
+| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey` | Asistente: la lista ordenada de proveedores de IA (0 = OpenAI, 1 = Gemini). El orden es el de la cadena; un proveedor sin clave se saltea |
+| `Smtp__*` | Identidad: el servidor de mails (sale de las `SMTP_*`) |
+| `Google__ClientId` | Identidad: para validar el login con Google |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
