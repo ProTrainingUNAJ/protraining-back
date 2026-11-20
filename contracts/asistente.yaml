@@ -3,8 +3,8 @@ info:
   title: ProTraining - Microservicio de Asistente IA
   description: >
     API v1 para el copiloto inteligente del preparador físico. Funciona bajo un esquema
-    híbrido y resiliente: modelo local en Ollama (Llama) como opción principal, API de Gemini
-    como respaldo ante fallos y reglas determinísticas locales en caso de desconexión.
+    híbrido y resiliente: agente de IA compatible con la API de OpenAI (OpenAI y Gemini, en ese
+    orden y según las claves configuradas) y reglas determinísticas locales como respaldo final.
     Genera alertas preventivas de fatiga/lesión, propone ajustes del día por molestias marcadas
     en el check-in, sugiere rutinas estructuradas y redacta recomendaciones de hábitos y alimentación
     sujetas a aprobación humana explícita del preparador físico en un solo clic.
@@ -226,7 +226,7 @@ paths:
       summary: Generar y persistir un nuevo borrador de planificación con IA
       description: >
         Genera un borrador de planificación multisesión a través de la cadena resiliente de IA
-        (Ollama -> Gemini -> Reglas), validando esquema e identificadores del catálogo oficial y
+        (OpenAI -> Gemini -> Reglas), validando esquema e identificadores del catálogo oficial y
         persistiéndolo en la base de datos bajo aislamiento multi-tenant.
       operationId: createPlanDraftWithAi
       requestBody:
@@ -420,7 +420,7 @@ paths:
         Genera y persiste la propuesta de ajuste del día (`day_adjustments`) a partir de los conflictos
         de dolor de hoy (KAN-451). El ejercicio sustituto se elige por reglas (el primero de la lista de
         sustitutos habilitados de KAN-387) y la IA solo redacta la justificación (con respaldo por reglas
-        si Ollama y Gemini fallan o están apagados). Si ya existe una propuesta `Pending` para hoy, devuelve
+        si los proveedores de IA fallan o no tienen clave). Si ya existe una propuesta `Pending` para hoy, devuelve
         esa sin duplicarla.
       operationId: createAthleteDayAdjustment
       parameters:
@@ -1224,9 +1224,10 @@ components:
                 example: 50.0
         aiProvider:
           type: string
-          description: Proveedor de IA o motor que originó la propuesta (Ollama, Gemini o Rules).
-          enum: [Ollama, Gemini, Rules]
-          example: "Gemini"
+          description: >
+            Proveedor de IA o motor que originó la propuesta (por ejemplo `Agente (OpenAI)`,
+            `Agente (Gemini)` o `Reglas`).
+          example: "Agente (OpenAI)"
 
     GenerateAthleteAdaptationRequest:
       type: object
@@ -1339,7 +1340,7 @@ components:
             $ref: '#/components/schemas/SuggestedRoutineExercise'
         aiProvider:
           type: string
-          example: "Ollama"
+          example: "Agente (OpenAI)"
         id:
           type: string
           format: uuid
@@ -1704,7 +1705,7 @@ components:
           example: "Draft"
         provider:
           type: string
-          example: "Ollama"
+          example: "Agente (OpenAI)"
         approvedPlanId:
           type: string
           format: uuid

@@ -226,7 +226,7 @@ public sealed class SportPromptEvaluationTests
         // Assert
         Assert.Equal(0.2, geminiOptions.Temperature);
         Assert.Equal(1200, geminiOptions.MaxOutputTokens);
-        Assert.Equal(10, agentOptions.MaxToolCalls);
+        Assert.Equal(6, agentOptions.MaxToolCalls);
         Assert.Equal(40, agentOptions.TimeoutSeconds);
     }
 

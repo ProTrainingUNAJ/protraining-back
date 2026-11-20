@@ -111,7 +111,8 @@ public static class DependencyInjection
                     BaseUrl = provider.BaseUrl,
                     Model = provider.Model,
                     ApiKey = resolvedKey,
-                    TimeoutSeconds = provider.TimeoutSeconds > 0 ? provider.TimeoutSeconds : agentOptions.TimeoutSeconds
+                    TimeoutSeconds = provider.TimeoutSeconds > 0 ? provider.TimeoutSeconds : agentOptions.TimeoutSeconds,
+                    ApiVersion = provider.ApiVersion
                 };
 
                 var httpClient = httpClientFactory.CreateClient($"Agent_{provider.Name}");

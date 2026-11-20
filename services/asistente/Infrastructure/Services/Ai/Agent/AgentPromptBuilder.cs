@@ -1,4 +1,6 @@
 using System.Text;
+using Application.Common.Ai;
+using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
 
@@ -36,8 +38,13 @@ public static class AgentPromptBuilder
         3. PRIVACIDAD Y SEGURIDAD:
            - No se incluyen nombres, apellidos, emails ni datos de contacto de ningún atleta.
 
-        4. FORMATO DE SALIDA ESTRICTO (JSON):
-           - Cuando tengas toda la información necesaria de las herramientas, devolvé ÚNICAMENTE un objeto JSON con la siguiente estructura:
+        4. CONTEXTO DEL PEDIDO:
+           - Si el pedido incluye restricciones por lesión o dolor, no propongas ejercicios restringidos y usá únicamente los sustitutos autorizados que figuren en el pedido.
+           - Si incluye decisiones previas del preparador físico, usalas como evidencia de su criterio, sin tratarlas como reglas absolutas si contradicen las restricciones actuales.
+
+        5. FORMATO DE SALIDA ESTRICTO (JSON):
+           - Si el pedido trae un CATÁLOGO OFICIAL numerado y un esquema JSON por bloques (warmUp, strengthA, strengthB, accessories), respondé ÚNICAMENTE con un JSON que cumpla ese esquema: usá el "exerciseIndex" de la lista y diseñá solo la sesión modelo de la primera semana.
+           - Solo si el pedido no trae ese catálogo numerado, devolvé ÚNICAMENTE un objeto JSON con la siguiente estructura semanal:
            {
              "name": "Nombre descriptivo de la planificación",
              "objective": "Objetivo técnico-físico del plan",
@@ -70,19 +77,39 @@ public static class AgentPromptBuilder
            }
         """;
 
+    /// <summary>
+    /// Arma el pedido de planificación para el agente (KAN-600). Incluye el destinatario (categoría o atleta, solo por
+    /// identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y,
+    /// si hay catálogo, el formato por bloques con la lista numerada (KAN-589 / KAN-591 / KAN-468).
+    /// </summary>
     public static string BuildPlanDraftUserPrompt(
         CreatePlanDraftRequestDto request,
-        IReadOnlyList<DateOnly>? matchDates = null)
+        IReadOnlyList<DateOnly>? matchDates = null,
+        IReadOnlyList<CatalogExerciseDto>? catalog = null)
     {
+        // El objetivo es texto libre del PF: antes de salir a un proveedor externo se quitan emails y teléfonos
+        var safeRequest = request with { Goal = PromptSanitizer.RedactContactData(request.Goal) };
+
         var sb = new StringBuilder();
         sb.AppendLine("SOLICITUD DE PLANIFICACIÓN DEPORTIVA:");
-        sb.AppendLine($"- Objetivo principal: {request.Goal}");
-        sb.AppendLine($"- Duración requerida: {request.Weeks} semanas");
-        sb.AppendLine($"- Frecuencia semanal: {request.DaysPerWeek} días por semana");
+        AppendRecipient(sb, safeRequest);
 
-        if (request.StartDate.HasValue)
+        if (catalog is { Count: > 0 })
         {
-            sb.AppendLine($"- Fecha de inicio: {request.StartDate.Value:yyyy-MM-dd}");
+            sb.AppendLine($"- Duración requerida: {safeRequest.Weeks} semanas (diseñá solo la sesión modelo de la semana 1: las demás las proyecta ProTraining).");
+            sb.AppendLine("Podés consultar las herramientas MCP para verificar ejercicios, restricciones y sustitutos, pero la respuesta final debe usar el catálogo numerado de abajo.");
+            sb.AppendLine();
+            sb.Append(RoutinePromptBuilder.BuildBlockPlanDraftPrompt(safeRequest, catalog, matchDates));
+            return sb.ToString();
+        }
+
+        sb.AppendLine($"- Objetivo principal: {safeRequest.Goal}");
+        sb.AppendLine($"- Duración requerida: {safeRequest.Weeks} semanas");
+        sb.AppendLine($"- Frecuencia semanal: {safeRequest.DaysPerWeek} días por semana");
+
+        if (safeRequest.StartDate.HasValue)
+        {
+            sb.AppendLine($"- Fecha de inicio: {safeRequest.StartDate.Value:yyyy-MM-dd}");
         }
 
         if (matchDates is { Count: > 0 })
@@ -92,8 +119,23 @@ public static class AgentPromptBuilder
         }
 
         sb.AppendLine();
+        RoutinePromptBuilder.AppendPfDecisionContext(sb, safeRequest.PreviousPfDecisions);
+        RoutinePromptBuilder.AppendAdaptationContext(sb, safeRequest.AdaptationContext);
+
         sb.AppendLine("Instrucción: Consultá las herramientas MCP para obtener ejercicios adecuados para este objetivo y devolvé el borrador en JSON.");
         return sb.ToString();
+    }
+
+    private static void AppendRecipient(StringBuilder sb, CreatePlanDraftRequestDto request)
+    {
+        if (request.CategoryId is { } categoryId && categoryId != Guid.Empty)
+        {
+            sb.AppendLine($"- Destinatario: categoría completa (identificador anónimo {categoryId}).");
+        }
+        else if (request.AthleteId is { } athleteId && athleteId != Guid.Empty)
+        {
+            sb.AppendLine($"- Destinatario: atleta individual (identificador anónimo {athleteId}).");
+        }
     }
 
     public static string BuildDayAdjustmentPrompt(IReadOnlyList<DayAdjustmentItemDto> items)

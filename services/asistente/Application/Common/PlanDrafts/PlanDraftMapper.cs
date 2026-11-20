@@ -79,6 +79,10 @@ public static class PlanDraftMapper
         [
             "Los proveedores de IA no devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
         ],
+        "Reglas (Límite diario alcanzado)" =>
+        [
+            "Llegaste al límite de pedidos a la IA por hoy, así que el borrador lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
+        ],
         _ => []
     };
 

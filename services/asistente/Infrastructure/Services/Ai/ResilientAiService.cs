@@ -473,6 +473,13 @@ public sealed class ResilientAiService : IAiService
                     continue;
                 }
 
+                // Registrar consumo de cuota diaria apenas respondió un modelo de IA real (aunque luego falle validación, gastó tokens - KAN-510)
+                if (provider is not RuleBasedAiClient &&
+                    !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                {
+                    _quotaService?.RecordUsage(pfId);
+                }
+
                 if (_catalogService != null)
                 {
                     try
@@ -509,13 +516,6 @@ public sealed class ResilientAiService : IAiService
                     provider.ProviderName,
                     tierStopwatch.ElapsedMilliseconds,
                     totalStopwatch.ElapsedMilliseconds);
-
-                // Registrar consumo de cuota diaria si respondió un modelo de IA real (KAN-510)
-                if (provider is not RuleBasedAiClient &&
-                    !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
-                {
-                    _quotaService?.RecordUsage(pfId);
-                }
 
                 return (content, provider.ProviderName);
             }

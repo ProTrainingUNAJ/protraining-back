@@ -2,6 +2,7 @@ namespace Application.Common.Ai;
 
 using System.Text;
 using Application.Common.Helpers;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Domain.Common;
@@ -27,49 +28,7 @@ public static class RoutinePromptBuilder
         sb.AppendLine($"Énfasis muscular solicitado: {muscles}");
         sb.AppendLine();
 
-        if (request.AdaptationContext is not null)
-        {
-            var context = request.AdaptationContext;
-            sb.AppendLine("CONTEXTO MÉDICO-DEPORTIVO DEL ATLETA:");
-            if (context.ActiveInjuries.Count == 0)
-                sb.AppendLine("- No hay lesiones activas informadas.");
-            else
-                foreach (var injury in context.ActiveInjuries)
-                {
-                    var zone = string.IsNullOrWhiteSpace(injury.Zone) ? "zona no informada" : injury.Zone.Trim();
-                    var status = string.IsNullOrWhiteSpace(injury.Status) ? "estado no informado" : injury.Status.Trim();
-                    sb.AppendLine($"- Lesión activa en {zone} (estado: {status}; severidad: no informada).");
-                }
-
-            if (context.CurrentRecords.Count == 0)
-            {
-                sb.AppendLine("- No hay récords vigentes: no inventes cargas ni porcentajes basados en 1RM.");
-            }
-            else
-            {
-                foreach (var record in context.CurrentRecords)
-                    sb.AppendLine($"- Récord vigente: {record.ExerciseName}, 1RM {record.WeightOneRepMaxKg:0.##} kg ({record.Origin}).");
-            }
-
-            if (context.Restrictions.Count > 0)
-            {
-                sb.AppendLine("RESTRICCIONES Y SUSTITUTOS AUTORIZADOS:");
-                foreach (var restriction in context.Restrictions)
-                {
-                    var substitutes = restriction.Substitutes.Count == 0
-                        ? "sin sustituto autorizado"
-                        : string.Join(", ", restriction.Substitutes.Select(s => $"{s.Name} [{s.ExerciseId}]"));
-                    sb.AppendLine($"- No usar ejercicio {restriction.ExerciseId} por {restriction.Zone}: {substitutes}.");
-                }
-            }
-
-            sb.AppendLine("REGLAS DE ADAPTACIÓN:");
-            sb.AppendLine("1. No propongas ejercicios restringidos.");
-            sb.AppendLine("2. Si debes reemplazar un ejercicio restringido, usa únicamente el sustituto autorizado indicado.");
-            sb.AppendLine("3. Explica la sustitución y avisa al preparador físico en el resumen.");
-            sb.AppendLine("4. Distingue los récords estimados de los testeados y no inventes datos faltantes.");
-            sb.AppendLine();
-        }
+        AppendAdaptationContext(sb, request.AdaptationContext);
 
         AppendPfDecisionContext(sb, request.PreviousPfDecisions);
 
@@ -116,6 +75,56 @@ public static class RoutinePromptBuilder
             """);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Agrega al prompt las lesiones activas, los récords vigentes y las restricciones con sus sustitutos autorizados.
+    /// Solo viajan zonas, ejercicios y porcentajes: nunca texto libre de lesiones ni datos personales (KAN-600).
+    /// </summary>
+    public static void AppendAdaptationContext(StringBuilder sb, AthleteAdaptationContextDto? context)
+    {
+        if (context is null)
+            return;
+
+        sb.AppendLine("CONTEXTO MÉDICO-DEPORTIVO DEL ATLETA:");
+        if (context.ActiveInjuries.Count == 0)
+            sb.AppendLine("- No hay lesiones activas informadas.");
+        else
+            foreach (var injury in context.ActiveInjuries)
+            {
+                var zone = string.IsNullOrWhiteSpace(injury.Zone) ? "zona no informada" : injury.Zone.Trim();
+                var status = string.IsNullOrWhiteSpace(injury.Status) ? "estado no informado" : injury.Status.Trim();
+                sb.AppendLine($"- Lesión activa en {zone} (estado: {status}; severidad: no informada).");
+            }
+
+        if (context.CurrentRecords.Count == 0)
+        {
+            sb.AppendLine("- No hay récords vigentes: no inventes cargas ni porcentajes basados en 1RM.");
+        }
+        else
+        {
+            foreach (var record in context.CurrentRecords)
+                sb.AppendLine($"- Récord vigente: {record.ExerciseName}, 1RM {record.WeightOneRepMaxKg:0.##} kg ({record.Origin}).");
+        }
+
+        if (context.Restrictions.Count > 0)
+        {
+            sb.AppendLine("RESTRICCIONES Y SUSTITUTOS AUTORIZADOS:");
+            foreach (var restriction in context.Restrictions)
+            {
+                var substitutes = restriction.Substitutes.Count == 0
+                    ? "sin sustituto autorizado"
+                    : string.Join(", ", restriction.Substitutes.Select(s => $"{s.Name} [{s.ExerciseId}]"));
+                sb.AppendLine($"- No usar ejercicio {restriction.ExerciseId} por {restriction.Zone}: {substitutes}.");
+            }
+        }
+
+        sb.AppendLine("REGLAS DE ADAPTACIÓN:");
+        sb.AppendLine("1. No propongas ejercicios restringidos.");
+        sb.AppendLine("2. Si debes reemplazar un ejercicio restringido, usa únicamente el sustituto autorizado indicado.");
+        sb.AppendLine("3. Explica la sustitución y avisa al preparador físico en el resumen.");
+        sb.AppendLine("4. Distingue los récords estimados de los testeados y no inventes datos faltantes.");
+        sb.AppendLine();
     }
 
     /// <summary>
@@ -246,6 +255,7 @@ public static class RoutinePromptBuilder
         sb.AppendLine();
 
         AppendPfDecisionContext(sb, request.PreviousPfDecisions);
+        AppendAdaptationContext(sb, request.AdaptationContext);
 
         var targetGroups = ExtractMuscleGroups(request.Goal);
         if (targetGroups.Count > 0)
@@ -286,7 +296,7 @@ public static class RoutinePromptBuilder
         return sb.ToString();
     }
 
-    private static void AppendPfDecisionContext(
+    public static void AppendPfDecisionContext(
         StringBuilder sb,
         IReadOnlyList<PfDecisionContextDto>? decisions)
     {

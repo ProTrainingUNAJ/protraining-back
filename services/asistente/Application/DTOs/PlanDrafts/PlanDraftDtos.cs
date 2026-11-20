@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Application.Common.PlanDrafts;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
 
 namespace Application.DTOs.PlanDrafts;
@@ -43,7 +44,8 @@ public sealed record CreatePlanDraftRequestDto(
     [property: JsonPropertyName("daysPerWeek")] int DaysPerWeek = 3,
     [property: JsonPropertyName("trainingDays")] List<string>? TrainingDays = null,
     [property: JsonPropertyName("startDate")] DateOnly? StartDate = null,
-    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null
+    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null,
+    [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null
 );
 
 public sealed record UpdatePlanDraftRequestDto(

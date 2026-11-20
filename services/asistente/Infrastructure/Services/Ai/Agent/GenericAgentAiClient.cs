@@ -6,12 +6,14 @@ using Application.Common.Ai;
 using Application.Common.DayAdjustments;
 using Application.Common.PlanDrafts;
 using Application.Common.Recommendations;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.Mcp;
 using Application.DTOs.PlanDrafts;
 using Application.DTOs.Recommendations;
 using Application.Interfaces.Services;
+using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Services.Mcp;
@@ -54,7 +56,7 @@ public sealed class GenericAgentAiClient : IAiClient
         _aiAuditService = aiAuditService ?? throw new ArgumentNullException(nameof(aiAuditService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _catalogService = catalogService;
-        _maxToolCalls = maxToolCalls > 0 ? maxToolCalls : 10;
+        _maxToolCalls = maxToolCalls > 0 ? maxToolCalls : 6;
     }
 
     public string ProviderName =>
@@ -92,10 +94,34 @@ public sealed class GenericAgentAiClient : IAiClient
         // Obtener la lista de herramientas disponibles desde el servidor MCP de Entrenamiento
         var availableTools = await ResolveMcpToolsAsync(cancellationToken);
 
+        // Catálogo numerado: es el mismo que se le muestra al modelo en el prompt y el que se usa después
+        // para traducir sus índices a GUIDs (KAN-589).
+        IReadOnlyList<CatalogExerciseDto> catalog = [];
+        if (_catalogService != null)
+        {
+            try
+            {
+                catalog = await _catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo consultar el catálogo para armar el prompt del agente.");
+            }
+        }
+
+        if (catalog.Count > 0 && request.AdaptationContext is { Restrictions.Count: > 0 })
+        {
+            catalog = await ApplyAdaptationRestrictionsAsync(catalog, request.AdaptationContext, cancellationToken);
+        }
+
         var conversation = new List<OpenAiChatMessage>
         {
             OpenAiChatMessage.CreateSystem(AgentPromptBuilder.SystemPrompt),
-            OpenAiChatMessage.CreateUser(AgentPromptBuilder.BuildPlanDraftUserPrompt(request, matchDates))
+            OpenAiChatMessage.CreateUser(AgentPromptBuilder.BuildPlanDraftUserPrompt(request, matchDates, catalog))
         };
 
         var toolCallsCount = 0;
@@ -231,20 +257,7 @@ public sealed class GenericAgentAiClient : IAiClient
                 overallStopwatch.Stop();
                 var cleanedJson = AiRoutineParser.CleanMarkdownFences(assistantMessage.Content);
 
-                // Obtener catálogo para traducción de índices y validación si está disponible
-                IReadOnlyList<CatalogExerciseDto> catalog = [];
-                if (_catalogService != null)
-                {
-                    try
-                    {
-                        catalog = await _catalogService.GetExercisesForGoalAsync(request.Goal, 30, cancellationToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "No se pudo consultar el catálogo para la traducción por bloques.");
-                    }
-                }
-
+                // La traducción de índices usa el mismo catálogo numerado que se mostró en el prompt
                 var parseResult = PlanDraftBlockParser.ParseAndExpand(
                     cleanedJson,
                     catalog,
@@ -288,7 +301,12 @@ public sealed class GenericAgentAiClient : IAiClient
                         )).ToList()
                     )).ToList();
 
-                    directContent = directContent with { Weeks = normalizedWeeks };
+                    // El modelo puede devolver varias semanas: se toma solo la primera y el resto lo proyecta la regla
+                    directContent = PlanDraftBlockParser.KeepFirstWeekAndProject(
+                        directContent with { Weeks = normalizedWeeks },
+                        request.Weeks,
+                        request.StartDate,
+                        matchDates);
 
                     await SafeAuditAsync(
                         prompt: $"PlanDraft: {request.Goal}",
@@ -404,7 +422,9 @@ public sealed class GenericAgentAiClient : IAiClient
             Goal: request.Goal,
             Weeks: 1,
             DaysPerWeek: 1,
-            StartDate: DateOnly.FromDateTime(DateTime.UtcNow));
+            StartDate: ArgentinaTime.Today,
+            PreviousPfDecisions: request.PreviousPfDecisions,
+            AdaptationContext: request.AdaptationContext);
 
         var draftContent = await TryGeneratePlanDraftAsync(draftRequest, null, cancellationToken);
         if (draftContent?.Weeks is { Count: > 0 } && draftContent.Weeks[0].Sessions is { Count: > 0 })
@@ -620,73 +640,97 @@ public sealed class GenericAgentAiClient : IAiClient
         }
     }
 
+    // Saca del catálogo numerado los ejercicios restringidos por lesión y suma los sustitutos autorizados,
+    // así el modelo nunca los puede elegir por índice (KAN-600 / KAN-468).
+    private async Task<IReadOnlyList<CatalogExerciseDto>> ApplyAdaptationRestrictionsAsync(
+        IReadOnlyList<CatalogExerciseDto> catalog,
+        AthleteAdaptationContextDto context,
+        CancellationToken cancellationToken)
+    {
+        var restrictedIds = context.Restrictions.Select(r => r.ExerciseId).ToHashSet();
+        var result = catalog.Where(e => !restrictedIds.Contains(e.Id)).ToList();
+
+        if (_catalogService == null)
+        {
+            return result;
+        }
+
+        var substituteIds = context.Restrictions
+            .SelectMany(r => r.Substitutes)
+            .Select(s => s.ExerciseId)
+            .Where(id => id != Guid.Empty && !restrictedIds.Contains(id) && result.All(e => e.Id != id))
+            .Distinct()
+            .Take(6)
+            .ToList();
+
+        foreach (var substituteId in substituteIds)
+        {
+            try
+            {
+                var substitute = await _catalogService.FindByIdAsync(substituteId, cancellationToken);
+                if (substitute != null)
+                {
+                    result.Add(substitute);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo sumar el sustituto autorizado {ExerciseId} al catálogo del agente.", substituteId);
+            }
+        }
+
+        return result;
+    }
+
     private async Task<OpenAiChatResponse?> SendChatCompletionAsync(
         OpenAiChatRequest payload,
         CancellationToken cancellationToken)
     {
-        var targetUri = ResolveChatCompletionsUri(_providerOptions.BaseUrl);
+        var targetUri = ResolveChatCompletionsUri(_providerOptions.BaseUrl, _providerOptions.Model, _providerOptions.ApiVersion);
         var jsonContent = JsonSerializer.Serialize(payload, JsonOptions);
 
-        const int maxAttempts = 3;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUri)
         {
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUri)
-            {
-                Content = new StringContent(jsonContent, Encoding.UTF8, "application/json")
-            };
+            Content = new StringContent(jsonContent, Encoding.UTF8, "application/json")
+        };
 
-            if (!string.IsNullOrWhiteSpace(_providerOptions.ApiKey))
-            {
-                requestMessage.Headers.TryAddWithoutValidation("api-key", _providerOptions.ApiKey);
-                requestMessage.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_providerOptions.ApiKey}");
-            }
-
-            using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
-
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < maxAttempts)
-            {
-                var rateLimitBody = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                // Parsear los segundos exactos pedidos por el gateway de Azure (ej. "Try again in 22 seconds.")
-                var delaySeconds = 8;
-                var match = System.Text.RegularExpressions.Regex.Match(
-                    rateLimitBody,
-                    @"Try again in (\d+) seconds",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-                if (match.Success && int.TryParse(match.Groups[1].Value, out var parsedSec))
-                {
-                    delaySeconds = Math.Clamp(parsedSec + 1, 1, 30);
-                }
-
-                _logger.LogWarning(
-                    "El proveedor {Provider} respondió con estado HTTP 429 (límite de tokens por ventana). Mensaje: {ErrorBody}. Esperando {Seconds}s antes del reintento (intento {Attempt}/{MaxAttempts})...",
-                    ProviderName,
-                    rateLimitBody,
-                    delaySeconds,
-                    attempt,
-                    maxAttempts);
-
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
-                continue;
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning(
-                    "El proveedor {Provider} respondió con estado HTTP {StatusCode}: {ErrorBody}",
-                    ProviderName,
-                    (int)response.StatusCode,
-                    errorBody);
-                return null;
-            }
-
-            var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
-            return JsonSerializer.Deserialize<OpenAiChatResponse>(responseString, JsonOptions);
+        if (!string.IsNullOrWhiteSpace(_providerOptions.ApiKey))
+        {
+            requestMessage.Headers.TryAddWithoutValidation("api-key", _providerOptions.ApiKey);
+            requestMessage.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_providerOptions.ApiKey}");
         }
 
-        return null;
+        using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            // 429: el proveedor se quedó sin cupo (por minuto o por día). No se espera ni se reintenta:
+            // se trata como una falla del proveedor y la cadena pasa de inmediato al siguiente (KAN-600).
+            var rateLimitBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "El proveedor {Provider} respondió con estado HTTP 429 (límite de pedidos o tokens). Mensaje: {ErrorBody}. Pasando de inmediato al siguiente proveedor de la cadena.",
+                ProviderName,
+                rateLimitBody);
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "El proveedor {Provider} respondió con estado HTTP {StatusCode}: {ErrorBody}",
+                ProviderName,
+                (int)response.StatusCode,
+                errorBody);
+            return null;
+        }
+
+        var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize<OpenAiChatResponse>(responseString, JsonOptions);
     }
 
     private async Task<string> ExecuteToolCallAsync(
@@ -835,7 +879,11 @@ public sealed class GenericAgentAiClient : IAiClient
         ];
     }
 
-    public static Uri ResolveChatCompletionsUri(string baseUrl)
+    /// <summary>
+    /// Arma la URL de chat completions. El deployment y la versión de API del gateway de Azure salen de la
+    /// configuración del proveedor (Model y ApiVersion), no están fijos en el código.
+    /// </summary>
+    public static Uri ResolveChatCompletionsUri(string baseUrl, string? model = null, string? apiVersion = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
@@ -866,11 +914,14 @@ public sealed class GenericAgentAiClient : IAiClient
         if (trimmed.Contains("azure-api.net", StringComparison.OrdinalIgnoreCase) &&
             !trimmed.Contains("/openai/deployments/", StringComparison.OrdinalIgnoreCase))
         {
+            var version = string.IsNullOrWhiteSpace(apiVersion) ? "2025-03-01-preview" : apiVersion.Trim();
+            var deployment = string.IsNullOrWhiteSpace(model) ? "gpt-4.1-mini" : model.Trim();
+
             var apiVersionQuery = queryString.Contains("api-version", StringComparison.OrdinalIgnoreCase)
                 ? queryString
-                : (string.IsNullOrEmpty(queryString) ? "?api-version=2025-03-01-preview" : $"{queryString}&api-version=2025-03-01-preview");
+                : (string.IsNullOrEmpty(queryString) ? $"?api-version={version}" : $"{queryString}&api-version={version}");
 
-            return new Uri($"{pathPart}/openai/deployments/gpt-4.1-mini/chat/completions{apiVersionQuery}", UriKind.Absolute);
+            return new Uri($"{pathPart}/openai/deployments/{deployment}/chat/completions{apiVersionQuery}", UriKind.Absolute);
         }
 
         return new Uri($"{pathPart}/chat/completions{queryString}", UriKind.Absolute);

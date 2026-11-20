@@ -17,7 +17,8 @@ public sealed class CreatePlanDraftCommandHandler(
     IMatchDayLoadValidator? matchDayLoadValidator = null,
     IExerciseCatalogService? catalogService = null,
     ILogger<CreatePlanDraftCommandHandler>? logger = null,
-    IPfDecisionRepository? pfDecisionRepository = null)
+    IPfDecisionRepository? pfDecisionRepository = null,
+    IAthleteAdaptationContextService? adaptationContextService = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
         CreatePlanDraftCommand command,
@@ -69,6 +70,30 @@ public sealed class CreatePlanDraftCommandHandler(
             {
                 PreviousPfDecisions = PfDecisionContextMapper.Map(previousDecisions)
             };
+        }
+
+        // KAN-600: el agente tiene que conocer las lesiones y restricciones del atleta. Si Seguimiento o
+        // Entrenamiento no responden, el borrador se genera igual, sin ese contexto.
+        if (adaptationContextService != null && hasAthlete)
+        {
+            try
+            {
+                var adaptationContext = await adaptationContextService.GetAsync(
+                    request.AthleteId!.Value,
+                    cancellationToken);
+                normalizedRequest = normalizedRequest with { AdaptationContext = adaptationContext };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(
+                    ex,
+                    "No se pudo armar el contexto de lesiones y restricciones del atleta {AthleteId}. El borrador se genera sin ese contexto.",
+                    request.AthleteId);
+            }
         }
 
         IReadOnlyList<DateOnly>? matchDates = null;

@@ -146,21 +146,28 @@ Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 | 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
 | ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
-### IA del Asistente
+### IA del Asistente: agente con herramientas y cadena de respaldo
 
-El Asistente arma los borradores de planificación y la justificación del ajuste del día con un **agente**: antes de responder, consulta la biblioteca de ejercicios, las restricciones y los sustitutos por MCP (ver "Servidor MCP" más abajo). Prueba los proveedores **en orden**:
+Ollama ya no forma parte del compose ni de la ejecución. El Asistente arma los borradores de planificación y la justificación del ajuste del día con un **agente** compatible con la API de OpenAI que consulta la biblioteca de ejercicios, las restricciones y los sustitutos a través del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerRestricciones`, `ObtenerSustitutos`) y está limitado a **6 llamadas a herramientas por pedido** (`AI_AGENT_MAX_TOOL_CALLS`).
 
-1. **OpenAI** (`gpt-4.1-mini`, por el gateway de IA de la UNAJ).
-2. **Gemini**, si OpenAI falla, tarda demasiado o no tiene clave.
-3. **Reglas fijas en C#**, si fallan los dos. La app anda igual sin internet y sin claves.
+El cliente es **uno solo y genérico**, compatible con la API de OpenAI (Gemini tiene un endpoint compatible). Sumar o cambiar un proveedor es configuración, no código (ver `Ai__Agent__Providers__N__*` en "Variables de entorno"). Prueba los proveedores **en orden**:
 
-El cliente es **uno solo y genérico**, compatible con la API de OpenAI (Gemini tiene un endpoint compatible). Sumar o cambiar un proveedor es configuración, no código (ver `Ai__Agent__Providers__N__*` en "Variables de entorno").
+| Orden | Proveedor | Variables del `.env` | Cuándo se usa |
+|---|---|---|---|
+| 1 | OpenAI (Azure Gateway UNAJ, `gpt-4.1-mini`) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Proveedor principal |
+| 2 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL` | Respaldo de IA (si OpenAI falla, tarda o no tiene clave) |
+| 3 | Reglas determinísticas locales | — | Si fallan los dos o no hay claves. La app anda igual sin internet |
 
 Lo que no cambia, con cualquier proveedor:
 - **La IA propone y el PF decide:** el borrador queda como borrador hasta que el PF lo aprueba.
-- **Sin datos personales:** a OpenAI y a Gemini va todo anonimizado, nunca el nombre, el email ni el teléfono de un atleta.
-- **Los cálculos no son IA:** kilos, %RM, redondeo a 2,5 kg, semáforo y elección del sustituto son reglas en C#.
-- Cada pedido a la IA queda en `ai_logs`, con el proveedor, los tokens y la latencia.
+- **Sin datos personales:** a cualquier proveedor externo viaja todo anonimizado, nunca el nombre, y del objetivo en texto libre se quitan emails y teléfonos.
+- **Los cálculos no son IA:** kilos, %RM, redondeo a 2,5 kg, semáforo y elección del sustituto son reglas determinísticas en C#.
+- **Ante un HTTP 429** (límite del proveedor) el agente **no espera ni reintenta**: pasa de inmediato al siguiente proveedor.
+- **Timeouts por proveedor:** 40 s + 40 s = 80 s, por debajo de los 100 s del gateway (`OPENAI_TIMEOUT_SECONDS`, `GEMINI_TIMEOUT_SECONDS`).
+- **Prompt contextualizado:** el prompt del agente incluye la categoría o el atleta destino (por identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y el formato por bloques con el catálogo numerado.
+- Cada pedido a la IA queda auditado en `ai_logs`, con el proveedor, los tokens y la latencia.
+- El Asistente no depende de ningún proveedor de IA para arrancar: si la IA se cae, el resto del sistema sigue andando.
+- Detalle técnico, hiperparámetros y mediciones históricas de Llama: [services/asistente/README.md](services/asistente/README.md).
 
 **Claves:** `OPENAI_API_KEY` y `GEMINI_API_KEY` van **solo en tu `.env`**. Se piden por privado y nunca se suben al repo, a Jira ni al grupo. Después de cambiarlas: `docker compose up -d asistente` (el `restart` no relee el `.env`).
 
@@ -269,6 +276,8 @@ En el `.env` (las usa el compose):
 | `OPENAI_BASE_URL`, `OPENAI_MODEL` | URL y modelo de OpenAI. Por defecto, el gateway de la UNAJ con `gpt-4.1-mini` (ver `.env.example`) |
 | `GEMINI_API_KEY` | Clave de Gemini, el segundo proveedor (de aistudio.google.com). **Solo en tu `.env`**. Sin clave, se saltea |
 | `GEMINI_BASE_URL`, `GEMINI_MODEL` | URL compatible con OpenAI y modelo de Gemini |
+| `AI_AGENT_MAX_TOOL_CALLS` | Tope de llamadas a herramientas del agente por pedido (opcional, por defecto 6) |
+| `AiQuota__DailyLimitPerPf` | Límite diario de pedidos a la IA por PF (opcional, por defecto 20; subir en demo si hace falta) |
 | `GOOGLE_CLIENT_ID` | Client ID del login con Google. No es secreto: va en el botón del front y tiene que coincidir con `VITE_GOOGLE_CLIENT_ID` |
 | `FRONTEND_BASE_URL` | URL del front para los links de los mails (confirmación del registro, recuperar contraseña) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_ENABLE_SSL`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Servidor de mails. En local, los mails se ven en **Mailpit** (`http://localhost:8025`). La contraseña real, si se usa, va **solo en tu `.env`** |
@@ -284,7 +293,8 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
-| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey` | Asistente: la lista ordenada de proveedores de IA (0 = OpenAI, 1 = Gemini). El orden es el de la cadena; un proveedor sin clave se saltea |
+| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey`, `__TimeoutSeconds` | Asistente: la lista ordenada de proveedores de IA (0 = OpenAI, 1 = Gemini). El orden es el de la cadena; un proveedor sin clave se saltea |
+| `Ai__Agent__MaxToolCalls` | Asistente: tope de llamadas a herramientas del agente por pedido (por defecto 6) |
 | `Smtp__*` | Identidad: el servidor de mails (sale de las `SMTP_*`) |
 | `Google__ClientId` | Identidad: para validar el login con Google |
 

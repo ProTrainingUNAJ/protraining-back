@@ -256,4 +256,89 @@ public sealed class AiQuotaServiceTests
         Assert.Equal(1, quotaService.GetCurrentUsage(pfId));
         externalAiMock.Verify(c => c.TrySuggestRoutineAsync(It.IsAny<RoutineSuggestionRequestDto>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Given_DraftDiscardedByValidator_When_GeneratingPlanDraft_Then_StillConsumesQuota()
+    {
+        // Arrange: el proveedor devuelve un borrador con un ejercicio inválido que el validador descarta,
+        // pero como ya gastó tokens debe consumir cupo (KAN-510).
+        var pfId = Guid.NewGuid();
+        var quotaService = CreateQuotaService(dailyLimit: 5);
+        var unknownExerciseId = Guid.NewGuid();
+
+        var externalAiMock = new Mock<IAiClient>();
+        externalAiMock.Setup(c => c.ProviderName).Returns("Agente (OpenAI)");
+        externalAiMock.Setup(c => c.TryGeneratePlanDraftAsync(
+                It.IsAny<Application.DTOs.PlanDrafts.CreatePlanDraftRequestDto>(),
+                It.IsAny<IReadOnlyList<DateOnly>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Application.DTOs.PlanDrafts.PlanDraftContentDto(
+                Name: "Borrador inválido",
+                Objective: "Fuerza",
+                JustificationSummary: "Resumen",
+                Weeks:
+                [
+                    new Application.DTOs.PlanDrafts.PlanDraftWeekDto(1,
+                    [
+                        new Application.DTOs.PlanDrafts.PlanDraftSessionDto("Sesión 1", DayOfWeek.Monday, 1, null,
+                        [
+                            new Application.DTOs.PlanDrafts.PlanDraftExerciseDto(unknownExerciseId, 1, 3, 10, 70m)
+                        ])
+                    ])
+                ]));
+
+        var validExerciseId = Guid.NewGuid();
+        var rulesMock = new Mock<IAiClient>();
+        rulesMock.Setup(c => c.ProviderName).Returns("Reglas");
+        rulesMock.Setup(c => c.TryGeneratePlanDraftAsync(
+                It.IsAny<Application.DTOs.PlanDrafts.CreatePlanDraftRequestDto>(),
+                It.IsAny<IReadOnlyList<DateOnly>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Application.DTOs.PlanDrafts.PlanDraftContentDto(
+                Name: "Borrador Reglas",
+                Objective: "Fuerza",
+                JustificationSummary: "Reglas",
+                Weeks:
+                [
+                    new Application.DTOs.PlanDrafts.PlanDraftWeekDto(1,
+                    [
+                        new Application.DTOs.PlanDrafts.PlanDraftSessionDto("Sesión 1", DayOfWeek.Monday, 1, null,
+                        [
+                            new Application.DTOs.PlanDrafts.PlanDraftExerciseDto(validExerciseId, 1, 3, 10, 70m)
+                        ])
+                    ])
+                ]));
+
+        var catalogMock = new Mock<IExerciseCatalogService>();
+        catalogMock.Setup(c => c.FindByIdAsync(unknownExerciseId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CatalogExerciseDto?)null);
+        catalogMock.Setup(c => c.FindByIdAsync(validExerciseId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CatalogExerciseDto(validExerciseId, "Sentadilla", "Piernas", "Barra"));
+
+        var currentUserMock = new Mock<ICurrentUser>();
+        currentUserMock.Setup(u => u.PfId).Returns(pfId);
+
+        var resilientService = new ResilientAiService(
+            providers: [externalAiMock.Object, rulesMock.Object],
+            semanticValidator: null,
+            responseCache: null,
+            currentUser: currentUserMock.Object,
+            auditService: null,
+            catalogService: catalogMock.Object,
+            quotaService: quotaService,
+            logger: NullLogger<ResilientAiService>.Instance);
+
+        var request = new Application.DTOs.PlanDrafts.CreatePlanDraftRequestDto(
+            Goal: "Fuerza",
+            AthleteId: Guid.NewGuid(),
+            Weeks: 1,
+            DaysPerWeek: 1);
+
+        // Act
+        var (_, provider) = await resilientService.GeneratePlanDraftAsync(request);
+
+        // Assert
+        Assert.Equal("Reglas", provider);
+        Assert.Equal(1, quotaService.GetCurrentUsage(pfId));
+    }
 }
