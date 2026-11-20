@@ -197,7 +197,9 @@ public class UpdateTrainingPlanCommandHandler
                             exReq.TargetRpe,
                             exReq.TargetRir,
                             exReq.Notes,
-                            session.Id
+                            session.Id,
+                            exReq.TargetDistanceMeters,
+                            exReq.TargetTimeSeconds
                         );
                         block.AddPrescribedExercise(exercise);
                     }
@@ -222,7 +224,9 @@ public class UpdateTrainingPlanCommandHandler
                     exReq.TargetRpe,
                     exReq.TargetRir,
                     exReq.Notes,
-                    session.Id
+                    session.Id,
+                    exReq.TargetDistanceMeters,
+                    exReq.TargetTimeSeconds
                 );
                 defaultBlock.AddPrescribedExercise(exercise);
             }
@@ -268,7 +272,9 @@ public class UpdateTrainingPlanCommandHandler
                                 exReq.TargetRpe,
                                 exReq.TargetRir,
                                 exReq.Notes,
-                                session.Id
+                                session.Id,
+                                exReq.TargetDistanceMeters,
+                                exReq.TargetTimeSeconds
                             );
                             newBlock.AddPrescribedExercise(newExercise);
                         }
@@ -325,7 +331,9 @@ public class UpdateTrainingPlanCommandHandler
                     exReq.TargetRpe,
                     exReq.TargetRir,
                     exReq.Notes,
-                    sessionId
+                    sessionId,
+                    exReq.TargetDistanceMeters,
+                    exReq.TargetTimeSeconds
                 );
                 block.AddPrescribedExercise(newExercise);
             }
@@ -340,7 +348,9 @@ public class UpdateTrainingPlanCommandHandler
                     intensityType,
                     exReq.TargetRpe,
                     exReq.TargetRir,
-                    exReq.Notes
+                    exReq.Notes,
+                    exReq.TargetDistanceMeters,
+                    exReq.TargetTimeSeconds
                 );
             }
         }

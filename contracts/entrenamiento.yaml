@@ -2705,6 +2705,18 @@ components:
           nullable: true
           description: Notas técnicas o indicaciones específicas para la semana.
           example: "Pausa de 2 seg en la concéntrica"
+        targetDistanceMeters:
+          type: number
+          format: decimal
+          nullable: true
+          description: Distancia objetivo prescripta en metros.
+          example: 400
+        targetTimeSeconds:
+          type: number
+          format: decimal
+          nullable: true
+          description: Tiempo objetivo prescripto en segundos.
+          example: 60.5
 
     TrainingBlockRequest:
       type: object
@@ -2880,6 +2892,18 @@ components:
           nullable: true
           description: Notas técnicas o indicaciones específicas para la semana.
           example: "Pausa de 2 seg en la concéntrica"
+        targetDistanceMeters:
+          type: number
+          format: decimal
+          nullable: true
+          description: Distancia objetivo prescripta en metros.
+          example: 400
+        targetTimeSeconds:
+          type: number
+          format: decimal
+          nullable: true
+          description: Tiempo objetivo prescripto en segundos.
+          example: 60.5
 
     TrainingBlockDetail:
       type: object

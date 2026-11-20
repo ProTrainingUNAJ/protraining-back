@@ -37,7 +37,9 @@ public sealed class PrescribedExercise : BaseEntity
         decimal? targetRpe,
         int? targetRir,
         string? notes,
-        Guid? trainingSessionId)
+        Guid? trainingSessionId,
+        decimal? targetDistanceMeters,
+        decimal? targetTimeSeconds)
     {
         Order = order;
         Sets = sets;
@@ -50,6 +52,8 @@ public sealed class PrescribedExercise : BaseEntity
         TargetRir = targetRir;
         Notes = notes;
         TrainingSessionId = trainingSessionId;
+        TargetDistanceMeters = targetDistanceMeters;
+        TargetTimeSeconds = targetTimeSeconds;
     }
 
     public static PrescribedExercise Create(
@@ -63,7 +67,9 @@ public sealed class PrescribedExercise : BaseEntity
         decimal? targetRpe = null,
         int? targetRir = null,
         string? notes = null,
-        Guid? trainingSessionId = null)
+        Guid? trainingSessionId = null,
+        decimal? targetDistanceMeters = null,
+        decimal? targetTimeSeconds = null)
     {
         if (order <= 0)
             throw new DomainException("El orden debe ser mayor a cero.");
@@ -73,6 +79,7 @@ public sealed class PrescribedExercise : BaseEntity
 
         ValidateReps(reps);
         ValidateIntensity(intensityType, targetRpe, targetRir);
+        ValidateTargets(targetDistanceMeters, targetTimeSeconds);
 
         return new PrescribedExercise(
             order,
@@ -85,7 +92,9 @@ public sealed class PrescribedExercise : BaseEntity
             targetRpe,
             targetRir,
             notes,
-            trainingSessionId);
+            trainingSessionId,
+            targetDistanceMeters,
+            targetTimeSeconds);
     }
 
     public static PrescribedExercise Create(
@@ -116,7 +125,9 @@ public sealed class PrescribedExercise : BaseEntity
         IntensityType? intensityType = null,
         decimal? targetRpe = null,
         int? targetRir = null,
-        string? notes = null)
+        string? notes = null,
+        decimal? targetDistanceMeters = null,
+        decimal? targetTimeSeconds = null)
     {
         if (order <= 0)
             throw new DomainException("El orden debe ser mayor a cero.");
@@ -126,6 +137,7 @@ public sealed class PrescribedExercise : BaseEntity
 
         ValidateReps(reps);
         ValidateIntensity(intensityType, targetRpe, targetRir);
+        ValidateTargets(targetDistanceMeters, targetTimeSeconds);
 
         Order = order;
         Sets = sets;
@@ -136,6 +148,8 @@ public sealed class PrescribedExercise : BaseEntity
         TargetRpe = targetRpe;
         TargetRir = targetRir;
         Notes = notes;
+        TargetDistanceMeters = targetDistanceMeters;
+        TargetTimeSeconds = targetTimeSeconds;
     }
 
     public void Update(
@@ -212,5 +226,14 @@ public sealed class PrescribedExercise : BaseEntity
 
         if (targetRir.HasValue && (targetRir.Value < 0 || targetRir.Value > 5))
             throw new DomainException("El RIR debe estar entre 0 y 5.");
+    }
+
+    private static void ValidateTargets(decimal? targetDistanceMeters, decimal? targetTimeSeconds)
+    {
+        if (targetDistanceMeters.HasValue && targetDistanceMeters.Value <= 0)
+            throw new DomainException("La distancia objetivo debe ser mayor a cero.");
+
+        if (targetTimeSeconds.HasValue && targetTimeSeconds.Value <= 0)
+            throw new DomainException("El tiempo objetivo debe ser mayor a cero.");
     }
 }

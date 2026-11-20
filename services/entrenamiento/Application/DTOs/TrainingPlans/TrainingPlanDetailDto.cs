@@ -19,7 +19,9 @@ public record PrescribedExerciseDto(
     string? IntensityType = null,
     decimal? TargetRpe = null,
     int? TargetRir = null,
-    string? Notes = null
+    string? Notes = null,
+    decimal? TargetDistanceMeters = null,
+    decimal? TargetTimeSeconds = null
 );
 
 public record TrainingBlockDto(

@@ -190,7 +190,7 @@ public sealed class AthleteSessionAdjustmentsTests
             new LoadCalculatorEngine(),
             structureMock.Object,
             videoRepoMock.Object,
-            Mock.Of<IPerformedSetRepository>(),
+            CreateEmptyPerformedSetRepo(),
             adjustmentRepoMock.Object,
             exerciseRepoMock.Object);
 
@@ -548,7 +548,7 @@ public sealed class AthleteSessionAdjustmentsTests
             new LoadCalculatorEngine(),
             structureMock.Object,
             videoRepoMock.Object,
-            new Mock<IPerformedSetRepository>().Object,
+            CreateEmptyPerformedSetRepo(),
             adjustmentRepo,
             exerciseRepo);
 
@@ -565,5 +565,16 @@ public sealed class AthleteSessionAdjustmentsTests
         Assert.Equal(64, exerciseResult.Percentage);
         Assert.NotNull(exerciseResult.WeightKg);
         Assert.True(exerciseResult.WeightKg < 80);
+    }
+
+    private static IPerformedSetRepository CreateEmptyPerformedSetRepo()
+    {
+        var mock = new Mock<IPerformedSetRepository>();
+        mock.Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return mock.Object;
     }
 }
