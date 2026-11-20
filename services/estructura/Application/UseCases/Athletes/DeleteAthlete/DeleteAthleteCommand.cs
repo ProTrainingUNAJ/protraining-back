@@ -22,7 +22,8 @@ public sealed class DeleteAthleteCommandHandler(
         await repository.DeleteAsync(athlete, cancellationToken);
 
         // 2. Registra la purga pendiente en la misma unidad de trabajo (Transactional Outbox).
-        var purge = PendingPurge.Create(athlete.Id, "Athlete");
+        // Se preserva el AccountId de Identidad antes del borrado para que el job pueda purgar la cuenta de usuario (#204 · KAN-499).
+        var purge = PendingPurge.Create(athlete.Id, athlete.AccountId, "Athlete");
         await pendingPurgeRepository.AddAsync(purge, cancellationToken);
 
         // 3. Confirma ambas operaciones atómicamente en la misma transacción.

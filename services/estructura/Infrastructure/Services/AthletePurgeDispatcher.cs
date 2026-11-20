@@ -13,18 +13,31 @@ public sealed class AthletePurgeDispatcher(
     IConfiguration configuration,
     ILogger<AthletePurgeDispatcher> logger) : IAthletePurgeDispatcher
 {
-    private sealed record ServiceTarget(string Name, string BaseUrl);
+    private sealed record ServiceTarget(string Name, string BaseUrl, Guid? TargetId);
 
     public async Task<AthletePurgeDispatchResult> DispatchPurgeToExternalServicesAsync(
         Guid athleteId,
+        Guid? accountId,
         CancellationToken cancellationToken = default)
     {
-        var servicesToPurge = GetTargetServices();
+        var servicesToPurge = GetTargetServices(athleteId, accountId);
         var allSucceeded = true;
         string? failureReason = null;
 
         foreach (var target in servicesToPurge)
         {
+            // Si el servicio requiere un identificador específico (ej: AccountId para Identidad)
+            // y el atleta no posee cuenta creada, se omite limpiamente la llamada (#204 · KAN-499).
+            if (!target.TargetId.HasValue)
+            {
+                logger.LogInformation(
+                    "El atleta {AthleteId} no posee cuenta de usuario vinculada en {ServiceName} (identificador nulo). Se omite llamada.",
+                    athleteId,
+                    target.Name);
+                continue;
+            }
+
+            var targetId = target.TargetId.Value;
             var success = false;
             const int maxAttempts = 3; // Reintentos con retroceso exponencial ante fallos transitorios de red
             string? lastServiceError = null;
@@ -34,7 +47,7 @@ public sealed class AthletePurgeDispatcher(
                 var result = await purgeClient.PurgeAthleteInServiceAsync(
                     target.Name,
                     target.BaseUrl,
-                    athleteId,
+                    targetId,
                     cancellationToken);
 
                 if (result.IsSuccess)
@@ -50,7 +63,7 @@ public sealed class AthletePurgeDispatcher(
                     maxAttempts,
                     athleteId,
                     target.Name,
-                    result.ErrorMessage);
+                    lastServiceError);
 
                 if (attempt < maxAttempts)
                 {
@@ -77,15 +90,15 @@ public sealed class AthletePurgeDispatcher(
         return new AthletePurgeDispatchResult(allSucceeded, allSucceeded ? null : failureReason);
     }
 
-    private List<ServiceTarget> GetTargetServices()
+    private List<ServiceTarget> GetTargetServices(Guid athleteId, Guid? accountId)
     {
-        return new List<ServiceTarget>
-        {
-            new("Identidad", configuration["Services:Identidad:BaseUrl"] ?? "http://identidad:8080"),
-            new("Entrenamiento", configuration["Services:Entrenamiento:BaseUrl"] ?? "http://entrenamiento:8080"),
-            new("Seguimiento", configuration["Services:Seguimiento:BaseUrl"] ?? "http://seguimiento:8080"),
-            new("Asistente", configuration["Services:Asistente:BaseUrl"] ?? "http://asistente:8080")
-        };
+        return
+        [
+            new("Identidad", configuration["Services:Identidad:BaseUrl"] ?? "http://identidad:8080", accountId),
+            new("Entrenamiento", configuration["Services:Entrenamiento:BaseUrl"] ?? "http://entrenamiento:8080", athleteId),
+            new("Seguimiento", configuration["Services:Seguimiento:BaseUrl"] ?? "http://seguimiento:8080", athleteId),
+            new("Asistente", configuration["Services:Asistente:BaseUrl"] ?? "http://asistente:8080", athleteId)
+        ];
     }
 }
 

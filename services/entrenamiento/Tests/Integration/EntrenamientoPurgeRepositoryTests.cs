@@ -98,6 +98,17 @@ public sealed class EntrenamientoPurgeRepositoryTests : IDisposable
             planId, DateOnly.FromDateTime(DateTime.UtcNow), categoryId: null, athleteId: otherAthleteId);
         _context.PlanAssignments.AddRange(targetAssignment, otherAssignment);
 
+        // 6. Variantes del atleta (#204 · KAN-499)
+        var substituteExercise = Exercise.Create("Press mancuernas", "Pecho");
+        _context.Exercises.Add(substituteExercise);
+        await _context.SaveChangesAsync();
+
+        var targetVariant = AthleteVariant.Create(
+            targetAthleteId, exerciseId, substituteExercise.Id, true, true, DateOnly.FromDateTime(DateTime.UtcNow));
+        var otherVariant = AthleteVariant.Create(
+            otherAthleteId, exerciseId, substituteExercise.Id, true, true, DateOnly.FromDateTime(DateTime.UtcNow));
+        _context.AthleteVariants.AddRange(targetVariant, otherVariant);
+
         await _context.SaveChangesAsync();
 
         // Act
@@ -111,7 +122,8 @@ public sealed class EntrenamientoPurgeRepositoryTests : IDisposable
         Assert.Equal(1, result.AthleteRecordsCount);
         Assert.Equal(1, result.SessionAdjustmentsCount);
         Assert.Equal(1, result.PlanAssignmentsCount);
-        Assert.Equal(5, result.TotalRecordsPurged);
+        Assert.Equal(1, result.AthleteVariantsCount);
+        Assert.Equal(6, result.TotalRecordsPurged);
 
         // Verificar que en la base de datos no queda nada del atleta purgado
         Assert.False(await _context.PerformedSets.IgnoreQueryFilters().AnyAsync(p => p.AthleteId == targetAthleteId));
@@ -119,6 +131,7 @@ public sealed class EntrenamientoPurgeRepositoryTests : IDisposable
         Assert.False(await _context.AthleteRecords.IgnoreQueryFilters().AnyAsync(r => r.AthleteId == targetAthleteId));
         Assert.False(await _context.AthleteSessionAdjustments.IgnoreQueryFilters().AnyAsync(a => a.AthleteId == targetAthleteId));
         Assert.False(await _context.PlanAssignments.IgnoreQueryFilters().AnyAsync(p => p.AthleteId == targetAthleteId));
+        Assert.False(await _context.AthleteVariants.IgnoreQueryFilters().AnyAsync(v => v.AthleteId == targetAthleteId));
 
         // Verificar que los datos del otro atleta permanecen intactos
         Assert.True(await _context.PerformedSets.IgnoreQueryFilters().AnyAsync(p => p.AthleteId == otherAthleteId));
@@ -126,6 +139,7 @@ public sealed class EntrenamientoPurgeRepositoryTests : IDisposable
         Assert.True(await _context.AthleteRecords.IgnoreQueryFilters().AnyAsync(r => r.AthleteId == otherAthleteId));
         Assert.True(await _context.AthleteSessionAdjustments.IgnoreQueryFilters().AnyAsync(a => a.AthleteId == otherAthleteId));
         Assert.True(await _context.PlanAssignments.IgnoreQueryFilters().AnyAsync(p => p.AthleteId == otherAthleteId));
+        Assert.True(await _context.AthleteVariants.IgnoreQueryFilters().AnyAsync(v => v.AthleteId == otherAthleteId));
     }
 
     [Fact]

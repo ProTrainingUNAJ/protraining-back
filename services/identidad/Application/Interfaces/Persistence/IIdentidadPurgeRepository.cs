@@ -7,5 +7,5 @@ namespace Application.Interfaces.Persistence;
 /// </summary>
 public interface IIdentidadPurgeRepository
 {
-    Task<PurgedAthleteDataDto> PurgeAthleteDataAsync(Guid athleteId, CancellationToken cancellationToken = default);
+    Task<PurgedAthleteDataDto> PurgeAthleteDataAsync(Guid accountId, CancellationToken cancellationToken = default);
 }

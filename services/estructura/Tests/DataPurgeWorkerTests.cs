@@ -41,9 +41,9 @@ public sealed class DataPurgeWorkerTests
             _fixedTimeProvider);
     }
 
-    private static PendingPurge CreatePendingPurge(Guid athleteId, DateTime createdAt)
+    private static PendingPurge CreatePendingPurge(Guid athleteId, DateTime createdAt, Guid? accountId = null)
     {
-        var purge = PendingPurge.Create(athleteId, "Athlete");
+        var purge = PendingPurge.Create(athleteId, accountId, "Athlete");
         typeof(BaseEntity).GetProperty(nameof(BaseEntity.CreatedAt))?.SetValue(purge, createdAt);
         return purge;
     }
@@ -62,7 +62,7 @@ public sealed class DataPurgeWorkerTests
 
         // Despachador a los 4 servicios externos responde OK
         _mockPurgeDispatcher
-            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AthletePurgeDispatchResult(true));
 
         var handler = CreateHandler();
@@ -77,7 +77,7 @@ public sealed class DataPurgeWorkerTests
         Assert.Equal(0, result.SkippedWithinRetention);
 
         // Verificamos que se llamó a los servicios externos (Identidad, Entrenamiento, Seguimiento, Asistente)
-        _mockPurgeDispatcher.Verify(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockPurgeDispatcher.Verify(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
 
         // Verificamos que se purgó localmente en Estructura (5to servicio)
         _mockEstructuraPurgeRepo.Verify(e => e.PurgeAthleteLocalDataAsync(athleteId, It.IsAny<CancellationToken>()), Times.Once);
@@ -112,7 +112,7 @@ public sealed class DataPurgeWorkerTests
         Assert.Equal(1, result.SkippedWithinRetention);
 
         // No se debe llamar a ningún servicio ni purgar localmente
-        _mockPurgeDispatcher.Verify(d => d.DispatchPurgeToExternalServicesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockPurgeDispatcher.Verify(d => d.DispatchPurgeToExternalServicesAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
         _mockEstructuraPurgeRepo.Verify(e => e.PurgeAthleteLocalDataAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
 
         // Debe mantenerse en estado Pending
@@ -134,7 +134,7 @@ public sealed class DataPurgeWorkerTests
 
         // Un servicio externo (ej. Seguimiento) falló o está caído
         _mockPurgeDispatcher
-            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AthletePurgeDispatchResult(false, "Error en Seguimiento"));
 
         var handler = CreateHandler();
@@ -172,7 +172,7 @@ public sealed class DataPurgeWorkerTests
 
         // En la primera corrida, el servicio está caído
         _mockPurgeDispatcher
-            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AthletePurgeDispatchResult(false, "Servicio temporalmente caído"));
 
         var handler = CreateHandler();
@@ -184,7 +184,7 @@ public sealed class DataPurgeWorkerTests
 
         // En la segunda corrida, el servicio se recuperó
         _mockPurgeDispatcher
-            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AthletePurgeDispatchResult(true));
 
         // Act
@@ -219,7 +219,7 @@ public sealed class DataPurgeWorkerTests
         var dispatcher = new AthletePurgeDispatcher(mockClient.Object, config, NullLogger<AthletePurgeDispatcher>.Instance);
 
         // Act
-        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, CancellationToken.None);
+        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, accountId: null, CancellationToken.None);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -234,9 +234,10 @@ public sealed class DataPurgeWorkerTests
         // Arrange
         var mockClient = new Mock<IExternalServicePurgeClient>();
         var athleteId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
 
         var callCount = 0;
-        mockClient.Setup(c => c.PurgeAthleteInServiceAsync(It.IsAny<string>(), It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()))
+        mockClient.Setup(c => c.PurgeAthleteInServiceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 callCount++;
@@ -251,10 +252,37 @@ public sealed class DataPurgeWorkerTests
         var dispatcher = new AthletePurgeDispatcher(mockClient.Object, config, NullLogger<AthletePurgeDispatcher>.Instance);
 
         // Act
-        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, CancellationToken.None);
+        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, accountId, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task Given_AthletePurgeDispatcher_When_AccountIdIsNull_Then_SkipsIdentidadAndPurgesRemainingServices()
+    {
+        // Arrange: atleta sin cuenta vinculada en Identidad (accountId == null)
+        var mockClient = new Mock<IExternalServicePurgeClient>();
+        var athleteId = Guid.NewGuid();
+
+        mockClient
+            .Setup(c => c.PurgeAthleteInServiceAsync(It.IsAny<string>(), It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string serviceName, string _, Guid _, CancellationToken _) =>
+                new ServicePurgeResult(serviceName, true, 200));
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var dispatcher = new AthletePurgeDispatcher(mockClient.Object, config, NullLogger<AthletePurgeDispatcher>.Instance);
+
+        // Act
+        var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, accountId: null, CancellationToken.None);
+
+        // Assert: omite Identidad limpiamente y purga los otros 3 servicios externos
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.ErrorMessage);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Identidad", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Entrenamiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Seguimiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Asistente", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

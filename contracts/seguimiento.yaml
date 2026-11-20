@@ -192,6 +192,41 @@ paths:
         "403":
           $ref: '#/components/responses/Forbidden'
 
+  /api/v1/internal/athletes/{athleteId}/purge:
+    delete:
+      tags:
+        - Internal
+      summary: Purga física de datos de un atleta
+      description: Endpoint interno inter-servicio (rol Servicio) para el job de purga de datos. Elimina de forma atómica check-ins, dolores, cargas diarias, lesiones, resultados de tests y asistencias.
+      operationId: purgeAthleteInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          description: Identificador único del atleta a purgar.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumen de registros físicos eliminados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  athleteId:
+                    type: string
+                    format: uuid
+                  totalRecordsPurged:
+                    type: integer
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/athletes/{athleteId}/check-in/today:
     get:
       tags:

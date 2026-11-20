@@ -2,6 +2,7 @@ using System.Reflection;
 using API.Controllers;
 using Application.DTOs.Internal;
 using Application.Interfaces.Persistence;
+using Application.UseCases.Athletes.PurgeAthlete;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -16,7 +17,8 @@ public sealed class InternalAthletesControllerTests
 
     public InternalAthletesControllerTests()
     {
-        _controller = new InternalAthletesController(_purgeRepoMock.Object);
+        var handler = new PurgeAthleteCommandHandler(_purgeRepoMock.Object);
+        _controller = new InternalAthletesController(handler);
     }
 
     [Fact]

@@ -149,6 +149,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<ApplyPlanTemplateCommandHandler>();
                 services.AddScoped<UpdateExerciseVideoCommandHandler>();
                 services.AddScoped<ResolveActiveMembershipsQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 services.AddTransient<ForwardAuthorizationHandler>();
                 services.AddHttpClient<IStructureClient, StructureClient>(client =>

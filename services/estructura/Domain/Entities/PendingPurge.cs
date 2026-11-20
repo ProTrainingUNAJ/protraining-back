@@ -9,6 +9,7 @@ public sealed class PendingPurge : BaseEntity
     public const string ProcessedStatus = "Processed";
 
     public Guid AthleteId { get; private set; }
+    public Guid? AccountId { get; private set; }
     public string EntityType { get; private set; } = "Athlete";
     public string Status { get; private set; } = PendingStatus;
     public DateTime? ProcessedAt { get; private set; }
@@ -17,7 +18,8 @@ public sealed class PendingPurge : BaseEntity
 
     private PendingPurge() { }
 
-    public static PendingPurge Create(Guid athleteId, string entityType = "Athlete")
+    // accountId es obligatorio (aunque puede ser null si el atleta nunca tuvo cuenta): así nadie omite Identidad sin querer.
+    public static PendingPurge Create(Guid athleteId, Guid? accountId, string entityType = "Athlete")
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -29,6 +31,7 @@ public sealed class PendingPurge : BaseEntity
         return new PendingPurge
         {
             AthleteId = athleteId,
+            AccountId = accountId,
             EntityType = cleanType,
             Status = PendingStatus
         };

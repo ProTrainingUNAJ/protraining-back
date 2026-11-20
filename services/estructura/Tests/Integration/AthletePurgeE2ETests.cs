@@ -36,12 +36,20 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
 
         public List<string> DispatchCallsRecorded { get; } = [];
 
-        public void SeedAthleteAcrossAllExternalServices(Guid athleteId)
+        public void SeedAthleteAcrossAllExternalServices(Guid athleteId, Guid? accountId = null)
         {
-            foreach (var service in TargetServices)
+            if (accountId.HasValue)
             {
-                _serviceData[service].Add(athleteId);
+                _serviceData["Identidad"].Add(accountId.Value);
             }
+            else
+            {
+                _serviceData["Identidad"].Add(athleteId);
+            }
+
+            _serviceData["Entrenamiento"].Add(athleteId);
+            _serviceData["Seguimiento"].Add(athleteId);
+            _serviceData["Asistente"].Add(athleteId);
         }
 
         public bool ContainsAthlete(string serviceName, Guid athleteId) =>
@@ -128,10 +136,14 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
 
         // 1.a) Servicio 1 (Estructura): Crear Atleta mediante API
         var athleteId = await CreateAthleteAsync("federico.gomez.e2e@test.com");
+        var accountId = Guid.NewGuid();
 
-        // 1.b) Asociar categoría y ficha médica en Estructura
+        // 1.b) Asociar categoría, ficha médica y cuenta vinculada en Identidad (AccountId #204 · KAN-499)
         using (var dbContext = _factory.CreateDbContext(_pfId))
         {
+            var athlete = await dbContext.Athletes.IgnoreQueryFilters().FirstAsync(a => a.Id == athleteId);
+            typeof(Athlete).GetProperty(nameof(Athlete.AccountId))?.SetValue(athlete, accountId);
+
             var organization = Organization.Create("Club Atlético Test E2E", "Organización para prueba E2E");
             dbContext.Organizations.Add(organization);
 
@@ -160,8 +172,9 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         }
 
         // 1.c) Servicios 2, 3, 4 y 5 (Identidad, Entrenamiento, Seguimiento, Asistente): Sembrar datos
-        _simulatedStore.SeedAthleteAcrossAllExternalServices(athleteId);
-        Assert.True(_simulatedStore.ContainsAthlete("Identidad", athleteId));
+        // En Identidad se siembra con su accountId y en los demás con athleteId
+        _simulatedStore.SeedAthleteAcrossAllExternalServices(athleteId, accountId);
+        Assert.True(_simulatedStore.ContainsAthlete("Identidad", accountId));
         Assert.True(_simulatedStore.ContainsAthlete("Entrenamiento", athleteId));
         Assert.True(_simulatedStore.ContainsAthlete("Seguimiento", athleteId));
         Assert.True(_simulatedStore.ContainsAthlete("Asistente", athleteId));
@@ -176,7 +189,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         var getActiveResponse = await _clientPf.GetAsync($"/api/v1/athletes/{athleteId}");
         Assert.Equal(HttpStatusCode.NotFound, getActiveResponse.StatusCode);
 
-        // Verificar que se registró la purga pendiente
+        // Verificar que se registró la purga pendiente con su AccountId
         using (var dbCheck = _factory.CreateDbContext())
         {
             var pendingPurge = await dbCheck.PendingPurges
@@ -185,6 +198,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
 
             Assert.NotNull(pendingPurge);
             Assert.Equal(PendingPurge.PendingStatus, pendingPurge.Status);
+            Assert.Equal(accountId, pendingPurge.AccountId);
         }
 
         // -----------------------------------------------------------------------------------------
@@ -200,7 +214,7 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
         // -----------------------------------------------------------------------------------------
 
         // 3.a) Verificación en los 4 servicios externos: Los almacenes quedaron vacíos para este atleta
-        Assert.False(_simulatedStore.ContainsAthlete("Identidad", athleteId));
+        Assert.False(_simulatedStore.ContainsAthlete("Identidad", accountId));
         Assert.False(_simulatedStore.ContainsAthlete("Entrenamiento", athleteId));
         Assert.False(_simulatedStore.ContainsAthlete("Seguimiento", athleteId));
         Assert.False(_simulatedStore.ContainsAthlete("Asistente", athleteId));

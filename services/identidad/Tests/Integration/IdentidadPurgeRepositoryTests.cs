@@ -41,15 +41,19 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Given_AthleteUserWithTokensAndPhoto_When_PurgingAthlete_Then_DeletesAllDataAndPreservesOtherUsers()
+    public async Task Given_AthleteUserWithTokensAndPhoto_When_PurgingAthleteWithAccountId_Then_DeletesAllDataAndPreservesOtherUsers()
     {
         // Arrange
-        var targetAthleteId = Guid.NewGuid();
+        // Estructura tiene un athleteId para el atleta, pero en Identidad la cuenta de usuario se guarda con su propio ID (AccountId) (#204 · KAN-499)
+        var estructuraAthleteId = Guid.NewGuid();
+        var targetAccountId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
+
+        Assert.NotEqual(estructuraAthleteId, targetAccountId);
 
         var targetUser = new User
         {
-            Id = targetAthleteId,
+            Id = targetAccountId,
             UserName = "atleta@protraining.test",
             Email = "atleta@protraining.test",
             FullName = "Atleta Test Purga",
@@ -67,7 +71,7 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
 
         var targetToken = new RefreshToken
         {
-            UserId = targetAthleteId,
+            UserId = targetAccountId,
             Token = "target-token-123",
             DeviceId = "device-1",
             ExpiresAt = DateTime.UtcNow.AddDays(30)
@@ -81,32 +85,58 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
         };
         _context.RefreshTokens.AddRange(targetToken, otherToken);
 
-        var targetPhoto = UserPhoto.Create(targetAthleteId, [1, 2, 3], "image/webp", 3);
+        var targetPhoto = UserPhoto.Create(targetAccountId, [1, 2, 3], "image/webp", 3);
         var otherPhoto = UserPhoto.Create(otherUserId, [4, 5, 6], "image/webp", 3);
         _context.UserPhotos.AddRange(targetPhoto, otherPhoto);
 
         await _context.SaveChangesAsync();
 
-        // Act
-        var result = await _repository.PurgeAthleteDataAsync(targetAthleteId);
+        // Act: La purga se ejecuta con el AccountId enviado por el job
+        var result = await _repository.PurgeAthleteDataAsync(targetAccountId);
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(targetAthleteId, result.AthleteId);
+        Assert.Equal(targetAccountId, result.AccountId);
         Assert.Equal(1, result.UsersCount);
         Assert.Equal(1, result.RefreshTokensCount);
         Assert.Equal(1, result.PhotosCount);
         Assert.Equal(3, result.TotalRecordsPurged);
 
         // Verificar que en la base no queda nada del atleta
-        Assert.False(await _context.Users.AnyAsync(u => u.Id == targetAthleteId));
-        Assert.False(await _context.RefreshTokens.AnyAsync(r => r.UserId == targetAthleteId));
-        Assert.False(await _context.UserPhotos.AnyAsync(p => p.UserId == targetAthleteId));
+        Assert.False(await _context.Users.AnyAsync(u => u.Id == targetAccountId));
+        Assert.False(await _context.RefreshTokens.AnyAsync(r => r.UserId == targetAccountId));
+        Assert.False(await _context.UserPhotos.AnyAsync(p => p.UserId == targetAccountId));
 
         // Verificar que el otro usuario permanece intacto
         Assert.True(await _context.Users.AnyAsync(u => u.Id == otherUserId));
         Assert.True(await _context.RefreshTokens.AnyAsync(r => r.UserId == otherUserId));
         Assert.True(await _context.UserPhotos.AnyAsync(p => p.UserId == otherUserId));
+    }
+
+    [Fact]
+    public async Task Given_MismatchedAthleteIdSentInsteadOfAccountId_When_Purging_Then_ReturnsZeroAndPreservesUser()
+    {
+        // Arrange: Demuestra el bug corregido en KAN-499 donde mandar athleteId de Estructura no borraba la cuenta en Identidad
+        var estructuraAthleteId = Guid.NewGuid();
+        var targetAccountId = Guid.NewGuid();
+
+        var targetUser = new User
+        {
+            Id = targetAccountId,
+            UserName = "atleta.bug@protraining.test",
+            Email = "atleta.bug@protraining.test",
+            FullName = "Atleta Bug Purga",
+            PfId = _pfId
+        };
+        _context.Users.Add(targetUser);
+        await _context.SaveChangesAsync();
+
+        // Act: Intentar purgar usando el athleteId de Estructura (distinto a targetAccountId)
+        var result = await _repository.PurgeAthleteDataAsync(estructuraAthleteId);
+
+        // Assert: Devuelve ceros y NO borra la cuenta
+        Assert.Equal(0, result.TotalRecordsPurged);
+        Assert.True(await _context.Users.AnyAsync(u => u.Id == targetAccountId));
     }
 
     [Fact]
@@ -120,7 +150,7 @@ public sealed class IdentidadPurgeRepositoryTests : IDisposable
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(athleteId, result.AthleteId);
+        Assert.Equal(athleteId, result.AccountId);
         Assert.Equal(0, result.UsersCount);
         Assert.Equal(0, result.RefreshTokensCount);
         Assert.Equal(0, result.PhotosCount);
