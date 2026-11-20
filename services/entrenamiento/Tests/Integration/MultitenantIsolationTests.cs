@@ -129,6 +129,68 @@ public sealed class MultitenantIsolationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UpdateTrainingPlan_PfBIntentandoModificarPlanConBloquesDePfA_Retorna404YNoModificaLaBase()
+    {
+        // Arrange: Sembrar un plan con bloques perteneciente al PF A
+        var dataA = await _factory.SeedPfDataAsync(_pfAId);
+
+        var requestConBloques = new SaveTrainingPlanRequest(
+            Name: "Plan Alterado por PF B",
+            Objective: "Intento de intrusión",
+            Weeks:
+            [
+                new TrainingWeekRequest(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new TrainingSessionRequest(
+                            Name: "Sesión Intrusiva",
+                            Order: 1,
+                            DayOfWeek: DayOfWeek.Monday,
+                            CoachNotes: "Intento de modificación",
+                            Blocks:
+                            [
+                                new TrainingBlockRequest(
+                                    Title: "Bloque Intruso",
+                                    Order: 1,
+                                    Exercises:
+                                    [
+                                        new PrescribedExerciseRequest(
+                                            exerciseId: dataA.CatalogExercise.Id,
+                                            order: 1,
+                                            sets: 3,
+                                            reps: "8-10",
+                                            targetPercentage: 70m,
+                                            intensityType: "RPE",
+                                            targetRpe: 8m,
+                                            notes: "Intruso"
+                                        )
+                                    ]
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ]
+        );
+
+        // Act: PF B intenta hacer PUT sobre el plan perteneciente a PF A
+        var response = await _clientPfB.PutAsJsonAsync($"/api/v1/training-plans/{dataA.Plan.Id}", requestConBloques);
+
+        // Assert: Aislamiento estricto KAN-429 / KAN-585 -> 404 Not Found
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        // Verificamos que en la base el plan del PF A no haya sido modificado
+        using var dbContext = _factory.CreateDbContext(overridePfId: null);
+        var planEnBase = await dbContext.TrainingPlans
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == dataA.Plan.Id);
+
+        Assert.NotNull(planEnBase);
+        Assert.Equal(dataA.Plan.Name, planEnBase!.Name);
+    }
+
+    [Fact]
     public async Task UpdateTrainingPlan_ComparacionIdDeBVsIdInventado_MismoStatusYMismoCuerpo()
     {
         // Criterio KAN-429: DADO un id de B y un id inventado CUANDO el PF A los modifica ENTONCES las dos respuestas son iguales

@@ -49,7 +49,7 @@ public sealed class PrescribedExercise : BaseEntity
         TargetRpe = targetRpe;
         TargetRir = targetRir;
         Notes = notes;
-        TrainingSessionId = trainingSessionId ?? trainingBlockId;
+        TrainingSessionId = trainingSessionId;
     }
 
     public static PrescribedExercise Create(
@@ -94,27 +94,16 @@ public sealed class PrescribedExercise : BaseEntity
         int reps,
         decimal? targetPercentage,
         Guid trainingBlockId,
-        Guid exerciseId)
-    {
-        return Create(order, sets, reps.ToString(), targetPercentage, trainingBlockId, exerciseId);
-    }
-
-    public static PrescribedExercise Create(
-        int order,
-        int sets,
-        int reps,
-        decimal? targetPercentage,
         Guid exerciseId,
-        Guid trainingSessionId,
-        Guid? trainingBlockId = null)
+        Guid? trainingSessionId = null)
     {
         return Create(
-            order,
-            sets,
-            reps.ToString(),
-            targetPercentage,
-            trainingBlockId ?? trainingSessionId,
-            exerciseId,
+            order: order,
+            sets: sets,
+            reps: reps.ToString(),
+            targetPercentage: targetPercentage,
+            trainingBlockId: trainingBlockId,
+            exerciseId: exerciseId,
             trainingSessionId: trainingSessionId);
     }
 

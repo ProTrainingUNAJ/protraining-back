@@ -55,8 +55,13 @@ public class RecordProposal : BaseEntity
         };
     }
 
-    public void UpdateProposal(decimal proposedWeight, decimal performedWeight, int performedReps, Guid? currentRecordId = null)
+    public void UpdateProposal(decimal proposedWeight, decimal performedWeight, int performedReps, Guid? currentRecordId = null, decimal? currentWeight = null)
     {
+        if (currentWeight.HasValue)
+        {
+            CurrentWeight = currentWeight.Value;
+        }
+
         if (proposedWeight <= CurrentWeight)
             throw new DomainException("El nuevo peso propuesto debe ser mayor al récord vigente.");
 
