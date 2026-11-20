@@ -6,6 +6,7 @@ using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Application.UseCases.Recommendations.GenerateAthleteRecommendations;
 
@@ -26,7 +27,8 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
     IAthleteRecommendationRepository recommendationRepository,
     IAiService aiService,
     IUnitOfWork unitOfWork,
-    RecommendationsOptions? options = null)
+    RecommendationsOptions? options = null,
+    ILogger<GenerateAthleteRecommendationsCommandHandler>? logger = null)
 {
     public const int DefaultWeeks = 4;
     public const int MinWeeks = 1;
@@ -106,30 +108,18 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
             .Select(r => TextNormalizer.Normalize(r.Reason))
             .ToHashSet(StringComparer.Ordinal);
 
-        var newlyCreated = new List<AthleteRecommendation>();
+        var newlyCreated = await RecommendationDraftGenerator.GenerateNewDraftsAsync(
+            command.AthleteId,
+            targetCategory?.Id,
+            targetCategory?.Name,
+            analysis.Signals,
+            existingReasons,
+            aiService,
+            cancellationToken);
 
-        foreach (var signal in analysis.Signals)
+        foreach (var recommendation in newlyCreated)
         {
-            var normalizedReason = TextNormalizer.Normalize(signal.Reason);
-            if (existingReasons.Contains(normalizedReason))
-                continue;
-
-            var aiRequest = RecommendationMapper.BuildTrainingAiRequest(
-                command.AthleteId,
-                targetCategory?.Name,
-                signal);
-
-            var drafted = await aiService.GenerateTrainingRecommendationAsync(aiRequest, cancellationToken);
-            var recommendation = RecommendationMapper.CreatePendingTrainingEntity(
-                command.AthleteId,
-                targetCategory?.Id,
-                targetCategory?.Name,
-                signal,
-                drafted);
-
             await recommendationRepository.AddAsync(recommendation, cancellationToken);
-            newlyCreated.Add(recommendation);
-            existingReasons.Add(normalizedReason);
         }
 
         if (newlyCreated.Count > 0)
@@ -139,7 +129,7 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
 
         var responseItems = newlyCreated
             .Concat(existingPending)
-            .Select(RecommendationMapper.ToResponseDto)
+            .Select(r => RecommendationMapper.ToResponseDto(r, logger))
             .ToList();
 
         return new RunAthleteRecommendationEngineResponseDto(

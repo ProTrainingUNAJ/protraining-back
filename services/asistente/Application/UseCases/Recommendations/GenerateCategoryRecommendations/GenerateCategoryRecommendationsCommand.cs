@@ -7,6 +7,7 @@ using Application.Interfaces.Services;
 using Application.UseCases.Recommendations.GenerateAthleteRecommendations;
 using Domain.Entities;
 using Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Application.UseCases.Recommendations.GenerateCategoryRecommendations;
 
@@ -16,8 +17,8 @@ public sealed record GenerateCategoryRecommendationsCommand(
 
 /// <summary>
 /// Ejecuta el motor determinístico de recomendaciones sobre todos los atletas activos de una categoría:
-/// consulta promedios de categoría una sola vez, analiza perfil y tendencias de cada atleta,
-/// redacta vía IA sin PII y persiste las nuevas recomendaciones en estado Pending (#196 · KAN-491).
+/// consulta promedios de categoría una sola vez, analiza perfil y tendencias en paralelo con límite de concurrencia,
+/// redacta vía IA sin PII y persiste secuencialmente las nuevas recomendaciones en estado Pending (#196 · KAN-491).
 /// </summary>
 public sealed class GenerateCategoryRecommendationsCommandHandler(
     IStructureAthleteClient structureClient,
@@ -26,7 +27,8 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
     IAthleteRecommendationRepository recommendationRepository,
     IAiService aiService,
     IUnitOfWork unitOfWork,
-    RecommendationsOptions? options = null)
+    RecommendationsOptions? options = null,
+    ILogger<GenerateCategoryRecommendationsCommandHandler>? logger = null)
 {
     private static readonly RecommendationStatus[] DeduplicationStatuses =
     [
@@ -95,58 +97,71 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
                 g => g.Key,
                 g => g.Select(r => TextNormalizer.Normalize(r.Reason)).ToHashSet(StringComparer.Ordinal));
 
-        var belowAverageThreshold = (options ?? new RecommendationsOptions()).GetEffectiveBelowAverageThresholdPercent();
-        var newlyCreated = new List<AthleteRecommendation>();
-        var evaluatedAthletes = 0;
+        var effectiveOptions = options ?? new RecommendationsOptions();
+        var belowAverageThreshold = effectiveOptions.GetEffectiveBelowAverageThresholdPercent();
+        var maxParallelism = effectiveOptions.GetEffectiveMaxCategoryParallelism();
 
-        foreach (var athleteId in athleteIds)
+        // Fase 1 (concurrente con límite): consultar permisos, métricas y redactar borradores en memoria
+        // sin tocar DbContext desde múltiples hilos.
+        using var concurrencyGate = new SemaphoreSlim(maxParallelism, maxParallelism);
+        var athleteTasks = athleteIds.Select(async athleteId =>
         {
-            var permission = await structureClient.GetHabitsPermissionAsync(athleteId, cancellationToken);
-            if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
-                continue;
-
-            evaluatedAthletes++;
-            var testsTask = seguimientoClient.GetAthleteFitnessTestsAsync(athleteId, cancellationToken);
-            var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(athleteId, weeks, cancellationToken);
-            await Task.WhenAll(testsTask, trendsTask);
-
-            var analysis = AthleteProfileAnalyzer.Analyze(
-                await testsTask,
-                categoryAverages,
-                await trendsTask,
-                belowAverageThreshold);
-
-            if (analysis.Signals.Count == 0)
-                continue;
-
-            if (!existingReasonsByAthlete.TryGetValue(athleteId, out var existingReasons))
+            await concurrencyGate.WaitAsync(cancellationToken);
+            try
             {
-                existingReasons = new HashSet<string>(StringComparer.Ordinal);
-                existingReasonsByAthlete[athleteId] = existingReasons;
-            }
+                var permission = await structureClient.GetHabitsPermissionAsync(athleteId, cancellationToken);
+                if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
+                    return (Evaluated: false, Created: (IReadOnlyList<AthleteRecommendation>)[]);
 
-            foreach (var signal in analysis.Signals)
-            {
-                var normalizedReason = TextNormalizer.Normalize(signal.Reason);
-                if (existingReasons.Contains(normalizedReason))
-                    continue;
+                var testsTask = seguimientoClient.GetAthleteFitnessTestsAsync(athleteId, cancellationToken);
+                var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(athleteId, weeks, cancellationToken);
+                await Task.WhenAll(testsTask, trendsTask);
 
-                var aiRequest = RecommendationMapper.BuildTrainingAiRequest(
-                    athleteId,
-                    category.Name,
-                    signal);
+                var analysis = AthleteProfileAnalyzer.Analyze(
+                    await testsTask,
+                    categoryAverages,
+                    await trendsTask,
+                    belowAverageThreshold);
 
-                var drafted = await aiService.GenerateTrainingRecommendationAsync(aiRequest, cancellationToken);
-                var recommendation = RecommendationMapper.CreatePendingTrainingEntity(
+                if (analysis.Signals.Count == 0)
+                    return (Evaluated: true, Created: (IReadOnlyList<AthleteRecommendation>)[]);
+
+                var blockedReasons = existingReasonsByAthlete.TryGetValue(athleteId, out var reasons)
+                    ? reasons
+                    : (ISet<string>)new HashSet<string>(StringComparer.Ordinal);
+
+                var createdForAthlete = await RecommendationDraftGenerator.GenerateNewDraftsAsync(
                     athleteId,
                     category.Id,
                     category.Name,
-                    signal,
-                    drafted);
+                    analysis.Signals,
+                    blockedReasons,
+                    aiService,
+                    cancellationToken);
 
+                return (Evaluated: true, Created: createdForAthlete);
+            }
+            finally
+            {
+                concurrencyGate.Release();
+            }
+        }).ToList();
+
+        var results = await Task.WhenAll(athleteTasks);
+
+        // Fase 2 (secuencial): agregar entidades al repositorio y persistir en una única transacción.
+        var newlyCreated = new List<AthleteRecommendation>();
+        var evaluatedAthletes = 0;
+
+        foreach (var result in results)
+        {
+            if (result.Evaluated)
+                evaluatedAthletes++;
+
+            foreach (var recommendation in result.Created)
+            {
                 await recommendationRepository.AddAsync(recommendation, cancellationToken);
                 newlyCreated.Add(recommendation);
-                existingReasons.Add(normalizedReason);
             }
         }
 
@@ -157,7 +172,7 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
 
         var responseItems = newlyCreated
             .Concat(existingPending)
-            .Select(RecommendationMapper.ToResponseDto)
+            .Select(r => RecommendationMapper.ToResponseDto(r, logger))
             .ToList();
 
         return new RunCategoryRecommendationEngineResponseDto(

@@ -253,6 +253,57 @@ public sealed class RecommendationPromptAndValidationTests
         Assert.Equal("AlimentoNoAprobado", result.ValidationCode);
     }
 
+    [Theory]
+    [InlineData("Armá tu plato con pollo, arroz y una milanesa al horno.")]
+    [InlineData("Sumá unas fetas de salame junto al huevo y la banana.")]
+    [InlineData("Combiná pollo con arroz y burrata artesanal para la cena.")]
+    [InlineData("Comé focaccia junto con el pollo y el arroz.")]
+    public void ValidateNutritionOutput_GivenUnlistedOrExoticUnapprovedFoodInPlateText_ThenRejectsWithUnapprovedFoodCode(string plateWithUnapprovedFood)
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var rawJson = $$"""
+            {
+              "suggestedPlateComposition": "{{plateWithUnapprovedFood}}",
+              "hydrationAndSleepGuidelines": "Tomá 2.5 litros de agua y dormí 8 horas.",
+              "mentionedFoods": ["pollo", "arroz"]
+            }
+            """;
+
+        var result = RecommendationOutputValidator.ValidateNutritionOutput(rawJson, request);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("AlimentoNoAprobado", result.ValidationCode);
+    }
+
+    [Theory]
+    [InlineData("Te conviene comer menos en la cena, usando pollo y arroz.")]
+    [InlineData("Comé menos cantidad de arroz y pollo durante la semana.")]
+    [InlineData("Intentá reducir porciones en el almuerzo con pollo y huevo.")]
+    [InlineData("Achicá tus porciones de arroz y evitá cenar después de entrenar.")]
+    [InlineData("Podés saltearse comidas livianas y priorizar solo pollo con banana.")]
+    public void ValidateNutritionOutput_GivenIndirectRestrictiveEatingPhrases_ThenRejectsWithWeightLossCode(string restrictivePlate)
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Mejorar rendimiento",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var rawJson = $$"""
+            {
+              "suggestedPlateComposition": "{{restrictivePlate}}",
+              "hydrationAndSleepGuidelines": "Tomá 2.5 litros de agua y dormí 8 horas.",
+              "mentionedFoods": ["pollo", "arroz"]
+            }
+            """;
+
+        var result = RecommendationOutputValidator.ValidateNutritionOutput(rawJson, request);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("BajarDePesoDetectado", result.ValidationCode);
+    }
+
     #endregion
 
     #region 3. Validación de Recomendación de Entrenamiento (Perfil frente al grupo)

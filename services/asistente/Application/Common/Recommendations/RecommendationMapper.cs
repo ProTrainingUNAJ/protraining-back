@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.DTOs.Recommendations;
 using Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Common.Recommendations;
 
@@ -25,7 +26,8 @@ public static class RecommendationMapper
         JsonSerializer.Serialize(new RecommendationSnapshot(metrics ?? [], trends), JsonOptions);
 
     public static (IReadOnlyList<ProfileMetricComparisonDto> Metrics, WeeklyTrendsSummaryDto? Trends) DeserializeSnapshot(
-        string? snapshotJson)
+        string? snapshotJson,
+        ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(snapshotJson))
             return ([], null);
@@ -35,8 +37,9 @@ public static class RecommendationMapper
             var snapshot = JsonSerializer.Deserialize<RecommendationSnapshot>(snapshotJson, JsonOptions);
             return (snapshot?.Metrics ?? [], snapshot?.Trends);
         }
-        catch
+        catch (JsonException ex)
         {
+            logger?.LogWarning(ex, "No se pudo deserializar el snapshot de métricas de la recomendación.");
             return ([], null);
         }
     }
@@ -69,9 +72,14 @@ public static class RecommendationMapper
             metricsSnapshotJson: SerializeSnapshot(signal.Metrics, signal.Trends),
             provider: drafted.ProviderUsed);
 
-    public static AthleteRecommendationResponseDto ToResponseDto(AthleteRecommendation entity)
+    public static AthleteRecommendationResponseDto ToResponseDto(AthleteRecommendation entity) =>
+        ToResponseDto(entity, logger: null);
+
+    public static AthleteRecommendationResponseDto ToResponseDto(
+        AthleteRecommendation entity,
+        ILogger? logger)
     {
-        var (metrics, trends) = DeserializeSnapshot(entity.MetricsSnapshotJson);
+        var (metrics, trends) = DeserializeSnapshot(entity.MetricsSnapshotJson, logger);
 
         return new AthleteRecommendationResponseDto(
             Id: entity.Id,
