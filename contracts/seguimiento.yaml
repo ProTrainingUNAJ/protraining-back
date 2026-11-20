@@ -641,6 +641,42 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/injuries/active-summary:
+    get:
+      tags:
+        - Injuries
+      summary: Resumen batch de lesiones activas por atleta
+      description: >
+        Devuelve en una sola consulta la cantidad de lesiones en estado Active para cada atleta indicado,
+        evitando consultas N+1 desde la vista de planificaciones (KAN-464).
+      operationId: getActiveInjuriesSummary
+      parameters:
+        - name: athleteIds
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+      responses:
+        "200":
+          description: Resumen de lesiones activas por atleta.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteActiveInjurySummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/fitness-tests:
     get:
       tags:
@@ -2124,6 +2160,22 @@ components:
         measurementUnit:
           type: string
           example: "s"
+
+    AthleteActiveInjurySummary:
+      type: object
+      description: Cantidad de lesiones activas registradas para un atleta.
+      required:
+        - athleteId
+        - activeCount
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        activeCount:
+          type: integer
+          format: int32
+          example: 1
 
     AthleteFitnessTest:
       type: object
