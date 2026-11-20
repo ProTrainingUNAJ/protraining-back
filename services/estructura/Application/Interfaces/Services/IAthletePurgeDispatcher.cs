@@ -4,9 +4,11 @@ using System.Threading.Tasks;
 
 namespace Application.Interfaces.Services;
 
+public sealed record AthletePurgeDispatchResult(bool IsSuccess, string? ErrorMessage = null);
+
 public interface IAthletePurgeDispatcher
 {
-    Task<bool> DispatchPurgeToExternalServicesAsync(
+    Task<AthletePurgeDispatchResult> DispatchPurgeToExternalServicesAsync(
         Guid athleteId,
         CancellationToken cancellationToken = default);
 }

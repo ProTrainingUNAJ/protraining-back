@@ -12,6 +12,8 @@ public sealed class PendingPurge : BaseEntity
     public string EntityType { get; private set; } = "Athlete";
     public string Status { get; private set; } = PendingStatus;
     public DateTime? ProcessedAt { get; private set; }
+    public int Attempts { get; private set; }
+    public string? LastError { get; private set; }
 
     private PendingPurge() { }
 
@@ -36,5 +38,12 @@ public sealed class PendingPurge : BaseEntity
     {
         Status = ProcessedStatus;
         ProcessedAt = DateTime.UtcNow;
+    }
+
+    public void RecordFailure(string error)
+    {
+        Attempts++;
+        var cleanError = error?.Trim();
+        LastError = cleanError?.Length > 500 ? cleanError[..500] : cleanError;
     }
 }
