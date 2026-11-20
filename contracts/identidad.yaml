@@ -897,6 +897,41 @@ paths:
         "404":
           description: El preparador físico no tiene foto de perfil.
 
+  /api/v1/internal/athletes/{accountId}/purge:
+    delete:
+      tags:
+        - Internal
+      summary: Purga física de cuenta y datos de un atleta/usuario
+      description: Endpoint interno inter-servicio (rol Servicio) para el job de purga de datos. Elimina de forma atómica la cuenta de usuario del atleta, fotos de perfil, tokens de refresco y roles. El parámetro accountId corresponde al AccountId en Identidad.
+      operationId: purgeAthleteInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: Identificador de la cuenta de usuario (AccountId) a purgar.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumen de registros físicos eliminados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountId:
+                    type: string
+                    format: uuid
+                  totalRecordsPurged:
+                    type: integer
+        "401":
+          description: No autenticado o rol inválido.
+        "403":
+          description: Requiere rol Servicio.
+
   /api/health:
     get:
       tags:

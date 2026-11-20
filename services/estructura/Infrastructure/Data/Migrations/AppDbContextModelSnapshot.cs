@@ -652,6 +652,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
                     b.Property<Guid>("AthleteId")
                         .HasColumnType("uuid")
                         .HasColumnName("athlete_id");

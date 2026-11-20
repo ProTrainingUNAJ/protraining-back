@@ -124,6 +124,7 @@ builder.Services.AddScoped<UpdateFieldTestSessionStatusCommandHandler>();
 builder.Services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
 builder.Services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
 builder.Services.AddScoped<SetAttendanceCommandHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 builder.Services.AddScoped<IFitnessTestMeasurementService, FieldTestMeasurementService>();
 builder.Services.AddScoped<GetCategoryAveragesQueryHandler>();
 builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();

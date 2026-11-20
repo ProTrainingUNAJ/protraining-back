@@ -140,6 +140,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase>();
+                services.AddScoped<Application.UseCases.Users.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);

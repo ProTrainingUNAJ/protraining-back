@@ -129,6 +129,7 @@ builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
 builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
 builder.Services.AddScoped<GetSubstitutesByZoneQueryHandler>();
 builder.Services.AddScoped<GetRestrictionsByZoneQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
 // E51: servidor MCP (Streamable HTTP, sin estado) para la biblioteca de ejercicios.
 // Se expone en /mcp y el gateway ya lo publica como /entrenamiento/mcp.

@@ -133,6 +133,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
                 services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
                 services.AddScoped<SetAttendanceCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 if (customTimeProvider != null)
                 {

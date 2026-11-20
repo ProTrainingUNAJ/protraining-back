@@ -10,5 +10,6 @@ public interface IAthletePurgeDispatcher
 {
     Task<AthletePurgeDispatchResult> DispatchPurgeToExternalServicesAsync(
         Guid athleteId,
+        Guid? accountId = null,
         CancellationToken cancellationToken = default);
 }

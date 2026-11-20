@@ -40,9 +40,14 @@ public sealed class EntrenamientoPurgeRepository(AppDbContext context) : IEntren
             .Where(p => p.AthleteId == athleteId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        // 6. Eliminar variantes asignadas al atleta (AthleteVariants) (#204 · KAN-499)
+        int athleteVariantsCount = await context.AthleteVariants.IgnoreQueryFilters()
+            .Where(v => v.AthleteId == athleteId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         await tx.CommitAsync(cancellationToken);
 
-        int totalRecordsPurged = performedSetsCount + recordProposalsCount + athleteRecordsCount + sessionAdjustmentsCount + planAssignmentsCount;
+        int totalRecordsPurged = performedSetsCount + recordProposalsCount + athleteRecordsCount + sessionAdjustmentsCount + planAssignmentsCount + athleteVariantsCount;
 
         return new PurgedAthleteDataDto(
             athleteId,
@@ -51,7 +56,8 @@ public sealed class EntrenamientoPurgeRepository(AppDbContext context) : IEntren
             athleteRecordsCount,
             sessionAdjustmentsCount,
             planAssignmentsCount,
-            totalRecordsPurged);
+            totalRecordsPurged,
+            athleteVariantsCount);
     }
 }
 

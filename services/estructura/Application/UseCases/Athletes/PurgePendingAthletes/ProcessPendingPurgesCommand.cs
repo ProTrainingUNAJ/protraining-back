@@ -49,9 +49,10 @@ public sealed class ProcessPendingPurgesCommandHandler(
                 continue;
             }
 
-            // Despacha la purga a los 4 microservicios externos
+            // Despacha la purga a los 4 microservicios externos (enviando AccountId para Identidad #204 · KAN-499)
             var dispatchResult = await purgeDispatcher.DispatchPurgeToExternalServicesAsync(
                 purge.AthleteId,
+                purge.AccountId,
                 cancellationToken);
 
             // Criterio 2: Si algún servicio externo falla o está caído, no se pierde el pedido:

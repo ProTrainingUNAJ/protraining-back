@@ -155,7 +155,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 {
                     var mockDispatcher = new Moq.Mock<IAthletePurgeDispatcher>();
                     mockDispatcher
-                        .Setup(d => d.DispatchPurgeToExternalServicesAsync(Moq.It.IsAny<Guid>(), Moq.It.IsAny<CancellationToken>()))
+                        .Setup(d => d.DispatchPurgeToExternalServicesAsync(Moq.It.IsAny<Guid>(), Moq.It.IsAny<Guid?>(), Moq.It.IsAny<CancellationToken>()))
                         .ReturnsAsync(new AthletePurgeDispatchResult(true));
                     services.AddScoped<IAthletePurgeDispatcher>(_ => mockDispatcher.Object);
                 }
