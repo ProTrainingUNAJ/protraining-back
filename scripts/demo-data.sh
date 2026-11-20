@@ -2,17 +2,24 @@
 # Datos de prueba de las demos (KAN-524, Demo 1; KAN-561, Demo 2). Solo para desarrollo local.
 #
 # Carga, con la API real y el token del PF de prueba, lo que la demo necesita ya armado:
-# organizaciones, categorías, atletas vinculados a sus cuentas, 3 atletas más registrados por
-# invitación (Sofía, Bruno y Diego), récords, la planificación "Fuerza base" (sin asignar),
-# videos de YouTube del PF, el partido del sábado y los check-ins que no se muestran en vivo.
+# 20 atletas en 3 lugares (Club Quilmes, Personalizados y Gimnasio), con cuentas vinculadas o
+# registradas por invitación (incluidos 2 menores con su tutor), récords, la planificación
+# "Fuerza base" (sin asignar), videos de YouTube del PF, el partido del sábado y los check-ins
+# que no se muestran en vivo.
 #
-# Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con "completo":
-#   🔴 Lucas (lesión activa, isquiotibial) · Camila (lesión activa, hombro) · Sofía (muy poco sueño: 3,5 h)
-#   🟡 Joaquín (sueño moderado: 6 h) · Valentina (dolor nuevo, cuádriceps)
-#      Bruno (más de 12 h en 3 de los últimos 7 días) · Diego (dolor en cuádriceps → "Ver ajuste sugerido")
-#   🟢 Martín y Facundo (8 h o más, sin otras señales)
-#   ⚪ Nicolás y Agustina sin cuenta: quedan "Sin check-in"
-#   (Valentina y Camila están en Alumnos particulares y Musculación, no en Primera División)
+# Los 20 atletas (KAN-479) y su semáforo, con "completo":
+#   Club Quilmes · Primera División (10):
+#     🔴 Lucas (lesión activa, isquiotibial) · Sofía (muy poco sueño: 3,5 h)
+#     🟡 Joaquín (sueño moderado: 6 h) · Bruno (más de 12 h en 3 de los últimos 7 días)
+#        Diego (dolor en cuádriceps → "Ver ajuste sugerido") · Mateo (esfuerzo alto: viene muy cargado)
+#     🟢 Martín · Facundo · Ramiro      ⚪ Nicolás (sin cuenta)
+#     Mateo es el compañero de Lucas sin variante (KAN-469: Lucas ve prensa y Mateo, sentadilla).
+#   Club Quilmes · Reserva (5): Santino (16) y Bautista (17), menores con tutor: el tutor de Santino
+#     habilita la alimentación y el de Bautista no (KAN-496/634); el WhatsApp va al tutor (KAN-503).
+#     🟢 Santino · Bautista · Lautaro      ⚪ Agustina y Thiago (sin cuenta)
+#   Personalizados · Alumnos particulares (3): 🔴 Camila (lesión activa, hombro) · 🟡 Valentina (dolor
+#     nuevo, cuádriceps) · 🟢 Florencia
+#   Gimnasio · Musculación (3): Camila (está en las dos) · 🟢 Paula · 🟡 Ignacio (sueño moderado: 6 h)
 #
 # Además deja listo: el WhatsApp del PF (botón "Contactar a mi preparador"), las lesiones de Lucas y Camila,
 # una sesión de tests de campo en curso ("Evaluación de pretemporada") y, con "completo", una propuesta de
@@ -167,6 +174,25 @@ invite_athlete() {
     | jq -r .id
 }
 
+# invite_minor <nombre> <apellido> <email> <teléfono> <categoría> <nacimiento> <tutor> <teléfono del tutor> <habilita alimentación: true|false>
+# → registra a un menor por invitación, con el consentimiento de su tutor (KAN-401), e imprime el id del atleta
+invite_minor() {
+  local first="$1" last="$2" email="$3" phone="$4" category="$5" birth="$6" guardian="$7" guardian_phone="$8" habits="$9"
+  local token session
+  token=$(api POST "/estructura/api/v1/categories/$category/invitation-token" "$PF_TOKEN" | jq -r .token)
+  session=$(curl -sf -X POST "$GATEWAY/identidad/api/v1/auth/register-by-invitation" \
+    -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg e "$email" --arg p "$PASSWORD" --arg n "$first $last" --arg t "$token" \
+      '{email:$e,password:$p,fullName:$n,token:$t,deviceId:"demo-data"}')" | jq -r .accessToken) \
+    || { echo "No se pudo registrar a $email por invitación." >&2; exit 1; }
+  api POST "/estructura/api/v1/invitations/$token/accept" "$session" \
+    "$(jq -nc --arg f "$first" --arg l "$last" --arg p "$phone" --arg b "$birth" --arg g "$guardian" \
+      --arg gp "$guardian_phone" --argjson h "$habits" \
+      '{firstName:$f,lastName:$l,phone:$p,birthDate:$b,guardianName:$g,guardianPhone:$gp,
+        allowsPhysicalTraining:true,allowsHabitsRecommendations:$h}')" \
+    | jq -r .id
+}
+
 PF_TOKEN=$(login pf@protraining.com | jq -r .accessToken)
 
 # --- check-ins de hoy (los que no se hacen en vivo) ------------------------
@@ -196,6 +222,20 @@ load_check_ins() {
   check_in bruno@protraining.com "$long_sleep"
   # Diego con dolor en el cuádriceps y sentadilla en la rutina de hoy → amarillo y "Ver ajuste sugerido" (KAN-451/452)
   check_in diego@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
+
+  # Los que se sumaron para llegar a 20 atletas (KAN-479)
+  local ok='{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  local moderate_sleep='{"sleepHours":6,"sleepQuality":3,"muscleSoreness":2,"fatigueLevel":3,"moodRate":3,"stressLevel":3,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  # Mateo viene muy cargado (esfuerzo 9 de 10) → amarillo "Esfuerzo alto"
+  check_in mateo@protraining.com '{"sleepHours":8,"sleepQuality":3,"muscleSoreness":4,"fatigueLevel":4,"moodRate":3,"stressLevel":3,"effortRate":9,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+  check_in ramiro@protraining.com "$ok"
+  check_in santino@protraining.com "$ok"
+  check_in bautista@protraining.com "$ok"
+  check_in lautaro@protraining.com "$ok"
+  check_in florencia@protraining.com "$ok"
+  check_in paula@protraining.com "$ok"
+  # Ignacio durmió 6 h → amarillo "Sueño moderado"
+  check_in ignacio@protraining.com "$moderate_sleep"
 }
 
 load_live_parts() {
@@ -244,8 +284,8 @@ fi
 
 # --- estructura ------------------------------------------------------------
 
-if api GET "/estructura/api/v1/organizations" "$PF_TOKEN" | jq -e '.[] | select(.name == "Club Demo")' >/dev/null; then
-  echo "Ya hay datos de la demo cargados (existe \"Club Demo\")." >&2
+if api GET "/estructura/api/v1/organizations" "$PF_TOKEN" | jq -e '.[] | select(.name == "Club Quilmes")' >/dev/null; then
+  echo "Ya hay datos de la demo cargados (existe \"Club Quilmes\")." >&2
   echo "Para empezar de cero: docker compose down -v && docker compose up -d --build" >&2
   echo "y después: docker compose --profile seed run --rm seed" >&2
   echo "Para cargar solo los check-ins de hoy: $0 checkins" >&2
@@ -256,14 +296,14 @@ echo "Organizaciones y categorías:"
 new_org() { api POST "/estructura/api/v1/organizations" "$PF_TOKEN" "$(jq -nc --arg n "$1" --arg d "$2" '{name:$n,description:$d}')" | jq -r .id; }
 new_category() { api POST "/estructura/api/v1/categories" "$PF_TOKEN" "$(jq -nc --arg o "$1" --arg n "$2" '{organizationId:$o,name:$n}')" | jq -r .id; }
 
-CLUB_ID=$(new_org "Club Demo" "Club de rugby amateur")
+CLUB_ID=$(new_org "Club Quilmes" "Club de fútbol")
 PERSONAL_ID=$(new_org "Personalizados" "Alumnos particulares")
 GYM_ID=$(new_org "Gimnasio" "Gimnasio del barrio")
 PRIMERA_ID=$(new_category "$CLUB_ID" "Primera División")
 RESERVA_ID=$(new_category "$CLUB_ID" "Reserva")
 PARTICULARES_ID=$(new_category "$PERSONAL_ID" "Alumnos particulares")
 MUSCULACION_ID=$(new_category "$GYM_ID" "Musculación")
-echo "  Club Demo (Primera División, Reserva), Personalizados, Gimnasio"
+echo "  Club Quilmes (Primera División, Reserva), Personalizados, Gimnasio"
 
 # new_athlete <nombre> <apellido> <email> <teléfono> <categoría…> → imprime el id
 new_athlete() {
@@ -288,7 +328,8 @@ new_athlete "Nicolás" "Herrera" "nicolas@protraining.com" "1150000005" "$PRIMER
 new_athlete "Agustina" "Morales" "agustina@protraining.com" "1150000006" "$RESERVA_ID" >/dev/null
 VALENTINA_ID=$(new_athlete "Valentina" "Ruiz" "valentina@protraining.com" "1150000007" "$PARTICULARES_ID")
 CAMILA_ID=$(new_athlete "Camila" "Torres" "camila@protraining.com" "1150000008" "$PARTICULARES_ID" "$MUSCULACION_ID")
-echo "  8 atletas (Nicolás y Agustina sin cuenta: en el semáforo quedan sin check-in)"
+new_athlete "Thiago" "Benítez" "thiago@protraining.com" "1150000012" "$RESERVA_ID" >/dev/null
+echo "  9 atletas (Nicolás, Agustina y Thiago sin cuenta: en el semáforo quedan sin check-in)"
 
 # Sofía, Bruno y Diego se registran solos por la invitación de Primera División (KAN-397/398),
 # como lo haría un atleta que escanea el QR: no hace falta vincular su cuenta a mano.
@@ -296,7 +337,21 @@ echo "Atletas registrados por invitación:"
 SOFIA_ID=$(invite_athlete "Sofía" "Méndez" "sofia@protraining.com" "1150000009" "$PRIMERA_ID")
 BRUNO_ID=$(invite_athlete "Bruno" "Castro" "bruno@protraining.com" "1150000010" "$PRIMERA_ID")
 DIEGO_ID=$(invite_athlete "Diego" "Funes" "diego@protraining.com" "1150000011" "$PRIMERA_ID")
-echo "  Sofía, Bruno y Diego en Primera División"
+invite_athlete "Mateo" "Ríos" "mateo@protraining.com" "1150000013" "$PRIMERA_ID" >/dev/null
+invite_athlete "Ramiro" "Acosta" "ramiro@protraining.com" "1150000014" "$PRIMERA_ID" >/dev/null
+echo "  Sofía, Bruno, Diego, Mateo y Ramiro en Primera División"
+invite_athlete "Lautaro" "Medina" "lautaro@protraining.com" "1150000015" "$RESERVA_ID" >/dev/null
+# Menores: el tutor de Santino habilita las recomendaciones de alimentación y el de Bautista no
+invite_minor "Santino" "Vega" "santino@protraining.com" "1150000016" "$RESERVA_ID" \
+  "2010-05-10" "Claudia Vega" "1150000116" true >/dev/null
+invite_minor "Bautista" "Ojeda" "bautista@protraining.com" "1150000017" "$RESERVA_ID" \
+  "2009-08-20" "Marcelo Ojeda" "1150000117" false >/dev/null
+echo "  Lautaro, Santino (16) y Bautista (17) en Reserva; los menores, con el consentimiento de su tutor"
+invite_athlete "Florencia" "Navarro" "florencia@protraining.com" "1150000018" "$PARTICULARES_ID" >/dev/null
+echo "  Florencia en Alumnos particulares"
+invite_athlete "Paula" "Romero" "paula@protraining.com" "1150000019" "$MUSCULACION_ID" >/dev/null
+invite_athlete "Ignacio" "Luna" "ignacio@protraining.com" "1150000020" "$MUSCULACION_ID" >/dev/null
+echo "  Paula e Ignacio en Musculación (20 atletas en total)"
 
 # Vincular cada atleta a su cuenta de Identidad. Lo hace la invitación por QR (Sprint 2);
 # mientras tanto, directo en la base de Estructura (solo desarrollo).
@@ -411,8 +466,8 @@ echo "  sentadilla y press de banca (peso muerto rumano sin video)"
 echo "Calendario:"
 MATCH_DATE=$(next_saturday)
 api POST "/estructura/api/v1/categories/$PRIMERA_ID/events" "$PF_TOKEN" \
-  "$(jq -nc --arg d "$MATCH_DATE" '{date:$d,startTime:"15:30:00",opponent:"Los Pumitas RC",venue:"Home",type:"Official",notes:"Fecha del torneo"}')" >/dev/null
-echo "  Primera División vs. Los Pumitas RC, el $MATCH_DATE a las 15:30"
+  "$(jq -nc --arg d "$MATCH_DATE" '{date:$d,startTime:"15:30:00",opponent:"Atlético Varela",venue:"Home",type:"Official",notes:"Fecha del torneo"}')" >/dev/null
+echo "  Primera División vs. Atlético Varela, el $MATCH_DATE a las 15:30"
 
 # WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
 # Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh
@@ -501,4 +556,5 @@ if [[ "$MODE" == "completo" ]]; then
   load_live_parts
 fi
 
-echo "Listo. PF: pf@protraining.com · atletas: atleta@ (Lucas), martin@, joaquin@, facundo@, valentina@, camila@, sofia@, bruno@, diego@protraining.com · contraseña: $PASSWORD"
+echo "Listo. PF: pf@protraining.com · atletas: atleta@ (Lucas), martin@, joaquin@, facundo@, valentina@, camila@, sofia@, bruno@, diego@,"
+echo "  mateo@, ramiro@, lautaro@, santino@ y bautista@ (menores), florencia@, paula@, ignacio@protraining.com · contraseña: $PASSWORD"

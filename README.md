@@ -116,7 +116,8 @@ En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas est
 | `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
 | `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
 | `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
-| `sofia@`, `bruno@`, `diego@protraining.com` | Atletas (Demo 2) | No los crea Identidad: se registran por **invitación** al correr `demo-data.sh`, con la misma contraseña |
+| `sofia@`, `bruno@`, `diego@`, `mateo@`, `ramiro@`, `lautaro@`, `florencia@`, `paula@`, `ignacio@protraining.com` | Atletas | No los crea Identidad: se registran por **invitación** al correr el seed, con la misma contraseña |
+| `santino@` (16) y `bautista@protraining.com` (17) | Atletas **menores** | Se registran por invitación con el consentimiento de su tutor. El tutor de Santino habilita la alimentación y el de Bautista no |
 
 Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh`, con la API y el token del PF.
 
@@ -124,7 +125,7 @@ Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar
 
 ```bash
 docker compose down -v && docker compose up -d --build   # base de cero
-docker compose --profile seed run --rm seed              # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
+docker compose --profile seed run --rm seed              # Club Quilmes, Personalizados y Gimnasio, 20 atletas (2 menores), récords, plan "Fuerza base" y check-ins de hoy
 docker compose --profile seed run --rm seed checkins     # solo los check-ins de hoy (la mañana del ensayo y de la demo)
 docker compose --profile seed run --rm seed completo     # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
