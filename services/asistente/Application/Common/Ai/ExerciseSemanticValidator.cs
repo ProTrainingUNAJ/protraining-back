@@ -1,5 +1,7 @@
 namespace Application.Common.Ai;
 
+using Application.Common.Adaptation;
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
 using Application.DTOs.Adaptation;
 using Application.Interfaces.Services;
@@ -83,7 +85,13 @@ public sealed class ExerciseSemanticValidator(
         if (adaptationContext is not null)
         {
             var initialItemResults = itemResults.ToList();
-            var adaptation = ApplyAuthorizedAdaptations(sanitizedRoutine, adaptationContext, initialItemResults, messages, itemResults);
+            var adaptation = await ApplyAuthorizedAdaptationsAsync(
+                sanitizedRoutine,
+                adaptationContext,
+                initialItemResults,
+                messages,
+                itemResults,
+                cancellationToken);
             sanitizedRoutine = adaptation.Routine;
             hasCorrections |= adaptation.HasCorrections;
 
@@ -115,12 +123,13 @@ public sealed class ExerciseSemanticValidator(
         );
     }
 
-    private static AdaptationValidationResult ApplyAuthorizedAdaptations(
+    private async Task<AdaptationValidationResult> ApplyAuthorizedAdaptationsAsync(
         RoutineSuggestionResponseDto routine,
         AthleteAdaptationContextDto context,
         IReadOnlyList<ExerciseSemanticValidationItemResult> initialItemResults,
         ICollection<string> messages,
-        ICollection<ExerciseSemanticValidationItemResult> itemResults)
+        ICollection<ExerciseSemanticValidationItemResult> itemResults,
+        CancellationToken cancellationToken)
     {
         var hasExplicitBaseExercises = routine.BaseExercises is not null;
         var baseExercises = routine.BaseExercises ?? routine.Exercises.ToList();
@@ -128,10 +137,7 @@ public sealed class ExerciseSemanticValidator(
         if (context.Restrictions.Count == 0)
             return new(routine with { BaseExercises = baseExercises }, false);
 
-        var restrictionsByExercise = context.Restrictions
-            .Where(r => r.Substitutes.Count > 0)
-            .GroupBy(r => r.ExerciseId)
-            .ToDictionary(g => g.Key, g => g.First());
+        var restrictionsByExercise = AuthorizedSubstituteHelper.BuildRestrictionsByExercise(context);
 
         if (restrictionsByExercise.Count == 0)
             return new(routine with { BaseExercises = baseExercises }, false);
@@ -150,7 +156,7 @@ public sealed class ExerciseSemanticValidator(
                 restrictionsByExercise.TryGetValue(exerciseId, out var restriction))
             {
                 var substitute = restriction.Substitutes[0];
-                var message = BuildAdaptationReason(restriction, substitute.Name);
+                var message = AuthorizedSubstituteHelper.BuildAdaptationReason(restriction, substitute.Name);
                 exercises.Add(RecordSubstituteAdaptation(
                     exercise,
                     exercise,
@@ -180,7 +186,7 @@ public sealed class ExerciseSemanticValidator(
                 }
 
                 var substitute = baseRestriction.Substitutes[0];
-                var message = BuildUnauthorizedSubstituteReason(baseRestriction, exercise.ExerciseName, substitute.Name);
+                var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(baseRestriction, exercise.ExerciseName, substitute.Name);
                 exercises.Add(RecordSubstituteAdaptation(
                     exercise,
                     routine.BaseExercises[i],
@@ -209,7 +215,9 @@ public sealed class ExerciseSemanticValidator(
             }
         }
 
-        // Pasada 2: Alucinaciones / ejercicios fuera de catálogo en sesiones de adaptación de 1 o múltiples ejercicios
+        // Pasada 2: Alucinaciones / ejercicios fuera de catálogo únicamente cuando coinciden con el mismo
+        // grupo muscular o zona de una restricción pendiente y hay un sustituto libre sin duplicar (KAN-466)
+        Dictionary<Guid, CatalogExerciseDto>? restrictedCatalogCache = null;
         for (var i = 0; i < exercises.Count; i++)
         {
             if (adaptedIndices.Contains(i))
@@ -225,20 +233,31 @@ public sealed class ExerciseSemanticValidator(
             if (!isHallucinated)
                 continue;
 
-            var applicableRestriction = restrictionsByExercise.Values
-                .FirstOrDefault(r => !satisfiedRestrictionIds.Contains(r.ExerciseId))
-                ?? (current.IsReference ? restrictionsByExercise.Values.First() : null);
+            var pendingRestrictions = restrictionsByExercise.Values
+                .Where(r => !satisfiedRestrictionIds.Contains(r.ExerciseId))
+                .ToList();
+
+            if (pendingRestrictions.Count == 0)
+                continue;
+
+            restrictedCatalogCache ??= await LoadRestrictedCatalogItemsAsync(restrictionsByExercise.Keys, cancellationToken);
+            var originalHallucinated = i < initialItemResults.Count ? initialItemResults[i].OriginalExercise : current;
+
+            var applicableRestriction = pendingRestrictions.FirstOrDefault(r =>
+                MatchesRestrictionMuscleGroup(originalHallucinated.ExerciseName, r, restrictedCatalogCache));
 
             if (applicableRestriction is null)
                 continue;
 
             var presentIds = CollectValidCatalogExerciseIds(exercises);
             var substitute = applicableRestriction.Substitutes
-                .FirstOrDefault(s => !presentIds.Contains(s.ExerciseId))
-                ?? applicableRestriction.Substitutes[0];
+                .FirstOrDefault(s => !presentIds.Contains(s.ExerciseId));
 
-            var originalHallucinated = i < initialItemResults.Count ? initialItemResults[i].OriginalExercise : current;
-            var message = BuildUnauthorizedSubstituteReason(applicableRestriction, originalHallucinated.ExerciseName, substitute.Name);
+            // Nunca duplicar un ejercicio que ya está presente en la sesión
+            if (substitute is null)
+                continue;
+
+            var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(applicableRestriction, originalHallucinated.ExerciseName, substitute.Name);
 
             exercises[i] = RecordSubstituteAdaptation(
                 originalHallucinated,
@@ -267,7 +286,7 @@ public sealed class ExerciseSemanticValidator(
             {
                 var restriction = restrictionsByExercise.Values.First();
                 var substitute = restriction.Substitutes[0];
-                var message = BuildUnauthorizedSubstituteReason(restriction, proposed.ExerciseName, substitute.Name);
+                var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(restriction, proposed.ExerciseName, substitute.Name);
                 exercises[0] = RecordSubstituteAdaptation(
                     proposed,
                     proposed,
@@ -293,6 +312,95 @@ public sealed class ExerciseSemanticValidator(
             adaptedAny);
     }
 
+    private async Task<Dictionary<Guid, CatalogExerciseDto>> LoadRestrictedCatalogItemsAsync(
+        IEnumerable<Guid> restrictedExerciseIds,
+        CancellationToken cancellationToken)
+    {
+        var map = new Dictionary<Guid, CatalogExerciseDto>();
+        foreach (var id in restrictedExerciseIds)
+        {
+            if (id == Guid.Empty || map.ContainsKey(id))
+                continue;
+
+            var item = await catalogService.FindByIdAsync(id, cancellationToken);
+            if (item is not null)
+                map[id] = item;
+        }
+
+        return map;
+    }
+
+    private static bool MatchesRestrictionMuscleGroup(
+        string? hallucinatedName,
+        ExerciseRestrictionContextDto restriction,
+        IReadOnlyDictionary<Guid, CatalogExerciseDto> restrictedCatalogItems)
+    {
+        if (string.IsNullOrWhiteSpace(hallucinatedName))
+            return false;
+
+        var hallucinatedGroups = ExtractExerciseMuscleGroups(hallucinatedName);
+        if (hallucinatedGroups.Count == 0)
+            return false;
+
+        var restrictionGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (restrictedCatalogItems.TryGetValue(restriction.ExerciseId, out var catalogItem) &&
+            !string.IsNullOrWhiteSpace(catalogItem.MuscleGroup))
+        {
+            foreach (var group in ExtractExerciseMuscleGroups(catalogItem.MuscleGroup))
+                restrictionGroups.Add(group);
+            restrictionGroups.Add(catalogItem.MuscleGroup.Trim());
+        }
+
+        foreach (var zoneGroup in MapZoneToMuscleGroups(restriction.Zone))
+            restrictionGroups.Add(zoneGroup);
+
+        return hallucinatedGroups.Any(restrictionGroups.Contains);
+    }
+
+    private static HashSet<string> ExtractExerciseMuscleGroups(string text)
+    {
+        var groups = new HashSet<string>(
+            GoalMuscleFocusMapper.ExtractMuscleGroups(text),
+            StringComparer.OrdinalIgnoreCase);
+
+        var norm = TextNormalizer.Normalize(text);
+        if (norm.Contains("salto") || norm.Contains("jump") || norm.Contains("pliometr") || norm.Contains("rodilla"))
+            groups.Add("Piernas");
+
+        return groups;
+    }
+
+    private static IReadOnlyList<string> MapZoneToMuscleGroups(string? zone)
+    {
+        var norm = TextNormalizer.Normalize(zone);
+        if (string.IsNullOrEmpty(norm))
+            return [];
+
+        if (norm.Contains("rodilla") || norm.Contains("knee") || norm.Contains("cuadriceps") ||
+            norm.Contains("isquio") || norm.Contains("gluteo") || norm.Contains("gemelo") || norm.Contains("tobillo") ||
+            norm.Contains("pierna") || norm.Contains("cadera"))
+        {
+            return ["Piernas"];
+        }
+
+        if (norm.Contains("hombro") || norm.Contains("shoulder"))
+            return ["Hombros", "Pecho"];
+
+        if (norm.Contains("pecho") || norm.Contains("pectoral"))
+            return ["Pecho"];
+
+        if (norm.Contains("espalda") || norm.Contains("lumbar") || norm.Contains("dorsal") || norm.Contains("back"))
+            return ["Espalda", "Piernas"];
+
+        if (norm.Contains("codo") || norm.Contains("muneca") || norm.Contains("biceps") || norm.Contains("triceps") || norm.Contains("brazo"))
+            return ["Brazos"];
+
+        if (norm.Contains("core") || norm.Contains("abdom"))
+            return ["Core"];
+
+        return [];
+    }
+
     private static HashSet<Guid> CollectValidCatalogExerciseIds(IEnumerable<SuggestedExerciseDto> exercises) =>
         exercises
             .Where(e => !e.IsReference && e.ExerciseId.HasValue && e.ExerciseId.Value != Guid.Empty)
@@ -309,22 +417,10 @@ public sealed class ExerciseSemanticValidator(
         ICollection<AdaptationChangeDto> changes,
         ICollection<ExerciseSemanticValidationItemResult> itemResults)
     {
-        var adapted = targetExercise with
-        {
-            ExerciseId = substitute.ExerciseId,
-            ExerciseName = substitute.Name,
-            IsReference = false
-        };
+        var adapted = AuthorizedSubstituteHelper.CreateAdaptedExercise(targetExercise, substitute);
 
         messages.Add(message);
-        changes.Add(new(
-            originalForChange.ExerciseId,
-            originalForChange.ExerciseName,
-            substitute.ExerciseId,
-            substitute.Name,
-            restriction.Zone ?? string.Empty,
-            message,
-            restriction.Substitutes));
+        changes.Add(AuthorizedSubstituteHelper.CreateAdaptationChange(originalForChange, restriction, substitute, message));
         itemResults.Add(new ExerciseSemanticValidationItemResult(
             targetExercise,
             adapted,
@@ -332,33 +428,6 @@ public sealed class ExerciseSemanticValidator(
             message));
 
         return adapted;
-    }
-
-    private static string BuildAdaptationReason(
-        ExerciseRestrictionContextDto restriction,
-        string substituteName) =>
-        $"Sustitución biomecánica por lesión de {restriction.Zone ?? "zona afectada"} para {NormalizeReason(restriction.Zone, restriction.Reason)}. Sustituto autorizado: {substituteName}.";
-
-    private static string BuildUnauthorizedSubstituteReason(
-        ExerciseRestrictionContextDto restriction,
-        string proposedName,
-        string substituteName) =>
-        $"El sustituto propuesto '{proposedName}' no estaba autorizado. " +
-        $"{BuildAdaptationReason(restriction, substituteName)}";
-
-    private static string NormalizeReason(string? zone, string? reason)
-    {
-        if (string.Equals(zone?.Trim(), "rodilla", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(reason) &&
-            reason.Contains("rotul", StringComparison.OrdinalIgnoreCase))
-        {
-            return "reducir estrés en tendón rotuliano";
-        }
-
-        var normalized = string.IsNullOrWhiteSpace(reason)
-            ? "reducir el estrés de la zona lesionada"
-            : reason.Trim().TrimEnd('.');
-        return char.ToLowerInvariant(normalized[0]) + normalized[1..];
     }
 
     private sealed record AdaptationValidationResult(

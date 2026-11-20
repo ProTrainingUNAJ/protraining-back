@@ -44,4 +44,5 @@ public sealed record AthleteAdaptationContextDto(
     Guid AthleteId,
     IReadOnlyList<ActiveInjuryRemoteDto> ActiveInjuries,
     IReadOnlyList<AthleteRecordRemoteDto> CurrentRecords,
-    IReadOnlyList<ExerciseRestrictionContextDto> Restrictions);
+    IReadOnlyList<ExerciseRestrictionContextDto> Restrictions,
+    decimal? ConservativeEstimatedRecordPercent = null);
