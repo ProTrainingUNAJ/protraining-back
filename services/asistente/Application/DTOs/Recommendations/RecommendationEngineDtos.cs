@@ -98,9 +98,9 @@ public sealed record MyRecommendationResponseDto(
     DateTime CreatedAt);
 
 /// <summary>
-/// Respuesta de recomendación de hábitos/nutrición para validación del PF (contrato hábitos, extendido KAN-494).
+/// Respuesta de recomendación de hábitos/nutrición para validación del PF (contrato hábitos extendido).
 /// Campos adicionales son opcionales para compatibilidad; algunos pueden ser null cuando faltan datos o no aplica.
-/// TODO(KAN-494): alinear completamente con contrato/consumidores si se agregan nuevos campos obligatorios.
+/// TODO: alinear completamente con contrato/consumidores si se agregan nuevos campos obligatorios.
 /// </summary>
 public sealed record HabitsRecommendationResponseDto(
     Guid Id,
@@ -124,7 +124,7 @@ public sealed record HabitsRecommendationResponseDto(
     string? Status = null);
 
 /// <summary>
-/// Snapshot persistido en MetricsSnapshotJson para recomendaciones de hábitos (KAN-494).
+/// Snapshot persistido en MetricsSnapshotJson para recomendaciones de hábitos.
 /// Permite reconstruir la respuesta de contrato sin cambios de esquema de BD.
 /// </summary>
 public sealed record HabitsRecommendationSnapshotDto(

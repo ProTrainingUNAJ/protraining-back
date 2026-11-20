@@ -33,10 +33,10 @@ public sealed record TrainingRecommendationResponseDto(
     string ProviderUsed = "Reglas");
 
 /// <summary>
-/// Solicitud para redactar una recomendación de hábitos y alimentación (#083 · KAN-378, extendido KAN-494).
+/// Solicitud para redactar una recomendación de hábitos y alimentación (#083 · KAN-378).
 /// La IA únicamente redacta: los números (proteína, hidratación, sueño) vienen calculados por reglas
 /// y los alimentos provienen exclusivamente de la lista aprobada.
-/// KAN-494: incluye contexto de seguridad (menor, peso/objetivo, momentos, datos faltantes, derivación).
+/// Incluye contexto de seguridad (menor, peso/objetivo, momentos, datos faltantes, derivación).
 /// Campos de peso/objetivo/rangos pueden ser desconocidos si el modelo de datos aún no los provee (TODO).
 /// </summary>
 public sealed record NutritionRecommendationRequestDto(
@@ -50,7 +50,7 @@ public sealed record NutritionRecommendationRequestDto(
     double? SleepHours = null,
     bool IncludeQuantities = true,
     Guid? AthleteId = null,
-    // KAN-494 (opcionales, backward-compatible)
+    // Opcionales, backward-compatible
     double? WeightKg = null,
     bool IsMinor = false,
     string? RecommendationMode = null, // Quantitative | Qualitative | Referral
@@ -60,7 +60,7 @@ public sealed record NutritionRecommendationRequestDto(
     IReadOnlyList<string>? MissingData = null);
 
 /// <summary>
-/// Recomendación de hábitos y alimentación redactada y validada (#083 · KAN-378, extendido KAN-494).
+/// Recomendación de hábitos y alimentación redactada y validada (#083 · KAN-378).
 /// Nunca menciona suplementos ni cantidades para bajar de peso y utiliza únicamente alimentos de la lista aprobada.
 /// </summary>
 public sealed record NutritionRecommendationResponseDto(
@@ -69,7 +69,7 @@ public sealed record NutritionRecommendationResponseDto(
     IReadOnlyList<string> MentionedFoods,
     string LegalDisclaimer,
     string ProviderUsed = "Reglas",
-    // KAN-494 (opcionales, backward-compatible)
+    // Opcionales, backward-compatible
     double? MinProteinGrams = null,
     double? MaxProteinGrams = null,
     string? RecommendationMode = null,

@@ -274,7 +274,7 @@ public sealed class Athlete : BaseEntity
     }
 
     /// <summary>
-    /// Actualiza el perfil físico usado por las recomendaciones de hábitos (KAN-494).
+    /// Actualiza el perfil físico usado por las recomendaciones de hábitos.
     /// null en peso/objetivo significa "sin dato": nunca se inventa un valor por defecto.
     /// </summary>
     public void UpdatePhysicalProfile(decimal? weightKg, string? athleticGoalLabel)

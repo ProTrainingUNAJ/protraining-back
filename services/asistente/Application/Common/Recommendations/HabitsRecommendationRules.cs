@@ -4,7 +4,7 @@ using Application.Interfaces.Services;
 namespace Application.Common.Recommendations;
 
 /// <summary>
-/// Reglas determinísticas de seguridad y cálculo para recomendaciones de hábitos y proteína (KAN-494).
+/// Reglas determinísticas de seguridad y cálculo para recomendaciones de hábitos y proteína.
 /// Prioriza siempre la seguridad: menores sin cantidades, sin estrategias/cantidades para bajar de peso,
 /// sin suplementos, derivación ante datos médicos/alergias/condiciones no verificables o riesgos,
 /// y manejo explícito de datos faltantes. Backend autoritativo.
@@ -18,13 +18,14 @@ namespace Application.Common.Recommendations;
 /// - Umbral de "poco descanso" = &lt; 6 h en el último check-in disponible. Justificación: coincide con el
 ///   criterio de sueño de la alarma A ya implementada en OverloadPatternDetector (KAN-477, alerta High con
 ///   reducción de carga), donde SleepHours &lt; 6 se considera riesgo de recuperación. No se cambia el umbral
-///   sin validación profesional (TODO(KAN-494)).
+///   sin validación profesional (TODO).
 /// - "Partido cercano" = fecha en [hoy, hoy + 2] desde hoy AR. Justificación: alineado con la ventana D-1/D-2
-///   de MatchDayLoadRules (KAN-473), que ya limita la carga previa al partido. No se amplía sin validar (TODO(KAN-494)).
-/// - "Día pesado": sin definición funcional aprobada ni fuente; se consume de IHabitsTrainingDayContextProvider,
-///   hoy sin fuente, y se reporta en missingData. Nunca se infiere de 1RM, carga, RPE ni objetivos de plan (TODO(KAN-494)).
+///   de MatchDayLoadRules (KAN-473), que ya limita la carga previa al partido. No se amplía sin validar (TODO).
+/// - Momento de entrenamiento intenso: sin definición funcional aprobada ni fuente; se consume de
+///   IHabitsTrainingDayContextProvider, hoy sin fuente, y se reporta en missingData. Nunca se infiere
+///   de 1RM, carga, RPE ni objetivos de plan (TODO).
 /// - Alergias/condiciones médicas se registran en Estructura como texto libre; HabitsMedicalContextRules las clasifica
-///   en backend sin enviar texto clínico a la IA. Ficha vacía, inexistente o no verificable => derivación (KAN-494).
+///   en backend sin enviar texto clínico a la IA. Ficha vacía, inexistente o no verificable => derivación.
 /// </remarks>
 public static class HabitsRecommendationRules
 {
@@ -32,9 +33,9 @@ public static class HabitsRecommendationRules
     public const string ModeQualitative = "Qualitative";
     public const string ModeReferral = "Referral";
 
-    // Justificado por OverloadPatternDetector (KAN-477): SleepHours < 6 ya dispara alerta High. TODO(KAN-494): validar con equipo profesional antes de cambiarlo.
+    // Justificado por OverloadPatternDetector (KAN-477): SleepHours < 6 ya dispara alerta High. TODO: validar con equipo profesional antes de cambiarlo.
     public const double LowSleepThresholdHoursAssumption = 6.0;
-    // Justificado por MatchDayLoadRules (KAN-473): ventana D-1/D-2 de carga previa al partido. TODO(KAN-494): validar con PO/PF antes de cambiarla.
+    // Justificado por MatchDayLoadRules (KAN-473): ventana D-1/D-2 de carga previa al partido. TODO: validar con PO/PF antes de cambiarla.
     public const int MatchNearbyWindowDaysAssumption = 2;
 
     public static HabitsEvaluationResult Evaluate(HabitsEvaluationInput input)
@@ -51,7 +52,7 @@ public static class HabitsRecommendationRules
         if (input.IsHeavyTrainingDay == true)
             moments.Add("Día pesado de entrenamiento");
         else if (input.IsHeavyTrainingDay is null)
-            missing.Add("Criterio/fuente de día pesado no disponible (TODO(KAN-494): definición pendiente; no se infiere de carga/1RM/RPE).");
+            missing.Add("Criterio/fuente de día pesado no disponible (definición pendiente; no se infiere de carga/1RM/RPE).");
 
         if (input.HasNearbyMatch == true)
             moments.Add("Partido cercano");
@@ -74,7 +75,7 @@ public static class HabitsRecommendationRules
         if (weightKg is null || weightKg <= 0)
             missing.Add("Peso corporal no disponible para cálculo de proteína.");
 
-        // KAN-494: la ficha médica se consulta en Estructura y se clasifica en backend.
+        // La ficha médica se consulta en Estructura y se clasifica en backend.
         // Ante ausencia de contexto, ficha incompleta, no verificable o riesgo registrado => derivación, sin cantidades.
         var medical = input.MedicalContext;
         if (medical is not null)
@@ -181,18 +182,18 @@ public static class HabitsRecommendationRules
     private static bool TryComputeProteinRange(double weightKg, string goal, out double minG, out double maxG, out string note)
     {
         minG = 0; maxG = 0; note = string.Empty;
-        // Único caso definido en KAN-494: 70 kg + ganar masa => 100-140 g/día.
+        // Único caso definido en el ticket: 70 kg + ganar masa => 100-140 g/día.
         // Generalización determinística asumida solo para "ganar masa/músculo" (~1.43-2.0 g/kg) basada en el ejemplo del ticket.
-        // TODO(KAN-494): validar rango g/kg exacto con nutricionista.
+        // TODO: validar rango g/kg exacto con nutricionista.
         if (IsGainMuscleGoal(goal))
         {
             minG = Math.Round(weightKg * (100.0 / 70.0), 0, MidpointRounding.AwayFromZero);
             maxG = Math.Round(weightKg * (140.0 / 70.0), 0, MidpointRounding.AwayFromZero);
-            note = $"Cálculo determinístico (KAN-494, supuesto basado en ejemplo 70 kg => 100-140 g/d): {minG:0}-{maxG:0} g/día para {weightKg:0.#} kg y objetivo de ganar masa. TODO: validar fórmula/rango con profesional.";
+            note = $"Cálculo determinístico (supuesto basado en ejemplo 70 kg => 100-140 g/d): {minG:0}-{maxG:0} g/día para {weightKg:0.#} kg y objetivo de ganar masa. TODO: validar fórmula/rango con profesional.";
             return true;
         }
 
-        // TODO(KAN-494): rangos para otros objetivos pendientes de definición profesional.
+        // TODO: rangos para otros objetivos pendientes de definición profesional.
         return false;
     }
 
@@ -261,7 +262,7 @@ public static class HabitsRecommendationRules
             }
         }
 
-        // Día pesado no inferible: se obtiene de IHabitsTrainingDayContextProvider (sin fuente hoy).
+        // El momento de entrenamiento intenso no se infiere: se obtiene de IHabitsTrainingDayContextProvider (sin fuente hoy).
         return (hasNearbyMatch, hasInsufficientRest);
     }
 }

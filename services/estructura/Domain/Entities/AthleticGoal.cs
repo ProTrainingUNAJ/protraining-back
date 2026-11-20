@@ -1,7 +1,7 @@
 namespace Domain.Entities;
 
 /// <summary>
-/// Objetivo deportivo canónico del atleta (KAN-494). Vocabulario cerrado: no se admite texto libre
+/// Objetivo deportivo canónico del atleta. Vocabulario cerrado: no se admite texto libre
 /// porque el motor de recomendaciones de hábitos decide el modo según Marcadores en español y bloquea
 /// expresamente objetivos de pérdida de peso.
 /// </summary>

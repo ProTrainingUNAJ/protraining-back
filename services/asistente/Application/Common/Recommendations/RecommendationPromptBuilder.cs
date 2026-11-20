@@ -189,10 +189,6 @@ public static class RecommendationPromptBuilder
     /// Construye el prompt para que la IA redacte una recomendación de alimentación y hábitos
     /// usando exclusivamente los números calculados por reglas y la lista aprobada de alimentos (#083 · KAN-378).
     /// </summary>
-    /// <summary>
-    /// Construye el prompt para que la IA redacte una recomendación de alimentación y hábitos
-    /// usando exclusivamente los números calculados por reglas y la lista aprobada de alimentos (#083 · KAN-378, KAN-494).
-    /// </summary>
     public static string BuildNutritionRecommendationPrompt(NutritionRecommendationRequestDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -373,10 +369,6 @@ public static class RecommendationPromptBuilder
     /// <summary>
     /// Genera una recomendación de alimentación y hábitos determinística segura usando exclusivamente
     /// los números de las reglas y los alimentos de la lista aprobada (#083 · KAN-378).
-    /// </summary>
-    /// <summary>
-    /// Genera una recomendación de alimentación y hábitos determinística segura usando exclusivamente
-    /// los números de las reglas y los alimentos de la lista aprobada (#083 · KAN-378, KAN-494).
     /// Aplica reglas de seguridad: sin cantidades para menores/bajar de peso/derivación/datos faltantes,
     /// sin suplementos, y manejo explícito de momentos y datos faltantes.
     /// </summary>
@@ -405,7 +397,7 @@ public static class RecommendationPromptBuilder
             && !request.RequiresProfessionalReferral
             && !string.Equals(request.RecommendationMode, HabitsRecommendationRules.ModeReferral, StringComparison.OrdinalIgnoreCase);
 
-        // KAN-494: si es objetivo de bajar de peso, nunca cantidades ni estrategias para perder peso (seguridad).
+        // Si es objetivo de bajar de peso, nunca cantidades ni estrategias para perder peso (seguridad).
         var hasWeightLossGoal = RecommendationOutputValidator.TryFindForbiddenWeightLoss(goal, out _);
         if (hasWeightLossGoal)
         {
@@ -440,7 +432,7 @@ public static class RecommendationPromptBuilder
         if (referralReasons.Count > 0)
         {
             plateParts.Add("Por seguridad, se recomienda consultar a un profesional de nutrición para una pauta personalizada.");
-            // KAN-494: con riesgo médico/alergias no verificables, evitar prescripción específica; mantener mención general de alimentos aprobados habituales.
+            // Con riesgo médico/alergias no verificables, evitar prescripción específica; mantener mención general de alimentos aprobados habituales.
             plateParts.Add($"Mientras tanto, priorizá alimentos habituales y bien tolerados dentro de opciones como {foodsText}, según indicación profesional.");
         }
         else
@@ -480,7 +472,7 @@ public static class RecommendationPromptBuilder
 
         var plateComposition = string.Join(" ", plateParts.Where(p => !string.IsNullOrWhiteSpace(p)));
 
-        // KAN-494: no inventar referencias numéricas. Sólo se redactan números que las reglas
+        // No inventar referencias numéricas. Sólo se redactan números que las reglas
         // informaron explícitamente y sólo en modo cuantitativo; en los modos sin cantidades
         // (menor, bajar de peso, derivación o datos faltantes) la guía es cualitativa.
         var hydrationParts = new List<string>();

@@ -4,7 +4,7 @@ using Application.Common.Helpers;
 using Application.Interfaces.Services;
 
 /// <summary>
-/// Estado de la verificación médica previa a una recomendación de alimentación (KAN-494).
+/// Estado de la verificación médica previa a una recomendación de alimentación.
 /// Solo <see cref="VerifiedNoKnownRisk"/> habilita cantidades; cualquier otro estado deriva a profesional.
 /// </summary>
 public enum MedicalRecommendationStatus
@@ -28,7 +28,7 @@ public sealed record MedicalRecommendationContext(
 }
 
 /// <summary>
-/// Convierte la ficha médica de Estructura en un contexto de seguridad para recomendaciones (KAN-494).
+/// Convierte la ficha médica de Estructura en un contexto de seguridad para recomendaciones.
 /// </summary>
 /// <remarks>
 /// Estructura registra alergias y condiciones como texto libre (pathologies / medicalHistory / surgeries)
@@ -39,7 +39,7 @@ public sealed record MedicalRecommendationContext(
 /// Se agregó un seam forward-compatible: si Estructura pasa a enviar hasKnownAllergies / hasKnownConditions,
 /// el cliente lo deserializa y esta regla lo prefiere. Un false estructurado NO borra un riesgo detectado en el
 /// texto (gana siempre la opción más conservadora); un true deriva directamente.
-/// TODO(KAN-494): dependencia externa. Cuando Estructura publique los campos estructurados, dejar de usar marcadores.
+/// TODO: dependencia externa. Cuando Estructura publique los campos estructurados, dejar de usar marcadores.
 /// </remarks>
 public static class HabitsMedicalContextRules
 {

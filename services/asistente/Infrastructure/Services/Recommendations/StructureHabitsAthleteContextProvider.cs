@@ -3,7 +3,7 @@ using Application.Interfaces.Services;
 namespace Infrastructure.Services.Recommendations;
 
 /// <summary>
-/// Fuente real de peso corporal y objetivo deportivo para KAN-494: el perfil físico canónico
+/// Fuente real de peso corporal y objetivo deportivo: el perfil físico canónico
 /// publicado por Estructura. Reemplaza a NoSourceHabitsAthleteContextProvider por DI;
 /// las reglas, el prompt y el snapshot no cambian.
 /// </summary>

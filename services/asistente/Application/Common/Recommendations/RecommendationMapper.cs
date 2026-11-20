@@ -6,7 +6,7 @@ namespace Application.Common.Recommendations;
 
 /// <summary>
 /// Mapea y serializa el snapshot analítico de métricas y tendencias para las recomendaciones (#196 · KAN-491).
-/// Extendido para hábitos/nutrición (KAN-494) almacenando detalles determinísticos en el snapshot JSON.
+/// Extendido para hábitos/nutrición almacenando detalles determinísticos en el snapshot JSON.
 /// </summary>
 public static class RecommendationMapper
 {
@@ -125,7 +125,7 @@ public static class RecommendationMapper
 
     /// <summary>
     /// Proyecta una recomendación de hábitos persistida (pendiente o aprobada) al DTO del contrato.
-    /// Se usa tanto desde la Query de lectura como desde el Command de generación (KAN-494).
+    /// Se usa tanto desde la Query de lectura como desde el Command de generación.
     /// </summary>
     public static HabitsRecommendationResponseDto ToHabitsResponse(
         AthleteRecommendation entity,

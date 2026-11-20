@@ -3,7 +3,7 @@ using Application.Interfaces.Services;
 namespace Infrastructure.Services.Recommendations;
 
 /// <summary>
-/// Implementación sin fuente del contexto de peso/objetivo (KAN-494). No inventa valores: devuelve null
+/// Implementación sin fuente del contexto de peso/objetivo. No inventa valores: devuelve null
 /// para que las reglas entreguen una guía cualitativa/derivación. Se conserva como doble de prueba y
 /// salida segura ante una futura indisponibilidad de Estructura; la implementación inyectada en
 /// producción es StructureHabitsAthleteContextProvider.

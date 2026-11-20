@@ -274,7 +274,7 @@ public sealed class StructureAthleteClient(
     }
 
     /// <summary>
-    /// KAN-494: perfil físico canónico desde GET /api/v1/athletes/{id}. Se usa el token del PF
+    /// Perfil físico canónico desde GET /api/v1/athletes/{id}. Se usa el token del PF
     /// reenviado (ForwardAuthorizationHandler); un atleta ajeno da 404 por el filtro de tenant.
     /// </summary>
     public async Task<StructureAthleteProfileDto?> GetAthleteProfileAsync(
@@ -325,12 +325,12 @@ public sealed class StructureAthleteClient(
         [property: JsonPropertyName("pathologies")] string? Pathologies,
         [property: JsonPropertyName("medicalHistory")] string? MedicalHistory,
         [property: JsonPropertyName("surgeries")] string? Surgeries,
-        // Campos aún no expuestos por Estructura (KAN-494). Si aparecen, se consumen sin tocar el flujo.
+        // Campos aún no expuestos por Estructura. Si aparecen, se consumen sin tocar el flujo.
         [property: JsonPropertyName("hasKnownAllergies")] bool? HasKnownAllergies = null,
         [property: JsonPropertyName("hasKnownConditions")] bool? HasKnownConditions = null);
 
     /// <summary>
-    /// KAN-494: la ficha médica se lee por el endpoint auditado de Estructura con el token
+    /// La ficha médica se lee por el endpoint auditado de Estructura con el token
     /// del PF (este HttpClient usa ForwardAuthorizationHandler). El token de Servicio no
     /// tiene acceso a este endpoint, por lo que la lectura solo ocurre en el request del PF.
     /// Cualquier fallo se reporta como No disponible; nunca como "sin alergias".

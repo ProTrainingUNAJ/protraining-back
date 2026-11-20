@@ -12,7 +12,7 @@ namespace Application.UseCases.Recommendations.GetHabitsRecommendation;
 public sealed record GetHabitsRecommendationForAthleteQuery(Guid AthleteId);
 
 /// <summary>
-/// Query de lectura de la recomendación de hábitos/nutrición para validación del PF (KAN-494).
+/// Query de lectura de la recomendación de hábitos/nutrición para validación del PF.
 /// Autoriza (pertenencia, preferencia KAN-493/496), reutiliza la pendiente existente y, si no hay,
 /// delega la generación/persistencia en <see cref="GenerateHabitsRecommendationCommandHandler"/>.
 /// Así la Query no escribe ni llama a SaveChanges, aunque el contrato GET siga generando bajo demanda.

@@ -709,7 +709,7 @@ public sealed class ResilientAiService : IAiService
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // KAN-494: objetivo orientado a bajar de peso => no se bloquea la generación; se debe producir
+        // Objetivo orientado a bajar de peso => no se bloquea la generación; se debe producir
         // una recomendación segura sin cantidades ni estrategias para perder peso y con derivación.
         // La seguridad se refuerza en prompt, generación determinística y validación.
         if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(request.AthleticGoal, out _))

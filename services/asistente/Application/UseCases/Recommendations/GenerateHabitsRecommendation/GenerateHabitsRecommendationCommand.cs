@@ -11,7 +11,7 @@ namespace Application.UseCases.Recommendations.GenerateHabitsRecommendation;
 public sealed record GenerateHabitsRecommendationCommand(Guid AthleteId, bool IsMinor);
 
 /// <summary>
-/// Command que genera y PERSISTE una recomendación de hábitos/nutrición pendiente (KAN-494).
+/// Command que genera y PERSISTE una recomendación de hábitos/nutrición pendiente.
 /// La escritura vive acá para que la Query de lectura no llame a AddAsync/SaveChanges. El endpoint GET
 /// del contrato sigue generando cuando no hay pendiente, pero delega en este Command; la autorización
 /// (pertenencia, preferencia del PF y consentimiento del tutor) la resuelve la Query antes de invocarlo.
@@ -33,11 +33,11 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
         var categories = await structureClient.GetAthleteCategoriesAsync(command.AthleteId, cancellationToken);
         var primaryCategory = categories.FirstOrDefault();
 
-        // KAN-494: peso y objetivo salen de la fuente configurada. Si no hay fuente, el proveedor
+        // Peso y objetivo salen de la fuente configurada. Si no hay fuente, el proveedor
         // devuelve null y el motor responde sin cantidades: nunca se inventan valores del atleta.
         var athleteContext = await athleteContextProvider.GetAsync(command.AthleteId, cancellationToken);
 
-        // KAN-494: ficha médica real, leída por el endpoint auditado de Estructura con el token
+        // Ficha médica real, leída por el endpoint auditado de Estructura con el token
         // del PF. Cualquier fallo (consentimiento, permisos o servicio) se clasifica como no
         // verificable y deriva a profesional; una ficha vacía NUNCA se toma como "sin alergias".
         var medicalRecord = await structureClient.GetMedicalRecordContextAsync(
@@ -101,7 +101,7 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
             hasInsufficientRest = null;
         }
 
-        // KAN-494: "día pesado" se toma de la fuente configurada. Sin fuente (hoy) o ante error,
+        // El momento de entrenamiento intenso se toma de la fuente configurada. Sin fuente (hoy) o ante error,
         // queda null y se reporta en missingData: nunca se infiere de carga/1RM/RPE.
         bool? isHeavyTrainingDay;
         try

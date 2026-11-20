@@ -21,7 +21,7 @@ using Xunit;
 namespace Asistente.Tests;
 
 /// <summary>
-/// KAN-494: proteína según peso/objetivo, momentos y bloqueos de seguridad.
+/// Proteína según peso/objetivo, momentos y bloqueos de seguridad.
 /// Cubre reglas determinísticas, ficha médica real, ausencia de fuente de peso,
 /// integración del caso de uso, contrato del controller y cliente auditado de Estructura.
 /// </summary>

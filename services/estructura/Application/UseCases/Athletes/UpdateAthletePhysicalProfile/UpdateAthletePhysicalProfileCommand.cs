@@ -11,7 +11,7 @@ public sealed record UpdateAthletePhysicalProfileCommand(
     string? AthleticGoal);
 
 /// <summary>
-/// Edición del perfil físico por el preparador físico (KAN-494). El tenant del PF se aplica
+/// Edición del perfil físico por el preparador físico. El tenant del PF se aplica
 /// en el repositorio: un id ajeno devuelve AthleteNotFoundException (404), sin filtrar datos.
 /// </summary>
 public sealed class UpdateAthletePhysicalProfileCommandHandler(

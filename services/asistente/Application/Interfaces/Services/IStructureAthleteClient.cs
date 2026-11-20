@@ -43,7 +43,7 @@ public sealed record StructureCategoryAthleteDto(
     bool Active);
 
 /// <summary>
-/// Perfil físico canónico del atleta en Estructura (KAN-494). Se expone como texto ya etiquetado
+/// Perfil físico canónico del atleta en Estructura. Se expone como texto ya etiquetado
 /// en español para que las reglas de hábitos lo consuman sin duplicar traducciones.
 /// </summary>
 public sealed record StructureAthleteProfileDto(
@@ -52,7 +52,7 @@ public sealed record StructureAthleteProfileDto(
     string? AthleticGoal);
 
 /// <summary>
-/// Disponibilidad de la ficha médica para el flujo de recomendaciones (KAN-494).
+/// Disponibilidad de la ficha médica para el flujo de recomendaciones.
 /// </summary>
 public enum StructureMedicalRecordAvailability
 {
@@ -62,7 +62,7 @@ public enum StructureMedicalRecordAvailability
 }
 
 /// <summary>
-/// Datos mínimos de la ficha médica necesarios para evaluar seguridad nutricional (KAN-494).
+/// Datos mínimos de la ficha médica necesarios para evaluar seguridad nutricional.
 /// El texto clínico viaja solo en memoria entre Estructura y el handler; nunca se persiste
 /// en el snapshot ni se envía al proveedor de IA.
 /// </summary>
@@ -131,7 +131,7 @@ public interface IStructureAthleteClient
     Task<Guid?> GetMyAthleteIdAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lee la ficha médica del atleta mediante el endpoint auditado de Estructura (KAN-494).
+    /// Lee la ficha médica del atleta mediante el endpoint auditado de Estructura.
     /// Requiere token del preparador físico y consentimiento firmado; ante cualquier error
     /// devuelve <see cref="StructureMedicalRecordAvailability.Unavailable"/> para que el
     /// consumidor aplique derivación profesional (fail-closed). Nunca devuelve null como
@@ -143,7 +143,7 @@ public interface IStructureAthleteClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lee el perfil físico canónico (peso/objetivo) de Estructura con el token del PF (KAN-494).
+    /// Lee el perfil físico canónico (peso/objetivo) de Estructura con el token del PF.
     /// Devuelve null si el atleta no existe, no pertenece al PF o el servicio no responde:
     /// el proveedor de hábitos debe responder sin cantidades, nunca inventar valores.
     /// </summary>

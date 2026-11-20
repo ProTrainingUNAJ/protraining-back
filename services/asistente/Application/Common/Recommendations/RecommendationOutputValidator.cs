@@ -227,7 +227,7 @@ public static class RecommendationOutputValidator
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
-    /// KAN-494: en modos sin cantidades tampoco se inventan referencias de hidratación/sueño.
+    /// En modos sin cantidades tampoco se inventan referencias de hidratación/sueño.
     /// </summary>
     private static readonly Regex NonFoodQuantityRegex = new(
         @"\b\d+([.,]\d+)?\s*(l|lt|lts|litros?|hs?|horas?)\b",
@@ -550,7 +550,7 @@ public static class RecommendationOutputValidator
         }
 
         // 3. Validar que si no se permiten cantidades (ej. menores de edad, bajar de peso, derivación/datos faltantes),
-        // no aparezcan gramos ni calorías en el texto (KAN-494).
+        // no aparezcan gramos ni calorías en el texto.
         var quantitiesAllowed = request.IncludeQuantities
             && !request.IsMinor
             && !request.RequiresProfessionalReferral
@@ -605,7 +605,7 @@ public static class RecommendationOutputValidator
                 "La recomendación no utiliza ningún alimento de la lista aprobada.");
         }
 
-        // KAN-494: coherencia básica de modo/rangos devueltos (no inventar cuantitativo si no está permitido).
+        // Coherencia básica de modo/rangos devueltos (no inventar cuantitativo si no está permitido).
         var resolvedMode = dto.RecommendationMode ?? request.RecommendationMode;
         var resolvedReferral = dto.RequiresProfessionalReferral || request.RequiresProfessionalReferral;
         double? resolvedMin = dto.MinProteinGrams ?? request.MinProteinGrams;

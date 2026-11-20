@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 /// <summary>
-/// Recomendaciones de hábitos y nutrición para el Preparador Físico (contrato hábitos, KAN-494).
+/// Recomendaciones de hábitos y nutrición para el Preparador Físico (contrato hábitos).
 /// Genera recomendaciones seguras basadas en reglas y datos disponibles, y permite aprobarlas para el atleta.
 /// </summary>
 [Authorize(Roles = "PreparadorFisico")]

@@ -13,7 +13,7 @@ public sealed record UpdateMyPhysicalProfileResponseDto(
     DateTime? PhysicalProfileUpdatedAt);
 
 /// <summary>
-/// Autoservicio del atleta autenticado: actualiza peso y objetivo desde el token, sin ids en la ruta (KAN-494).
+/// Autoservicio del atleta autenticado: actualiza peso y objetivo desde el token, sin ids en la ruta.
 /// </summary>
 public sealed class UpdateMyPhysicalProfileCommandHandler(
     ICurrentUser currentUser,

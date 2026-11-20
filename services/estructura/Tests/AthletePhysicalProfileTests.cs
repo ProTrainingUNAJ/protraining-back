@@ -11,7 +11,7 @@ using Moq;
 namespace Estructura.Tests;
 
 /// <summary>
-/// KAN-494: el perfil físico de Estructura es la fuente canónica de peso y objetivo.
+/// El perfil físico de Estructura es la fuente canónica de peso y objetivo.
 /// Cubre validación de dominio, etiquetas cerradas, mapeo al DTO y los dos comandos de escritura.
 /// </summary>
 public sealed class AthletePhysicalProfileTests
