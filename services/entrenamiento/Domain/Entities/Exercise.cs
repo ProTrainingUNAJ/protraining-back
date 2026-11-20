@@ -99,6 +99,15 @@ namespace Domain.Entities
             VariantLabel = null;
         }
 
+        // Actualiza el grupo muscular principal del ejercicio
+        public void UpdateMuscleGroup(string muscleGroup)
+        {
+            if (string.IsNullOrWhiteSpace(muscleGroup))
+                throw new DomainException("El grupo muscular es obligatorio.");
+
+            MuscleGroup = muscleGroup.Trim();
+        }
+
         // Actualiza la modalidad o tipo de ejercicio
         public void UpdateExerciseType(ExerciseType exerciseType)
         {

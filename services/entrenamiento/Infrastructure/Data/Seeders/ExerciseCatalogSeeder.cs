@@ -29,6 +29,7 @@ namespace Infrastructure.Data.Seeders
                 foreach (var elem in doc.RootElement.EnumerateArray())
                 {
                     var name = elem.GetProperty("name").GetString()!;
+                    var sourceId = elem.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
 
                     var description = elem.TryGetProperty("instructions", out var inst)
                         ? string.Join(" ", inst.EnumerateArray().Select(s => s.GetString()))
@@ -42,8 +43,9 @@ namespace Infrastructure.Data.Seeders
 
                     var secondaryMuscles = ReadStringArray(elem, "secondaryMuscles");
 
-                    // Mapear grupo muscular con el primer primaryMuscle
+                    // Mapear grupo muscular según reglas de clasificación de básicos (KAN-590) o primer primaryMuscle
                     var firstMuscle = primaryMuscles.FirstOrDefault() ?? "general";
+                    var muscleGroup = ExerciseClassificationHelper.DetermineMuscleGroup(name, sourceId, firstMuscle);
 
                     var category = elem.TryGetProperty("category", out var catProp) ? catProp.GetString() : null;
 
@@ -51,7 +53,7 @@ namespace Infrastructure.Data.Seeders
 
                     exercises.Add(Exercise.Create(
                         name: name,
-                        muscleGroup: NormalizeMuscleGroup(firstMuscle),
+                        muscleGroup: muscleGroup,
                         description: description,
                         equipment: equipment,
                         images: images,
