@@ -4,6 +4,7 @@ using Application.UseCases.Athletes.GetMe;
 using Application.UseCases.Athletes.GetMyConsent;
 using Application.UseCases.Athletes.ListMyCategories;
 using Application.UseCases.Athletes.RegisterMyConsent;
+using Application.UseCases.Athletes.UpdateMyTelegram;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +18,8 @@ public sealed class MeController(
     GetMeQueryHandler getMeHandler,
     ListMyCategoriesQueryHandler listMyCategoriesHandler,
     GetMyConsentQueryHandler getMyConsentHandler,
-    RegisterMyConsentCommandHandler registerMyConsentHandler) : ControllerBase
+    RegisterMyConsentCommandHandler registerMyConsentHandler,
+    UpdateMyTelegramCommandHandler updateMyTelegramHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<MeDto>> GetMe(CancellationToken cancellationToken) =>
@@ -37,5 +39,18 @@ public sealed class MeController(
         CancellationToken cancellationToken) =>
         Ok(await registerMyConsentHandler.HandleAsync(
             new RegisterMyConsentCommand(request.AllowsHabitsRecommendations, request.AllowsPhysicalTraining),
+            cancellationToken));
+
+    [HttpPut("telegram")]
+    [ProducesResponseType(typeof(UpdateMyTelegramResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UpdateMyTelegramResponseDto>> UpdateMyTelegram(
+        [FromBody] UpdateMyTelegramRequestDto request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateMyTelegramHandler.HandleAsync(
+            new UpdateMyTelegramCommand(request.TelegramUsername),
             cancellationToken));
 }

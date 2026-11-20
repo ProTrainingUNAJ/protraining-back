@@ -613,6 +613,40 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/me/telegram:
+    put:
+      tags:
+        - Me
+      summary: Actualizar usuario de Telegram del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Actualiza exclusivamente el usuario de Telegram del atleta asociado al sub del JWT.
+      operationId: updateMyTelegram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMyTelegramRequest'
+      responses:
+        "200":
+          description: Usuario de Telegram actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMyTelegramResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/organizations:
     get:
       tags:
@@ -2154,6 +2188,22 @@ components:
           type: boolean
           description: Indica si el atleta es menor de edad.
           example: false
+
+    UpdateMyTelegramRequest:
+      type: object
+      properties:
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "lucas_atleta"
+
+    UpdateMyTelegramResponse:
+      type: object
+      properties:
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "lucas_atleta"
 
     AthleteConsentStatus:
       type: object

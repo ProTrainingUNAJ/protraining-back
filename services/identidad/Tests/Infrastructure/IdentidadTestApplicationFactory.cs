@@ -128,6 +128,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<ForgotPasswordUseCase>();
                 services.AddScoped<ResetPasswordWithTokenUseCase>();
                 services.AddScoped<Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase>();
                 services.AddScoped<Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase>();
                 services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
                 services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();

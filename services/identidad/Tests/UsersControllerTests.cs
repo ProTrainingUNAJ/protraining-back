@@ -46,6 +46,8 @@ public class UsersControllerTests
             _mockUserManager.Object, _mockCurrentUser.Object);
 
         var updateProfileUseCase = new Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase(_mockUserManager.Object);
+        var updateMyTelegramUseCase = new Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase(
+            _mockUserManager.Object, new Mock<IStructureClient>().Object);
         var deactivateAccountUseCase = new Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase(_mockUserManager.Object, _mockRefreshTokenRepo.Object);
 
         _controller = new UsersController(
@@ -62,6 +64,7 @@ public class UsersControllerTests
             updateEmailUseCase,
             updatePhoneUseCase,
             updateProfileUseCase,
+            updateMyTelegramUseCase,
             deactivateAccountUseCase);
     }
 
@@ -181,5 +184,12 @@ public class UsersControllerTests
     public void Given_UpdateAthleteEmailEndpoint_When_CheckingAuthorization_Then_OnlyPreparadorFisicoCanCallIt()
     {
         Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateAthleteEmail)));
+    }
+
+    [Fact]
+    public void Given_UpdateProfileAndTelegramEndpoints_When_CheckingAuthorization_Then_RolesAreEnforced()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateProfile)));
+        Assert.Equal("PreparadorFisico,Atleta", RolesOf(nameof(UsersController.UpdateMyTelegram)));
     }
 }

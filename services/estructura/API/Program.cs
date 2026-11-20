@@ -108,6 +108,7 @@ builder.Services.AddScoped<GetMeQueryHandler>();
 builder.Services.AddScoped<ListMyCategoriesQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.UpdateMyTelegram.UpdateMyTelegramCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.UploadAthletePhoto.UploadAthletePhotoCommandHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.GetAthletePhoto.GetAthletePhotoQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Athletes.DeleteAthletePhoto.DeleteAthletePhotoCommandHandler>();

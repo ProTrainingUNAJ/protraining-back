@@ -10,6 +10,13 @@ public sealed record UpdateProfileRequestDto(
 );
 
 /// <summary>
+/// Solicitud de actualización del usuario de Telegram propio (PF y Atleta, KAN-503).
+/// </summary>
+public sealed record UpdateTelegramRequestDto(
+    string? TelegramUsername = null
+);
+
+/// <summary>
 /// Respuesta de actualización de perfil de usuario (KAN-601 / KAN-503).
 /// </summary>
 public sealed record ProfileResponseDto(
