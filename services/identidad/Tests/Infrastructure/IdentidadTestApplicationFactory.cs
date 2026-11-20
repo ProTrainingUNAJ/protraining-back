@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using API.Extensions;
 using API.Middleware;
 using API.Services;
@@ -24,8 +25,10 @@ using Infrastructure.Services;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -141,6 +144,38 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);
 
+                // Rate Limiting para protección contra abuso en endpoints de autenticación y registro (#KAN-601)
+                services.AddRateLimiter(options =>
+                {
+                    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                    options.OnRejected = async (context, _) =>
+                    {
+                        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                        await Results.Problem(
+                            statusCode: StatusCodes.Status429TooManyRequests,
+                            title: "Demasiadas solicitudes.",
+                            detail: "Has superado el límite de intentos permitidos. Por favor, intentá nuevamente en 15 minutos."
+                        ).ExecuteAsync(context.HttpContext);
+                    };
+
+                    options.AddPolicy("AuthRateLimit", httpContext =>
+                    {
+                        var clientIp = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous";
+
+                        return RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: clientIp,
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 5,
+                                Window = TimeSpan.FromMinutes(15),
+                                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                                QueueLimit = 0
+                            });
+                    });
+                });
+
                 services.AddControllers()
                     .AddApplicationPart(typeof(API.Controllers.AuthController).Assembly)
                     .ConfigureApiBehaviorOptions(options =>
@@ -170,6 +205,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
 
                 app.UseRouting();
                 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
+                app.UseRateLimiter();
                 app.UseAuthentication();
                 app.UseAuthorization();
                 app.UseMiddleware<MustChangePasswordMiddleware>();

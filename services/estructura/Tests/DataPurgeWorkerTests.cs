@@ -63,7 +63,7 @@ public sealed class DataPurgeWorkerTests
         // Despachador a los 4 servicios externos responde OK
         _mockPurgeDispatcher
             .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(new AthletePurgeDispatchResult(true));
 
         var handler = CreateHandler();
 
@@ -135,7 +135,7 @@ public sealed class DataPurgeWorkerTests
         // Un servicio externo (ej. Seguimiento) falló o está caído
         _mockPurgeDispatcher
             .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync(new AthletePurgeDispatchResult(false, "Error en Seguimiento"));
 
         var handler = CreateHandler();
 
@@ -151,10 +151,12 @@ public sealed class DataPurgeWorkerTests
         // No se purgan los datos locales de Estructura si falló algún servicio externo
         _mockEstructuraPurgeRepo.Verify(e => e.PurgeAthleteLocalDataAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
 
-        // El registro de purga NO debe marcarse como procesado; debe conservarse como Pending
+        // El registro de purga NO debe marcarse como procesado; debe conservarse como Pending y registrar el fallo
         Assert.Equal(PendingPurge.PendingStatus, purge.Status);
         Assert.Null(purge.ProcessedAt);
-        _mockUnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(1, purge.Attempts);
+        Assert.Equal("Error en Seguimiento", purge.LastError);
+        _mockUnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -171,18 +173,19 @@ public sealed class DataPurgeWorkerTests
         // En la primera corrida, el servicio está caído
         _mockPurgeDispatcher
             .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync(new AthletePurgeDispatchResult(false, "Servicio temporalmente caído"));
 
         var handler = CreateHandler();
         var firstRunResult = await handler.HandleAsync(new ProcessPendingPurgesCommand(), CancellationToken.None);
 
         Assert.Equal(1, firstRunResult.FailedOrPostponed);
         Assert.Equal(PendingPurge.PendingStatus, purge.Status);
+        Assert.Equal(1, purge.Attempts);
 
         // En la segunda corrida, el servicio se recuperó
         _mockPurgeDispatcher
             .Setup(d => d.DispatchPurgeToExternalServicesAsync(athleteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(new AthletePurgeDispatchResult(true));
 
         // Act
         var secondRunResult = await handler.HandleAsync(new ProcessPendingPurgesCommand(), CancellationToken.None);
@@ -193,7 +196,8 @@ public sealed class DataPurgeWorkerTests
         Assert.Equal(PendingPurge.ProcessedStatus, purge.Status);
         Assert.NotNull(purge.ProcessedAt);
         _mockEstructuraPurgeRepo.Verify(e => e.PurgeAthleteLocalDataAsync(athleteId, It.IsAny<CancellationToken>()), Times.Once);
-        _mockUnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        // Se invoca 2 veces SaveChanges: una en la 1ra corrida para guardar el fallo (attempts/last_error) y otra en la 2da para guardar Processed
+        _mockUnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -218,9 +222,10 @@ public sealed class DataPurgeWorkerTests
         var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, CancellationToken.None);
 
         // Assert
-        Assert.False(result);
-        // Debe haber intentado 2 veces con Entrenamiento
-        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Entrenamiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.ErrorMessage);
+        // Debe haber intentado 3 veces con retroceso exponencial con Entrenamiento
+        mockClient.Verify(c => c.PurgeAthleteInServiceAsync("Entrenamiento", It.IsAny<string>(), athleteId, It.IsAny<CancellationToken>()), Times.Exactly(3));
     }
 
     [Fact]
@@ -249,7 +254,7 @@ public sealed class DataPurgeWorkerTests
         var result = await dispatcher.DispatchPurgeToExternalServicesAsync(athleteId, CancellationToken.None);
 
         // Assert
-        Assert.True(result);
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]

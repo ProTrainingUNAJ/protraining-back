@@ -125,15 +125,25 @@ public class RecordPerformedSetsCommandHandler
             }
         }
 
+        var existingSets = await _performedSetRepository.GetByAthleteAndDateAsync(athleteId, today, cancellationToken) ?? [];
+        var existingByKey = existingSets.Where(s => s.SetNumber.HasValue).GroupBy(s => (s.ExerciseId, SetNumber: s.SetNumber!.Value)).ToDictionary(g => g.Key, g => g.First());
         var performedSets = new List<PerformedSet>();
+        int recordedCount = 0;
         int proposalsCount = 0;
 
         foreach (var item in command.Sets)
         {
             var weight = item.Weight ?? 0m;
-            var reps = item.Reps ?? 0;    
+            var reps = item.Reps ?? 0;
 
-            var performedSet = PerformedSet.Create(
+            if (item.SetNumber.HasValue && item.TimeSeconds.HasValue && existingByKey.TryGetValue((item.ExerciseId, item.SetNumber.Value), out var existingSet))
+            {
+                existingSet.UpdateTime(item.TimeSeconds.Value);
+                recordedCount++;
+            }
+            else
+            {
+                var performedSet = PerformedSet.Create(
                 athleteId: athleteId,
                 sessionId: session.Id,
                 exerciseId: item.ExerciseId,
@@ -143,10 +153,18 @@ public class RecordPerformedSetsCommandHandler
                 timeSeconds: item.TimeSeconds,
                 setNumber: item.SetNumber);
 
-            performedSets.Add(performedSet);
+                performedSets.Add(performedSet);
+
+                if (item.SetNumber.HasValue)
+                {
+                    existingByKey[(item.ExerciseId, item.SetNumber.Value)] = performedSet;
+                }
+                recordedCount++;
+            }
 
             // Epley solo aplica a ejercicios de sobrecarga/fuerza (no a carreras/tiempos)
-            if(!item.TimeSeconds.HasValue && weight > 0 && reps > 0){
+            if (!item.TimeSeconds.HasValue && weight > 0 && reps > 0)
+            {
                 // Algoritmo Epley y evaluación de propuesta
                 var proposed1Rm = EpleyCalculator.CalculateConservative1Rm(weight, reps);
                 if (proposed1Rm.HasValue)
@@ -185,13 +203,17 @@ public class RecordPerformedSetsCommandHandler
                 }
             }
         }
-
-        await _performedSetRepository.AddRangeAsync(performedSets, cancellationToken);
+        
+        if (performedSets.Count > 0)
+        {
+            await _performedSetRepository.AddRangeAsync(performedSets, cancellationToken);
+        }
+        
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
+        
         return new RecordPerformedSetsResponseDto
         {
-            RecordedSetsCount = performedSets.Count,
+            RecordedSetsCount = recordedCount,
             ProposalsGeneratedCount = proposalsCount
         };
     }

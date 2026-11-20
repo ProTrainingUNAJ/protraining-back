@@ -325,86 +325,11 @@ public static class RoutinePromptBuilder
     }
 
     /// <summary>
-    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563).
+    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563 / KAN-605).
+    /// Delega en <see cref="GoalMuscleFocusMapper"/> para mantenerse sincronizado con el motor de reglas.
     /// </summary>
-    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal)
-    {
-        if (string.IsNullOrWhiteSpace(goal))
-            return [];
-
-        var text = TextNormalizer.Normalize(goal);
-        var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Piernas / Tren Inferior
-        if (text.Contains("pierna") || text.Contains("cuadriceps") ||
-            text.Contains("isquio") || text.Contains("gluteo") ||
-            text.Contains("gemelo") || text.Contains("pantorrilla") ||
-            text.Contains("tren inferior") || text.Contains("lower body") ||
-            text.Contains("sentadilla") || text.Contains("peso muerto") ||
-            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada") ||
-            text.Contains("hip thrust") || text.Contains("empuje de cadera"))
-        {
-            groups.Add("Piernas");
-        }
-
-        // Pecho / Empuje
-        if (text.Contains("pecho") || text.Contains("pectoral") ||
-            text.Contains("empuje") || text.Contains("push") ||
-            text.Contains("press de banca") || text.Contains("press banca") ||
-            text.Contains("fondo"))
-        {
-            groups.Add("Pecho");
-        }
-
-        // Espalda / Tracción
-        if (text.Contains("espalda") || text.Contains("dorsal") ||
-            text.Contains("traccion") || text.Contains("pull") ||
-            text.Contains("remo") || text.Contains("dominada") ||
-            text.Contains("lumbar") || text.Contains("trapecio") ||
-            text.Contains("jalon"))
-        {
-            groups.Add("Espalda");
-        }
-
-        // Hombros
-        if (text.Contains("hombro") || text.Contains("deltoides") || text.Contains("press militar"))
-        {
-            groups.Add("Hombros");
-        }
-
-        // Brazos
-        if (text.Contains("brazo") || text.Contains("biceps") || text.Contains("triceps"))
-        {
-            groups.Add("Brazos");
-        }
-
-        // Tren superior: sin esto "fuerza de tren superior" no matcheaba ningún grupo y se mandaba la mezcla
-        // general, con mayoría de ejercicios de piernas
-        if (text.Contains("tren superior") || text.Contains("upper body") || text.Contains("torso"))
-        {
-            groups.Add("Pecho");
-            groups.Add("Espalda");
-            groups.Add("Hombros");
-            groups.Add("Brazos");
-        }
-
-        // Core / Abdomen
-        if (text.Contains("core") || text.Contains("abdominal") ||
-            text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
-        {
-            groups.Add("Core");
-        }
-
-        // Deportes de contacto / Rugby (potencia de tren inferior, tracción y estabilidad de core)
-        if (text.Contains("rugby") || text.Contains("contacto") || text.Contains("colision"))
-        {
-            groups.Add("Piernas");
-            groups.Add("Espalda");
-            groups.Add("Core");
-        }
-
-        return groups.ToList();
-    }
+    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal) =>
+        GoalMuscleFocusMapper.ExtractMuscleGroups(goal);
 
     /// <summary>
     /// Filtra y prioriza los ejercicios del catálogo oficial según el objetivo deportivo solicitado (#158 · KAN-563).

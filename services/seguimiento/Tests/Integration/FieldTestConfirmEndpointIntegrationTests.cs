@@ -43,9 +43,11 @@ public sealed class FieldTestConfirmEndpointIntegrationTests
         {
             CategoryId = Guid.NewGuid(),
             Date = new DateTime(2026, 11, 4),
-            Name = "Evaluación de pretemporada",
-            Status = FieldTestSessionStatus.InProgress
+            Name = "Evaluación de pretemporada"
         };
+
+        // KAN-580: Status tiene setter privado; el estado se alcanza por transición.
+        session.TransitionTo(FieldTestSessionStatus.InProgress);
 
         await factory.ExecuteInDbContextAsync(async db =>
         {

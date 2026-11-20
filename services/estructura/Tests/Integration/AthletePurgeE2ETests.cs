@@ -56,10 +56,10 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
                 return new ServicePurgeResult(serviceName, false, 400, "Servicio desconocido");
             }
 
-            // Si el atleta existía se remueve (200 OK); si no existía, responde 404 (idempotencia)
-            return store.Remove(athleteId)
-                ? new ServicePurgeResult(serviceName, true, 200)
-                : new ServicePurgeResult(serviceName, true, 404);
+            // En ProTraining, todos los endpoints de purga responden 200 OK con ceros si el atleta no tenía datos.
+            // Ningún endpoint devuelve 404 por falta de datos.
+            store.Remove(athleteId);
+            return new ServicePurgeResult(serviceName, true, 200);
         }
     }
 
@@ -287,35 +287,52 @@ public sealed class AthletePurgeE2ETests : IAsyncDisposable
             Assert.NotNull(pendingPurge);
             Assert.Equal(PendingPurge.PendingStatus, pendingPurge.Status); // Sigue pendiente
             Assert.Null(pendingPurge.ProcessedAt);
+            Assert.Equal(1, pendingPurge.Attempts);
+            Assert.NotNull(pendingPurge.LastError);
         }
     }
 
     [Fact]
-    public async Task Given_ExternalServicesReturn404_When_PurgeRuns_Then_TreatsAsIdempotentSuccessAndCompletesPurge()
+    public async Task Given_ExternalServiceReturns404NotFound_When_PurgeRuns_Then_CountsAsFailureAbortsAndRecordsLastError()
     {
-        // Arrange: Atleta que no existía en servicios externos (ej. recién registrado y borrado antes de interactuar)
+        // Arrange: Atleta dado de baja (Criterio: 404 indica endpoint no desplegado o ruta mal configurada)
         var athleteId = await CreateAndSoftDeleteAthleteAsync("cristian.medina.e2e@test.com");
 
-        // No sembramos nada en SimulatedExternalServiceStore -> responderá 404 para los 4 servicios
+        // Simulamos que Asistente devuelve 404 (ej. servicio sin desplegar o base URL errónea)
+        _mockPurgeClient
+            .Setup(c => c.PurgeAthleteInServiceAsync(
+                "Asistente",
+                It.IsAny<string>(),
+                athleteId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ServicePurgeResult(
+                "Asistente",
+                false,
+                404,
+                "HTTP 404: Endpoint no encontrado en Asistente (http://asistente:8080/api/v1/internal/athletes/.../purge)."));
 
         // Act
         var result = await ExecutePurgeCommandAsync(retentionDays: 0);
-        Assert.Equal(1, result.PurgedSuccessfully);
-        Assert.Equal(0, result.FailedOrPostponed);
+        Assert.Equal(0, result.PurgedSuccessfully);
+        Assert.Equal(1, result.FailedOrPostponed);
 
-        // Assert: La purga se completa correctamente por idempotencia
+        // Assert: El 404 cuenta como fallo. La purga se aborta, no se tocan los datos locales en Estructura,
+        // y se registra el intento y el mensaje de error en pending_purges.
         using (var dbContext = _factory.CreateDbContext())
         {
             var dbAthlete = await dbContext.Athletes
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(a => a.Id == athleteId);
-            Assert.Null(dbAthlete);
+            Assert.NotNull(dbAthlete); // Conserva los datos para no perderlos
 
             var pendingPurge = await dbContext.PendingPurges
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(p => p.AthleteId == athleteId);
             Assert.NotNull(pendingPurge);
-            Assert.Equal(PendingPurge.ProcessedStatus, pendingPurge.Status);
+            Assert.Equal(PendingPurge.PendingStatus, pendingPurge.Status);
+            Assert.True(pendingPurge.Attempts >= 1);
+            Assert.NotNull(pendingPurge.LastError);
+            Assert.Contains("404", pendingPurge.LastError);
         }
     }
 

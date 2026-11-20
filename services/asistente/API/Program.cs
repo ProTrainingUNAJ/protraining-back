@@ -4,6 +4,8 @@ using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
+using Application.Common.Adaptation;
+using Application.Common.Recommendations;
 using Application.Interfaces.Services;
 using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
@@ -189,6 +191,16 @@ builder.Services.AddScoped<ReviewAlertCommandHandler>();
 builder.Services.AddScoped<ApplyAlertAdjustmentCommandHandler>();
 builder.Services.AddScoped<CreatePreventiveAlertCommandHandler>();
 builder.Services.AddScoped<ProcessDailyOverloadAnalysisCommandHandler>();
+var adaptationOptions = builder.Configuration
+    .GetSection(AdaptationOptions.SectionName)
+    .Get<AdaptationOptions>() ?? new AdaptationOptions();
+builder.Services.AddSingleton(adaptationOptions);
+
+var recommendationsOptions = builder.Configuration
+    .GetSection(RecommendationsOptions.SectionName)
+    .Get<RecommendationsOptions>() ?? new RecommendationsOptions();
+builder.Services.AddSingleton(recommendationsOptions);
+
 builder.Services.AddScoped<GenerateAthleteRecommendationsCommandHandler>();
 builder.Services.AddScoped<GenerateCategoryRecommendationsCommandHandler>();
 builder.Services.AddScoped<IHabitsAthleteContextProvider, StructureHabitsAthleteContextProvider>();

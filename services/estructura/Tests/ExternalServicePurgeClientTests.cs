@@ -50,7 +50,7 @@ public sealed class ExternalServicePurgeClientTests
     }
 
     [Fact]
-    public async Task Given_404NotFound_When_PurgingAthlete_Then_ReturnsIsSuccessTrueAsIdempotent()
+    public async Task Given_404NotFound_When_PurgingAthlete_Then_ReturnsIsSuccessFalseAndDescriptiveErrorMessage()
     {
         // Arrange
         var (client, handlerMock) = CreateClient();
@@ -66,9 +66,11 @@ public sealed class ExternalServicePurgeClientTests
         // Act
         var result = await client.PurgeAthleteInServiceAsync("Asistente", "http://asistente:8080", athleteId);
 
-        // Assert
-        Assert.True(result.IsSuccess);
+        // Assert: El 404 debe contar como fallo (endpoint no desplegado o ruta mal configurada)
+        Assert.False(result.IsSuccess);
         Assert.Equal(404, result.StatusCode);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("HTTP 404", result.ErrorMessage);
     }
 
     [Theory]

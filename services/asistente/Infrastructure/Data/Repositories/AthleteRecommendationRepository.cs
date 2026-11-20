@@ -71,18 +71,20 @@ public sealed class AthleteRecommendationRepository(AppDbContext dbContext) : IA
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+    public async Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
         IReadOnlyCollection<Guid> athleteIds,
+        IReadOnlyCollection<RecommendationStatus> statuses,
         CancellationToken cancellationToken = default)
     {
-        if (athleteIds.Count == 0)
+        if (athleteIds.Count == 0 || statuses.Count == 0)
             return [];
 
         var ids = athleteIds.Distinct().ToList();
+        var statusList = statuses.Distinct().ToList();
 
         return await dbContext.AthleteRecommendations
             .AsNoTracking()
-            .Where(r => ids.Contains(r.AthleteId) && r.Status == RecommendationStatus.Pending)
+            .Where(r => ids.Contains(r.AthleteId) && statusList.Contains(r.Status))
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
     }

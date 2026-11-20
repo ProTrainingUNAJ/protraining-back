@@ -27,8 +27,8 @@ public sealed record ProfileAnalysisResult(
 /// </summary>
 public static class AthleteProfileAnalyzer
 {
-    public const double BelowAverageThresholdPercent = -2.0;
-    public const double AboveAverageThresholdPercent = 2.0;
+    public const double BelowAverageThresholdPercent = RecommendationsOptions.DefaultBelowAverageThresholdPercent;
+    public const double AboveAverageThresholdPercent = 10.0;
     public const double LowWellnessAbsoluteThreshold = 3.0;
     public const double WellnessDropThreshold = -0.5;
     public const double WellnessDropCeiling = 3.5;
@@ -43,12 +43,15 @@ public static class AthleteProfileAnalyzer
     public static ProfileAnalysisResult Analyze(
         IReadOnlyList<AthleteFitnessTestRemoteDto> athleteTests,
         CategoryAveragesRemoteDto? categoryAverages,
-        AthleteWeeklyTrendsRemoteDto? weeklyTrends)
+        AthleteWeeklyTrendsRemoteDto? weeklyTrends,
+        double belowAverageThresholdPercent = BelowAverageThresholdPercent)
     {
         var evaluatedMetrics = new List<ProfileMetricComparisonDto>();
         var physicalGaps = new List<PhysicalGapCandidate>();
 
-        EvaluateGroupProfile(athleteTests, categoryAverages, evaluatedMetrics, physicalGaps);
+        var effectiveBelowThreshold = RecommendationsOptions.NormalizeBelowAverageThreshold(belowAverageThresholdPercent);
+
+        EvaluateGroupProfile(athleteTests, categoryAverages, evaluatedMetrics, physicalGaps, effectiveBelowThreshold);
 
         var (trendsSummary, hasNegativeWellness, hasLoadSpikeWithDrop) = AnalyzeTrends(weeklyTrends);
         var signals = BuildSignals(physicalGaps, trendsSummary, hasNegativeWellness, hasLoadSpikeWithDrop);
@@ -60,7 +63,8 @@ public static class AthleteProfileAnalyzer
         IReadOnlyList<AthleteFitnessTestRemoteDto> athleteTests,
         CategoryAveragesRemoteDto? categoryAverages,
         List<ProfileMetricComparisonDto> evaluatedMetrics,
-        List<PhysicalGapCandidate> physicalGaps)
+        List<PhysicalGapCandidate> physicalGaps,
+        double belowAverageThresholdPercent)
     {
         if (athleteTests.Count == 0 || categoryAverages?.FitnessTests is not { Count: > 0 })
             return;
@@ -97,21 +101,22 @@ public static class AthleteProfileAnalyzer
                 ? Math.Round(((groupAverage - athleteValue) / groupAverage) * 100.0, 1, MidpointRounding.AwayFromZero)
                 : Math.Round(((athleteValue - groupAverage) / groupAverage) * 100.0, 1, MidpointRounding.AwayFromZero);
 
-            var trendLabel = pctDiff switch
-            {
-                < BelowAverageThresholdPercent => string.Format(
+            var aboveAverageThresholdPercent = Math.Abs(belowAverageThresholdPercent);
+
+            var trendLabel = pctDiff < belowAverageThresholdPercent
+                ? string.Format(
                     CultureInfo.InvariantCulture,
                     "Por debajo del promedio ({0:+0.0;-0.0;0.0}%)",
-                    pctDiff),
-                > AboveAverageThresholdPercent => string.Format(
-                    CultureInfo.InvariantCulture,
-                    "Superior al promedio ({0:+0.0;-0.0;0.0}%)",
-                    pctDiff),
-                _ => string.Format(
-                    CultureInfo.InvariantCulture,
-                    "En el promedio ({0:+0.0;-0.0;0.0}%)",
                     pctDiff)
-            };
+                : pctDiff > aboveAverageThresholdPercent
+                    ? string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Superior al promedio ({0:+0.0;-0.0;0.0}%)",
+                        pctDiff)
+                    : string.Format(
+                        CultureInfo.InvariantCulture,
+                        "En el promedio ({0:+0.0;-0.0;0.0}%)",
+                        pctDiff);
 
             var unit = latest.MeasurementUnit.Trim();
             var metric = new ProfileMetricComparisonDto(
@@ -124,7 +129,7 @@ public static class AthleteProfileAnalyzer
 
             evaluatedMetrics.Add(metric);
 
-            if (pctDiff < BelowAverageThresholdPercent)
+            if (pctDiff < belowAverageThresholdPercent)
             {
                 var (reason, focus) = MapGapReasonAndFocus(latest.TestName, latest.MotorCapacity);
                 physicalGaps.Add(new PhysicalGapCandidate(reason, focus, metric, pctDiff));
@@ -308,17 +313,71 @@ public static class AthleteProfileAnalyzer
         return signals;
     }
 
-    private static bool IsLowerBetter(string unit, string testName)
+    private static readonly string[] HigherTimeIsBetterKeywords =
+    [
+        "plancha",
+        "plank",
+        "isometric",
+        "sosten",
+        "aguante",
+        "suspension",
+        "wall sit",
+        "dead hang",
+        "colgado",
+        "equilibrio",
+        "balance",
+        "cooper",
+        "yo-yo",
+        "yoyo",
+        "course navette",
+        "beep"
+    ];
+
+    private static readonly string[] LowerTimeIsBetterKeywords =
+    [
+        "sprint",
+        "carrera",
+        "agility",
+        "agilidad",
+        "cambios de direccion",
+        "illinois",
+        "t-test",
+        "5-10-5",
+        "bronco",
+        "10 m",
+        "20 m",
+        "30 m",
+        "40 m",
+        "50 m",
+        "100 m",
+        "1 km",
+        "1000 m",
+        "1500 m",
+        "2000 m",
+        "milla",
+        "reaccion",
+        "tiempo"
+    ];
+
+    public static bool IsLowerBetter(string unit, string testName)
     {
         var normUnit = TextNormalizer.Normalize(unit);
         var normName = TextNormalizer.Normalize(testName);
 
-        return normUnit is "s" or "seg" or "segundos" or "min" or "minutos" or "ms"
-            || normName.Contains("sprint")
-            || normName.Contains("tiempo")
-            || normName.Contains("agility")
-            || normName.Contains("cambios de direccion")
-            || (normName.Contains("velocidad") && normUnit.Contains('s'));
+        // Pruebas isométricas o de sostén/resistencia por tiempo (ej. plancha): más tiempo es mejor
+        if (HigherTimeIsBetterKeywords.Any(normName.Contains))
+            return false;
+
+        if (LowerTimeIsBetterKeywords.Any(normName.Contains))
+            return true;
+
+        // En milisegundos y segundos (que no sean sostén isométrico), menor tiempo indica mejor marca
+        if (normUnit is "ms" or "s" or "seg" or "segundos")
+            return true;
+
+        // En minutos solo es "menos es mejor" si el nombre indicó explícitamente una prueba de distancia/tiempo
+        // (ya evaluada arriba); así una plancha o prueba de resistencia en minutos no queda invertida
+        return normName.Contains("velocidad") && normUnit.Contains('s');
     }
 
     private static (string Reason, string SuggestedFocus) MapGapReasonAndFocus(string testName, string motorCapacity)

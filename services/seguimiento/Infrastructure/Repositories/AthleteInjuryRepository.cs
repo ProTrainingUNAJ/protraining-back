@@ -30,6 +30,26 @@ public sealed class AthleteInjuryRepository(AppDbContext context) : IAthleteInju
                 .OrderByDescending(injury => injury.InjuryDate)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyDictionary<Guid, int>> CountActiveByAthleteIdsAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (athleteIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        var ids = athleteIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteInjuries
+                .AsNoTracking()
+                .Where(injury => ids.Contains(injury.AthleteId) && injury.Status == InjuryStatus.Active)
+                .GroupBy(injury => injury.AthleteId)
+                .Select(group => new { AthleteId = group.Key, ActiveCount = group.Count() })
+                .ToDictionaryAsync(item => item.AthleteId, item => item.ActiveCount, cancellationToken));
+    }
+
     public Task AddAsync(AthleteInjury injury, CancellationToken cancellationToken = default)
     {
         context.AthleteInjuries.Add(injury);

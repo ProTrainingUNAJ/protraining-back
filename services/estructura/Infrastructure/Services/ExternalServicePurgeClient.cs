@@ -36,14 +36,17 @@ public sealed class ExternalServicePurgeClient(
                 return new ServicePurgeResult(serviceName, true, (int)response.StatusCode);
             }
 
-            // 404 Not Found -> Idempotencia: el atleta no tenía datos en este servicio o ya fue purgado
+            // 404 Not Found -> Es un fallo: indica ruta/servicio inexistente o URL mal configurada.
+            // Ningún endpoint de purga responde 404 cuando no hay datos; todos devuelven 200 con ceros.
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                logger.LogInformation(
-                    "El atleta {AthleteId} no registra datos en el servicio {ServiceName} (404 Not Found). Se considera purgado con éxito.",
+                var notFoundMsg = $"HTTP 404: Endpoint no encontrado en {serviceName} ({requestUri}). Verifique la URL base y el despliegue del servicio.";
+                logger.LogWarning(
+                    "El servicio {ServiceName} respondió 404 Not Found al purgar atleta {AthleteId} en {RequestUri}. Se considera fallo.",
+                    serviceName,
                     athleteId,
-                    serviceName);
-                return new ServicePurgeResult(serviceName, true, (int)response.StatusCode);
+                    requestUri);
+                return new ServicePurgeResult(serviceName, false, 404, notFoundMsg);
             }
 
             // Códigos 4xx (excepto 404) y 5xx

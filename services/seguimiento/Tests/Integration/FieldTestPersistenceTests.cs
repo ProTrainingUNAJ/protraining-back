@@ -57,14 +57,32 @@ public sealed class FieldTestPersistenceTests : IDisposable
         return catalogTest;
     }
 
-    private static FieldTestSession NuevaSesion(Guid categoryId, string name, FieldTestSessionStatus status) =>
-        new()
+    private static FieldTestSession NuevaSesion(Guid categoryId, string name, FieldTestSessionStatus status)
+    {
+        var session = new FieldTestSession
         {
             CategoryId = categoryId,
             Date = new DateTime(2026, 11, 4),
-            Name = name,
-            Status = status
+            Name = name
         };
+
+        // KAN-580: Status tiene setter privado; el estado se alcanza por transición.
+        AplicarEstado(session, status);
+        return session;
+    }
+
+    // KAN-580: Status tiene setter privado, así que el estado pedido a la sesión de
+    // prueba se construye recorriendo las transiciones permitidas.
+    private static void AplicarEstado(FieldTestSession session, FieldTestSessionStatus status)
+    {
+        if (status == FieldTestSessionStatus.Planned)
+            return;
+
+        session.TransitionTo(FieldTestSessionStatus.InProgress);
+
+        if (status == FieldTestSessionStatus.Closed)
+            session.TransitionTo(FieldTestSessionStatus.Closed);
+    }
 
     // ---------- CA1: la sesión admite varios tests del catálogo y resultados por atleta ----------
 

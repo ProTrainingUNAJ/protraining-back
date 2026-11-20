@@ -18,12 +18,14 @@ public class GetFieldTestSessionQueryHandlerTests
     {
         CategoryId = Guid.NewGuid(),
         Date = new DateTime(2026, 11, 4),
-        Name = "Evaluación de pretemporada",
-        Status = FieldTestSessionStatus.InProgress
+        Name = "Evaluación de pretemporada"
+        // Estado InProgress por transición en el constructor (setter privado, KAN-580).
     };
 
     public GetFieldTestSessionQueryHandlerTests()
     {
+        _session.TransitionTo(FieldTestSessionStatus.InProgress);
+
         _fieldTests
             .Setup(repo => repo.GetSessionByIdAsync(SessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_session);

@@ -50,13 +50,16 @@ public sealed class ProcessPendingPurgesCommandHandler(
             }
 
             // Despacha la purga a los 4 microservicios externos
-            var externalSuccess = await purgeDispatcher.DispatchPurgeToExternalServicesAsync(
+            var dispatchResult = await purgeDispatcher.DispatchPurgeToExternalServicesAsync(
                 purge.AthleteId,
                 cancellationToken);
 
-            // Criterio 2: Si algún servicio externo falla o está caído, no se pierde el pedido y se reintenta más tarde
-            if (!externalSuccess)
+            // Criterio 2: Si algún servicio externo falla o está caído, no se pierde el pedido:
+            // se registran los intentos y el último error para auditoría y se reintenta más tarde
+            if (!dispatchResult.IsSuccess)
             {
+                purge.RecordFailure(dispatchResult.ErrorMessage ?? "Fallo en servicios externos al purgar.");
+                await unitOfWork.SaveChangesAsync(cancellationToken);
                 failedOrPostponed++;
                 continue;
             }

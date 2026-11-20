@@ -185,7 +185,10 @@ public sealed class Kan493HabitsRecommendationsTests
 
         var repository = new Mock<IAthleteRecommendationRepository>();
         repository
-            .Setup(r => r.ListPendingByAthleteIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.ListByAthleteIdsAndStatusesAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<IReadOnlyCollection<RecommendationStatus>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var handler = new GenerateCategoryRecommendationsCommandHandler(
@@ -407,6 +410,12 @@ public sealed class Kan493HabitsRecommendationsTests
         var repository = new Mock<IAthleteRecommendationRepository>();
         repository
             .Setup(r => r.ListAsync(It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<RecommendationStatus?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        repository
+            .Setup(r => r.ListByAthleteIdsAndStatusesAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<IReadOnlyCollection<RecommendationStatus>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         return (structure, seguimiento, new Mock<IAiService>(), repository, new Mock<IUnitOfWork>());

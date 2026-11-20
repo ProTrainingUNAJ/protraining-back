@@ -1,6 +1,7 @@
 namespace Application.UseCases.Ai.SuggestRoutine;
 
 using System.Text.Json;
+using Application.Common.Adaptation;
 using Application.Common.PfDecisions;
 using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
@@ -19,7 +20,8 @@ public sealed class SuggestRoutineUseCase(
     IUnitOfWork? unitOfWork = null,
     ILogger<SuggestRoutineUseCase>? logger = null,
     IPfDecisionRepository? pfDecisionRepository = null,
-    ITrainingPlanServiceClient? trainingPlanServiceClient = null)
+    ITrainingPlanServiceClient? trainingPlanServiceClient = null,
+    AdaptationOptions? adaptationOptions = null)
 {
     public async Task<RoutineSuggestionResponseDto> ExecuteAsync(
         RoutineSuggestionRequestDto request,
@@ -97,10 +99,12 @@ public sealed class SuggestRoutineUseCase(
                 ? new List<string>()
                 : new List<string> { "La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta." };
 
+        var conservativePercent = ResolveConservativePercent(context);
         foreach (var estimatedWarning in BuildEstimatedAndMissingRecordWarnings(
                      context.CurrentRecords,
                      aiResponse.BaseExercises ?? aiResponse.Exercises,
-                     aiResponse.Exercises))
+                     aiResponse.Exercises,
+                     conservativePercent))
         {
             if (!baseWarningList.Contains(estimatedWarning))
                 baseWarningList.Add(estimatedWarning);
@@ -141,7 +145,7 @@ public sealed class SuggestRoutineUseCase(
         RoutineSuggestionResponseDto response,
         AthleteAdaptationContextDto context)
     {
-        var (updatedExercises, changes, warnings, adaptedAny) = AdaptRestrictedExercises(
+        var (updatedExercises, changes, warnings, adaptedAny) = AuthorizedSubstituteHelper.AdaptRestrictedExercises(
             response.Exercises,
             context,
             response.AdaptationChanges,
@@ -158,60 +162,6 @@ public sealed class SuggestRoutineUseCase(
             AdaptationWarnings = warnings,
             AdaptationChanges = changes
         };
-    }
-
-    private static (List<SuggestedExerciseDto> Exercises, List<AdaptationChangeDto> Changes, List<string> Warnings, bool AdaptedAny)
-        AdaptRestrictedExercises(
-            IReadOnlyList<SuggestedExerciseDto> sourceExercises,
-            AthleteAdaptationContextDto context,
-            IReadOnlyList<AdaptationChangeDto>? existingChanges = null,
-            IReadOnlyList<string>? existingWarnings = null)
-    {
-        var restrictionsByExercise = context.Restrictions
-            .Where(r => r.Substitutes.Count > 0)
-            .GroupBy(r => r.ExerciseId)
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var adaptedExercises = new List<SuggestedExerciseDto>(sourceExercises.Count);
-        var changes = existingChanges?.ToList() ?? [];
-        var warnings = existingWarnings?.ToList() ?? [];
-        var adaptedAny = false;
-
-        foreach (var exercise in sourceExercises)
-        {
-            if (exercise.ExerciseId is { } exId &&
-                exId != Guid.Empty &&
-                restrictionsByExercise.TryGetValue(exId, out var restriction))
-            {
-                var substitute = restriction.Substitutes[0];
-                adaptedExercises.Add(exercise with
-                {
-                    ExerciseId = substitute.ExerciseId,
-                    ExerciseName = substitute.Name,
-                    IsReference = false
-                });
-
-                var reason = BuildAdaptationReason(restriction, substitute.Name);
-                if (!warnings.Contains(reason))
-                    warnings.Add(reason);
-
-                changes.Add(new AdaptationChangeDto(
-                    exercise.ExerciseId,
-                    exercise.ExerciseName,
-                    substitute.ExerciseId,
-                    substitute.Name,
-                    restriction.Zone ?? string.Empty,
-                    reason,
-                    restriction.Substitutes));
-                adaptedAny = true;
-            }
-            else
-            {
-                adaptedExercises.Add(exercise);
-            }
-        }
-
-        return (adaptedExercises, changes, warnings, adaptedAny);
     }
 
     private async Task<AthleteAdaptationContextDto> EnrichContextForExercisesAsync(
@@ -343,17 +293,19 @@ public sealed class SuggestRoutineUseCase(
         AthleteAdaptationContextDto context,
         CancellationToken cancellationToken)
     {
-        var (adaptedExercises, changes, warnings, _) = AdaptRestrictedExercises(baseExercises, context);
+        var (adaptedExercises, changes, warnings, _) = AuthorizedSubstituteHelper.AdaptRestrictedExercises(baseExercises, context);
 
         if (warnings.Count == 0 && context.Restrictions.Count > 0)
         {
             warnings.Add("La propuesta fue validada contra las restricciones y sustitutos autorizados del atleta.");
         }
 
+        var conservativePercent = ResolveConservativePercent(context);
         foreach (var recordWarning in BuildEstimatedAndMissingRecordWarnings(
                      context.CurrentRecords,
                      baseExercises,
-                     adaptedExercises))
+                     adaptedExercises,
+                     conservativePercent))
         {
             if (!warnings.Contains(recordWarning))
                 warnings.Add(recordWarning);
@@ -391,10 +343,19 @@ public sealed class SuggestRoutineUseCase(
             BaseExercises: baseExercises.ToList());
     }
 
+    private decimal ResolveConservativePercent(AthleteAdaptationContextDto context)
+    {
+        if (context.ConservativeEstimatedRecordPercent is > 0m and <= 100m)
+            return context.ConservativeEstimatedRecordPercent.Value;
+
+        return (adaptationOptions ?? new AdaptationOptions()).GetEffectiveEstimatedRecordConservativePercent();
+    }
+
     private static IReadOnlyList<string> BuildEstimatedAndMissingRecordWarnings(
         IReadOnlyList<AthleteRecordRemoteDto>? currentRecords,
         IReadOnlyList<SuggestedExerciseDto>? baseExercises,
-        IReadOnlyList<SuggestedExerciseDto>? adaptedExercises)
+        IReadOnlyList<SuggestedExerciseDto>? adaptedExercises,
+        decimal conservativePercent)
     {
         if (currentRecords is not { Count: > 0 })
             return [];
@@ -421,23 +382,7 @@ public sealed class SuggestRoutineUseCase(
                 continue;
 
             warnings.Add(
-                $"Alerta de dato estimado: el 1RM de {matched.ExerciseName} ({matched.WeightOneRepMaxKg:0.##} kg) es estimado; la carga se calcula con escalón conservador (90%).");
-        }
-
-        if (warnings.Count == 0)
-        {
-            foreach (var record in currentRecords.Where(r => IsEstimatedOrigin(r.Origin)))
-            {
-                var alreadyAlerted =
-                    (record.ExerciseId != Guid.Empty && !alertedEstimatedExerciseIds.Add(record.ExerciseId)) ||
-                    (!string.IsNullOrWhiteSpace(record.ExerciseName) && !alertedEstimatedNames.Add(record.ExerciseName.Trim()));
-
-                if (alreadyAlerted)
-                    continue;
-
-                warnings.Add(
-                    $"Alerta de dato estimado: el 1RM de {record.ExerciseName} ({record.WeightOneRepMaxKg:0.##} kg) es estimado; la carga se calcula con escalón conservador (90%).");
-            }
+                $"Alerta de dato estimado: el 1RM de {matched.ExerciseName} ({matched.WeightOneRepMaxKg:0.##} kg) es estimado; la carga se calcula con escalón conservador ({conservativePercent:0.#}%).");
         }
 
         return warnings;
@@ -469,30 +414,6 @@ public sealed class SuggestRoutineUseCase(
         !string.IsNullOrWhiteSpace(origin) &&
         (origin.Contains("Estimated", StringComparison.OrdinalIgnoreCase) ||
          origin.Contains("Estimad", StringComparison.OrdinalIgnoreCase));
-
-    private static string BuildAdaptationReason(
-        ExerciseRestrictionContextDto restriction,
-        string substituteName)
-    {
-        var zone = string.IsNullOrWhiteSpace(restriction.Zone) ? "zona afectada" : restriction.Zone.Trim();
-        var normalizedReason = NormalizeReason(zone, restriction.Reason);
-        return $"Sustitución biomecánica por lesión de {zone} para {normalizedReason}. Sustituto autorizado: {substituteName}.";
-    }
-
-    private static string NormalizeReason(string zone, string? reason)
-    {
-        if (string.Equals(zone, "rodilla", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(reason) &&
-            reason.Contains("rotul", StringComparison.OrdinalIgnoreCase))
-        {
-            return "reducir estrés en tendón rotuliano";
-        }
-
-        var normalized = string.IsNullOrWhiteSpace(reason)
-            ? "reducir el estrés de la zona lesionada"
-            : reason.Trim().TrimEnd('.');
-        return char.ToLowerInvariant(normalized[0]) + normalized[1..];
-    }
 
     private async Task<Guid?> TryPersistDraftAsync(
         Guid athleteId,

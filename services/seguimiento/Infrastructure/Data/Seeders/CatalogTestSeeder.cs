@@ -38,7 +38,9 @@ public static class CatalogTestSeeder
 
     // Catálogo completo del microservicio: se reutiliza en el alta inicial y en el
     // backfill de bases que ya fueron sembradas con menos pruebas (KAN-458).
-    private static List<CatalogTest> BuildTests()
+    // internal (no private): el test de KAN-580 recorre estos mismos TargetExerciseName
+    // y verifica que existan en exercises.json de Entrenamiento.
+    internal static List<CatalogTest> BuildTests()
     {
         return new List<CatalogTest>
         {
