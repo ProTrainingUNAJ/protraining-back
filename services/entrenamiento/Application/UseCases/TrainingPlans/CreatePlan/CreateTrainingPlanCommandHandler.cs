@@ -80,7 +80,9 @@ public class CreateTrainingPlanCommandHandler
                                             exReq.TargetRpe,
                                             exReq.TargetRir,
                                             exReq.Notes,
-                                            session.Id
+                                            session.Id,
+                                            exReq.TargetDistanceMeters,
+                                            exReq.TargetTimeSeconds
                                         );
                                         block.AddPrescribedExercise(exercise);
                                     }
@@ -105,7 +107,9 @@ public class CreateTrainingPlanCommandHandler
                                     exReq.TargetRpe,
                                     exReq.TargetRir,
                                     exReq.Notes,
-                                    session.Id
+                                    session.Id,
+                                    exReq.TargetDistanceMeters,
+                                    exReq.TargetTimeSeconds
                                 );
                                 defaultBlock.AddPrescribedExercise(exercise);
                             }

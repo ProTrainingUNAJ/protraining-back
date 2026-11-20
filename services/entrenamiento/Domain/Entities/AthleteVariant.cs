@@ -1,6 +1,5 @@
 ﻿using Domain.Common;
 using Domain.Exceptions;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Domain.Entities
 {

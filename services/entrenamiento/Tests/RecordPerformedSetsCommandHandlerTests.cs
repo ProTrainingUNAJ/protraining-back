@@ -377,5 +377,43 @@ public class RecordPerformedSetsCommandHandlerTests
             Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Given_ExistingTimedPass_When_CorrectingSameSetNumber_Then_UpdatesWithoutDuplicating()
+    {
+        // KAN-579: corregir la misma pasada no duplica
+        var existingSet = PerformedSet.Create(
+            athleteId: _athleteId,
+            sessionId: _session.Id,
+            exerciseId: _exerciseId,
+            date: Domain.Common.ArgentinaTime.Today,
+            weight: 0m,
+            reps: 0,
+            timeSeconds: 15.2m,
+            setNumber: 1);
+
+        _performedSetRepoMock
+            .Setup(r => r.GetByAthleteAndDateAsync(_athleteId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([existingSet]);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                TimeSeconds = 15.0m
+            }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(15.0m, existingSet.TimeSeconds);
+        _performedSetRepoMock.Verify(
+            r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
 

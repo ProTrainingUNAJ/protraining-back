@@ -18,6 +18,8 @@ public record PrescribedExerciseRequest : IValidatableObject
     public decimal? TargetRpe { get; init; }
     public int? TargetRir { get; init; }
     public string? Notes { get; init; }
+    public decimal? TargetDistanceMeters { get; init; }
+    public decimal? TargetTimeSeconds { get; init; }
 
     public PrescribedExerciseRequest() { }
 
@@ -31,7 +33,9 @@ public record PrescribedExerciseRequest : IValidatableObject
         string? intensityType = null,
         decimal? targetRpe = null,
         int? targetRir = null,
-        string? notes = null)
+        string? notes = null,
+        decimal? targetDistanceMeters = null,
+        decimal? targetTimeSeconds = null)
     {
         ExerciseId = exerciseId;
         Order = order;
@@ -43,6 +47,8 @@ public record PrescribedExerciseRequest : IValidatableObject
         TargetRpe = targetRpe;
         TargetRir = targetRir;
         Notes = notes;
+        TargetDistanceMeters = targetDistanceMeters;
+        TargetTimeSeconds = targetTimeSeconds;
     }
 
     public PrescribedExerciseRequest(
@@ -55,8 +61,10 @@ public record PrescribedExerciseRequest : IValidatableObject
         string? intensityType = null,
         decimal? targetRpe = null,
         int? targetRir = null,
-        string? notes = null)
-        : this(exerciseId, order, sets, reps.ToString(), targetPercentage, id, intensityType, targetRpe, targetRir, notes)
+        string? notes = null,
+        decimal? targetDistanceMeters = null,
+        decimal? targetTimeSeconds = null)
+        : this(exerciseId, order, sets, reps.ToString(), targetPercentage, id, intensityType, targetRpe, targetRir, notes, targetDistanceMeters, targetTimeSeconds)
     {
     }
 
@@ -85,6 +93,20 @@ public record PrescribedExerciseRequest : IValidatableObject
             yield return new ValidationResult(
                 "El RIR debe estar entre 0 y 5.",
                 [nameof(TargetRir)]);
+        }
+
+        if (TargetDistanceMeters.HasValue && TargetDistanceMeters.Value <= 0)
+        {
+            yield return new ValidationResult(
+                "La distancia objetivo debe ser mayor a cero.",
+                [nameof(TargetDistanceMeters)]);
+        }
+
+        if (TargetTimeSeconds.HasValue && TargetTimeSeconds.Value <= 0)
+        {
+            yield return new ValidationResult(
+                "El tiempo objetivo debe ser mayor a cero.",
+                [nameof(TargetTimeSeconds)]);
         }
     }
 }

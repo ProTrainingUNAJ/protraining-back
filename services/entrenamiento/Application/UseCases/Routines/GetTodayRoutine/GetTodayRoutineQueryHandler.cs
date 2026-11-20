@@ -178,9 +178,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
             var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(effectiveExerciseIds, cancellationToken);
 
-            var performedSets = performedSetRepository != null
-                ? (await performedSetRepository.GetByAthleteAndDateAsync(athleteId, date, cancellationToken) ?? [])
-                : [];
+            var performedSets = await performedSetRepository.GetByAthleteAndDateAsNoTrackingAsync(athleteId, date, cancellationToken);
 
             var hasTimedExercise = routine.PrescribedExercises.Any(p =>
             {
