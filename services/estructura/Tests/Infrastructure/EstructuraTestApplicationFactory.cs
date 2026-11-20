@@ -168,6 +168,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<Application.UseCases.Athletes.UpdateAthleteStatus.UpdateAthleteStatusCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UpdateAthleteEmail.UpdateAthleteEmailCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhone.UpdateAthletePhoneCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhysicalProfile.UpdateAthletePhysicalProfileCommandHandler>();
                 services.AddScoped<UpdateHabitsPermissionCommandHandler>();
                 services.AddScoped<DeleteAthleteCommandHandler>();
                 services.AddScoped<AssignAthleteCategoryCommandHandler>();
@@ -181,6 +182,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UpdateMyTelegram.UpdateMyTelegramCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateMyPhysicalProfile.UpdateMyPhysicalProfileCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UploadAthletePhoto.UploadAthletePhotoCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetAthletePhoto.GetAthletePhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.DeleteAthletePhoto.DeleteAthletePhotoCommandHandler>();

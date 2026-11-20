@@ -13,6 +13,7 @@ using Application.UseCases.Athletes.UpdateAthlete;
 using Application.UseCases.Athletes.UpdateAthleteStatus;
 using Application.UseCases.Athletes.UpdateAthleteEmail;
 using Application.UseCases.Athletes.UpdateAthletePhone;
+using Application.UseCases.Athletes.UpdateAthletePhysicalProfile;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Athletes.UpdateMedicalRecord;
 using Application.UseCases.Athletes.UploadAthletePhoto;
@@ -44,7 +45,8 @@ public sealed class AthletesController(
     DeleteAthletePhotoCommandHandler deletePhotoHandler,
     UpdateAthleteStatusCommandHandler updateStatusHandler,
     UpdateAthleteEmailCommandHandler updateEmailHandler,
-    UpdateAthletePhoneCommandHandler updatePhoneHandler) : ControllerBase
+    UpdateAthletePhoneCommandHandler updatePhoneHandler,
+    UpdateAthletePhysicalProfileCommandHandler updatePhysicalProfileHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -130,6 +132,15 @@ public sealed class AthletesController(
         CancellationToken cancellationToken) =>
         Ok(await updatePhoneHandler.HandleAsync(
             new UpdateAthletePhoneCommand(id, request.Phone),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/physical-profile")]
+    public async Task<ActionResult<AthleteDto>> UpdatePhysicalProfile(
+        Guid id,
+        UpdatePhysicalProfileRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updatePhysicalProfileHandler.HandleAsync(
+            new UpdateAthletePhysicalProfileCommand(id, request.WeightKg, request.AthleticGoal),
             cancellationToken));
 
     [HttpPost("{id:guid}/medical-record/access")]

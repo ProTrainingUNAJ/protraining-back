@@ -38,6 +38,11 @@ namespace Infrastructure.Data.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("active");
 
+                    b.Property<string>("AthleticGoal")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("athletic_goal");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -93,10 +98,19 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("photo_updated_at");
 
+                    b.Property<DateTime?>("PhysicalProfileUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("physical_profile_updated_at");
+
                     b.Property<string>("TelegramUsername")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("telegram_username");
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("weight_kg");
 
                     b.HasKey("Id");
 

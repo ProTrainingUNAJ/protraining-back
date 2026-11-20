@@ -42,6 +42,47 @@ public sealed record StructureCategoryAthleteDto(
     Guid Id,
     bool Active);
 
+/// <summary>
+/// Perfil físico canónico del atleta en Estructura. Se expone como texto ya etiquetado
+/// en español para que las reglas de hábitos lo consuman sin duplicar traducciones.
+/// </summary>
+public sealed record StructureAthleteProfileDto(
+    Guid Id,
+    double? WeightKg,
+    string? AthleticGoal);
+
+/// <summary>
+/// Disponibilidad de la ficha médica para el flujo de recomendaciones.
+/// </summary>
+public enum StructureMedicalRecordAvailability
+{
+    Available,
+    NoRecord,
+    Unavailable
+}
+
+/// <summary>
+/// Datos mínimos de la ficha médica necesarios para evaluar seguridad nutricional.
+/// El texto clínico viaja solo en memoria entre Estructura y el handler; nunca se persiste
+/// en el snapshot ni se envía al proveedor de IA.
+/// </summary>
+/// <remarks>
+/// <see cref="HasKnownAllergies"/> y <see cref="HasKnownConditions"/> son un seam forward-compatible:
+/// Estructura hoy no expone esos campos estructurados (el texto libre vive en pathologies/history/surgeries),
+/// así que llegan null y se usa la clasificación conservadora por marcadores. Cuando el campo exista,
+/// el cliente lo deserializa y las reglas lo prefieren sin cambiar el flujo. Un valor false NUNCA
+/// habilita cantidades si el texto clínico sigue registrando un riesgo: gana la opción más conservadora.
+/// </remarks>
+public sealed record StructureMedicalRecordContextDto(
+    StructureMedicalRecordAvailability Availability,
+    bool HasPhysicalFitnessCertificate,
+    DateOnly? PhysicalFitnessExpiresAt,
+    string? Pathologies,
+    string? MedicalHistory,
+    string? Surgeries,
+    bool? HasKnownAllergies = null,
+    bool? HasKnownConditions = null);
+
 public interface IStructureAthleteClient
 {
     /// <summary>
@@ -88,4 +129,25 @@ public interface IStructureAthleteClient
     /// Devuelve null si el usuario todavía no tiene un perfil de atleta vinculado (404).
     /// </summary>
     Task<Guid?> GetMyAthleteIdAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lee la ficha médica del atleta mediante el endpoint auditado de Estructura.
+    /// Requiere token del preparador físico y consentimiento firmado; ante cualquier error
+    /// devuelve <see cref="StructureMedicalRecordAvailability.Unavailable"/> para que el
+    /// consumidor aplique derivación profesional (fail-closed). Nunca devuelve null como
+    /// equivalente a "sin alergias".
+    /// </summary>
+    Task<StructureMedicalRecordContextDto> GetMedicalRecordContextAsync(
+        Guid athleteId,
+        string justification,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lee el perfil físico canónico (peso/objetivo) de Estructura con el token del PF.
+    /// Devuelve null si el atleta no existe, no pertenece al PF o el servicio no responde:
+    /// el proveedor de hábitos debe responder sin cantidades, nunca inventar valores.
+    /// </summary>
+    Task<StructureAthleteProfileDto?> GetAthleteProfileAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default);
 }
