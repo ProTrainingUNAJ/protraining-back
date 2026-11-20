@@ -729,6 +729,39 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{athleteId}/fitness-tests/best-marks:
+    get:
+      tags:
+        - Fitness Tests
+      summary: Mejores marcas de tests mapeados a ejercicios de un atleta
+      description: >
+        Devuelve la mejor marca registrada por el atleta para cada test del catálogo
+        vinculado a un ejercicio de Entrenamiento (menor valor para pruebas de tiempo,
+        mayor valor para el resto). Accesible para el PF dueño del atleta o el propio atleta.
+      operationId: listAthleteBestMarks
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Mejores marcas obtenidas con éxito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AthleteBestMark'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{athleteId}/evolution:
     get:
       tags:
@@ -2063,6 +2096,34 @@ components:
           type: string
           format: date-time
           example: "2026-10-10T09:30:00Z"
+
+    AthleteBestMark:
+      type: object
+      description: Mejor marca histórica de un atleta en un test del catálogo mapeado a un ejercicio.
+      required:
+        - catalogTestId
+        - testName
+        - targetExerciseName
+        - bestValue
+        - measurementUnit
+      properties:
+        catalogTestId:
+          type: string
+          format: uuid
+          example: "6f1d8b3a-2c4e-4f5a-9b7d-1e2f3a4b5c6d"
+        testName:
+          type: string
+          example: "Carrera 100 m"
+        targetExerciseName:
+          type: string
+          example: "Pasadas"
+        bestValue:
+          type: number
+          format: double
+          example: 14.0
+        measurementUnit:
+          type: string
+          example: "s"
 
     AthleteFitnessTest:
       type: object

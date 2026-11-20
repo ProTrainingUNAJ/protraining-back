@@ -43,6 +43,7 @@ using Infrastructure.Services.Training;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Application.UseCases.FitnessTests.ListAthleteBestMarks;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -101,6 +102,7 @@ builder.Services.AddScoped<GetAthleteWeekQueryHandler>();
 // Catálogo de tests físicos por capacidad motora (KAN-333) e historial de tests del atleta (KAN-434).
 builder.Services.AddScoped<ListFitnessTestsQueryHandler>();
 builder.Services.AddScoped<ListAthleteFitnessTestsQueryHandler>();
+builder.Services.AddScoped<ListAthleteBestMarksQueryHandler>();
 // Lesiones de los atletas con su ciclo de vida (KAN-419): alta en Active + historial de estados.
 builder.Services.AddScoped<CreateAthleteInjuryCommandHandler>();
 builder.Services.AddScoped<ListAthleteInjuriesQueryHandler>();
