@@ -13,8 +13,8 @@ public class FieldTestSessionTransitionTests
         {
             CategoryId = Guid.NewGuid(),
             Date = new DateTime(2026, 11, 4),
-            Name = "Evaluación de pretemporada",
-            Status = FieldTestSessionStatus.Planned
+            Name = "Evaluación de pretemporada"
+            // Planned por defecto: Status tiene setter privado (KAN-580).
         };
 
     private static FieldTestSession CrearCerrada()

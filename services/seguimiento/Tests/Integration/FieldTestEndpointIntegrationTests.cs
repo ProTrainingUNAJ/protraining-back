@@ -53,9 +53,11 @@ public sealed class FieldTestEndpointIntegrationTests
         {
             CategoryId = Guid.NewGuid(),
             Date = new DateTime(2026, 11, 4),
-            Name = "Evaluación de pretemporada",
-            Status = status
+            Name = "Evaluación de pretemporada"
         };
+
+        // KAN-580: Status tiene setter privado; el estado se alcanza por transición.
+        AplicarEstado(session, status);
 
         await factory.ExecuteInDbContextAsync(async db =>
         {
@@ -70,6 +72,19 @@ public sealed class FieldTestEndpointIntegrationTests
         });
 
         return session.Id;
+    }
+
+    // KAN-580: Status tiene setter privado, así que el estado pedido a la sesión de
+    // prueba se construye recorriendo las transiciones permitidas.
+    private static void AplicarEstado(FieldTestSession session, FieldTestSessionStatus status)
+    {
+        if (status == FieldTestSessionStatus.Planned)
+            return;
+
+        session.TransitionTo(FieldTestSessionStatus.InProgress);
+
+        if (status == FieldTestSessionStatus.Closed)
+            session.TransitionTo(FieldTestSessionStatus.Closed);
     }
 
     // Sesión y resultado de otro PF: SQL crudo con el pf_id ajeno, que el filtro global

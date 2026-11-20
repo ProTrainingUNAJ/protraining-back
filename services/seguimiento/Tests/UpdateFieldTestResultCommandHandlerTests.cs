@@ -20,8 +20,8 @@ public class UpdateFieldTestResultCommandHandlerTests
     {
         CategoryId = Guid.NewGuid(),
         Date = new DateTime(2026, 11, 4),
-        Name = "Evaluación de pretemporada",
-        Status = FieldTestSessionStatus.InProgress
+        Name = "Evaluación de pretemporada"
+        // Estado InProgress por transición en el constructor (setter privado, KAN-580).
     };
 
     private readonly FieldTestResult _result = new()
@@ -36,6 +36,8 @@ public class UpdateFieldTestResultCommandHandlerTests
 
     public UpdateFieldTestResultCommandHandlerTests()
     {
+        _session.TransitionTo(FieldTestSessionStatus.InProgress);
+
         _fieldTests
             .Setup(repo => repo.GetSessionByIdAsync(SessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_session);
@@ -106,7 +108,8 @@ public class UpdateFieldTestResultCommandHandlerTests
     [Fact]
     public async Task HandleAsync_WithClosedSession_ThrowsDomainExceptionWithoutSaving()
     {
-        _session.Status = FieldTestSessionStatus.Closed;
+        // La sesión ya está en curso (la puso el constructor): se cierra por transición.
+        _session.TransitionTo(FieldTestSessionStatus.Closed);
 
         var exception = await Assert.ThrowsAsync<Domain.Exceptions.DomainException>(
             () => CreateHandler().HandleAsync(
