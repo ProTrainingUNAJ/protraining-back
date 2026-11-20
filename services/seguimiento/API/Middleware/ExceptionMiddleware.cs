@@ -51,7 +51,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             };
 
             if (status >= 500)
-                logger.LogError("Solicitud fallida. Estado {Status}; tipo {Type}.", status, exception.GetType().Name);
+                logger.LogError(exception, "Solicitud fallida. Estado {Status}; tipo {Type}.", status, exception.GetType().Name);
 
             await Results.Problem(statusCode: status, title: title, detail: detail).ExecuteAsync(context);
         }

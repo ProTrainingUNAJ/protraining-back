@@ -4,7 +4,7 @@ info:
   description: >
     API v1 para el registro diario de bienestar (<30 segundos), semáforo tricolor de fatiga,
     carga de actividad en minutos con asistencia automática, comparativa frente al grupo
-    y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> Cleared).
+    y gestión del ciclo de vida de lesiones deportivas (Active -> InRecovery -> MedicallyCleared).
   version: 1.8.0
 servers:
   - url: http://localhost:8084
@@ -24,6 +24,8 @@ tags:
     description: Comparativa anónima de métricas del atleta contra el promedio de su categoría
   - name: Injuries
     description: Registro clínico de lesiones y transiciones controladas de estado
+  - name: Dashboard
+    description: Resumen consolidado y anónimo de asistencia, lesiones y carga por categoría
   - name: Fitness Tests
     description: Catálogo de tests físicos estandarizados por capacidad motora para armar baterías de evaluación
   - name: Health
@@ -537,6 +539,57 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/categories/{categoryId}/summary:
+    get:
+      tags:
+        - Dashboard
+      summary: Consultar resumen consolidado de una categoría en un período
+      description: >
+        Devuelve presentismo, lesiones y carga de entrenamiento agregados de una categoría
+        entre dos fechas (formato YYYY-MM-DD, hora Argentina). Garantía de privacidad:
+        no expone identificadores, nombres ni datos clínicos individuales.
+      operationId: getCategoryDashboardSummary
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          description: Fecha de inicio del período (formato YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+          example: "2026-10-21"
+        - name: to
+          in: query
+          required: true
+          description: Fecha de fin del período, inclusive (formato YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+          example: "2026-11-20"
+      responses:
+        "200":
+          description: Resumen de la categoría obtenido con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDashboardSummary'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/athletes/{athleteId}/group-benchmark:
     get:
       tags:
@@ -592,7 +645,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [Active, InRecovery, Cleared]
+            enum: [Active, InRecovery, MedicallyCleared]
       responses:
         "200":
           description: Lista de lesiones obtenida con éxito.
@@ -645,7 +698,7 @@ paths:
       summary: Actualizar estado de una lesión (Máquina de estados)
       description: >
         Realiza la transición de estado de una lesión. Regla de negocio estricta:
-        Una lesión 'Active' no puede pasar directamente a 'Cleared' sin haber transitado por 'InRecovery'.
+        Una lesión 'Active' no puede pasar directamente a 'MedicallyCleared' sin haber transitado por 'InRecovery'.
       operationId: updateInjuryStatus
       parameters:
         - name: injuryId
@@ -1676,6 +1729,134 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AthleteAttendanceSummary'
+
+    CategoryAttendanceMetrics:
+      type: object
+      required:
+        - presentDays
+        - absentDays
+        - withoutRecordDays
+        - evaluatedAthleteDays
+        - attendancePercentage
+      properties:
+        presentDays:
+          type: integer
+          example: 58
+        absentDays:
+          type: integer
+          example: 4
+        withoutRecordDays:
+          type: integer
+          example: 10
+        evaluatedAthleteDays:
+          type: integer
+          example: 72
+        attendancePercentage:
+          type: number
+          format: double
+          example: 80.6
+
+    CategoryInjuryMetrics:
+      type: object
+      required:
+        - activeCount
+        - inRecoveryCount
+        - clearedInPeriodCount
+        - athletesAffected
+      properties:
+        activeCount:
+          type: integer
+          example: 2
+        inRecoveryCount:
+          type: integer
+          example: 1
+        clearedInPeriodCount:
+          type: integer
+          example: 3
+        athletesAffected:
+          type: integer
+          example: 4
+
+    CategoryDashboardLoadWeek:
+      type: object
+      required:
+        - weekStart
+        - weekEnd
+        - totalLoad
+        - totalMinutes
+        - recordsCount
+      properties:
+        weekStart:
+          type: string
+          format: date
+        weekEnd:
+          type: string
+          format: date
+        totalLoad:
+          type: integer
+          example: 4200
+        totalMinutes:
+          type: integer
+          example: 980
+        recordsCount:
+          type: integer
+          example: 37
+
+    CategoryLoadMetrics:
+      type: object
+      required:
+        - totalLoad
+        - totalMinutes
+        - recordsCount
+        - weeks
+      properties:
+        totalLoad:
+          type: integer
+          example: 16800
+        totalMinutes:
+          type: integer
+          example: 3920
+        recordsCount:
+          type: integer
+          example: 148
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryDashboardLoadWeek'
+
+    CategoryDashboardSummary:
+      type: object
+      required:
+        - categoryId
+        - from
+        - to
+        - athleteCount
+        - evaluatedDays
+        - attendance
+        - injuries
+        - load
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        athleteCount:
+          type: integer
+          example: 18
+        evaluatedDays:
+          type: integer
+          example: 4
+        attendance:
+          $ref: '#/components/schemas/CategoryAttendanceMetrics'
+        injuries:
+          $ref: '#/components/schemas/CategoryInjuryMetrics'
+        load:
+          $ref: '#/components/schemas/CategoryLoadMetrics'
 
     AttendanceActivityDetail:
       type: object
