@@ -193,6 +193,30 @@ services:
       Services__Identidad__BaseUrl: http://identidad:8080
     ports: ["8000:8080"]
 
+  # ---------- Datos de la demo (opcional, KAN-479) ----------
+  # Igual en Windows, Mac y Linux, con el compose ya levantado:
+  #   docker compose --profile seed run --rm seed             todo, con la base de cero
+  #   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy
+  #   docker compose --profile seed run --rm seed completo    todo + lo que en la demo se hace en vivo
+  seed:
+    profiles: [seed]
+    build: scripts/seed
+    depends_on:
+      gateway: { condition: service_healthy }
+      identidad: { condition: service_healthy }
+      estructura: { condition: service_healthy }
+      entrenamiento: { condition: service_healthy }
+      seguimiento: { condition: service_healthy }
+      db-estructura: { condition: service_healthy }
+      db-seguimiento: { condition: service_healthy }
+    environment:
+      SEED_IN_CONTAINER: "1"
+      GATEWAY: http://gateway:8080
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEMO_PF_PHONE: ${DEMO_PF_PHONE:-+5491150000000}
+    volumes: ["./scripts:/scripts:ro"]
+
   # ---------- Front (opcional: docker compose --profile front up) ----------
   front:
     profiles: [front]
