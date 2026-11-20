@@ -1,4 +1,6 @@
+using Application.DTOs.Injuries;
 using Application.Interfaces.Persistence;
+using Domain.Common;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +50,42 @@ public sealed class AthleteInjuryRepository(AppDbContext context) : IAthleteInju
                 .GroupBy(injury => injury.AthleteId)
                 .Select(group => new { AthleteId = group.Key, ActiveCount = group.Count() })
                 .ToDictionaryAsync(item => item.AthleteId, item => item.ActiveCount, cancellationToken));
+    }
+
+    public async Task<InjuryPeriodAggregateDto> GetPeriodAggregateByAthleteIdsAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = athleteIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0)
+            return new InjuryPeriodAggregateDto(0, 0, 0, 0);
+
+        var fromDate = from.ToDateTime(TimeOnly.MinValue);
+        var toDate = to.ToDateTime(TimeOnly.MaxValue);
+        // ClearedAt es timestamptz: Npgsql exige DateTime con Kind=Utc. El rango se
+        // interpreta en hora Argentina para que el día del alta coincida con el contrato.
+        var fromUtc = ArgentinaTime.ToUtcStartOfDay(from);
+        var toUtc = ArgentinaTime.ToUtcEndOfDay(to);
+
+        // Se incluyen las lesiones vigentes dentro del rango y las dadas de alta en él.
+        // El filtro global por PfId del AppDbContext ya limita las filas al PF del token.
+        var injuries = await PersistenceErrors.ExecuteAsync(async () =>
+            await context.AthleteInjuries
+                .AsNoTracking()
+                .Where(injury => ids.Contains(injury.AthleteId)
+                    && injury.InjuryDate <= toDate
+                    && (injury.Status != InjuryStatus.MedicallyCleared
+                        || (injury.ClearedAt >= fromUtc && injury.ClearedAt <= toUtc)))
+                .Select(injury => new { injury.AthleteId, injury.Status })
+                .ToListAsync(cancellationToken));
+
+        return new InjuryPeriodAggregateDto(
+            injuries.Count(injury => injury.Status == InjuryStatus.Active),
+            injuries.Count(injury => injury.Status == InjuryStatus.InRecovery),
+            injuries.Count(injury => injury.Status == InjuryStatus.MedicallyCleared),
+            injuries.Select(injury => injury.AthleteId).Distinct().Count());
     }
 
     public Task AddAsync(AthleteInjury injury, CancellationToken cancellationToken = default)
