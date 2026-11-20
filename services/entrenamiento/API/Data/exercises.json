@@ -2814,7 +2814,7 @@
     "id": "Butt-Ups"
   },
   {
-    "name": "Levantamiento de glúteos (puente)",
+    "name": "Puente de glúteo (activación)",
     "force": "push",
     "level": "beginner",
     "mechanic": "isolation",
@@ -3734,7 +3734,7 @@
     "id": "Carioca_Quick_Step"
   },
   {
-    "name": "Estiramiento de gato",
+    "name": "Gato-camello (movilidad de columna)",
     "force": "static",
     "level": "beginner",
     "mechanic": null,
@@ -3747,9 +3747,9 @@
       "trapecios"
     ],
     "instructions": [
-      "Ponete en el suelo apoyándote sobre las manos y las rodillas.",
-      "Mete el abdomen hacia adentro y redondea la columna vertebral, la zona lumbar, los hombros y el cuello, dejando caer la cabeza.",
-      "Mantener pulsado durante 15 segundos."
+      "Ponete en el suelo en posición de cuadrupedia, apoyándote sobre las manos y las rodillas.",
+      "Meté el abdomen hacia adentro y redondeá la columna vertebral, la zona lumbar, los hombros y el cuello, dejando caer la cabeza.",
+      "Mantené la posición unos segundos y luego invertí el movimiento extendiendo suavemente la columna y levantando el pecho."
     ],
     "category": "stretching",
     "images": [
@@ -6920,7 +6920,7 @@
     "id": "External_Rotation_with_Cable"
   },
   {
-    "name": "Estiramiento facial",
+    "name": "Face pull con banda (activación)",
     "force": "pull",
     "level": "intermediate",
     "mechanic": "compound",
@@ -12120,7 +12120,7 @@
     "id": "Mixed_Grip_Chin"
   },
   {
-    "name": "Caminata de monstruos",
+    "name": "Caminata lateral con banda (monster walk, activación)",
     "force": "pull",
     "level": "beginner",
     "mechanic": "compound",
@@ -12131,8 +12131,8 @@
     "secondaryMuscles": [],
     "instructions": [
       "Colocá una banda elástica alrededor de cada tobillo y otra alrededor de cada rodilla. Deben estar lo suficientemente tensas como para que queden ajustadas cuando tengas los pies separados a la anchura de los hombros.",
-      "Para empezar, da pasos cortos hacia adelante alternando el pie izquierdo y el derecho.",
-      "Tras dar unos pasos, hacé justo lo contrario y caminá hacia atrás hasta el punto de partida."
+      "Para empezar, caminá con pasos cortos laterales o hacia adelante alternando los pies y manteniendo la tensión de la banda.",
+      "Tras dar unos pasos, hacé justo lo contrario y volvé de forma controlada hasta el punto de partida."
     ],
     "category": "strength",
     "images": [
@@ -13996,7 +13996,7 @@
     "id": "Piriformis-SMR"
   },
   {
-    "name": "Tablón",
+    "name": "Plancha (activación)",
     "force": "static",
     "level": "beginner",
     "mechanic": "isolation",
@@ -14007,7 +14007,7 @@
     "secondaryMuscles": [],
     "instructions": [
       "Acostate boca abajo en el suelo, apoyando tu peso sobre los dedos de los pies y los antebrazos. Los brazos deben estar flexionados y directamente debajo de los hombros.",
-      "Mantené el cuerpo recto en todo momento y conserva esta posición el mayor tiempo posible. Para aumentar la dificultad, podés levantar un brazo o una pierna."
+      "Mantené el cuerpo recto en todo momento y conservá esta posición el mayor tiempo posible. Para aumentar la dificultad, podés levantar un brazo o una pierna."
     ],
     "category": "strength",
     "images": [
@@ -15833,7 +15833,7 @@
     "id": "Rope_Crunch"
   },
   {
-    "name": "Salto a la cuerda",
+    "name": "Saltos a la soga (entrada en calor)",
     "force": null,
     "level": "intermediate",
     "mechanic": null,
@@ -15846,7 +15846,7 @@
       "isquiotibiales"
     ],
     "instructions": [
-      "Sujetá un extremo de la cuerda con cada mano. Colocá la cuerda en el suelo detrás de vos. Levantá los brazos y girá la cuerda por encima de tu cabeza, dejándola caer frente a vos. Cuando toque el suelo, saltá por encima. Busca un ritmo de giro que puedas mantener. Podés usar diferentes velocidades y técnicas para variar el ejercicio.",
+      "Sujetá un extremo de la cuerda con cada mano. Colocá la cuerda en el suelo detrás de vos. Levantá los brazos y girá la cuerda por encima de tu cabeza, dejándola caer frente a vos. Cuando toque el suelo, saltá por encima. Buscá un ritmo de giro que puedas mantener. Podés usar diferentes velocidades y técnicas para variar el ejercicio.",
       "Saltar la cuerda es emocionante, pone a prueba tu coordinación y requiere mucha energía. Una persona de 68 kg (150 lb) quema aproximadamente 350 calorías saltando la cuerda durante 30 minutos, en comparación con las más de 450 calorías que quema corriendo."
     ],
     "category": "cardio",
@@ -22481,7 +22481,7 @@
     "id": "Windmills"
   },
   {
-    "name": "El mayor estiramiento del mundo",
+    "name": "\"World's greatest stretch\" (estocada con rotación, movilidad)",
     "force": "static",
     "level": "intermediate",
     "mechanic": null,
@@ -22495,7 +22495,7 @@
       "cuadríceps"
     ],
     "instructions": [
-      "Este estiramiento consta de tres partes. Comenzá dando una zancada hacia adelante, con el pie delantero apoyado en el suelo y la punta del pie trasero sobre los dedos. Con las rodillas flexionadas, bajá en cuclillas hasta que la rodilla casi toque el suelo. Mantené el torso erguido y conserva esta posición durante 10-20 segundos.",
+      "Este estiramiento consta de tres partes. Comenzá dando una zancada hacia adelante, con el pie delantero apoyado en el suelo y la punta del pie trasero sobre los dedos. Con las rodillas flexionadas, bajá en cuclillas hasta que la rodilla casi toque el suelo. Mantené el torso erguido y conservá esta posición durante 10-20 segundos.",
       "Ahora, colocá el brazo del mismo lado que la pierna delantera en el suelo, con el codo junto al pie. La otra mano debe estar apoyada en el suelo, paralela a la pierna delantera, para ayudarte durante esta parte del estiramiento.",
       "Tras 10-20 segundos, colocá las manos a ambos lados del pie delantero. Levantá los dedos del pie delantero del suelo y estirá la pierna. Es posible que tengas que recolocar la pierna trasera para hacerlo. Mantené la posición durante 10-20 segundos y luego repetí todo el procedimiento con el otro lado."
     ],
@@ -22690,5 +22690,135 @@
       "Zottman_Preacher_Curl/1.jpg"
     ],
     "id": "Zottman_Preacher_Curl"
+  },
+  {
+    "name": "Movilidad de cadera 90/90",
+    "force": "pull",
+    "level": "beginner",
+    "mechanic": "compound",
+    "equipment": "solo el cuerpo",
+    "primaryMuscles": [
+      "glúteos",
+      "abductores",
+      "aductores"
+    ],
+    "secondaryMuscles": [
+      "isquiotibiales"
+    ],
+    "instructions": [
+      "Sentate en el suelo con ambas piernas flexionadas a 90 grados, una adelante y otra hacia el costado.",
+      "Mantené el torso erguido y rotá las caderas de forma controlada pasando de un lado al otro.",
+      "Repetí el movimiento de manera fluida sin despegar bruscamente los glúteos del suelo."
+    ],
+    "category": "stretching",
+    "images": [],
+    "id": "Hip_Mobility_90_90"
+  },
+  {
+    "name": "Movilidad de tobillo en pared",
+    "force": "push",
+    "level": "beginner",
+    "mechanic": "isolation",
+    "equipment": "solo el cuerpo",
+    "primaryMuscles": [
+      "gemelos"
+    ],
+    "secondaryMuscles": [],
+    "instructions": [
+      "Colocá la punta del pie a unos centímetros de la pared con las manos apoyadas en ella.",
+      "Flexioná la rodilla hacia adelante buscando tocar la pared sin levantar el talón del suelo.",
+      "Mantené un segundo la posición de máxima dorsiflexión y volvé controladamente."
+    ],
+    "category": "stretching",
+    "images": [],
+    "id": "Wall_Ankle_Mobility"
+  },
+  {
+    "name": "Rotaciones torácicas (movilidad)",
+    "force": "pull",
+    "level": "beginner",
+    "mechanic": "compound",
+    "equipment": "solo el cuerpo",
+    "primaryMuscles": [
+      "espalda media"
+    ],
+    "secondaryMuscles": [
+      "abdominales"
+    ],
+    "instructions": [
+      "En posición de cuadrupedia o sentado sobre los talones, colocá una mano detrás de la nuca.",
+      "Rotá el torso abriendo el codo hacia el techo acompañando el movimiento con la mirada.",
+      "Descendé lentamente llevando el codo hacia el brazo de apoyo y repetí."
+    ],
+    "category": "stretching",
+    "images": [],
+    "id": "Thoracic_Rotations_Mobility"
+  },
+  {
+    "name": "Dislocaciones de hombro con palo o banda (movilidad)",
+    "force": "pull",
+    "level": "beginner",
+    "mechanic": "compound",
+    "equipment": "banda",
+    "primaryMuscles": [
+      "hombros"
+    ],
+    "secondaryMuscles": [
+      "pecho",
+      "espalda media"
+    ],
+    "instructions": [
+      "Tomá una banda elástica o un bastón con un agarre amplio frente al cuerpo.",
+      "Llevalo por encima de la cabeza y hacia atrás de la espalda con los brazos extendidos y sin arquear la zona lumbar.",
+      "Regresá al frente de manera controlada y suave."
+    ],
+    "category": "stretching",
+    "images": [],
+    "id": "Shoulder_Dislocations_Mobility"
+  },
+  {
+    "name": "Jumping jacks (entrada en calor)",
+    "force": "push",
+    "level": "beginner",
+    "mechanic": "compound",
+    "equipment": "solo el cuerpo",
+    "primaryMuscles": [
+      "gemelos",
+      "cuádriceps",
+      "abductores"
+    ],
+    "secondaryMuscles": [
+      "hombros"
+    ],
+    "instructions": [
+      "Parate con los pies juntos y los brazos relajados a los lados del cuerpo.",
+      "Saltá separando las piernas a la vez que elevás los brazos por encima de la cabeza.",
+      "Volvé inmediatamente a la posición inicial amortiguando con la punta de los pies y continuá a ritmo constante."
+    ],
+    "category": "cardio",
+    "images": [],
+    "id": "Jumping_Jacks_Warmup"
+  },
+  {
+    "name": "Trote suave o bicicleta (5 min, entrada en calor)",
+    "force": "push",
+    "level": "beginner",
+    "mechanic": "compound",
+    "equipment": "solo el cuerpo",
+    "primaryMuscles": [
+      "cuádriceps",
+      "gemelos"
+    ],
+    "secondaryMuscles": [
+      "glúteos",
+      "isquiotibiales"
+    ],
+    "instructions": [
+      "Iniciá un trote suave continuo o pedaleo en bicicleta fija a cadencia moderada durante 5 minutos.",
+      "Mantené una respiración nasal relajada buscando elevar progresivamente la temperatura corporal y el ritmo cardíaco."
+    ],
+    "category": "cardio",
+    "images": [],
+    "id": "Light_Jog_Or_Bike_Warmup"
   }
 ]
