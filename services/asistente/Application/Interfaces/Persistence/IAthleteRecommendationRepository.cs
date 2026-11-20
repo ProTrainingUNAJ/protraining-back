@@ -20,7 +20,8 @@ public interface IAthleteRecommendationRepository
         Guid athleteId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+    Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
         IReadOnlyCollection<Guid> athleteIds,
+        IReadOnlyCollection<RecommendationStatus> statuses,
         CancellationToken cancellationToken = default);
 }

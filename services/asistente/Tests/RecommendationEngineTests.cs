@@ -16,6 +16,7 @@ using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Xunit;
 
@@ -93,20 +94,22 @@ public sealed class RecommendationEngineTests
             return Task.FromResult(result);
         }
 
-        public Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+        public Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
             IReadOnlyCollection<Guid> athleteIds,
+            IReadOnlyCollection<RecommendationStatus> statuses,
             CancellationToken cancellationToken = default)
         {
-            if (athleteIds.Count == 0)
+            if (athleteIds.Count == 0 || statuses.Count == 0)
                 return Task.FromResult<IReadOnlyList<AthleteRecommendation>>([]);
 
             var pfId = currentPfId();
-            var set = athleteIds.ToHashSet();
+            var athleteSet = athleteIds.ToHashSet();
+            var statusSet = statuses.ToHashSet();
             IReadOnlyList<AthleteRecommendation> result = store
                 .Where(r => r.PfId == pfId &&
                             r.DeletedAt == null &&
-                            set.Contains(r.AthleteId) &&
-                            r.Status == RecommendationStatus.Pending)
+                            athleteSet.Contains(r.AthleteId) &&
+                            statusSet.Contains(r.Status))
                 .OrderByDescending(r => r.CreatedAt)
                 .ToList();
 
@@ -624,5 +627,303 @@ public sealed class RecommendationEngineTests
         var detailOk = Assert.IsType<OkObjectResult>(detailAction.Result);
         var detail = Assert.IsType<AthleteRecommendationResponseDto>(detailOk.Value);
         Assert.Equal("salto por debajo del promedio", detail.Reason);
+    }
+
+    [Fact]
+    public void Analyze_GivenDefaultTenPercentThreshold_IgnoresFivePercentGapAndRespectsConfiguredThreshold()
+    {
+        var athleteTests = new List<AthleteFitnessTestRemoteDto>
+        {
+            // 38 vs 40 = -5.0 % (dentro del margen de -10 % por defecto)
+            new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 38.0m, "cm", 1, new DateTime(2026, 11, 10, 10, 0, 0, DateTimeKind.Utc))
+        };
+
+        var averages = new CategoryAveragesRemoteDto(
+            CategoryId,
+            10,
+            new DateOnly(2026, 11, 9),
+            new DateOnly(2026, 11, 15),
+            [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 40.0, 10)],
+            []);
+
+        var defaultResult = AthleteProfileAnalyzer.Analyze(athleteTests, averages, weeklyTrends: null);
+        Assert.Empty(defaultResult.Signals);
+        var defaultMetric = Assert.Single(defaultResult.EvaluatedMetrics);
+        Assert.Equal(-5.0, defaultMetric.PercentageDifference);
+        Assert.Contains("En el promedio", defaultMetric.Trend);
+
+        // Con umbral configurado en -4 % (o 4.0 positivo normalizado a -4.0), -5 % sí dispara señal
+        var strictResult = AthleteProfileAnalyzer.Analyze(athleteTests, averages, weeklyTrends: null, belowAverageThresholdPercent: -4.0);
+        var signal = Assert.Single(strictResult.Signals);
+        Assert.Equal("salto por debajo del promedio", signal.Reason);
+        Assert.Contains("Por debajo del promedio", strictResult.EvaluatedMetrics[0].Trend);
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_GivenConfiguredOptions_AppliesConfiguredThreshold()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
+
+        // 37.2 vs 40 = -7.0 % (no supera -10 % por defecto, pero sí -5 % configurado)
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 37.2m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 40.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var defaultHandler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var defaultResponse = await defaultHandler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(0, defaultResponse.GeneratedCount);
+        Assert.Empty(store);
+
+        var customHandler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow,
+            new RecommendationsOptions { BelowAverageThresholdPercent = -5.0 });
+
+        var customResponse = await customHandler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(1, customResponse.GeneratedCount);
+        Assert.Single(store);
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_WhenRecommendationWasDiscarded_DoesNotRecreateOrCallAi()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discarded = AthleteRecommendation.Create(
+            AthleteId,
+            "Refuerzo de salto",
+            "salto por debajo del promedio",
+            "Texto previo descartado por el PF.",
+            categoryId: CategoryId,
+            categoryName: "Primera División");
+        discarded.Discard();
+        await repository.AddAsync(discarded);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 34.0m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+
+        var handler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var response = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+
+        Assert.Equal(0, response.GeneratedCount);
+        Assert.Equal(0, response.ExistingPendingCount);
+        Assert.Empty(response.Recommendations);
+        Assert.Single(store);
+        Assert.Equal(RecommendationStatus.Discarded, store[0].Status);
+        Assert.Equal(0, uow.SaveChangesCount);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_WhenRecommendationWasDiscarded_DoesNotRecreateOrCallAi()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discarded = AthleteRecommendation.Create(
+            AthleteId,
+            "Refuerzo de salto",
+            "salto por debajo del promedio",
+            "Texto previo descartado por el PF.",
+            categoryId: CategoryId,
+            categoryName: "Reserva");
+        discarded.Discard();
+        await repository.AddAsync(discarded);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Reserva"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new StructureCategoryAthleteDto(AthleteId, true),
+                new StructureCategoryAthleteDto(SecondAthleteId, true)
+            ]);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.SetupHabitsPermission(SecondAthleteId);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 8, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, 8)], []));
+
+        // Ambos atletas están -19 % en salto, pero el Atleta 1 ya tiene esa recomendación descartada
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 34.0m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(SecondAthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), SecondAthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 34.0m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var handler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+
+        Assert.Equal(2, response.EvaluatedAthletes);
+        Assert.Equal(1, response.GeneratedCount);
+        Assert.Equal(0, response.ExistingPendingCount);
+        var returned = Assert.Single(response.Recommendations);
+        Assert.Equal(SecondAthleteId, returned.AthleteId);
+        Assert.Equal(2, store.Count);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == AthleteId), It.IsAny<CancellationToken>()), Times.Never);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == SecondAthleteId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void RecommendationsOptions_GivenConfigurationAndEdgeValues_BindsAndNormalizesThreshold()
+    {
+        var configNegative = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{RecommendationsOptions.SectionName}:BelowAverageThresholdPercent"] = "-15"
+            })
+            .Build();
+        var boundNegative = configNegative.GetSection(RecommendationsOptions.SectionName).Get<RecommendationsOptions>()!;
+        Assert.Equal(-15.0, boundNegative.GetEffectiveBelowAverageThresholdPercent());
+
+        var configPositive = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{RecommendationsOptions.SectionName}:BelowAverageThresholdPercent"] = "12.5"
+            })
+            .Build();
+        var boundPositive = configPositive.GetSection(RecommendationsOptions.SectionName).Get<RecommendationsOptions>()!;
+        Assert.Equal(-12.5, boundPositive.GetEffectiveBelowAverageThresholdPercent());
+
+        Assert.Equal(-10.0, new RecommendationsOptions { BelowAverageThresholdPercent = 0 }.GetEffectiveBelowAverageThresholdPercent());
+        Assert.Equal(-10.0, new RecommendationsOptions { BelowAverageThresholdPercent = double.NaN }.GetEffectiveBelowAverageThresholdPercent());
+        Assert.Equal(-10.0, new RecommendationsOptions { BelowAverageThresholdPercent = double.PositiveInfinity }.GetEffectiveBelowAverageThresholdPercent());
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_GivenConfiguredOptions_AppliesConfiguredThreshold()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Reserva"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryAthleteDto(AthleteId, true)]);
+        structureMock.SetupHabitsPermission(AthleteId);
+
+        // 37.2 vs 40 = -7.0 %: no dispara con -10 % default, sí con -5 % configurado
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 8, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 40.0, 8)], []));
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 37.2m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var defaultHandler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var defaultResponse = await defaultHandler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+        Assert.Equal(0, defaultResponse.GeneratedCount);
+        Assert.Empty(store);
+
+        var customHandler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow,
+            new RecommendationsOptions { BelowAverageThresholdPercent = -5.0 });
+
+        var customResponse = await customHandler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+        Assert.Equal(1, customResponse.GeneratedCount);
+        Assert.Single(store);
     }
 }

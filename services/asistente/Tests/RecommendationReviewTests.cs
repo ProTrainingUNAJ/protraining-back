@@ -80,13 +80,18 @@ public sealed class RecommendationReviewTests
             return Task.FromResult(result);
         }
 
-        public Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+        public Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
             IReadOnlyCollection<Guid> athleteIds,
+            IReadOnlyCollection<RecommendationStatus> statuses,
             CancellationToken cancellationToken = default)
         {
-            var set = athleteIds.ToHashSet();
+            if (athleteIds.Count == 0 || statuses.Count == 0)
+                return Task.FromResult<IReadOnlyList<AthleteRecommendation>>([]);
+
+            var athleteSet = athleteIds.ToHashSet();
+            var statusSet = statuses.ToHashSet();
             IReadOnlyList<AthleteRecommendation> result = Items
-                .Where(r => r.DeletedAt == null && set.Contains(r.AthleteId) && r.Status == RecommendationStatus.Pending)
+                .Where(r => r.DeletedAt == null && athleteSet.Contains(r.AthleteId) && statusSet.Contains(r.Status))
                 .ToList();
             return Task.FromResult(result);
         }

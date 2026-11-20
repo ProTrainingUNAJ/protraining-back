@@ -79,14 +79,19 @@ public sealed class RecommendationIsolationTests
             return Task.FromResult(items);
         }
 
-        public Task<IReadOnlyList<AthleteRecommendation>> ListPendingByAthleteIdsAsync(
+        public Task<IReadOnlyList<AthleteRecommendation>> ListByAthleteIdsAndStatusesAsync(
             IReadOnlyCollection<Guid> athleteIds,
+            IReadOnlyCollection<RecommendationStatus> statuses,
             CancellationToken cancellationToken = default)
         {
+            if (athleteIds.Count == 0 || statuses.Count == 0)
+                return Task.FromResult<IReadOnlyList<AthleteRecommendation>>([]);
+
             var pfId = currentPfId();
-            var set = athleteIds.ToHashSet();
+            var athleteSet = athleteIds.ToHashSet();
+            var statusSet = statuses.ToHashSet();
             IReadOnlyList<AthleteRecommendation> items = store
-                .Where(r => r.PfId == pfId && r.DeletedAt == null && set.Contains(r.AthleteId) && r.Status == RecommendationStatus.Pending)
+                .Where(r => r.PfId == pfId && r.DeletedAt == null && athleteSet.Contains(r.AthleteId) && statusSet.Contains(r.Status))
                 .ToList();
             return Task.FromResult(items);
         }
