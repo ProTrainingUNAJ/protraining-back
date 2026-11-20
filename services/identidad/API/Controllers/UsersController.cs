@@ -37,6 +37,7 @@ public class UsersController(
     Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase updateAthleteEmailUseCase,
     Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase updateAthletePhoneUseCase,
     UpdateProfileUseCase updateProfileUseCase,
+    Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase updateMyTelegramUseCase,
     DeactivateAccountUseCase deactivateAccountUseCase) : ControllerBase
 {
     /// <summary>
@@ -380,6 +381,36 @@ public class UsersController(
         }
 
         var response = await updateProfileUseCase.ExecuteAsync(userId.Value, request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Actualiza exclusivamente el usuario de Telegram del usuario autenticado (PF o Atleta) (KAN-503).
+    /// </summary>
+    [HttpPut("me/telegram")]
+    [Authorize(Roles = "PreparadorFisico,Atleta")]
+    [ProducesResponseType(typeof(ProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> UpdateMyTelegram(
+        [FromBody] UpdateTelegramRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var authHeader = Request.Headers.Authorization.ToString();
+        var bearerToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? authHeader["Bearer ".Length..].Trim()
+            : null;
+
+        var response = await updateMyTelegramUseCase.ExecuteAsync(userId.Value, request, bearerToken, cancellationToken);
         return Ok(response);
     }
 

@@ -83,6 +83,7 @@ builder.Services.AddScoped<ChangePasswordUseCase>();
 builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
 builder.Services.AddScoped<ResetAthletePasswordUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
 builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();

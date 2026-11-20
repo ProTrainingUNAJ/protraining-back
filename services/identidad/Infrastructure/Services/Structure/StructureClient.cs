@@ -1,8 +1,10 @@
-﻿using System.Net;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Application.DTOs.Structure;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services.Structure;
@@ -55,6 +57,58 @@ public sealed class StructureClient(HttpClient httpClient, ILogger<StructureClie
                 default:
                     logger.LogError("Estructura respondió con código {Status} al validar la invitación.", (int)response.StatusCode);
                     throw new StructureUnavailableException();
+            }
+        }
+    }
+
+    public async Task UpdateMyAthleteTelegramAsync(
+        string? telegramUsername,
+        string? bearerToken,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, "api/v1/me/telegram")
+        {
+            Content = JsonContent.Create(new { telegramUsername })
+        };
+
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error de red al sincronizar el usuario de Telegram del atleta con Estructura.");
+            throw new StructureUnavailableException("No se pudo sincronizar el usuario de Telegram con Estructura. Inténtalo nuevamente.", ex);
+        }
+
+        using (response)
+        {
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return;
+
+                case HttpStatusCode.BadRequest:
+                    throw new DomainException("El usuario de Telegram no es válido.");
+
+                case HttpStatusCode.NotFound:
+                    throw new AthleteNotFoundException();
+
+                default:
+                    logger.LogError(
+                        "Estructura respondió con código {Status} al sincronizar el usuario de Telegram del atleta.",
+                        (int)response.StatusCode);
+                    throw new StructureUnavailableException("No se pudo sincronizar el usuario de Telegram con Estructura. Inténtalo nuevamente.");
             }
         }
     }

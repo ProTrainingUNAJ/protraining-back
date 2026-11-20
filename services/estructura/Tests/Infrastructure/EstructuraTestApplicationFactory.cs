@@ -180,6 +180,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ListMyCategoriesQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateMyTelegram.UpdateMyTelegramCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.UploadAthletePhoto.UploadAthletePhotoCommandHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetAthletePhoto.GetAthletePhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.DeleteAthletePhoto.DeleteAthletePhotoCommandHandler>();

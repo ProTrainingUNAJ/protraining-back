@@ -514,6 +514,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /api/v1/users/me/telegram:
+    put:
+      tags:
+        - Users
+      summary: Actualizar usuario de Telegram propio (PF y Atleta, KAN-503)
+      description: >
+        Actualiza exclusivamente el usuario de Telegram del usuario autenticado (PF o Atleta).
+        Para atletas, sincroniza primero con Estructura antes de confirmar el cambio en Identidad.
+      operationId: updateMyUserTelegram
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTelegramRequest'
+      responses:
+        "200":
+          description: Usuario de Telegram actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          description: No autenticado o token inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "403":
+          description: Rol no permitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          description: Atleta no encontrado en Estructura.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "503":
+          description: No se pudo sincronizar el usuario de Telegram con Estructura.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /api/v1/users/me/deactivate:
     post:
       tags:
@@ -1236,6 +1287,14 @@ components:
           type: string
           nullable: true
           example: "profe_juan"
+
+    UpdateTelegramRequest:
+      type: object
+      properties:
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "lucas_atleta"
 
     ProfileResponse:
       type: object
