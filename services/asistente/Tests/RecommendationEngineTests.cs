@@ -17,6 +17,7 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -925,5 +926,125 @@ public sealed class RecommendationEngineTests
         var customResponse = await customHandler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
         Assert.Equal(1, customResponse.GeneratedCount);
         Assert.Single(store);
+    }
+
+    [Fact]
+    public void Analyze_GivenPlankInMinutesOrSeconds_TreatsHigherTimeAsBetter_WhileTimedRunsStayLowerIsBetter()
+    {
+        Assert.False(AthleteProfileAnalyzer.IsLowerBetter("min", "Plancha frontal"));
+        Assert.False(AthleteProfileAnalyzer.IsLowerBetter("segundos", "Plancha isométrica"));
+        Assert.False(AthleteProfileAnalyzer.IsLowerBetter("min", "Sentadilla isométrica"));
+        Assert.True(AthleteProfileAnalyzer.IsLowerBetter("s", "Carrera 30 m"));
+        Assert.True(AthleteProfileAnalyzer.IsLowerBetter("min", "Test de Bronco"));
+        Assert.True(AthleteProfileAnalyzer.IsLowerBetter("min", "Carrera 1 km"));
+
+        // Atleta aguanta 3.0 min de plancha frente a 2.0 min de promedio -> +50 % (superior al promedio, sin señal)
+        var strongPlank = AthleteProfileAnalyzer.Analyze(
+            [new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Plancha frontal", "Core", 3.0m, "min", 1, DateTime.UtcNow)],
+            new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Plancha frontal", "min", 2.0, 10)], []),
+            weeklyTrends: null);
+
+        Assert.Empty(strongPlank.Signals);
+        var strongMetric = Assert.Single(strongPlank.EvaluatedMetrics);
+        Assert.Equal(50.0, strongMetric.PercentageDifference);
+        Assert.Contains("Superior al promedio", strongMetric.Trend);
+
+        // Atleta aguanta 1.2 min de plancha frente a 2.0 min de promedio -> -40 % (por debajo, dispara señal)
+        var weakPlank = AthleteProfileAnalyzer.Analyze(
+            [new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Plancha frontal", "Core", 1.2m, "min", 1, DateTime.UtcNow)],
+            new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Plancha frontal", "min", 2.0, 10)], []),
+            weeklyTrends: null);
+
+        var weakSignal = Assert.Single(weakPlank.Signals);
+        Assert.Equal(-40.0, weakSignal.Metrics[0].PercentageDifference);
+        Assert.Contains("Por debajo del promedio", weakSignal.Metrics[0].Trend);
+    }
+
+    [Fact]
+    public void DeserializeSnapshot_GivenMalformedJson_LogsWarningAndReturnsEmpty()
+    {
+        var loggerMock = new Mock<ILogger>();
+
+        var (metrics, trends) = RecommendationMapper.DeserializeSnapshot("{ json roto", loggerMock.Object);
+
+        Assert.Empty(metrics);
+        Assert.Null(trends);
+        loggerMock.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<System.Text.Json.JsonException>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_GivenMultipleAthletes_ParallelizesWithinConfiguredLimitAndSavesOnce()
+    {
+        var athleteIds = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToList();
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Primera"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athleteIds.Select(id => new StructureCategoryAthleteDto(id, true)).ToList());
+        foreach (var id in athleteIds)
+            structureMock.SetupHabitsPermission(id);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, athleteIds.Count, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, athleteIds.Count)], []));
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) =>
+                [new AthleteFitnessTestRemoteDto(Guid.NewGuid(), id, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 34.0m, "cm", 1, DateTime.UtcNow)]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var inFlight = 0;
+        var peakConcurrency = 0;
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .Returns(async (TrainingRecommendationRequestDto req, CancellationToken ct) =>
+            {
+                var current = Interlocked.Increment(ref inFlight);
+                while (true)
+                {
+                    var observed = Volatile.Read(ref peakConcurrency);
+                    if (current <= observed || Interlocked.CompareExchange(ref peakConcurrency, current, observed) == observed)
+                        break;
+                }
+
+                await Task.Delay(40, ct);
+                Interlocked.Decrement(ref inFlight);
+                return RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas");
+            });
+
+        const int maxParallelism = 3;
+        var handler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow,
+            new RecommendationsOptions { MaxCategoryParallelism = maxParallelism });
+
+        var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+
+        Assert.Equal(athleteIds.Count, response.EvaluatedAthletes);
+        Assert.Equal(athleteIds.Count, response.GeneratedCount);
+        Assert.Equal(athleteIds.Count, store.Count);
+        Assert.Equal(1, uow.SaveChangesCount);
+        Assert.InRange(peakConcurrency, 2, maxParallelism);
     }
 }

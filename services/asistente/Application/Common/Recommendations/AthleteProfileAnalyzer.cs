@@ -313,17 +313,71 @@ public static class AthleteProfileAnalyzer
         return signals;
     }
 
-    private static bool IsLowerBetter(string unit, string testName)
+    private static readonly string[] HigherTimeIsBetterKeywords =
+    [
+        "plancha",
+        "plank",
+        "isometric",
+        "sosten",
+        "aguante",
+        "suspension",
+        "wall sit",
+        "dead hang",
+        "colgado",
+        "equilibrio",
+        "balance",
+        "cooper",
+        "yo-yo",
+        "yoyo",
+        "course navette",
+        "beep"
+    ];
+
+    private static readonly string[] LowerTimeIsBetterKeywords =
+    [
+        "sprint",
+        "carrera",
+        "agility",
+        "agilidad",
+        "cambios de direccion",
+        "illinois",
+        "t-test",
+        "5-10-5",
+        "bronco",
+        "10 m",
+        "20 m",
+        "30 m",
+        "40 m",
+        "50 m",
+        "100 m",
+        "1 km",
+        "1000 m",
+        "1500 m",
+        "2000 m",
+        "milla",
+        "reaccion",
+        "tiempo"
+    ];
+
+    public static bool IsLowerBetter(string unit, string testName)
     {
         var normUnit = TextNormalizer.Normalize(unit);
         var normName = TextNormalizer.Normalize(testName);
 
-        return normUnit is "s" or "seg" or "segundos" or "min" or "minutos" or "ms"
-            || normName.Contains("sprint")
-            || normName.Contains("tiempo")
-            || normName.Contains("agility")
-            || normName.Contains("cambios de direccion")
-            || (normName.Contains("velocidad") && normUnit.Contains('s'));
+        // Pruebas isométricas o de sostén/resistencia por tiempo (ej. plancha): más tiempo es mejor
+        if (HigherTimeIsBetterKeywords.Any(normName.Contains))
+            return false;
+
+        if (LowerTimeIsBetterKeywords.Any(normName.Contains))
+            return true;
+
+        // En milisegundos y segundos (que no sean sostén isométrico), menor tiempo indica mejor marca
+        if (normUnit is "ms" or "s" or "seg" or "segundos")
+            return true;
+
+        // En minutos solo es "menos es mejor" si el nombre indicó explícitamente una prueba de distancia/tiempo
+        // (ya evaluada arriba); así una plancha o prueba de resistencia en minutos no queda invertida
+        return normName.Contains("velocidad") && normUnit.Contains('s');
     }
 
     private static (string Reason, string SuggestedFocus) MapGapReasonAndFocus(string testName, string motorCapacity)
