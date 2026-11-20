@@ -6,6 +6,7 @@ namespace Application.Common.Recommendations;
 
 /// <summary>
 /// Mapea y serializa el snapshot analítico de métricas y tendencias para las recomendaciones (#196 · KAN-491).
+/// Extendido para hábitos/nutrición (KAN-494) almacenando detalles determinísticos en el snapshot JSON.
 /// </summary>
 public static class RecommendationMapper
 {
@@ -17,27 +18,38 @@ public static class RecommendationMapper
 
     private sealed record RecommendationSnapshot(
         IReadOnlyList<ProfileMetricComparisonDto>? Metrics,
-        WeeklyTrendsSummaryDto? Trends);
+        WeeklyTrendsSummaryDto? Trends,
+        HabitsRecommendationSnapshotDto? Habits = null);
 
     public static string SerializeSnapshot(
         IReadOnlyList<ProfileMetricComparisonDto>? metrics,
         WeeklyTrendsSummaryDto? trends) =>
         JsonSerializer.Serialize(new RecommendationSnapshot(metrics ?? [], trends), JsonOptions);
 
+    public static string SerializeHabitsSnapshot(HabitsRecommendationSnapshotDto habits) =>
+        JsonSerializer.Serialize(new RecommendationSnapshot([], null, habits), JsonOptions);
+
     public static (IReadOnlyList<ProfileMetricComparisonDto> Metrics, WeeklyTrendsSummaryDto? Trends) DeserializeSnapshot(
         string? snapshotJson)
     {
+        var full = DeserializeFullSnapshot(snapshotJson);
+        return (full.Metrics, full.Trends);
+    }
+
+    public static (IReadOnlyList<ProfileMetricComparisonDto> Metrics, WeeklyTrendsSummaryDto? Trends, HabitsRecommendationSnapshotDto? Habits) DeserializeFullSnapshot(
+        string? snapshotJson)
+    {
         if (string.IsNullOrWhiteSpace(snapshotJson))
-            return ([], null);
+            return ([], null, null);
 
         try
         {
             var snapshot = JsonSerializer.Deserialize<RecommendationSnapshot>(snapshotJson, JsonOptions);
-            return (snapshot?.Metrics ?? [], snapshot?.Trends);
+            return (snapshot?.Metrics ?? [], snapshot?.Trends, snapshot?.Habits);
         }
         catch
         {
-            return ([], null);
+            return ([], null, null);
         }
     }
 
@@ -89,6 +101,62 @@ public static class RecommendationMapper
             CreatedAt: entity.CreatedAt,
             UpdatedAt: entity.UpdatedAt,
             ReviewedAtUtc: entity.ReviewedAtUtc);
+    }
+
+    public static AthleteRecommendation CreatePendingHabitsEntity(
+        Guid athleteId,
+        Guid? categoryId,
+        string? categoryName,
+        string title,
+        string reason,
+        string recommendationText,
+        HabitsRecommendationSnapshotDto snapshot,
+        string? provider = null) =>
+        AthleteRecommendation.Create(
+            athleteId: athleteId,
+            title: title,
+            reason: reason,
+            recommendationText: recommendationText,
+            categoryId: categoryId,
+            categoryName: categoryName,
+            type: RecommendationType.Habits,
+            metricsSnapshotJson: SerializeHabitsSnapshot(snapshot),
+            provider: provider);
+
+    /// <summary>
+    /// Proyecta una recomendación de hábitos persistida (pendiente o aprobada) al DTO del contrato.
+    /// Se usa tanto desde la Query de lectura como desde el Command de generación (KAN-494).
+    /// </summary>
+    public static HabitsRecommendationResponseDto ToHabitsResponse(
+        AthleteRecommendation entity,
+        bool? knownIsMinor = null)
+    {
+        var (_, _, habits) = DeserializeFullSnapshot(entity.MetricsSnapshotJson);
+        var isMinor = habits?.IsMinor ?? knownIsMinor ?? false;
+        var daily = habits?.DailyProteinRequirementGrams;
+        if (daily is null && habits?.MinProteinGrams is not null && habits?.MaxProteinGrams is not null)
+            daily = (habits.MinProteinGrams.Value + habits.MaxProteinGrams.Value) / 2.0;
+
+        return new HabitsRecommendationResponseDto(
+            Id: entity.Id,
+            AthleteId: entity.AthleteId,
+            AthleticGoal: habits?.AthleticGoal ?? "Objetivo no informado",
+            DailyProteinRequirementGrams: daily,
+            SuggestedPlateComposition: habits?.SuggestedPlateComposition ?? entity.RecommendationText,
+            HydrationAndSleepGuidelines: habits?.HydrationAndSleepGuidelines ?? string.Empty,
+            LegalDisclaimer: habits?.LegalDisclaimer ?? RecommendationPromptBuilder.OfficialNutritionDisclaimer,
+            ApprovedByPf: entity.Status == RecommendationStatus.Approved,
+            MinProteinGrams: habits?.MinProteinGrams,
+            MaxProteinGrams: habits?.MaxProteinGrams,
+            RecommendationMode: habits?.RecommendationMode,
+            IsMinor: isMinor,
+            RequiresProfessionalReferral: habits?.RequiresProfessionalReferral ?? false,
+            ReferralReasons: habits?.ReferralReasons ?? [],
+            DetectedMoments: habits?.DetectedMoments ?? [],
+            MissingData: habits?.MissingData ?? [],
+            WeightKg: habits?.WeightKg,
+            Provider: entity.Provider,
+            Status: entity.Status.ToString());
     }
 
     public static MyRecommendationResponseDto ToMyResponseDto(AthleteRecommendation entity) =>

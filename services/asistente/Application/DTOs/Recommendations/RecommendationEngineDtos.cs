@@ -96,3 +96,53 @@ public sealed record MyRecommendationResponseDto(
     string RecommendationText,
     DateTime? ReviewedAtUtc,
     DateTime CreatedAt);
+
+/// <summary>
+/// Respuesta de recomendación de hábitos/nutrición para validación del PF (contrato hábitos, extendido KAN-494).
+/// Campos adicionales son opcionales para compatibilidad; algunos pueden ser null cuando faltan datos o no aplica.
+/// TODO(KAN-494): alinear completamente con contrato/consumidores si se agregan nuevos campos obligatorios.
+/// </summary>
+public sealed record HabitsRecommendationResponseDto(
+    Guid Id,
+    Guid AthleteId,
+    string AthleticGoal,
+    double? DailyProteinRequirementGrams,
+    string SuggestedPlateComposition,
+    string HydrationAndSleepGuidelines,
+    string LegalDisclaimer,
+    bool ApprovedByPf,
+    double? MinProteinGrams = null,
+    double? MaxProteinGrams = null,
+    string? RecommendationMode = null,
+    bool IsMinor = false,
+    bool RequiresProfessionalReferral = false,
+    IReadOnlyList<string>? ReferralReasons = null,
+    IReadOnlyList<string>? DetectedMoments = null,
+    IReadOnlyList<string>? MissingData = null,
+    double? WeightKg = null,
+    string? Provider = null,
+    string? Status = null);
+
+/// <summary>
+/// Snapshot persistido en MetricsSnapshotJson para recomendaciones de hábitos (KAN-494).
+/// Permite reconstruir la respuesta de contrato sin cambios de esquema de BD.
+/// </summary>
+public sealed record HabitsRecommendationSnapshotDto(
+    string AthleticGoal,
+    double? WeightKg,
+    double? MinProteinGrams,
+    double? MaxProteinGrams,
+    double? DailyProteinRequirementGrams,
+    string SuggestedPlateComposition,
+    string HydrationAndSleepGuidelines,
+    string LegalDisclaimer,
+    string? RecommendationMode,
+    bool IsMinor,
+    bool RequiresProfessionalReferral,
+    IReadOnlyList<string>? ReferralReasons,
+    IReadOnlyList<string>? DetectedMoments,
+    IReadOnlyList<string>? MissingData,
+    IReadOnlyList<string>? MentionedFoods,
+    string? CalculationNote);
+
+public sealed record ApproveHabitsRecommendationResponseDto(string Message);

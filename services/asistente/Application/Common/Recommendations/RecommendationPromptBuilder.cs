@@ -1,4 +1,4 @@
-namespace Application.Common.Recommendations;
+﻿namespace Application.Common.Recommendations;
 
 using System.Globalization;
 using System.Text;
@@ -189,6 +189,10 @@ public static class RecommendationPromptBuilder
     /// Construye el prompt para que la IA redacte una recomendación de alimentación y hábitos
     /// usando exclusivamente los números calculados por reglas y la lista aprobada de alimentos (#083 · KAN-378).
     /// </summary>
+    /// <summary>
+    /// Construye el prompt para que la IA redacte una recomendación de alimentación y hábitos
+    /// usando exclusivamente los números calculados por reglas y la lista aprobada de alimentos (#083 · KAN-378, KAN-494).
+    /// </summary>
     public static string BuildNutritionRecommendationPrompt(NutritionRecommendationRequestDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -202,24 +206,41 @@ public static class RecommendationPromptBuilder
             ? string.Join(", ", approvedFoods)
             : "ninguno";
 
+        var quantitiesAllowed = request.IncludeQuantities
+            && !request.IsMinor
+            && !request.RequiresProfessionalReferral
+            && !string.Equals(request.RecommendationMode, HabitsRecommendationRules.ModeReferral, StringComparison.OrdinalIgnoreCase);
+
         var sb = new StringBuilder();
         sb.AppendLine("Sos el asistente de hábitos saludables y alimentación deportiva de ProTraining en Argentina.");
         sb.AppendLine("Tu tarea es ÚNICAMENTE redactar de forma clara y amigable una recomendación general de alimentación, hidratación y descanso para que el preparador físico la revise.");
         sb.AppendLine();
         sb.AppendLine("PARÁMETROS CALCULADOS POR REGLAS (NO CALCULAR NI INVENTAR NÚMEROS):");
         sb.AppendLine($"- Objetivo deportivo: {goal}");
+        if (request.WeightKg.HasValue)
+            sb.AppendLine(string.Format(CultureInfo.InvariantCulture, "- Peso informado: {0:0.#} kg.", request.WeightKg.Value));
+        if (request.IsMinor)
+            sb.AppendLine("- Atleta menor de edad: SÍ (no se permiten cantidades de proteína).");
         if (!string.IsNullOrWhiteSpace(request.Moment))
-        {
             sb.AppendLine($"- Momento / Contexto: {request.Moment.Trim()}");
-        }
+        if (request.DetectedMoments is { Count: > 0 })
+            sb.AppendLine($"- Momentos detectados: {string.Join("; ", request.DetectedMoments.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct())}");
+        if (!string.IsNullOrWhiteSpace(request.RecommendationMode))
+            sb.AppendLine($"- Modo de recomendación: {request.RecommendationMode}");
+        if (request.RequiresProfessionalReferral)
+            sb.AppendLine("- Requiere derivación profesional: SÍ.");
+        if (request.ReferralReasons is { Count: > 0 })
+            sb.AppendLine($"- Motivos de derivación/seguridad: {string.Join("; ", request.ReferralReasons.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct())}");
+        if (request.MissingData is { Count: > 0 })
+            sb.AppendLine($"- Datos faltantes / pendientes de validación (TODO): {string.Join("; ", request.MissingData.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct())}");
 
-        if (request.IncludeQuantities)
+        if (quantitiesAllowed)
         {
             if (request.MinProteinGrams.HasValue && request.MaxProteinGrams.HasValue)
             {
                 sb.AppendLine(string.Format(
                     CultureInfo.InvariantCulture,
-                    "- Proteína diaria calculada por reglas: entre {0:0.#} g y {1:0.#} g por día.",
+                    "- Proteína diaria calculada por reglas (rango): entre {0:0.#} g y {1:0.#} g por día.",
                     request.MinProteinGrams.Value,
                     request.MaxProteinGrams.Value));
             }
@@ -233,7 +254,7 @@ public static class RecommendationPromptBuilder
         }
         else
         {
-            sb.AppendLine("- MODALIDAD SIN CANTIDADES (MENOR DE EDAD): NO incluyas gramos, calorías ni cantidades numéricas de comida.");
+            sb.AppendLine("- MODALIDAD SIN CANTIDADES: NO incluyas gramos, calorías ni cantidades numéricas de comida/proteína (menor, bajar de peso, derivación o datos faltantes).");
         }
 
         if (request.HydrationLiters.HasValue)
@@ -270,37 +291,35 @@ public static class RecommendationPromptBuilder
         }
 
         sb.AppendLine();
-        sb.AppendLine("REGLAS ESTRICTAS E INNEGOCIABLES:");
+        sb.AppendLine("REGLAS ESTRICTAS E INNEGOCIABLES (KAN-494):");
         sb.AppendLine("1. LA IA SÓLO REDACTA: los números vienen calculados por reglas y los alimentos deben salir EXCLUSIVAMENTE de la lista aprobada de arriba.");
         sb.AppendLine("2. SÓLO ALIMENTOS DE LA LISTA: mencioná únicamente alimentos que estén en 'Alimentos permitidos'. Está prohibido agregar cualquier otro alimento fuera de esa lista.");
         sb.AppendLine("3. PROHIBIDO SUPLEMENTOS: jamás menciones suplementos (proteína en polvo, whey protein, creatina, BCAA, aminoácidos, pre-entreno, quemadores, geles, pastillas, batidos proteicos, etc.).");
-        sb.AppendLine("4. PROHIBIDO BAJAR DE PESO: jamás menciones ni sugieras bajar de peso, adelgazar, perder kilos, déficit calórico, dieta hipocalórica ni recortar calorías.");
-        if (!request.IncludeQuantities)
+        sb.AppendLine("4. PROHIBIDO BAJAR DE PESO: jamás menciones ni sugieras bajar de peso, adelgazar, perder kilos, déficit calórico, dieta hipocalórica ni recortar calorías/cantidades para perder peso.");
+        if (!quantitiesAllowed)
         {
-            sb.AppendLine("5. SIN CANTIDADES EN GRAMOS: por tratarse de una pauta cualitativa / para menores, no escribas gramos ('g', 'gr', 'gramos') ni calorías ('kcal') en el plato.");
+            sb.AppendLine("5. SIN CANTIDADES EN GRAMOS NI REFERENCIAS NUMÉRICAS: no escribas gramos ('g', 'gr', 'gramos'), rangos numéricos de proteína, calorías ('kcal') ni cantidades numéricas de litros u horas que no figuren arriba como calculadas por reglas.");
         }
         else
         {
-            sb.AppendLine("5. RESPETAR NÚMEROS DE REGLAS: si mencionás gramos de proteína, litros de agua u horas de sueño, usá exactamente los valores indicados arriba sin inventar otros.");
+            sb.AppendLine("5. CANTIDADES PERMITIDAS SOLO SI LAS REGLAS LAS INDICAN: si mencionás gramos de proteína, usá exactamente el rango/valor indicado arriba sin inventar otros; lo mismo vale para litros u horas.");
         }
-        sb.AppendLine("6. PRIVACIDAD: no incluyas nombres de personas.");
-        sb.AppendLine("7. IDIOMA Y FORMATO: redactá los textos en español rioplatense (Argentina, usando 'vos') y respondé ÚNICAMENTE con un objeto JSON válido con las claves en inglés:");
+        sb.AppendLine("6. MENORES: si el atleta es menor de edad, no indiques cantidades de proteína.");
+        sb.AppendLine("7. DERIVACIÓN/SEGURIDAD: si se indica derivación profesional o faltan datos críticos, sé conservador, no inventes pautas específicas y recomendá consultar a un profesional de nutrición.");
+        sb.AppendLine("8. PRIVACIDAD: no incluyas nombres de personas.");
+        sb.AppendLine("9. IDIOMA Y FORMATO: redactá los textos en español rioplatense (Argentina, usando 'vos') y respondé ÚNICAMENTE con un objeto JSON válido con las claves en inglés:");
         sb.AppendLine("""
             {
-              "suggestedPlateComposition": "Descripción clara de cómo armar el plato o la merienda usando únicamente alimentos de la lista aprobada y las pautas de las reglas.",
-              "hydrationAndSleepGuidelines": "Consejo de hidratación con agua y horas de descanso nocturno según los datos de las reglas.",
+              "suggestedPlateComposition": "Descripción clara y segura usando únicamente alimentos de la lista aprobada, considerando momentos y restricciones.",
+              "hydrationAndSleepGuidelines": "Consejo de hidratación y descanso según reglas/contexto.",
               "mentionedFoods": ["alimento aprobado 1", "alimento aprobado 2"],
               "legalDisclaimer": "Aviso legal obligatorio (texto fijo, no modificar)."
             }
             """);
-        sb.AppendLine($"8. AVISO LEGAL: el campo 'legalDisclaimer' debe contener exactamente este texto fijo y sin modificar: «{OfficialNutritionDisclaimer}»");
+        sb.AppendLine($"10. AVISO LEGAL: el campo 'legalDisclaimer' debe contener exactamente este texto fijo y sin modificar: \"{OfficialNutritionDisclaimer}\"");
 
         return sb.ToString();
     }
-
-    /// <summary>
-    /// Genera una recomendación de entrenamiento determinística segura cuando los proveedores de IA no están disponibles o fallan la validación (#083 · KAN-378).
-    /// </summary>
     public static TrainingRecommendationResponseDto BuildDeterministicTrainingRecommendation(
         TrainingRecommendationRequestDto request,
         string providerUsed = "Reglas")
@@ -355,6 +374,12 @@ public static class RecommendationPromptBuilder
     /// Genera una recomendación de alimentación y hábitos determinística segura usando exclusivamente
     /// los números de las reglas y los alimentos de la lista aprobada (#083 · KAN-378).
     /// </summary>
+    /// <summary>
+    /// Genera una recomendación de alimentación y hábitos determinística segura usando exclusivamente
+    /// los números de las reglas y los alimentos de la lista aprobada (#083 · KAN-378, KAN-494).
+    /// Aplica reglas de seguridad: sin cantidades para menores/bajar de peso/derivación/datos faltantes,
+    /// sin suplementos, y manejo explícito de momentos y datos faltantes.
+    /// </summary>
     public static NutritionRecommendationResponseDto BuildDeterministicNutritionRecommendation(
         NutritionRecommendationRequestDto request,
         string providerUsed = "Reglas")
@@ -367,56 +392,141 @@ public static class RecommendationPromptBuilder
 
         var approvedFoods = ResolveApprovedFoods(request.ApprovedFoods);
         var selectedFoods = approvedFoods.Take(4).ToList();
-        var foodsText = selectedFoods.Count > 0
-            ? string.Join(", ", selectedFoods)
-            : "alimentos frescos habituales";
+        if (selectedFoods.Count == 0)
+            selectedFoods = DefaultApprovedFoods.Take(4).ToList();
+        var foodsText = string.Join(", ", selectedFoods);
 
-        var momentPrefix = !string.IsNullOrWhiteSpace(request.Moment)
-            ? $"Para el momento '{request.Moment.Trim()}', "
-            : string.Empty;
+        var referralReasons = request.ReferralReasons?.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct().ToList() ?? [];
+        var missingData = request.MissingData?.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList() ?? [];
+        var moments = request.DetectedMoments?.Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList() ?? [];
 
-        string proteinClause = string.Empty;
-        if (request.IncludeQuantities)
+        var quantitiesAllowed = request.IncludeQuantities
+            && !request.IsMinor
+            && !request.RequiresProfessionalReferral
+            && !string.Equals(request.RecommendationMode, HabitsRecommendationRules.ModeReferral, StringComparison.OrdinalIgnoreCase);
+
+        // KAN-494: si es objetivo de bajar de peso, nunca cantidades ni estrategias para perder peso (seguridad).
+        var hasWeightLossGoal = RecommendationOutputValidator.TryFindForbiddenWeightLoss(goal, out _);
+        if (hasWeightLossGoal)
         {
-            if (request.MinProteinGrams.HasValue && request.MaxProteinGrams.HasValue)
-            {
-                proteinClause = string.Format(
-                    CultureInfo.InvariantCulture,
-                    " Apuntá a cubrir entre {0:0.#} g y {1:0.#} g de proteína diaria distribuidos en las comidas principales.",
-                    request.MinProteinGrams.Value,
-                    request.MaxProteinGrams.Value);
-            }
-            else if (request.DailyProteinRequirementGrams.HasValue)
-            {
-                proteinClause = string.Format(
-                    CultureInfo.InvariantCulture,
-                    " Apuntá a cubrir unos {0:0.#} g de proteína diaria distribuidos en las comidas principales.",
-                    request.DailyProteinRequirementGrams.Value);
-            }
+            quantitiesAllowed = false;
+            if (!referralReasons.Any(r => r.Contains("bajar de peso", StringComparison.OrdinalIgnoreCase)))
+                referralReasons.Add("Objetivo orientado a bajar de peso: no se brindan cantidades ni estrategias para perder peso; se sugiere derivación profesional.");
+        }
+        if (request.IsMinor)
+        {
+            quantitiesAllowed = false;
+            if (!missingData.Any(m => m.Contains("menor de edad", StringComparison.OrdinalIgnoreCase)))
+                missingData.Add("Atleta menor de edad: no se indican cantidades de proteína (regla de seguridad).");
         }
 
-        var plateComposition =
-            $"{momentPrefix}priorizá armar tus comidas con alimentos naturales de la lista aprobada como {foodsText}, acompañando el objetivo de {goal}.{proteinClause}".Trim();
+        string mode = request.RecommendationMode ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            mode = referralReasons.Count > 0 || hasWeightLossGoal
+                ? HabitsRecommendationRules.ModeReferral
+                : (quantitiesAllowed && (request.MinProteinGrams.HasValue || request.MaxProteinGrams.HasValue || request.DailyProteinRequirementGrams.HasValue)
+                    ? HabitsRecommendationRules.ModeQuantitative
+                    : HabitsRecommendationRules.ModeQualitative);
+        }
+        if (!quantitiesAllowed && string.Equals(mode, HabitsRecommendationRules.ModeQuantitative, StringComparison.OrdinalIgnoreCase))
+            mode = referralReasons.Count > 0 ? HabitsRecommendationRules.ModeReferral : HabitsRecommendationRules.ModeQualitative;
 
-        var hydrationLiters = request.HydrationLiters ?? 2.5;
-        var sleepHours = request.SleepHours ?? 8.0;
+        double? minG = quantitiesAllowed ? request.MinProteinGrams : null;
+        double? maxG = quantitiesAllowed ? request.MaxProteinGrams : null;
+        double? dailyG = quantitiesAllowed ? request.DailyProteinRequirementGrams : null;
 
-        var hydrationAndSleep = string.Format(
-            CultureInfo.InvariantCulture,
-            "Mantené una hidratación constante con al menos {0:0.#} litros de agua a lo largo del día y procurá descansar {1:0.#} horas de sueño continuo para favorecer la recuperación.",
-            hydrationLiters,
-            sleepHours);
+        var plateParts = new List<string>();
+        if (referralReasons.Count > 0)
+        {
+            plateParts.Add("Por seguridad, se recomienda consultar a un profesional de nutrición para una pauta personalizada.");
+            // KAN-494: con riesgo médico/alergias no verificables, evitar prescripción específica; mantener mención general de alimentos aprobados habituales.
+            plateParts.Add($"Mientras tanto, priorizá alimentos habituales y bien tolerados dentro de opciones como {foodsText}, según indicación profesional.");
+        }
+        else
+        {
+            var momentPrefix = moments.Count > 0 ? $"Considerando {string.Join(", ", moments).ToLowerInvariant()}, " : string.Empty;
+            plateParts.Add($"{momentPrefix}priorizá armar tus comidas con alimentos naturales de la lista aprobada como {foodsText}, alineados al objetivo de {goal}.");
+        }
+
+        if (quantitiesAllowed)
+        {
+            if (minG.HasValue && maxG.HasValue)
+                plateParts.Add(string.Format(CultureInfo.InvariantCulture, "Como referencia calculada por reglas, apuntá a un rango diario de proteína de entre {0:0.#} g y {1:0.#} g distribuidos en las comidas.", minG.Value, maxG.Value));
+            else if (dailyG.HasValue)
+                plateParts.Add(string.Format(CultureInfo.InvariantCulture, "Como referencia calculada por reglas, apuntá a unos {0:0.#} g de proteína diaria distribuidos en las comidas.", dailyG.Value));
+        }
+        else
+        {
+            if (request.IsMinor)
+                plateParts.Add("Al ser menor de edad, esta recomendación es cualitativa y no incluye cantidades de proteína.");
+            if (hasWeightLossGoal)
+                plateParts.Add("No se incluyen pautas ni cantidades de pérdida de peso.");
+            if (!quantitiesAllowed && !request.IsMinor && !hasWeightLossGoal && (request.WeightKg is null || request.WeightKg <= 0 || missingData.Count > 0))
+                plateParts.Add("No se indican cantidades de proteína porque faltan datos o definiciones validadas; se brinda una guía general.");
+        }
+
+        if (moments.Any(m => m.Contains("Partido cercano", StringComparison.OrdinalIgnoreCase)))
+            plateParts.Add("Con partido cercano, elegí comidas conocidas y fáciles de digerir.");
+        if (moments.Any(m => m.Contains("Poco descanso", StringComparison.OrdinalIgnoreCase)))
+            plateParts.Add("Si hubo poco descanso, mantené comidas regulares y de buena calidad.");
+        if (moments.Any(m => m.Contains("Día pesado", StringComparison.OrdinalIgnoreCase)))
+            plateParts.Add("En día pesado, cuidá la energía y la recuperación en las comidas cercanas al entrenamiento.");
+
+        // Seguridad: prohibidos los suplementos (no mencionar términos prohibidos en el texto generado).
+
+        if (missingData.Count > 0)
+            plateParts.Add($"Datos pendientes/por validar: {string.Join("; ", missingData)}.");
+
+        var plateComposition = string.Join(" ", plateParts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+        // KAN-494: no inventar referencias numéricas. Sólo se redactan números que las reglas
+        // informaron explícitamente y sólo en modo cuantitativo; en los modos sin cantidades
+        // (menor, bajar de peso, derivación o datos faltantes) la guía es cualitativa.
+        var hydrationParts = new List<string>();
+        if (quantitiesAllowed && request.HydrationLiters is > 0)
+        {
+            hydrationParts.Add(string.Format(
+                CultureInfo.InvariantCulture,
+                "Mantené una hidratación constante con agua a lo largo del día (referencia calculada por reglas: {0:0.#} litros, ajustá según calor y carga).",
+                request.HydrationLiters.Value));
+        }
+        else
+        {
+            hydrationParts.Add("Mantené una hidratación constante con agua a lo largo del día, ajustando según calor y carga de entrenamiento.");
+        }
+
+        if (quantitiesAllowed && request.SleepHours is > 0)
+        {
+            hydrationParts.Add(string.Format(
+                CultureInfo.InvariantCulture,
+                "Procurá descansar unas {0:0.#} horas de sueño para favorecer la recuperación (referencia calculada por reglas).",
+                request.SleepHours.Value));
+        }
+        else
+        {
+            hydrationParts.Add("Procurá un descanso suficiente y regular para favorecer la recuperación.");
+        }
+        if (moments.Any(m => m.Contains("Poco descanso", StringComparison.OrdinalIgnoreCase)))
+            hydrationParts.Add("Priorizá recuperar horas de sueño cuando sea posible.");
+        if (moments.Any(m => m.Contains("Partido cercano", StringComparison.OrdinalIgnoreCase)))
+            hydrationParts.Add("Reforzá la hidratación en las horas previas al partido.");
+        var hydrationAndSleep = string.Join(" ", hydrationParts);
 
         return new NutritionRecommendationResponseDto(
             SuggestedPlateComposition: plateComposition,
             HydrationAndSleepGuidelines: hydrationAndSleep,
             MentionedFoods: selectedFoods,
             LegalDisclaimer: OfficialNutritionDisclaimer,
-            ProviderUsed: providerUsed);
+            ProviderUsed: providerUsed,
+            MinProteinGrams: minG,
+            MaxProteinGrams: maxG,
+            RecommendationMode: mode,
+            RequiresProfessionalReferral: referralReasons.Count > 0 || hasWeightLossGoal || request.RequiresProfessionalReferral,
+            ReferralReasons: referralReasons,
+            DetectedMoments: moments,
+            MissingData: missingData);
     }
 }
 
-/// <summary>
-/// Grupo de la lista blanca de alimentos usada por las recomendaciones de alimentación (#KAN-495).
-/// </summary>
 public sealed record ApprovedFoodGroup(string Label, IReadOnlyList<string> Foods);

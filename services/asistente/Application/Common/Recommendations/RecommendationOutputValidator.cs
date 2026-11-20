@@ -227,6 +227,13 @@ public static class RecommendationOutputValidator
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
+    /// KAN-494: en modos sin cantidades tampoco se inventan referencias de hidratación/sueño.
+    /// </summary>
+    private static readonly Regex NonFoodQuantityRegex = new(
+        @"\b\d+([.,]\d+)?\s*(l|lt|lts|litros?|hs?|horas?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
     /// Valida la respuesta del modelo para una recomendación de entrenamiento al PF (perfil frente al grupo) (#083 · KAN-378).
     /// </summary>
     public static RecommendationValidationResult<TrainingRecommendationResponseDto> ValidateTrainingOutput(
@@ -542,15 +549,21 @@ public static class RecommendationOutputValidator
                 $"La recomendación de alimentación incluye pautas o cantidades para bajar de peso ('{weightLossFound}').");
         }
 
-        // 3. Validar que si no se permiten cantidades (ej. menores de edad), no aparezcan gramos ni calorías
-        if (!request.IncludeQuantities)
+        // 3. Validar que si no se permiten cantidades (ej. menores de edad, bajar de peso, derivación/datos faltantes),
+        // no aparezcan gramos ni calorías en el texto (KAN-494).
+        var quantitiesAllowed = request.IncludeQuantities
+            && !request.IsMinor
+            && !request.RequiresProfessionalReferral
+            && !string.Equals(request.RecommendationMode, HabitsRecommendationRules.ModeReferral, StringComparison.OrdinalIgnoreCase);
+
+        if (!quantitiesAllowed)
         {
-            var normalizedPlate = TextNormalizer.Normalize(plateComposition);
-            if (QuantityRegex.IsMatch(normalizedPlate))
+            var normalizedForQuantities = TextNormalizer.Normalize($"{plateComposition} {hydrationAndSleep}");
+            if (QuantityRegex.IsMatch(normalizedForQuantities) || NonFoodQuantityRegex.IsMatch(normalizedForQuantities))
             {
                 return RecommendationValidationResult<NutritionRecommendationResponseDto>.Failure(
                     "CantidadesNoPermitidas",
-                    "La recomendación incluye cantidades en gramos o calorías cuando se indicó modalidad sin cantidades.");
+                    "La recomendación incluye cantidades numéricas (gramos, calorías, litros u horas) cuando no están permitidas por seguridad/reglas (menor, bajar de peso, derivación o datos faltantes).");
             }
         }
 
@@ -592,13 +605,33 @@ public static class RecommendationOutputValidator
                 "La recomendación no utiliza ningún alimento de la lista aprobada.");
         }
 
+        // KAN-494: coherencia básica de modo/rangos devueltos (no inventar cuantitativo si no está permitido).
+        var resolvedMode = dto.RecommendationMode ?? request.RecommendationMode;
+        var resolvedReferral = dto.RequiresProfessionalReferral || request.RequiresProfessionalReferral;
+        double? resolvedMin = dto.MinProteinGrams ?? request.MinProteinGrams;
+        double? resolvedMax = dto.MaxProteinGrams ?? request.MaxProteinGrams;
+        if (!quantitiesAllowed)
+        {
+            resolvedMin = null;
+            resolvedMax = null;
+            if (string.Equals(resolvedMode, HabitsRecommendationRules.ModeQuantitative, StringComparison.OrdinalIgnoreCase))
+                resolvedMode = resolvedReferral ? HabitsRecommendationRules.ModeReferral : HabitsRecommendationRules.ModeQualitative;
+        }
+
         return RecommendationValidationResult<NutritionRecommendationResponseDto>.Success(
             new NutritionRecommendationResponseDto(
                 SuggestedPlateComposition: plateComposition,
                 HydrationAndSleepGuidelines: hydrationAndSleep,
                 MentionedFoods: matchedApprovedFoods,
                 LegalDisclaimer: RecommendationPromptBuilder.OfficialNutritionDisclaimer,
-                ProviderUsed: string.IsNullOrWhiteSpace(dto.ProviderUsed) ? "Reglas" : dto.ProviderUsed));
+                ProviderUsed: string.IsNullOrWhiteSpace(dto.ProviderUsed) ? "Reglas" : dto.ProviderUsed,
+                MinProteinGrams: resolvedMin,
+                MaxProteinGrams: resolvedMax,
+                RecommendationMode: resolvedMode,
+                RequiresProfessionalReferral: resolvedReferral,
+                ReferralReasons: dto.ReferralReasons ?? request.ReferralReasons,
+                DetectedMoments: dto.DetectedMoments ?? request.DetectedMoments,
+                MissingData: dto.MissingData ?? request.MissingData));
     }
 
     public static bool TryFindForbiddenSupplement(string? text, out string matchedTerm)

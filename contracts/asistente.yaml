@@ -697,6 +697,21 @@ paths:
       description: >
         Genera consejos de descanso, hidratación y requerimiento proteico diario según el peso y objetivo del atleta
         (basado en reglas fijas; sin suplementos; si el atleta es menor requiere consentimiento del tutor).
+        KAN-494: el rango cuantitativo de proteína sólo se calcula cuando la fuente de contexto informa peso y
+        objetivo válidos y la ficha médica auditada de Estructura puede verificarse sin riesgos registrados.
+        Si faltan peso/objetivo, la ficha está vacía, incompleta o no se puede consultar, la respuesta es
+        cualitativa o con derivación profesional, con minProteinGrams/maxProteinGrams en null; nunca se inventan
+        valores. Fuente de peso/objetivo: el perfil físico canónico de Estructura
+        (PATCH /api/v1/athletes/{id}/physical-profile y PATCH /api/v1/me/physical-profile, vocabulario cerrado
+        "Ganar masa muscular" / "Mantener" / "Rendimiento deportivo" / "Objetivo no informado"). Si el dato no
+        existe o Estructura no responde, el proveedor devuelve "sin dato" y no se inventan valores. Sigue sin
+        haber definición aprobada de "día pesado" (se reporta en missingData). Ambas dependencias tienen un
+        proveedor desacoplado. Los umbrales de partido cercano
+        (2 días) y poco descanso (menos de 6 h) están alineados con reglas ya implementadas (KAN-473/KAN-477) y
+        no se modifican sin validación profesional. La ficha médica se clasifica en backend; si Estructura pasa a
+        exponer alergias/condiciones estructuradas se consumen automáticamente, y un false nunca borra un riesgo
+        detectado en el texto libre. La consulta requiere consentimiento y se audita en Estructura.
+        Devuelve 409 cuando la preferencia del PF o la autorización del tutor no habilitan hábitos (KAN-493/496).
       operationId: getHabitsRecommendation
       parameters:
         - name: athleteId
@@ -714,6 +729,8 @@ paths:
                 $ref: '#/components/schemas/HabitsRecommendationResponse'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/habits-recommendations/{recommendationId}/approve:
     patch:
@@ -1889,11 +1906,15 @@ components:
 
     HabitsRecommendationResponse:
       type: object
+      description: >
+        Recomendación de hábitos/nutrición para validación del PF (KAN-494).
+        Extiende el esquema base con campos opcionales de seguridad y contexto (rangos, modo, menor, derivación,
+        momentos y datos faltantes). dailyProteinRequirementGrams puede ser null cuando no es seguro/posible
+        indicar cantidades (menor, objetivo bajar de peso, datos faltantes o derivación).
       required:
         - id
         - athleteId
         - athleticGoal
-        - dailyProteinRequirementGrams
         - suggestedPlateComposition
         - hydrationAndSleepGuidelines
         - legalDisclaimer
@@ -1909,24 +1930,97 @@ components:
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
         athleticGoal:
           type: string
-          example: "Aumento de masa muscular y recuperación"
+          example: "Ganar masa muscular"
         dailyProteinRequirementGrams:
           type: number
           format: double
-          description: Calculado por regla determinística en g/kg de peso corporal.
-          example: 144.0
+          nullable: true
+          description: >
+            Referencia cuantitativa calculada por reglas cuando es segura (p.ej. rango objetivo definido).
+            Null si no corresponde indicar cantidades. TODO(KAN-494): compatibilidad con clientes que esperen valor numérico.
+          example: 120.0
         suggestedPlateComposition:
           type: string
-          example: "50% proteína magra (pollo, huevos, legumbres), 35% carbohidratos complejos, 15% grasas saludables."
+          example: "Plato con alimentos aprobados, adaptado al objetivo y momentos detectados, sin suplementos."
         hydrationAndSleepGuidelines:
           type: string
-          example: "Consumir al menos 2.5 litros de agua y procurar 8 horas de sueño continuo."
+          example: "Consumir agua de forma regular y procurar descanso suficiente para la recuperación."
         legalDisclaimer:
           type: string
           example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
         approvedByPf:
           type: boolean
           example: false
+        minProteinGrams:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Límite inferior del rango diario de proteína (g) fijado por reglas en el backend. La IA sólo redacta;
+            nunca puede reemplazar este valor. Null en modos sin cantidades.
+          example: 100.0
+        maxProteinGrams:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Límite superior del rango diario de proteína (g) fijado por reglas en el backend. Null en modos sin cantidades.
+          example: 140.0
+        recommendationMode:
+          type: string
+          nullable: true
+          description: "Modo de recomendación: Quantitative, Qualitative o Referral."
+          example: "Quantitative"
+        isMinor:
+          type: boolean
+          description: Indica si el atleta es menor de edad (sin cantidades de proteína).
+          example: false
+        requiresProfessionalReferral:
+          type: boolean
+          description: >
+            Indica si se recomienda derivación a profesional por seguridad. Verdadero ante riesgo médico registrado,
+            ficha médica vacía/incompleta/no verificable, objetivo de pérdida de peso o datos críticos ausentes.
+            En ese caso no se entregan cantidades ni estrategias de pérdida de peso.
+          example: false
+        referralReasons:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Motivos de derivación o precaución.
+        detectedMoments:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Momentos detectados (día pesado, partido cercano, poco descanso) cuando hay datos.
+        missingData:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: >
+            Datos faltantes o pendientes de definición/validación que impiden una pauta completa (por ejemplo,
+            peso/objetivo sin fuente, día pesado sin criterio aprobado, partido/descanso no inferibles,
+            check-ins con fecha futura o ficha médica no verificable). No implica que el dato sea cero.
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Peso corporal informado por la fuente configurada y usado para el cálculo. Null significa "sin dato":
+            el backend no lo estima ni lo reemplaza por valores de otros dominios (1RM, carga, objetivos de plan).
+          example: 70.0
+        provider:
+          type: string
+          nullable: true
+          description: Proveedor/redacción utilizada (IA o reglas).
+          example: "Reglas"
+        status:
+          type: string
+          nullable: true
+          description: Estado de revisión de la recomendación (Pending, Approved, Discarded).
+          example: "Pending"
 
     PfDecisionResponse:
       type: object

@@ -11,6 +11,9 @@ public sealed class Athlete : BaseEntity
     public string Email { get; private set; } = string.Empty;
     public string Phone { get; private set; } = string.Empty;
     public string? TelegramUsername { get; private set; }
+    public decimal? WeightKg { get; private set; }
+    public AthleticGoal? AthleticGoal { get; private set; }
+    public DateTime? PhysicalProfileUpdatedAt { get; private set; }
     public bool IsMinor { get; private set; }
     public string? EmergencyContact { get; private set; }
     public bool Active { get; private set; } = true;
@@ -268,6 +271,27 @@ public sealed class Athlete : BaseEntity
         }
 
         TelegramUsername = normalized;
+    }
+
+    /// <summary>
+    /// Actualiza el perfil físico usado por las recomendaciones de hábitos (KAN-494).
+    /// null en peso/objetivo significa "sin dato": nunca se inventa un valor por defecto.
+    /// </summary>
+    public void UpdatePhysicalProfile(decimal? weightKg, string? athleticGoalLabel)
+    {
+        // Validar todo antes de mutar: un objetivo inválido no debe dejar el peso a medias.
+        if (weightKg.HasValue && (weightKg.Value <= 0 || weightKg.Value > 400))
+            throw new DomainException("El peso corporal debe estar entre 0 y 400 kg.");
+
+        if (!AthleticGoalLabels.TryParse(athleticGoalLabel, out var goal))
+            throw new DomainException(
+                $"El objetivo deportivo no es válido. Valores permitidos: {AthleticGoalLabels.ValidValues}.");
+
+        WeightKg = weightKg.HasValue
+            ? decimal.Round(weightKg.Value, 2, MidpointRounding.AwayFromZero)
+            : null;
+        AthleticGoal = goal;
+        PhysicalProfileUpdatedAt = DateTime.UtcNow;
     }
 
     public void SetActive(bool active) => Active = active;

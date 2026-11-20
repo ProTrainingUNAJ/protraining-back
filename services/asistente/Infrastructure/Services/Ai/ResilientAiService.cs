@@ -709,9 +709,24 @@ public sealed class ResilientAiService : IAiService
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(request.AthleticGoal, out var goalWeightLoss))
+        // KAN-494: objetivo orientado a bajar de peso => no se bloquea la generación; se debe producir
+        // una recomendación segura sin cantidades ni estrategias para perder peso y con derivación.
+        // La seguridad se refuerza en prompt, generación determinística y validación.
+        if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(request.AthleticGoal, out _))
         {
-            throw new DomainException($"No se permiten recomendaciones ni cantidades para bajar de peso ('{goalWeightLoss}').");
+            request = request with
+            {
+                IncludeQuantities = false,
+                MinProteinGrams = null,
+                MaxProteinGrams = null,
+                DailyProteinRequirementGrams = null,
+                RecommendationMode = HabitsRecommendationRules.ModeReferral,
+                RequiresProfessionalReferral = true,
+                ReferralReasons = (request.ReferralReasons ?? [])
+                    .Concat(["Objetivo orientado a bajar de peso: no se brindan cantidades ni estrategias para perder peso; se sugiere derivación profesional."])
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+            };
         }
 
         if (request.ApprovedFoods is { Count: 0 })
