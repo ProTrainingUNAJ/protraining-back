@@ -1,6 +1,7 @@
 using Application.DTOs.DayConflicts;
 using Application.Exceptions;
 using Application.Interfaces.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Application.UseCases.DayConflicts.GetDayConflicts;
 
@@ -9,11 +10,13 @@ public sealed record GetDayConflictsQuery(Guid AthleteId);
 /// <summary>
 /// Detecta si la rutina de hoy del atleta carga zonas anatómicas donde reportó dolor
 /// en el check-in de hoy (#156 · KAN-451) y puede resolver sustitutos vía MCP (#189 · KAN-484).
+/// Si el servidor MCP no responde, devuelve los conflictos igual sin sustitutos en vez de fallar con 503.
 /// </summary>
 public sealed class GetDayConflictsQueryHandler(
     ITrainingPlanServiceClient trainingClient,
     ISeguimientoClient seguimientoClient,
-    IExerciseLibraryMcpClient? exerciseLibraryMcpClient = null)
+    IExerciseLibraryMcpClient? exerciseLibraryMcpClient = null,
+    ILogger<GetDayConflictsQueryHandler>? logger = null)
 {
     public const string MissingCheckInMessage = "Todavía no hizo el check-in";
 
@@ -87,13 +90,28 @@ public sealed class GetDayConflictsQueryHandler(
                 && exerciseLibraryMcpClient is not null
                 && !string.IsNullOrWhiteSpace(r.Zone))
             {
-                var mcpResult = await exerciseLibraryMcpClient.GetSubstitutesAsync(
-                    r.Zone,
-                    cancellationToken);
+                try
+                {
+                    var mcpResult = await exerciseLibraryMcpClient.GetSubstitutesAsync(
+                        r.Zone,
+                        cancellationToken);
 
-                substitutes = mcpResult.Substitutes
-                    .Select(s => new DayConflictSubstituteDto(s.ExerciseId, s.Name))
-                    .ToList();
+                    substitutes = mcpResult.Substitutes
+                        .Select(s => new DayConflictSubstituteDto(s.ExerciseId, s.Name))
+                        .ToList();
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(
+                        ex,
+                        "No se pudieron obtener sustitutos desde MCP para la zona '{Zone}' (ejercicio {ExerciseId}). Se devuelven los conflictos sin sustitutos.",
+                        r.Zone,
+                        r.ExerciseId);
+                }
             }
 
             conflicts.Add(new DayConflictItemDto(

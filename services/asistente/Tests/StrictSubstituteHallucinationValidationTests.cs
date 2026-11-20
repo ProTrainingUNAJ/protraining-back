@@ -637,4 +637,69 @@ public sealed class StrictSubstituteHallucinationValidationTests
             Assert.False(e.IsReference);
         });
     }
+
+    [Fact]
+    public async Task Given_LlmHallucinatesUnrelatedMuscleGroupExercise_When_ValidatingAdaptation_Then_DoesNotSubstituteWithUnrelatedKneeSubstitute()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+        var context = CreateKneeInjuryContext(athleteId);
+
+        // El atleta solo tiene restricción de rodilla, pero el LLM alucina un ejercicio de bíceps (otro grupo muscular)
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Tren superior",
+            JustificationSummary: "Sesión de empuje y brazos",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Press de banca plano con barra", 4, 6, 75m, BenchPressId),
+                new SuggestedExerciseDto("Curl galáctico de bíceps con láser", 3, 12, 0m, Guid.NewGuid())
+            ],
+            ProviderUsed: "Agente (OpenAI)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: context);
+
+        // No debe reemplazar el curl de bíceps alucinado por Prensa de piernas (sin relación)
+        Assert.DoesNotContain(result.SanitizedRoutine.Exercises, e => e.ExerciseId == LegPressId);
+        Assert.Equal(BenchPressId, result.SanitizedRoutine.Exercises[0].ExerciseId);
+        Assert.True(result.SanitizedRoutine.Exercises[1].IsReference);
+        Assert.False(result.SanitizedRoutine.WasAdapted);
+    }
+
+    [Fact]
+    public async Task Given_LlmHallucinatesLegExerciseWhenOnlyAuthorizedSubstituteIsAlreadyInSession_When_ValidatingAdaptation_Then_DoesNotDuplicateExercises()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+
+        var singleSubstituteContext = new AthleteAdaptationContextDto(
+            AthleteId: athleteId,
+            ActiveInjuries: [CreateActiveInjury(athleteId, "rodilla", "Dolor rotuliano")],
+            CurrentRecords: [],
+            Restrictions:
+            [
+                new ExerciseRestrictionContextDto(
+                    SquatId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [new AuthorizedSubstituteDto(LegPressId, "Prensa de piernas")])
+            ]);
+
+        // Prensa de piernas ya está en la sesión y hay un ejercicio alucinado de piernas: no debe duplicar Prensa
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Tren inferior",
+            JustificationSummary: "Sesión de piernas",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Prensa de piernas", 4, 8, 70m, LegPressId),
+                new SuggestedExerciseDto("Sentadilla espacial con barra", 3, 10, 60m, Guid.NewGuid())
+            ],
+            ProviderUsed: "Agente (OpenAI)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: singleSubstituteContext);
+
+        Assert.Equal(1, result.SanitizedRoutine.Exercises.Count(e => e.ExerciseId == LegPressId));
+        Assert.True(result.SanitizedRoutine.Exercises[1].IsReference);
+    }
 }

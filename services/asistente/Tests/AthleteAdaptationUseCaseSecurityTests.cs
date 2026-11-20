@@ -1,6 +1,7 @@
 namespace Asistente.Tests;
 
 using System.Reflection;
+using Application.Common.Adaptation;
 using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
 using Application.DTOs.DayConflicts;
@@ -290,5 +291,77 @@ public sealed class AthleteAdaptationUseCaseSecurityTests
             warning => warning.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase) &&
                        warning.Contains("Press de banca con barra - Agarre medio", StringComparison.OrdinalIgnoreCase) &&
                        warning.Contains("85 kg", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAdaptationAsync_WhenEstimatedRecordIsNotInSession_DoesNotWarnAboutUnrelatedExercise()
+    {
+        var athleteId = Guid.NewGuid();
+        var unrelatedSquatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService.Setup(c => c.GetAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                athleteId,
+                [],
+                [
+                    // Récord estimado de Sentadilla, pero la sesión solo tiene Press de banca (testeado)
+                    new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, unrelatedSquatId, "Sentadilla con barra", 120m, "Estimated", DateTime.UtcNow.AddDays(-3), true),
+                    new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, benchId, "Press de banca plano", 90m, "Tested", DateTime.UtcNow.AddDays(-3), true)
+                ],
+                []));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object);
+
+        var result = await useCase.ExecuteAdaptationAsync(new RoutineSuggestionRequestDto(
+            AthleteId: athleteId,
+            Goal: "Fuerza de tren superior",
+            BaseExercises: [new SuggestedExerciseDto("Press de banca plano", 4, 6, 75m, benchId)]));
+
+        Assert.NotNull(result.AdaptationWarnings);
+        Assert.DoesNotContain(
+            result.AdaptationWarnings!,
+            w => w.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAdaptationAsync_GivenConfiguredAdaptationOptions_UsesConfiguredConservativePercent()
+    {
+        var athleteId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService.Setup(c => c.GetAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                athleteId,
+                [],
+                [new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, benchId, "Press de banca plano", 90m, "Estimated", DateTime.UtcNow.AddDays(-2), true)],
+                []));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object,
+            adaptationOptions: new AdaptationOptions { EstimatedRecordConservativePercent = 85m });
+
+        var result = await useCase.ExecuteAdaptationAsync(new RoutineSuggestionRequestDto(
+            AthleteId: athleteId,
+            Goal: "Fuerza",
+            BaseExercises: [new SuggestedExerciseDto("Press de banca plano", 4, 6, 75m, benchId)]));
+
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            w => w.Contains("85%", StringComparison.OrdinalIgnoreCase) &&
+                 !w.Contains("90%", StringComparison.OrdinalIgnoreCase));
     }
 }

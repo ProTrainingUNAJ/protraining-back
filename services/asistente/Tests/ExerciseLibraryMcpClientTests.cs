@@ -145,6 +145,61 @@ public sealed class ExerciseLibraryMcpClientTests
         Assert.Equal(2, item.AvailableSubstitutes.Count);
     }
 
+    [Fact]
+    public async Task Given_McpServerDown_When_GetDayConflictsRuns_Then_ReturnsConflictsWithoutSubstitutesInsteadOf503()
+    {
+        var trainingClientMock = new Mock<ITrainingPlanServiceClient>();
+        trainingClientMock
+            .Setup(c => c.GetTodayRoutineAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(
+                AthleteId,
+                new DateOnly(2026, 11, 18),
+                [new TodayRoutineExerciseRemoteDto(SquatId, "Sentadilla con barra")],
+                SessionId));
+
+        trainingClientMock
+            .Setup(c => c.CheckExerciseRestrictionsAsync("rodilla:3", It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ExerciseRestrictionCheckResultRemoteDto(
+                    ExerciseId: SquatId,
+                    Restricted: true,
+                    Zone: "rodilla",
+                    PainLevel: 3,
+                    Reason: "Carga axial sobre rodilla",
+                    Substitutes: [])
+            ]);
+
+        var seguimientoClientMock = new Mock<ISeguimientoClient>();
+        seguimientoClientMock
+            .Setup(c => c.GetTodayCheckInAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayCheckInDto(
+                Guid.NewGuid(),
+                AthleteId,
+                new DateTime(2026, 11, 18),
+                "rodilla:3"));
+
+        var failingMcpMock = new Mock<IExerciseLibraryMcpClient>();
+        failingMcpMock
+            .Setup(m => m.GetSubstitutesAsync("rodilla", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Application.Exceptions.TrainingServiceUnavailableException("MCP caído"));
+
+        var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<GetDayConflictsQueryHandler>>();
+        var handler = new GetDayConflictsQueryHandler(
+            trainingClientMock.Object,
+            seguimientoClientMock.Object,
+            failingMcpMock.Object,
+            loggerMock.Object);
+
+        var response = await handler.HandleAsync(new GetDayConflictsQuery(AthleteId));
+
+        Assert.True(response.HasConflicts);
+        var conflict = Assert.Single(response.Conflicts);
+        Assert.Equal(SquatId, conflict.ExerciseId);
+        Assert.Equal("rodilla", conflict.Zone);
+        Assert.Empty(conflict.Substitutes);
+    }
+
     // =========================================================================
     // BuscarEjercicios por MCP
     // =========================================================================

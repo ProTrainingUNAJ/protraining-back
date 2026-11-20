@@ -1615,6 +1615,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExerciseRestrictionContext'
+        conservativeEstimatedRecordPercent:
+          type: number
+          nullable: true
+          description: Porcentaje conservador aplicado cuando el 1RM del atleta es estimado (por defecto 90 %).
 
     PlanDraftExercise:
       type: object
