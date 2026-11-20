@@ -15,17 +15,19 @@ public sealed class AthletePurgeDispatcher(
 {
     private sealed record ServiceTarget(string Name, string BaseUrl);
 
-    public async Task<bool> DispatchPurgeToExternalServicesAsync(
+    public async Task<AthletePurgeDispatchResult> DispatchPurgeToExternalServicesAsync(
         Guid athleteId,
         CancellationToken cancellationToken = default)
     {
         var servicesToPurge = GetTargetServices();
         var allSucceeded = true;
+        string? failureReason = null;
 
         foreach (var target in servicesToPurge)
         {
             var success = false;
-            const int maxAttempts = 2; // Reintento inmediato ante fallo transitorio
+            const int maxAttempts = 3; // Reintentos con retroceso exponencial ante fallos transitorios de red
+            string? lastServiceError = null;
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -41,6 +43,7 @@ public sealed class AthletePurgeDispatcher(
                     break;
                 }
 
+                lastServiceError = result.ErrorMessage;
                 logger.LogWarning(
                     "Intento {Attempt}/{MaxAttempts} fallido al purgar atleta {AthleteId} en {ServiceName}. Motivo: {Error}",
                     attempt,
@@ -51,23 +54,27 @@ public sealed class AthletePurgeDispatcher(
 
                 if (attempt < maxAttempts)
                 {
-                    await Task.Delay(150, cancellationToken);
+                    // Retroceso exponencial: 150 ms, 300 ms...
+                    var delayMs = (int)(150 * Math.Pow(2, attempt - 1));
+                    await Task.Delay(delayMs, cancellationToken);
                 }
             }
 
             if (!success)
             {
                 allSucceeded = false;
+                failureReason = $"El servicio {target.Name} falló tras {maxAttempts} intentos: {lastServiceError}";
                 logger.LogWarning(
-                    "El servicio {ServiceName} no pudo completar la purga del atleta {AthleteId} tras {MaxAttempts} intentos. Se aborta el ciclo para este atleta y se reintentará más tarde.",
+                    "El servicio {ServiceName} no pudo completar la purga del atleta {AthleteId} tras {MaxAttempts} intentos. Se aborta el ciclo para este atleta. Motivo: {Error}",
                     target.Name,
                     athleteId,
-                    maxAttempts);
+                    maxAttempts,
+                    lastServiceError);
                 break; // No seguimos con los restantes si uno falló, para garantizar consistencia y reintentar todo el bloque
             }
         }
 
-        return allSucceeded;
+        return new AthletePurgeDispatchResult(allSucceeded, allSucceeded ? null : failureReason);
     }
 
     private List<ServiceTarget> GetTargetServices()

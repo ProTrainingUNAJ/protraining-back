@@ -26,6 +26,11 @@ public sealed class InternalAthletesController(
         return Ok(athletes);
     }
 
+    /// <summary>
+    /// Endpoint interno para purgar físicamente los datos locales de un atleta en Estructura.
+    /// Nota: El pipeline automatizado de purga (DataPurgeWorker) invoca directamente IEstructuraPurgeRepository in-process;
+    /// este endpoint HTTP queda expuesto para invocaciones administrativas o herramientas de soporte externas que requieran forzar la purga local.
+    /// </summary>
     [HttpDelete("{athleteId:guid}/purge")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
