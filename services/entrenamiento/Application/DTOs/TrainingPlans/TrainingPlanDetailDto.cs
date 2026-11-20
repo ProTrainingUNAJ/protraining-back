@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Domain.Entities;
 
 namespace Application.DTOs.TrainingPlans;
@@ -28,17 +29,39 @@ public record TrainingBlockDto(
     List<PrescribedExerciseDto> Exercises
 );
 
-public record TrainingPlanSessionDto(
-    Guid Id,
-    string Name,
-    int Order,
-    DayOfWeek DayOfWeek,
-    string? CoachNotes,
-    List<TrainingBlockDto> Blocks,
-    List<PrescribedExerciseDto> Exercises,
-    TimeOnly? StartTime = null
-)
+public record TrainingPlanSessionDto
 {
+    public Guid Id { get; init; }
+    public string Name { get; init; }
+    public int Order { get; init; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DayOfWeek DayOfWeek { get; init; }
+    public string? CoachNotes { get; init; }
+    public List<TrainingBlockDto> Blocks { get; init; } = [];
+    public List<PrescribedExerciseDto> Exercises { get; init; } = [];
+    public TimeOnly? StartTime { get; init; }
+
+    [JsonConstructor]
+    public TrainingPlanSessionDto(
+        Guid id,
+        string name,
+        int order,
+        DayOfWeek dayOfWeek,
+        string? coachNotes,
+        List<TrainingBlockDto>? blocks,
+        List<PrescribedExerciseDto>? exercises,
+        TimeOnly? startTime = null)
+    {
+        Id = id;
+        Name = name;
+        Order = order;
+        DayOfWeek = dayOfWeek;
+        CoachNotes = coachNotes;
+        Blocks = blocks ?? [];
+        Exercises = exercises ?? [];
+        StartTime = startTime;
+    }
+
     public TrainingPlanSessionDto(
         Guid id,
         string name,

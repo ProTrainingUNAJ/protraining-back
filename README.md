@@ -148,22 +148,30 @@ Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 
 ### IA del Asistente: agente con herramientas y cadena de respaldo
 
-Ollama ya no forma parte del compose ni de la ejecución. El Asistente arma los borradores con un **agente** compatible con la API de OpenAI que consulta el catálogo de ejercicios a través del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerRestricciones`, `ObtenerSustitutos`) y está limitado a **6 llamadas a herramientas por pedido** (`AI_AGENT_MAX_TOOL_CALLS`).
+Ollama ya no forma parte del compose ni de la ejecución. El Asistente arma los borradores de planificación y la justificación del ajuste del día con un **agente** compatible con la API de OpenAI que consulta la biblioteca de ejercicios, las restricciones y los sustitutos a través del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerRestricciones`, `ObtenerSustitutos`) y está limitado a **6 llamadas a herramientas por pedido** (`AI_AGENT_MAX_TOOL_CALLS`).
 
-La cadena de proveedores se define por configuración (`Ai__Agent__Providers__N__*`, ya cableada en el compose) y se prueba en orden. Un proveedor sin clave se saltea sin error:
+El cliente es **uno solo y genérico**, compatible con la API de OpenAI (Gemini tiene un endpoint compatible). Sumar o cambiar un proveedor es configuración, no código (ver `Ai__Agent__Providers__N__*` en "Variables de entorno"). Prueba los proveedores **en orden**:
 
 | Orden | Proveedor | Variables del `.env` | Cuándo se usa |
 |---|---|---|---|
 | 1 | OpenAI (Azure Gateway UNAJ, `gpt-4.1-mini`) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Proveedor principal |
-| 2 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL` | Respaldo de IA |
-| 3 | Reglas determinísticas locales | — | Si ningún proveedor devuelve un borrador válido |
+| 2 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL` | Respaldo de IA (si OpenAI falla, tarda o no tiene clave) |
+| 3 | Reglas determinísticas locales | — | Si fallan los dos o no hay claves. La app anda igual sin internet |
 
-- Ante un HTTP 429 (límite del proveedor) el agente **no espera ni reintenta**: pasa de inmediato al siguiente proveedor.
-- Timeouts por proveedor: 40 s + 40 s = 80 s, por debajo de los 100 s del gateway (`OPENAI_TIMEOUT_SECONDS`, `GEMINI_TIMEOUT_SECONDS`).
-- A cualquier proveedor externo viaja todo anonimizado: sin nombres de atletas, y del objetivo en texto libre se quitan emails y teléfonos.
-- El prompt del agente incluye la categoría o el atleta destino (por identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y el formato por bloques con el catálogo numerado.
-- Detalle técnico, hiperparámetros y mediciones históricas de Llama: [services/asistente/README.md](services/asistente/README.md).
+Lo que no cambia, con cualquier proveedor:
+- **La IA propone y el PF decide:** el borrador queda como borrador hasta que el PF lo aprueba.
+- **Sin datos personales:** a cualquier proveedor externo viaja todo anonimizado, nunca el nombre, y del objetivo en texto libre se quitan emails y teléfonos.
+- **Los cálculos no son IA:** kilos, %RM, redondeo a 2,5 kg, semáforo y elección del sustituto son reglas determinísticas en C#.
+- **Ante un HTTP 429** (límite del proveedor) el agente **no espera ni reintenta**: pasa de inmediato al siguiente proveedor.
+- **Timeouts por proveedor:** 40 s + 40 s = 80 s, por debajo de los 100 s del gateway (`OPENAI_TIMEOUT_SECONDS`, `GEMINI_TIMEOUT_SECONDS`).
+- **Prompt contextualizado:** el prompt del agente incluye la categoría o el atleta destino (por identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y el formato por bloques con el catálogo numerado.
+- Cada pedido a la IA queda auditado en `ai_logs`, con el proveedor, los tokens y la latencia.
 - El Asistente no depende de ningún proveedor de IA para arrancar: si la IA se cae, el resto del sistema sigue andando.
+- Detalle técnico, hiperparámetros y mediciones históricas de Llama: [services/asistente/README.md](services/asistente/README.md).
+
+**Claves:** `OPENAI_API_KEY` y `GEMINI_API_KEY` van **solo en tu `.env`**. Se piden por privado y nunca se suben al repo, a Jira ni al grupo. Después de cambiarlas: `docker compose up -d asistente` (el `restart` no relee el `.env`).
+
+**Para probar:** en el front, "Generar con IA". El borrador dice quién lo armó: "Agente (OpenAI)", "Agente (Gemini)" o "Reglas".
 
 ## Gateway
 
@@ -209,7 +217,10 @@ La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
 
 Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
 
-También se expone la herramienta MCP de solo lectura **`ObtenerSustitutos`**, que recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
+También se exponen dos herramientas MCP de solo lectura más, que usa el agente del Asistente:
+
+- **`ObtenerRestricciones`**: recibe `zona` y devuelve los ejercicios contraindicados para esa zona, con sus sustitutos.
+- **`ObtenerSustitutos`**: recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
 
 Esta ampliación es exclusiva de la superficie MCP: no modifica endpoints REST, esquemas OpenAPI ni contratos que consuma el frontend.
 
@@ -260,11 +271,18 @@ En el `.env` (las usa el compose):
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | Usuario y contraseña de las 5 bases |
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
-| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
-| `OPENAI_API_KEY` | Clave del agente de IA principal del Asistente (opcional; sin clave se saltea) |
-| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
+| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger y crea las cuentas de demo |
+| `OPENAI_API_KEY` | Clave del agente con OpenAI (la del gateway de IA de la UNAJ). **Solo en tu `.env`**, se pide por privado. Sin clave, se saltea |
+| `OPENAI_BASE_URL`, `OPENAI_MODEL` | URL y modelo de OpenAI. Por defecto, el gateway de la UNAJ con `gpt-4.1-mini` (ver `.env.example`) |
+| `GEMINI_API_KEY` | Clave de Gemini, el segundo proveedor (de aistudio.google.com). **Solo en tu `.env`**. Sin clave, se saltea |
+| `GEMINI_BASE_URL`, `GEMINI_MODEL` | URL compatible con OpenAI y modelo de Gemini |
 | `AI_AGENT_MAX_TOOL_CALLS` | Tope de llamadas a herramientas del agente por pedido (opcional, por defecto 6) |
 | `AiQuota__DailyLimitPerPf` | Límite diario de pedidos a la IA por PF (opcional, por defecto 20; subir en demo si hace falta) |
+| `GOOGLE_CLIENT_ID` | Client ID del login con Google. No es secreto: va en el botón del front y tiene que coincidir con `VITE_GOOGLE_CLIENT_ID` |
+| `FRONTEND_BASE_URL` | URL del front para los links de los mails (confirmación del registro, recuperar contraseña) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_ENABLE_SSL`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Servidor de mails. En local, los mails se ven en **Mailpit** (`http://localhost:8025`). La contraseña real, si se usa, va **solo en tu `.env`** |
+| `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Claves de las notificaciones push (se generan con `npx web-push generate-vapid-keys`) |
+| `DEMO_PF_PHONE` | WhatsApp del PF de la demo (opcional; para el seed) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -275,8 +293,10 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
-| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey`, `__TimeoutSeconds` | Cadena de proveedores de IA del Asistente (0 = OpenAI, 1 = Gemini) |
-| `Ai__Agent__MaxToolCalls` | Tope de llamadas a herramientas del agente por pedido |
+| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey`, `__TimeoutSeconds` | Asistente: la lista ordenada de proveedores de IA (0 = OpenAI, 1 = Gemini). El orden es el de la cadena; un proveedor sin clave se saltea |
+| `Ai__Agent__MaxToolCalls` | Asistente: tope de llamadas a herramientas del agente por pedido (por defecto 6) |
+| `Smtp__*` | Identidad: el servidor de mails (sale de las `SMTP_*`) |
+| `Google__ClientId` | Identidad: para validar el login con Google |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
