@@ -119,6 +119,13 @@ athlete_id_of() {
   api GET "/estructura/api/v1/me" "$token" | jq -r .athleteId
 }
 
+# active_injury_of <email> → id de su lesión activa. Desde la KAN-487 el check-in tiene que puntuar
+# el dolor de cada lesión activa; en el modo "checkins" las lesiones ya existen y hay que buscarlas.
+active_injury_of() {
+  api GET "/seguimiento/api/v1/athletes/$(athlete_id_of "$1")/injuries?status=Active" "$PF_TOKEN" \
+    | jq -r '.[0].id // empty'
+}
+
 # check_in <email> <json> [días atrás] → check-in con el token del atleta (si ya hizo uno ese día, lo pisa).
 # Sin días atrás es el de hoy; con días atrás manda la fecha, como el front al sincronizar sin conexión.
 check_in() {
@@ -173,6 +180,7 @@ load_check_ins() {
   # Valentina con dolor nuevo en el cuádriceps → amarillo
   check_in valentina@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":3,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":6,"isSick":false,"painZones":"cuadriceps:3","hasActiveInjury":false}'
   # Camila con lesión activa en el hombro → rojo (está en Alumnos particulares y en Musculación)
+  CAMILA_INJURY_ID="${CAMILA_INJURY_ID:-$(active_injury_of camila@protraining.com)}"
   if [[ -n "${CAMILA_INJURY_ID:-}" ]]; then
     camila_body=$(jq -nc --arg inj "$CAMILA_INJURY_ID" '{sleepHours:8,sleepQuality:4,muscleSoreness:3,fatigueLevel:2,moodRate:3,stressLevel:2,effortRate:5,isSick:false,painZones:"hombros:4",hasActiveInjury:true,injuries:[{injuryId:$inj,level:4}]}')
   else
@@ -293,10 +301,6 @@ echo "  Sofía, Bruno y Diego en Primera División"
 # Vincular cada atleta a su cuenta de Identidad. Lo hace la invitación por QR (Sprint 2);
 # mientras tanto, directo en la base de Estructura (solo desarrollo).
 echo "Vínculo de las cuentas:"
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
 link_sql=""
 for pair in "atleta@protraining.com:$LUCAS_ID" "martin@protraining.com:$MARTIN_ID" \
   "joaquin@protraining.com:$JOAQUIN_ID" "facundo@protraining.com:$FACUNDO_ID" \
