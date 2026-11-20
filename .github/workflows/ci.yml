@@ -110,19 +110,20 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Levantar Estructura y Seguimiento
+      - name: Levantar microservicios con Docker Compose
         run: |
           cp .env.example .env
-          docker compose up -d --build --wait --wait-timeout 180 estructura seguimiento
+          docker compose up -d --build --wait --wait-timeout 180 identidad estructura entrenamiento seguimiento asistente
 
-      - name: Ejecutar pruebas de integración real (Asistente y Seguimiento)
+      - name: Ejecutar pruebas de integración real (Asistente, Seguimiento y Estructura)
         run: |
           dotnet test services/asistente/Tests/Asistente.Tests.csproj -c Release --filter "Category=ServiceIntegration"
           dotnet test services/seguimiento/Tests/Seguimiento.Tests.csproj -c Release --filter "Category=ServiceIntegration"
+          dotnet test services/estructura/Tests/Estructura.Tests.csproj -c Release --filter "Category=ServiceIntegration"
 
       - name: Logs si algo falló
         if: failure()
-        run: docker compose logs estructura seguimiento
+        run: docker compose logs identidad estructura entrenamiento seguimiento asistente
 
       - name: Bajar todo
         if: always()
