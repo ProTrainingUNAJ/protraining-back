@@ -30,4 +30,13 @@ public sealed class PlanDraftProviderWarningsTests
         Assert.Contains("reglas fijas de ProTraining", warning);
         Assert.Contains("Revisalo", warning);
     }
+
+    [Fact]
+    public void ProviderWarnings_QuotaExceeded_ExplainsDailyLimitReached()
+    {
+        var warning = Assert.Single(PlanDraftMapper.ProviderWarnings("Reglas (Límite diario alcanzado)"));
+
+        Assert.Contains("límite de pedidos a la IA por hoy", warning);
+        Assert.Contains("reglas fijas de ProTraining", warning);
+    }
 }

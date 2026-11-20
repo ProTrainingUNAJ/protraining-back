@@ -2,13 +2,14 @@ namespace Infrastructure.Services.Ai.Quota;
 
 using System.Collections.Concurrent;
 using Application.Interfaces.Services;
+using Domain.Common;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Implementación en memoria del limitador de cuota diaria de IA por preparador físico (#215 · KAN-510).
-/// Gestiona contadores indexados por PF y fecha UTC con reseteo automático al cambiar el día.
+/// Gestiona contadores indexados por PF y fecha de Argentina con reseteo automático al cambiar el día.
 /// </summary>
 public sealed class AiQuotaService : IAiQuotaService
 {
@@ -46,12 +47,12 @@ public sealed class AiQuotaService : IAiQuotaService
         if (!pfId.HasValue || pfId.Value == Guid.Empty)
             return 0;
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ArgentinaTime.Today;
         var key = BuildKey(pfId.Value, today);
 
-        if (_cache != null && _cache.TryGetValue<int>(key, out var cachedUsage))
+        if (_cache != null)
         {
-            return cachedUsage;
+            return _cache.TryGetValue<int>(key, out var cachedUsage) ? cachedUsage : 0;
         }
 
         return _fallbackCounters.TryGetValue(key, out var fallbackUsage) ? fallbackUsage : 0;
@@ -62,7 +63,8 @@ public sealed class AiQuotaService : IAiQuotaService
         if (!pfId.HasValue || pfId.Value == Guid.Empty)
             return 0;
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = ArgentinaTime.Today;
+        var todaySuffix = $"_{today:yyyyMMdd}";
         var key = BuildKey(pfId.Value, today);
 
         lock (_syncLock)
@@ -72,11 +74,21 @@ public sealed class AiQuotaService : IAiQuotaService
 
             if (_cache != null)
             {
-                // Expira tras 25 horas para limpiar memoria pasada la jornada UTC
+                // Expira tras 25 horas para limpiar memoria pasada la jornada local
                 _cache.Set(key, next, TimeSpan.FromHours(25));
             }
-
-            _fallbackCounters[key] = next;
+            else
+            {
+                // Sin IMemoryCache, purgar días previos para que el diccionario no crezca sin límite
+                foreach (var existingKey in _fallbackCounters.Keys)
+                {
+                    if (!existingKey.EndsWith(todaySuffix, StringComparison.Ordinal))
+                    {
+                        _fallbackCounters.TryRemove(existingKey, out _);
+                    }
+                }
+                _fallbackCounters[key] = next;
+            }
 
             _logger.LogInformation(
                 "Consumo de IA registrado para el preparador físico {PfId}: {Usage}/{Limit} pedidos consumidos hoy.",

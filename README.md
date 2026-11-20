@@ -94,41 +94,24 @@ Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 | 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
 | ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
-### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
+### IA del Asistente: agente con herramientas y cadena de respaldo
 
-El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
+Ollama ya no forma parte del compose ni de la ejecución. El Asistente arma los borradores con un **agente** compatible con la API de OpenAI que consulta el catálogo de ejercicios a través del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerRestricciones`, `ObtenerSustitutos`) y está limitado a **6 llamadas a herramientas por pedido** (`AI_AGENT_MAX_TOOL_CALLS`).
 
-```bash
-docker compose --profile ia up -d
-curl http://localhost:11434/api/tags      # modelos instalados
-```
+La cadena de proveedores se define por configuración (`Ai__Agent__Providers__N__*`, ya cableada en el compose) y se prueba en orden. Un proveedor sin clave se saltea sin error:
 
-#### Elección oficial del modelo: `llama3.2:1b` (#079 / KAN-374)
-Tras evaluar comparativamente tres versiones de Meta Llama (`llama3.2:1b`, `llama3.2:3b` y `llama3.1:8b`) con pedidos reales de planificación deportiva, se seleccionó **`llama3.2:1b`** como el modelo estándar y obligatorio por defecto:
+| Orden | Proveedor | Variables del `.env` | Cuándo se usa |
+|---|---|---|---|
+| 1 | OpenAI (Azure Gateway UNAJ, `gpt-4.1-mini`) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Proveedor principal |
+| 2 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL` | Respaldo de IA |
+| 3 | Reglas determinísticas locales | — | Si ningún proveedor devuelve un borrador válido |
 
-| Modelo | RAM en Inferencia | Latencia CPU (sin GPU) | Cumplimiento JSON | Veredicto |
-|---|:---:|:---:|:---:|:---:|
-| **`llama3.2:1b`** | **~1.5 GB** | **1.8 s - 2.6 s** | **98 %** | ✅ **Elegido por defecto (demo y laptops del equipo)** |
-| `llama3.2:3b` | ~3.2 GB | 5.2 s - 7.5 s | 99 % | ⚙️ Alternativa soportada en `.env` (si hay GPU) |
-| `llama3.1:8b` | ~6.0 GB | 19.0 s - 38.0 s | 99 % | ❌ Descartado (alto riesgo de OOM y timeout en CPU) |
-
-> 📖 **Informe técnico completo:** Consulta [services/asistente/README.md](services/asistente/README.md) para ver la matriz de evaluación detallada, consumo de memoria y comandos de prueba.
-
-El Asistente opera con una arquitectura resiliente de 3 niveles:
-1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
-2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
-3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
-
-El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
-
-- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
-- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
-- **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
-- **Memoria RAM requerida:**
-  - En reposo (inactivo): ~200 MB.
-  - En inferencia/ejecución: ~1.5 GB a 1.8 GB de RAM.
-  - *(Como referencia, `llama3.2:3b` requiere ~3.2 GB y `llama3.1:8b` ~6 GB).*
-
+- Ante un HTTP 429 (límite del proveedor) el agente **no espera ni reintenta**: pasa de inmediato al siguiente proveedor.
+- Timeouts por proveedor: 40 s + 40 s = 80 s, por debajo de los 100 s del gateway (`OPENAI_TIMEOUT_SECONDS`, `GEMINI_TIMEOUT_SECONDS`).
+- A cualquier proveedor externo viaja todo anonimizado: sin nombres de atletas, y del objetivo en texto libre se quitan emails y teléfonos.
+- El prompt del agente incluye la categoría o el atleta destino (por identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y el formato por bloques con el catálogo numerado.
+- Detalle técnico, hiperparámetros y mediciones históricas de Llama: [services/asistente/README.md](services/asistente/README.md).
+- El Asistente no depende de ningún proveedor de IA para arrancar: si la IA se cae, el resto del sistema sigue andando.
 
 ## Gateway
 
@@ -226,8 +209,10 @@ En el `.env` (las usa el compose):
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
 | `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
-| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
+| `OPENAI_API_KEY` | Clave del agente de IA principal del Asistente (opcional; sin clave se saltea) |
 | `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
+| `AI_AGENT_MAX_TOOL_CALLS` | Tope de llamadas a herramientas del agente por pedido (opcional, por defecto 6) |
+| `AiQuota__DailyLimitPerPf` | Límite diario de pedidos a la IA por PF (opcional, por defecto 20; subir en demo si hace falta) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -238,8 +223,8 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
-| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
-| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
+| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey`, `__TimeoutSeconds` | Cadena de proveedores de IA del Asistente (0 = OpenAI, 1 = Gemini) |
+| `Ai__Agent__MaxToolCalls` | Tope de llamadas a herramientas del agente por pedido |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 

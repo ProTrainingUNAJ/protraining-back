@@ -10,7 +10,7 @@
 
 | Caso | Orden recomendado | Temperatura | Máximo de tokens | Tiempo recomendado |
 |---|---|---:|---:|---:|
-| Borrador de plan por bloques (1-2 semanas) | OpenAI mini → Gemini → reglas | 0,2 | 1.200 | 45 s por proveedor |
+| Borrador de plan por bloques (1-2 semanas) | OpenAI mini → Gemini → reglas | 0,2 | 1.200 | 40 s por proveedor |
 | Ajuste del día / justificación | OpenAI mini → Gemini → reglas | 0,2 | 250 | 15 s por proveedor |
 | Recomendación de entrenamiento | OpenAI mini → Gemini → reglas | 0,3 | 500 | 20 s por proveedor |
 | Recomendación de alimentación | OpenAI mini → Gemini → reglas | 0,2 | 500 | 20 s por proveedor |
@@ -19,7 +19,7 @@
 
 * **Temperatura baja (0,2):** Aplicada en generación de borradores, ajustes y nutrición. Dado que estos casos requieren apego estricto a esquemas JSON forzados (Structured Outputs), índices del catálogo y reglas determinísticas, una temperatura baja previene alucinaciones y divergencias sintácticas.
 * **Temperatura moderada (0,3):** Aplicada en recomendaciones de entrenamiento para permitir variedad en la redacción pedagógica para el preparador físico sin apartarse de los números calculados por reglas.
-* **Presupuesto de tiempo:** El gateway YARP / Azure API Management tiene un límite máximo de 100 segundos y el frontend corta a los 120 segundos. La configuración de timeouts por proveedor (ej. 45 s en OpenAI + 30 s en Gemini = 75 s) garantiza que la cadena de fallback siempre active las reglas determinísticas antes de alcanzar el timeout del gateway, evitando errores 504 o 500 al preparador físico.
+* **Presupuesto de tiempo:** El gateway YARP / Azure API Management tiene un límite máximo de 100 segundos y el frontend corta a los 120 segundos. La configuración de timeouts por proveedor (40 s en OpenAI + 40 s en Gemini = 80 s) garantiza que la cadena de fallback siempre active las reglas determinísticas antes de alcanzar el timeout del gateway, evitando errores 504 o 500 al preparador físico.
 
 ### Directivas de optimización de prompts deportivos
 
@@ -45,7 +45,7 @@ Para minimizar la necesidad de edición manual por parte del preparador físico,
 
 ## 1. Contexto y Objetivos de la Evaluación
 
-El microservicio **Asistente** tiene como función generar borradores de planificaciones y sugerencias de entrenamiento para preparadores físicos. Para garantizar soberanía de datos, privacidad del atleta y funcionamiento sin conexión a internet ni costos por token en la nube, el sistema utiliza un modelo de lenguaje de código abierto ejecutado localmente mediante el contenedor de **Ollama**.
+El microservicio **Asistente** tiene como función generar borradores de planificaciones y sugerencias de entrenamiento para preparadores físicos. Para garantizar soberanía de datos, privacidad del atleta y funcionamiento sin conexión a internet ni costos por token en la nube, el sistema utilizaba un modelo de lenguaje de código abierto ejecutado localmente mediante el contenedor de **Ollama** *(sección histórica: Ollama ya no forma parte de la ejecución, ver el encabezado de este documento)*.
 
 ### Restricciones del Entorno del Proyecto
 1. **Máquinas de desarrollo del equipo:** Laptops y PCs de trabajo estándar con **8 GB a 16 GB de memoria RAM**, donde conviven en simultáneo los 5 microservicios .NET 8, las 5 bases PostgreSQL en Docker y el Gateway YARP. La mayoría no cuenta con GPU dedicada para inferencia.

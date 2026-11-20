@@ -102,17 +102,8 @@ public static class PlanDraftBlockParser
             var fallbackContent = PlanDraftMapper.DeserializeContent(cleanedJson);
             if (fallbackContent?.Weeks is { Count: > 0 })
             {
-                // Si solo vino 1 semana y pidieron más, la expandimos con el motor de progresión
-                if (fallbackContent.Weeks.Count == 1 && requestedWeeks > 1 && fallbackContent.Weeks[0].Sessions is { Count: > 0 })
-                {
-                    var expandedWeeks = WeeklyProgressionEngine.GenerateProgressionWeeks(
-                        fallbackContent.Weeks[0].Sessions,
-                        requestedWeeks,
-                        startDate,
-                        matchDates);
-
-                    fallbackContent = fallbackContent with { Weeks = expandedWeeks };
-                }
+                // Solo importa la primera semana del modelo: las demás las proyecta el motor de progresión
+                fallbackContent = KeepFirstWeekAndProject(fallbackContent, requestedWeeks, startDate, matchDates);
 
                 return (true, fallbackContent, null);
             }
@@ -127,6 +118,37 @@ public static class PlanDraftBlockParser
         {
             return (false, null, $"Error al interpretar el borrador por bloques: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Toma solo la primera semana que devolvió el modelo y proyecta las siguientes con el motor de progresión:
+    /// la progresión la decide la regla en C#, no la IA (KAN-600).
+    /// </summary>
+    public static PlanDraftContentDto KeepFirstWeekAndProject(
+        PlanDraftContentDto content,
+        int requestedWeeks,
+        DateOnly? startDate = null,
+        IReadOnlyList<DateOnly>? matchDates = null)
+    {
+        var weeks = content.Weeks ?? [];
+        if (weeks.Count == 0 || weeks[0].Sessions is not { Count: > 0 })
+            return content;
+
+        if (requestedWeeks <= 1)
+        {
+            return weeks.Count == 1
+                ? content
+                : content with { Weeks = [weeks[0] with { WeekNumber = 1 }] };
+        }
+
+        return content with
+        {
+            Weeks = WeeklyProgressionEngine.GenerateProgressionWeeks(
+                weeks[0].Sessions,
+                requestedWeeks,
+                startDate,
+                matchDates)
+        };
     }
 
     private static string? AppendBlock(

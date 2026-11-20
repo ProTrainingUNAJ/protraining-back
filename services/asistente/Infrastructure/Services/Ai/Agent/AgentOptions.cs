@@ -9,9 +9,10 @@ public sealed class AgentOptions
     public const string SectionName = "Ai:Agent";
 
     /// <summary>
-    /// Cantidad máxima permitida de ejecuciones de herramientas MCP por pedido (default: 10).
+    /// Cantidad máxima permitida de ejecuciones de herramientas MCP por pedido (tope de la KAN-600: 6).
+    /// Protege el saldo del proveedor; se puede subir con Ai__Agent__MaxToolCalls sin tocar código.
     /// </summary>
-    public int MaxToolCalls { get; set; } = 10;
+    public int MaxToolCalls { get; set; } = 6;
 
     /// <summary>
     /// Tiempo límite total por defecto en segundos para la interacción con el proveedor (default: 40s).
@@ -53,4 +54,9 @@ public sealed class AgentProviderOptions
     /// Tiempo límite específico en segundos para este proveedor.
     /// </summary>
     public int TimeoutSeconds { get; set; } = 40;
+
+    /// <summary>
+    /// Versión de la API que se agrega a la URL del gateway de Azure OpenAI cuando la URL base no la trae.
+    /// </summary>
+    public string ApiVersion { get; set; } = "2025-03-01-preview";
 }
