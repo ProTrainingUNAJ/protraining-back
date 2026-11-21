@@ -143,20 +143,20 @@ public sealed class PlanDraftMatchPeriodizationPromptTests
         Assert.Contains("D-1", fridaySession.CoachNotes);
         Assert.Contains("Semana de partido: carga reducida", fridaySession.CoachNotes);
 
-        // Jueves (D-2): Capped <= 75% (semana con partido: 80% - 10% = 70% <= 75%)
+        // Jueves (D-2): Capped <= 75% (semana con partido: 85% - 10% = 75% <= 75%)
         var thursdaySession = week1.Sessions.FirstOrDefault(s => s.DayOfWeek == DayOfWeek.Thursday);
         Assert.NotNull(thursdaySession);
         Assert.All(thursdaySession.Exercises, ex => Assert.True(ex.TargetPercentage <= 75m));
         Assert.Contains("D-2", thursdaySession.CoachNotes);
         Assert.Contains("Semana de partido: carga reducida", thursdaySession.CoachNotes);
 
-        // Lunes en semana de partido: carga reducida (-1 serie, -10 %RM respecto a 4x5 al 80% -> 3x5 al 70%)
+        // Lunes en semana de partido: carga reducida (-1 serie, -10 %RM respecto a 4x5 al 85% NSCA -> 3x5 al 75%)
         var mondaySession = week1.Sessions.FirstOrDefault(s => s.DayOfWeek == DayOfWeek.Monday);
         Assert.NotNull(mondaySession);
         Assert.All(mondaySession.Exercises, ex =>
         {
             Assert.Equal(3, ex.Sets);
-            Assert.Equal(70m, ex.TargetPercentage);
+            Assert.Equal(75m, ex.TargetPercentage);
         });
         Assert.Contains("Semana de partido: carga reducida", mondaySession.CoachNotes);
     }

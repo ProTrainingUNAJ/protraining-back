@@ -113,9 +113,10 @@ public sealed class RuleBasedAiClient(
         // KAN-605: Si el borrador es para un atleta con molestias activas, aplicar restricciones y sustitutos
         var adaptedSessions = splitPlan.Sessions;
         var totalSubstitutions = 0;
+        string? restrictionsWarning = null;
         if (request.AthleteId.HasValue && request.AthleteId.Value != Guid.Empty)
         {
-            (adaptedSessions, totalSubstitutions) = await ApplyAthleteRestrictionsAsync(
+            (adaptedSessions, totalSubstitutions, restrictionsWarning) = await ApplyAthleteRestrictionsAsync(
                 splitPlan.Sessions,
                 catalog,
                 request.AdaptationContext,
@@ -138,7 +139,8 @@ public sealed class RuleBasedAiClient(
             splitPlan.SplitDescription,
             request.Weeks,
             matchCount,
-            totalSubstitutions);
+            totalSubstitutions,
+            restrictionsWarning);
 
         var content = new PlanDraftContentDto(
             Name: $"Planificación {request.Goal}",
@@ -163,7 +165,7 @@ public sealed class RuleBasedAiClient(
         return content;
     }
 
-    private async Task<(IReadOnlyList<RuleSessionBlueprint> Sessions, int SubstitutionCount)> ApplyAthleteRestrictionsAsync(
+    private async Task<(IReadOnlyList<RuleSessionBlueprint> Sessions, int SubstitutionCount, string? RestrictionsWarning)> ApplyAthleteRestrictionsAsync(
         IReadOnlyList<RuleSessionBlueprint> sessions,
         IReadOnlyList<CatalogExerciseDto> catalog,
         AthleteAdaptationContextDto? adaptationContext,
@@ -172,7 +174,7 @@ public sealed class RuleBasedAiClient(
         if (adaptationContext is null ||
             (adaptationContext.ActiveInjuries.Count == 0 && adaptationContext.Restrictions.Count == 0))
         {
-            return (sessions, 0);
+            return (sessions, 0, null);
         }
 
         var restrictionsByExerciseId = new Dictionary<Guid, ExerciseRestrictionContextDto>();
@@ -184,9 +186,15 @@ public sealed class RuleBasedAiClient(
             }
         }
 
-        var primaryInjuryZone = adaptationContext.ActiveInjuries
+        var activeInjuryZones = adaptationContext.ActiveInjuries
             .Select(i => i.Zone?.Trim())
-            .FirstOrDefault(z => !string.IsNullOrWhiteSpace(z));
+            .Where(z => !string.IsNullOrWhiteSpace(z))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+
+        var primaryInjuryZone = activeInjuryZones.FirstOrDefault();
+        var trainingRestrictionsUnavailable = false;
 
         // Si hay lesiones activas y el cliente de Entrenamiento está disponible, consultar restricciones
         // para los ejercicios elegidos (que podrían no tener 1RM cargado en AdaptationContext)
@@ -194,11 +202,7 @@ public sealed class RuleBasedAiClient(
         {
             var painZones = string.Join(
                 ",",
-                adaptationContext.ActiveInjuries
-                    .Select(i => i.Zone?.Trim())
-                    .Where(z => !string.IsNullOrWhiteSpace(z))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(z => $"{z!.ToLowerInvariant()}:3"));
+                activeInjuryZones.Select(z => $"{z.ToLowerInvariant()}:3"));
 
             var candidateIds = sessions
                 .SelectMany(s => s.Exercises.Concat(s.FallbackPool))
@@ -243,6 +247,7 @@ public sealed class RuleBasedAiClient(
                 }
                 catch (Exception ex)
                 {
+                    trainingRestrictionsUnavailable = true;
                     logger?.LogWarning(
                         ex,
                         "No se pudieron consultar restricciones adicionales en Entrenamiento para el atleta {AthleteId}. Se aplicarán las restricciones ya disponibles.",
@@ -251,8 +256,29 @@ public sealed class RuleBasedAiClient(
             }
         }
 
+        string? unavailableWarning = null;
+        if (trainingRestrictionsUnavailable)
+        {
+            var zonesText = activeInjuryZones.Count > 0
+                ? string.Join(", ", activeInjuryZones)
+                : "zona afectada";
+            unavailableWarning =
+                $"Aviso: no se pudo consultar el servicio de Entrenamiento para verificar todas las restricciones por molestia de {zonesText}; revisar los ejercicios y reemplazos antes de aprobar.";
+        }
+
         if (restrictionsByExerciseId.Count == 0)
-            return (sessions, 0);
+        {
+            if (unavailableWarning is null)
+                return (sessions, 0, null);
+
+            var flaggedSessions = sessions
+                .Select(s => s with
+                {
+                    SubstitutionNotes = [.. s.SubstitutionNotes, unavailableWarning]
+                })
+                .ToList();
+            return (flaggedSessions, 0, unavailableWarning);
+        }
 
         var catalogById = catalog
             .Where(e => e.Id != Guid.Empty)
@@ -267,6 +293,11 @@ public sealed class RuleBasedAiClient(
             var adaptedExercises = new List<CatalogExerciseDto>(session.Exercises.Count);
             var usedIds = new HashSet<Guid>();
             var notes = new List<string>(session.SubstitutionNotes);
+
+            if (unavailableWarning is not null)
+            {
+                notes.Add(unavailableWarning);
+            }
 
             foreach (var exercise in session.Exercises)
             {
@@ -285,6 +316,7 @@ public sealed class RuleBasedAiClient(
 
                 // Regla determinística (KAN-452): tomar el primer sustituto autorizado disponible en el catálogo del PF
                 CatalogExerciseDto? replacement = null;
+                var usedAuthorizedSubstitute = false;
                 foreach (var substitute in restriction.Substitutes)
                 {
                     if (substitute.ExerciseId == Guid.Empty ||
@@ -297,11 +329,12 @@ public sealed class RuleBasedAiClient(
                     if (catalogById.TryGetValue(substitute.ExerciseId, out var catalogSubstitute))
                     {
                         replacement = catalogSubstitute;
+                        usedAuthorizedSubstitute = true;
                         break;
                     }
                 }
 
-                // Si ningún sustituto autorizado está libre en el catálogo, buscar alternativa segura del mismo grupo
+                // Si ningún sustituto autorizado está libre en el catálogo, buscar alternativa del mismo grupo
                 replacement ??= session.FallbackPool.FirstOrDefault(candidate =>
                     !restrictionsByExerciseId.ContainsKey(candidate.Id) &&
                     !usedIds.Contains(candidate.Id));
@@ -309,12 +342,22 @@ public sealed class RuleBasedAiClient(
                 if (replacement is not null && usedIds.Add(replacement.Id))
                 {
                     adaptedExercises.Add(replacement);
-                    notes.Add($"{exercise.Name} cambiada por {replacement.Name} por la molestia de {zoneLabel}.");
+                    if (usedAuthorizedSubstitute)
+                    {
+                        notes.Add($"Se reemplazó {exercise.Name} por {replacement.Name} por la molestia de {zoneLabel}.");
+                    }
+                    else
+                    {
+                        var fallbackContext = trainingRestrictionsUnavailable
+                            ? "alternativa del mismo grupo sin validación de Entrenamiento; revisar antes de aprobar"
+                            : "alternativa del mismo grupo sin sustituto autorizado disponible; revisar antes de aprobar";
+                        notes.Add($"Se reemplazó {exercise.Name} por {replacement.Name} por la molestia de {zoneLabel} ({fallbackContext}).");
+                    }
                     totalSubstitutions++;
                 }
                 else
                 {
-                    notes.Add($"{exercise.Name} quitada por la molestia de {zoneLabel}.");
+                    notes.Add($"Se quitó {exercise.Name} por la molestia de {zoneLabel}.");
                     totalSubstitutions++;
                 }
             }
@@ -355,7 +398,7 @@ public sealed class RuleBasedAiClient(
             });
         }
 
-        return (adaptedSessions, totalSubstitutions);
+        return (adaptedSessions, totalSubstitutions, unavailableWarning);
     }
 
     private static int CountRelevantMatches(
@@ -377,7 +420,8 @@ public sealed class RuleBasedAiClient(
         string splitDescription,
         int totalWeeks,
         int matchCount,
-        int totalSubstitutions)
+        int totalSubstitutions,
+        string? restrictionsWarning)
     {
         var culture = CultureInfo.GetCultureInfo("es-AR");
         var basePct = profile.MainBasePercentage.ToString("0.#", culture);
@@ -398,6 +442,8 @@ public sealed class RuleBasedAiClient(
             extras.Add($"Carga reducida en semanas con partido ({matchCount} partido(s) en el ciclo).");
         if (totalSubstitutions > 0)
             extras.Add($"Incluye {totalSubstitutions} sustitución(es) por molestias activas del atleta.");
+        if (!string.IsNullOrWhiteSpace(restrictionsWarning))
+            extras.Add(restrictionsWarning);
 
         return $"{line1} {string.Join(" ", extras)}";
     }

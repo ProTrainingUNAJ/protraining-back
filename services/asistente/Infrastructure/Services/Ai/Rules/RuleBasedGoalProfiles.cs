@@ -47,15 +47,28 @@ public readonly record struct RuleExercisePrescription(
 /// </summary>
 public static class RuleBasedGoalProfiles
 {
-    // Orden de prioridad: potencia/hipertrofia/resistencia antes de fuerza para frases como "fuerza explosiva"
+    // Orden de prioridad: potencia y resistencia antes de hipertrofia y fuerza para que frases como
+    // "fuerza explosiva" o "resistencia muscular" no caigan en fuerza o hipertrofia.
     private static readonly RuleTrainingGoal[] DetectionOrder =
     [
         RuleTrainingGoal.Power,
-        RuleTrainingGoal.Hypertrophy,
         RuleTrainingGoal.Endurance,
+        RuleTrainingGoal.Hypertrophy,
         RuleTrainingGoal.Strength
     ];
 
+    // Referencias bibliográficas de la tabla de prescripción (decisión PM · KAN-605):
+    // 1. NSCA — Haff, G. G. & Triplett, N. T. (4.ª ed.), "Essentials of Strength Training and Conditioning",
+    //    tabla "Asignación de carga y repeticiones según el objetivo":
+    //    - Fuerza: >=85 % del 1RM, <=6 reps, 2–6 series, 2–5 min de pausa (4×5 al 85 %, tope 87,5 %, pausa 3 min).
+    //    - Potencia (esfuerzo múltiple en ejercicios clásicos): 75–85 %, 3–5 reps, 3–5 series, 2–5 min (4×3 al 75–85 %, explosivo, pausa 3 min).
+    //    - Hipertrofia: 67–85 %, 6–12 reps, 30–90 s de pausa (4×10 al 70–75 %, pausa 90 s).
+    //    - Resistencia muscular: <=67 %, >=12 reps, 2–3 series, <=30 s de pausa (3×15 al 50–55 %, pausa 30 s).
+    // 2. Cormie, P., McGuigan, M. R. & Newton, R. U. (2011), Sports Medicine 41(2):
+    //    - Potencia (accesorios balísticos / explosivos): 0–50 % del 1RM (3×6 al 45 %).
+    // 3. ACSM (2009), Medicine & Science in Sports & Exercise 41(3), Position Stand "Progression Models in Resistance Training":
+    //    - General / principiantes: 60–70 % del 1RM, 8–12 reps (3×10 al 65–70 %, pausa 90 s).
+    //    - Progresión semanal: incrementos de 2–10 % cuando se superan las repeticiones objetivo (+2,5 % por semana).
     public static readonly IReadOnlyDictionary<RuleTrainingGoal, RuleGoalProfile> Profiles =
         new Dictionary<RuleTrainingGoal, RuleGoalProfile>
         {
@@ -65,17 +78,17 @@ public static class RuleBasedGoalProfiles
                 Keywords: ["fuerza", "maxima", "strength", "heavy"],
                 MainSets: 4,
                 MainReps: 5,
-                MainBasePercentage: 80m,
-                MainMaxPercentage: 85m,
+                MainBasePercentage: 85m,
+                MainMaxPercentage: 87.5m,
                 AccessorySets: 3,
                 AccessoryReps: 8,
                 AccessoryBasePercentage: 70m,
-                RestNote: "2-3 min"),
+                RestNote: "3 min"),
 
             [RuleTrainingGoal.Hypertrophy] = new(
                 Goal: RuleTrainingGoal.Hypertrophy,
                 DisplayName: "hipertrofia",
-                Keywords: ["hipertrofia", "masa", "volumen", "muscular", "hypertrophy", "muscle", "volume"],
+                Keywords: ["hipertrofia", "masa", "masa muscular", "desarrollo muscular", "ganancia muscular", "volumen", "hypertrophy", "muscle mass", "muscle growth", "volume"],
                 MainSets: 4,
                 MainReps: 10,
                 MainBasePercentage: 70m,
@@ -91,12 +104,12 @@ public static class RuleBasedGoalProfiles
                 Keywords: ["potencia", "explosiv", "salto", "velocidad", "power", "speed", "jump", "pliometr", "plyo"],
                 MainSets: 4,
                 MainReps: 3,
-                MainBasePercentage: 50m,
-                MainMaxPercentage: 60m,
+                MainBasePercentage: 75m,
+                MainMaxPercentage: 85m,
                 AccessorySets: 3,
                 AccessoryReps: 6,
                 AccessoryBasePercentage: 45m,
-                RestNote: "2 min",
+                RestNote: "3 min",
                 ExecutionCue: "explosivo"),
 
             [RuleTrainingGoal.Endurance] = new(
@@ -110,7 +123,7 @@ public static class RuleBasedGoalProfiles
                 AccessorySets: 2,
                 AccessoryReps: 18,
                 AccessoryBasePercentage: 45m,
-                RestNote: "60 s"),
+                RestNote: "30 s"),
 
             [RuleTrainingGoal.General] = new(
                 Goal: RuleTrainingGoal.General,
