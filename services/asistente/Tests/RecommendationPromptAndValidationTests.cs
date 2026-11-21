@@ -258,6 +258,8 @@ public sealed class RecommendationPromptAndValidationTests
     [InlineData("Sumá unas fetas de salame junto al huevo y la banana.")]
     [InlineData("Combiná pollo con arroz y burrata artesanal para la cena.")]
     [InlineData("Comé focaccia junto con el pollo y el arroz.")]
+    [InlineData("Prepará pollo con burrata y arroz para recuperar energía.")]
+    [InlineData("Elegí alimentos como burrata, pollo y arroz en tu almuerzo.")]
     public void ValidateNutritionOutput_GivenUnlistedOrExoticUnapprovedFoodInPlateText_ThenRejectsWithUnapprovedFoodCode(string plateWithUnapprovedFood)
     {
         var request = new NutritionRecommendationRequestDto(
@@ -276,6 +278,33 @@ public sealed class RecommendationPromptAndValidationTests
 
         Assert.False(result.IsValid);
         Assert.Equal("AlimentoNoAprobado", result.ValidationCode);
+    }
+
+    [Theory]
+    [InlineData("Armá tu plato con pollo y arroz, y comelo con tranquilidad.")]
+    [InlineData("Incluí pollo o huevo como mínimo dos veces al día junto con arroz y banana.")]
+    [InlineData("Prepará pollo con tranquilidad y acompañalo con arroz para tu almuerzo.")]
+    [InlineData("Consumí avena con banana como mínimo tres veces por semana, con calma y moderación.")]
+    [InlineData("Elegí preparaciones simples con huevo y arroz; comé despacio, con regularidad y consultá con un nutricionista.")]
+    [InlineData("Tomá como referencia opciones como pollo, arroz y huevo, priorizando variedad y constancia.")]
+    public void ValidateNutritionOutput_GivenNaturalSpanishPhrasesWithApprovedFoods_ThenSucceedsWithoutFalsePositives(string validNaturalPlate)
+    {
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            ApprovedFoods: SampleApprovedFoods);
+
+        var rawJson = $$"""
+            {
+              "suggestedPlateComposition": "{{validNaturalPlate}}",
+              "hydrationAndSleepGuidelines": "Tomá 2.5 litros de agua y dormí 8 horas.",
+              "mentionedFoods": ["pollo", "arroz"]
+            }
+            """;
+
+        var result = RecommendationOutputValidator.ValidateNutritionOutput(rawJson, request);
+
+        Assert.True(result.IsValid, $"No debería rechazarse texto válido: {result.ValidationCode} - {result.ErrorMessage}");
+        Assert.Equal("Valido", result.ValidationCode);
     }
 
     [Theory]

@@ -39,7 +39,6 @@ public sealed record ProfileAnalysisResult(
 public static class AthleteProfileAnalyzer
 {
     public const double BelowAverageThresholdPercent = RecommendationsOptions.DefaultBelowAverageThresholdPercent;
-    public const double AboveAverageThresholdPercent = 10.0;
     public const double LowWellnessAbsoluteThreshold = 3.0;
     public const double WellnessDropThreshold = -0.5;
     public const double WellnessDropCeiling = 3.5;
