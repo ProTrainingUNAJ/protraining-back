@@ -106,14 +106,14 @@ public class RoutineResolutionIntegrationTests
 
             // Consulta Atleta 1
             var routineAthlete1 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete1Id });
-            var exercise1 = Assert.Single(routineAthlete1.Exercises);
+            var exercise1 = Assert.Single(routineAthlete1.Blocks![0].Exercises);
             Assert.Equal(100.0, exercise1.Current1RmKg);
             Assert.Equal(75.0, exercise1.WeightKg);
             Assert.False(exercise1.IsReference);
 
             // Consulta Atleta 2
             var routineAthlete2 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete2Id });
-            var exercise2 = Assert.Single(routineAthlete2.Exercises);
+            var exercise2 = Assert.Single(routineAthlete2.Blocks![0].Exercises);
             Assert.Equal(80.0, exercise2.Current1RmKg);
             Assert.Equal(60.0, exercise2.WeightKg);
             Assert.False(exercise2.IsReference);
@@ -256,7 +256,7 @@ public class RoutineResolutionIntegrationTests
             Assert.Equal("Martín Pérez", routine.AthleteName);
             Assert.Equal("Cuidado con la postura", routine.CoachNotes);
 
-            var ex = Assert.Single(routine.Exercises);
+            var ex = Assert.Single(routine.Blocks![0].Exercises);
             Assert.Equal("Press Militar", ex.Name);
             Assert.Equal(60.0, ex.Current1RmKg);
             // 60 kg * 80% = 48 kg -> redondeado a 2.5 kg = 47.5 kg

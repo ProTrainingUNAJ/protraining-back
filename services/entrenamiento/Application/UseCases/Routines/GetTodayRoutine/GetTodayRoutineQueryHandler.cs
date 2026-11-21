@@ -213,7 +213,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 activeAdjustment,
                 pfVideos,
                 performedSets,
-                bestMarksByExerciseName);
+                bestMarksByExerciseName,
+                routine.Week?.WeekNumber);
 
             if (routine.Blocks.Count > 0)
             {
@@ -223,7 +224,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
                     foreach (var prescribed in block.PrescribedExercises.OrderBy(pe => pe.Order))
                     {
-                        var resolvedExercise = await ResolveExerciseAsync(prescribed, resolutionContext, cancellationToken);
+                        var resolvedExercise = await ResolveExerciseAsync(prescribed, resolutionContext, cancellationToken, block.Id);
                         blockExercises.Add(resolvedExercise);
                         exercisesDto.Add(resolvedExercise);
                     }
@@ -274,7 +275,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 CoachNotes = effectiveCoachNotes,
                 StartTime = routine.StartTime,
                 Exercises = exercisesDto,
-                Blocks = blocksDto
+                WeekNumber = routine.Week?.WeekNumber,
+                Blocks = blocksDto,
+                SessionName = routine.Name
             };
 
             return todayRoutineDto;
@@ -295,7 +298,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             }
         }
 
-        private async Task<TodayRoutineExerciseDto> ResolveExerciseAsync(PrescribedExercise prescribed, ExerciseResolutionContext context, CancellationToken cancellationToken)
+        private async Task<TodayRoutineExerciseDto> ResolveExerciseAsync(PrescribedExercise prescribed, ExerciseResolutionContext context, CancellationToken cancellationToken, Guid? blockId = null)
         {
             // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
             var effectiveExerciseId = prescribed.ExerciseId;
@@ -397,7 +400,13 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     .ToList(),
                 IsAdapted = isAdapted,
                 OriginalExerciseName = originalExerciseName,
-                AdaptationReason = adaptationReason
+                AdaptationReason = adaptationReason,
+                IntensityType = prescribed.IntensityType,
+                TargetRpe = prescribed.TargetRpe,
+                TargetRir = prescribed.TargetRir,
+                Notes = prescribed.Notes,
+                WeekNumber = context.WeekNumber,
+                BlockId = blockId
             };
         }
 
@@ -409,6 +418,7 @@ namespace Application.UseCases.Routines.GetTodayRoutine
             AthleteSessionAdjustment? ActiveAdjustment,
             IReadOnlyDictionary<Guid, string> PfVideos,
             IReadOnlyList<PerformedSet> PerformedSets,
-            IReadOnlyDictionary<string, decimal> BestMarksByExerciseName);
+            IReadOnlyDictionary<string, decimal> BestMarksByExerciseName,
+            int? WeekNumber);
     }
 }

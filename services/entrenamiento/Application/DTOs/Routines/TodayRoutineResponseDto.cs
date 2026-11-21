@@ -14,6 +14,9 @@ namespace Application.DTOs.Routines
         // Hora de la sesión (hora Argentina), si el PF la cargó
         public TimeOnly? StartTime { get; set; }
         public List<TodayRoutineExerciseDto> Exercises { get; set; } = [];
+        // Valores semanales / bloques resueltos
+        public int? WeekNumber { get; set; }
         public List<TodayRoutineBlockDto> Blocks { get; set; } = [];
+        public string? SessionName { get; set; }
     }
 }
