@@ -2243,6 +2243,33 @@ components:
           nullable: true
           description: Motivo o nota de la adaptación aplicada al ejercicio.
           example: "Variante aprobada por molestia de rodilla"
+        intensityType:
+          type: string
+          nullable: true
+          enum: [RPE, RIR]
+          description: Métrica de intensidad activa del ejercicio.
+        targetRpe:
+          type: number
+          format: double
+          nullable: true
+          description: RPE objetivo (1-10) cuando intensityType es RPE.
+        targetRir:
+          type: integer
+          nullable: true
+          description: RIR objetivo (0-5) cuando intensityType es RIR.
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas del ejercicio para la semana.
+        weekNumber:
+          type: integer
+          nullable: true
+          description: Número de semana resuelta para este ejercicio.
+        blockId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del bloque al que pertenece el ejercicio.
 
     TodayRoutineBlock:
       type: object
@@ -2272,7 +2299,6 @@ components:
       required:
         - date
         - exercises
-        - blocks
       properties:
         athleteId:
           type: string
@@ -2306,11 +2332,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+        weekNumber:
+          type: integer
+          nullable: true
+          description: Número de semana resuelta para la rutina.
         blocks:
           type: array
-          description: Bloques de la sesión del día ordenados con los valores de la semana en curso (KAN-586).
+          nullable: true
+          description: Bloques de la sesión del día ordenados con los valores de la semana en curso.
           items:
             $ref: '#/components/schemas/TodayRoutineBlock'
+        sessionName:
+          type: string
+          nullable: true
+          description: Nombre de la sesión del plan.
 
         sessionId:
           type: string
