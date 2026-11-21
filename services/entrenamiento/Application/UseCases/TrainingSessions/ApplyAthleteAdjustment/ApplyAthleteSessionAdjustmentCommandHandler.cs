@@ -13,7 +13,8 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
     IAthleteSessionAdjustmentRepository adjustmentRepository,
     IExerciseRepository exerciseRepository,
     IStructureClient structureClient,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    IAthleteVariantRepository? variantRepository = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -106,6 +107,47 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
                 loadReductionPercentage: request.LoadReductionPercentage);
 
             await adjustmentRepository.AddAsync(adjustment, cancellationToken);
+        }
+
+        if (variantRepository is not null)
+        {
+            foreach (var item in items)
+            {
+                if (item.OriginalExerciseId == Guid.Empty ||
+                    item.SubstituteExerciseId == Guid.Empty ||
+                    item.OriginalExerciseId == item.SubstituteExerciseId)
+                {
+                    continue;
+                }
+
+                var existingVariant = await variantRepository.GetActiveByAthleteAndOriginalExerciseAsync(
+                    athlete.Id,
+                    item.OriginalExerciseId,
+                    request.Date,
+                    cancellationToken);
+
+                if (existingVariant is not null)
+                {
+                    if (existingVariant.SubstituteExerciseId == item.SubstituteExerciseId)
+                        continue;
+
+                    var endDate = request.Date > existingVariant.ValidFrom
+                        ? request.Date.AddDays(-1)
+                        : existingVariant.ValidFrom;
+                    existingVariant.Deactivate(endDate);
+                }
+
+                var variant = AthleteVariant.Create(
+                    athleteId: athlete.Id,
+                    originalExerciseId: item.OriginalExerciseId,
+                    substituteExerciseId: item.SubstituteExerciseId,
+                    isApproved: true,
+                    isActive: true,
+                    validFrom: request.Date,
+                    note: request.Note);
+
+                await variantRepository.AddAsync(variant, cancellationToken);
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

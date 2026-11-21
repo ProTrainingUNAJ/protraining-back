@@ -25,5 +25,24 @@ namespace Infrastructure.Repositories
                                                                         .ThenBy(v => v.CreatedAt)
                                                                         .ToListAsync(cancellationToken);
         }
+
+        public async Task<AthleteVariant?> GetActiveByAthleteAndOriginalExerciseAsync(Guid athleteId, Guid originalExerciseId, DateOnly date, CancellationToken cancellationToken = default)
+        {
+            return await _context.AthleteVariants
+                .Where(v => v.AthleteId == athleteId
+                    && v.OriginalExerciseId == originalExerciseId
+                    && v.IsApproved
+                    && v.IsActive
+                    && v.ValidFrom <= date
+                    && (v.ValidTo == null || v.ValidTo >= date))
+                .OrderByDescending(v => v.ValidFrom)
+                .ThenByDescending(v => v.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task AddAsync(AthleteVariant variant, CancellationToken cancellationToken = default)
+        {
+            await _context.AthleteVariants.AddAsync(variant, cancellationToken);
+        }
     }
 }

@@ -56,5 +56,14 @@ namespace Domain.Entities
                 Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
             };
         }
+
+        public void Deactivate(DateOnly validTo)
+        {
+            if (validTo < ValidFrom)
+                throw new DomainException("La fecha de fin de vigencia no puede ser anterior a la fecha de inicio.");
+
+            IsActive = false;
+            ValidTo = validTo;
+        }
     }
 }
