@@ -266,6 +266,7 @@ public class RoutineResolutionIntegrationTests
     }
 
     [Fact]
+    [Trait("Category", "Isolation")]
     public async Task AthleteVariant_DoesNotAffectTeammatesInSameSquad()
     {
         // CUANDO se analizan los payloads devueltos ENTONCES la variante de Atleta 1 no afectó la rutina de Atleta 2
@@ -465,6 +466,82 @@ public class RoutineResolutionIntegrationTests
             Assert.Equal("Variante aprobada por molestia de rodilla", b2Ex.AdaptationReason);
             Assert.Equal(135.0, b2Ex.Current1RmKg);
             Assert.Equal(107.5, b2Ex.WeightKg);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task AthleteVariant_FromAnotherPf_IsNotApplied()
+    {
+        var pfA = Guid.NewGuid();
+        var pfB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+        var categoryId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+
+        var plan = TrainingPlan.Create("Plan PF A", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día Piernas", 1, ArgentinaTime.DayOfWeek);
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session.Id, squat.Id));
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var assignment = PlanAssignment.Create(plan.Id, ArgentinaTime.Today, categoryId: categoryId);
+        var squatRecord = AthleteRecord.Create(athleteId, squat.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+
+        await using (var contextA = CreateInMemoryDbContext(pfA, dbName))
+        {
+            await contextA.Exercises.AddRangeAsync(squat, legPress);
+            await contextA.TrainingPlans.AddAsync(plan);
+            await contextA.PlanAssignments.AddAsync(assignment);
+            await contextA.AthleteRecords.AddAsync(squatRecord);
+            await contextA.SaveChangesAsync();
+        }
+
+        await using (var contextB = CreateInMemoryDbContext(pfB, dbName))
+        {
+            var foreignVariant = AthleteVariant.Create(
+                athleteId,
+                squat.Id,
+                legPress.Id,
+                isApproved: true,
+                isActive: true,
+                validFrom: ArgentinaTime.Today.AddDays(-1));
+            await contextB.AthleteVariants.AddAsync(foreignVariant);
+            await contextB.SaveChangesAsync();
+        }
+
+        var structureClientMock = new Mock<IStructureClient>();
+        structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Primera", null)]);
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas"));
+
+        await using (var contextA = CreateInMemoryDbContext(pfA, dbName))
+        {
+            var handler = new GetTodayRoutineQueryHandler(
+                new AthleteRecordRepository(contextA),
+                new TrainingSessionRepository(contextA),
+                new LoadCalculatorEngine(),
+                structureClientMock.Object,
+                new ExerciseVideoRepository(contextA),
+                new PerformedSetRepository(contextA),
+                adjustmentRepository: new AthleteSessionAdjustmentRepository(contextA),
+                exerciseRepository: new ExerciseRepository(contextA),
+                athleteVariantRepository: new AthleteVariantRepository(contextA));
+
+            var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId });
+
+            Assert.False(result.RoutineAdapted);
+            var ex = Assert.Single(result.Exercises);
+            Assert.Equal(squat.Id, ex.ExerciseId);
+            Assert.Equal("Sentadilla", ex.Name);
+            Assert.Equal(80.0, ex.WeightKg);
         }
     }
 }

@@ -567,6 +567,100 @@ public sealed class AthleteSessionAdjustmentsTests
         Assert.True(exerciseResult.WeightKg < 80);
     }
 
+    [Fact]
+    public async Task ApproveAdaptation_PersistsAndAppliesAthleteVariant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var today = ArgentinaTime.Today;
+        var nextWeekDate = today.AddDays(7);
+        var athleteId = Guid.NewGuid();
+
+        var plan = TrainingPlan.Create("Plan Fuerza", "Fuerza");
+        var week1 = TrainingWeek.Create(1, plan.Id);
+        var session1 = TrainingSession.Create(week1.Id, "Semana 1", 1, today.DayOfWeek);
+        session1.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session1.Id, squat.Id));
+        week1.AddSession(session1);
+
+        var week2 = TrainingWeek.Create(2, plan.Id);
+        var session2 = TrainingSession.Create(week2.Id, "Semana 2", 1, nextWeekDate.DayOfWeek);
+        session2.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session2.Id, squat.Id));
+        week2.AddSession(session2);
+
+        plan.AddWeek(week1);
+        plan.AddWeek(week2);
+
+        var assignment = PlanAssignment.Create(plan.Id, today, athleteId: athleteId);
+        var legPressRecord = AthleteRecord.Create(athleteId, legPress.Id, 150m, RecordSource.Tested, DateTime.UtcNow);
+
+        db.TrainingPlans.Add(plan);
+        db.PlanAssignments.Add(assignment);
+        db.AthleteRecords.Add(legPressRecord);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas"));
+        structureMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session1.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Variante aprobada por molestia de rodilla",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)])));
+
+        var savedVariant = await db.AthleteVariants.FirstOrDefaultAsync(v => v.AthleteId == athleteId);
+        Assert.NotNull(savedVariant);
+        Assert.Equal(squat.Id, savedVariant.OriginalExerciseId);
+        Assert.Equal(legPress.Id, savedVariant.SubstituteExerciseId);
+        Assert.True(savedVariant.IsApproved);
+        Assert.True(savedVariant.IsActive);
+
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            new AthleteRecordRepository(db),
+            sessionRepo,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            new ExerciseVideoRepository(db),
+            CreateEmptyPerformedSetRepo(),
+            adjustmentRepository: adjustmentRepo,
+            exerciseRepository: exerciseRepo,
+            athleteVariantRepository: variantRepo);
+
+        var routine = await queryHandler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = nextWeekDate });
+
+        Assert.True(routine.RoutineAdapted);
+        Assert.False(routine.AdjustedByCoach);
+        var ex = Assert.Single(routine.Exercises);
+        Assert.Equal(legPress.Id, ex.ExerciseId);
+        Assert.Equal("Prensa de piernas", ex.Name);
+        Assert.Equal(120.0, ex.WeightKg);
+    }
+
     private static IPerformedSetRepository CreateEmptyPerformedSetRepo()
     {
         var mock = new Mock<IPerformedSetRepository>();

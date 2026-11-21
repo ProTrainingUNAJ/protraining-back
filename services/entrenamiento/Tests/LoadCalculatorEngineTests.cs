@@ -149,4 +149,14 @@ public class LoadCalculatorEngineTests
         var target = _engine.CalculateTimeTarget(bestTime, percentage);
         Assert.Equal(expectedTarget, target);
     }
+
+    [Fact]
+    public void CalculateLoad_ConPorcentajeMayorAl100_CalculaYRedondeaCorrectamente()
+    {
+        // DADO un récord testeado de 100 kg y una serie al 105 %
+        var result = _engine.CalculateLoad(100m, RecordSource.Tested, 105m);
+
+        Assert.Equal(105.0m, result.WeightKg);
+        Assert.False(result.IsReference);
+    }
 }
