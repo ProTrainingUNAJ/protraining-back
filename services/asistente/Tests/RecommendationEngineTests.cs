@@ -15,9 +15,13 @@ using Application.UseCases.Recommendations.UpdateRecommendation;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
+using Infrastructure.Services.Ai;
+using Infrastructure.Services.Ai.Rules;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -428,7 +432,7 @@ public sealed class RecommendationEngineTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uow);
 
         var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
@@ -597,7 +601,7 @@ public sealed class RecommendationEngineTests
 
         var controller = new RecommendationsController(
             new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, aiMock.Object, uow),
-            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, aiMock.Object, uow),
+            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, ScopedAiServiceRunnerFactory.From(aiMock.Object), uow),
             new GetRecommendationsQueryHandler(repository),
             new GetRecommendationByIdQueryHandler(repository),
             new UpdateRecommendationCommandHandler(repository, uow),
@@ -829,7 +833,7 @@ public sealed class RecommendationEngineTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uow);
 
         var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
@@ -907,7 +911,7 @@ public sealed class RecommendationEngineTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uow);
 
         var defaultResponse = await defaultHandler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
@@ -919,7 +923,7 @@ public sealed class RecommendationEngineTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uow,
             new RecommendationsOptions { BelowAverageThresholdPercent = -5.0 });
 
@@ -1035,7 +1039,7 @@ public sealed class RecommendationEngineTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uow,
             new RecommendationsOptions { MaxCategoryParallelism = maxParallelism });
 
@@ -1046,5 +1050,144 @@ public sealed class RecommendationEngineTests
         Assert.Equal(athleteIds.Count, store.Count);
         Assert.Equal(1, uow.SaveChangesCount);
         Assert.InRange(peakConcurrency, 2, maxParallelism);
+    }
+
+    private sealed class ConcurrencyTracker
+    {
+        private int _globalInFlight;
+        private int _peakGlobalConcurrency;
+        private int _totalLogged;
+        private int _instanceCollisions;
+        private int _instancesCreated;
+
+        public int PeakGlobalConcurrency => Volatile.Read(ref _peakGlobalConcurrency);
+        public int TotalLogged => Volatile.Read(ref _totalLogged);
+        public int InstanceCollisions => Volatile.Read(ref _instanceCollisions);
+        public int InstancesCreated => Volatile.Read(ref _instancesCreated);
+
+        public void RegisterInstanceCreated() => Interlocked.Increment(ref _instancesCreated);
+        public void RegisterInstanceCollision() => Interlocked.Increment(ref _instanceCollisions);
+        public void RegisterLogged() => Interlocked.Increment(ref _totalLogged);
+
+        public void EnterGlobal()
+        {
+            var current = Interlocked.Increment(ref _globalInFlight);
+            while (true)
+            {
+                var observed = Volatile.Read(ref _peakGlobalConcurrency);
+                if (current <= observed || Interlocked.CompareExchange(ref _peakGlobalConcurrency, current, observed) == observed)
+                    break;
+            }
+        }
+
+        public void ExitGlobal() => Interlocked.Decrement(ref _globalInFlight);
+    }
+
+    /// <summary>
+    /// Simula un DbContext no thread-safe por instancia scoped: falla si dos hilos entran simultáneamente
+    /// sobre la misma instancia de auditoría.
+    /// </summary>
+    private sealed class ConcurrencyDetectingAiAuditService : IAiAuditService
+    {
+        private readonly ConcurrencyTracker _tracker;
+        private int _instanceInUse;
+
+        public ConcurrencyDetectingAiAuditService(ConcurrencyTracker tracker)
+        {
+            _tracker = tracker;
+            _tracker.RegisterInstanceCreated();
+        }
+
+        public async Task LogAsync(AiLog log, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.CompareExchange(ref _instanceInUse, 1, 0) != 0)
+            {
+                _tracker.RegisterInstanceCollision();
+                throw new InvalidOperationException(
+                    "Uso concurrente detectado sobre la misma instancia de auditoría/DbContext.");
+            }
+
+            _tracker.EnterGlobal();
+            try
+            {
+                await Task.Delay(35, cancellationToken);
+                _tracker.RegisterLogged();
+            }
+            finally
+            {
+                _tracker.ExitGlobal();
+                Volatile.Write(ref _instanceInUse, 0);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_WithScopedAiRunnerAndRealRuleBasedAi_IsolatesAuditPerAthleteWithoutConcurrencyCollisions()
+    {
+        var athleteIds = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToList();
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Primera"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athleteIds.Select(id => new StructureCategoryAthleteDto(id, true)).ToList());
+        foreach (var id in athleteIds)
+            structureMock.SetupHabitsPermission(id);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, athleteIds.Count, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, athleteIds.Count)], []));
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) =>
+                [new AthleteFitnessTestRemoteDto(Guid.NewGuid(), id, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 34.0m, "cm", 1, DateTime.UtcNow)]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var tracker = new ConcurrencyTracker();
+        var services = new ServiceCollection();
+        services.AddSingleton(tracker);
+        services.AddScoped<IAiAuditService, ConcurrencyDetectingAiAuditService>();
+        services.AddScoped<RuleBasedAiClient>(sp => new RuleBasedAiClient(
+            sp.GetRequiredService<IAiAuditService>(),
+            NullLogger<RuleBasedAiClient>.Instance));
+        services.AddScoped<IReadOnlyList<IAiClient>>(sp => [sp.GetRequiredService<RuleBasedAiClient>()]);
+        services.AddScoped<IAiService>(sp => new ResilientAiService(
+            providers: sp.GetRequiredService<IReadOnlyList<IAiClient>>(),
+            semanticValidator: null,
+            responseCache: null,
+            currentUser: null,
+            auditService: sp.GetRequiredService<IAiAuditService>(),
+            logger: NullLogger<ResilientAiService>.Instance));
+        services.AddSingleton<IScopedAiServiceRunner, ScopedAiServiceRunner>();
+
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        const int maxParallelism = 4;
+        var handler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            serviceProvider.GetRequiredService<IScopedAiServiceRunner>(),
+            uow,
+            new RecommendationsOptions { MaxCategoryParallelism = maxParallelism },
+            NullLogger<GenerateCategoryRecommendationsCommandHandler>.Instance);
+
+        var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+
+        Assert.Equal(athleteIds.Count, response.EvaluatedAthletes);
+        Assert.Equal(athleteIds.Count, response.GeneratedCount);
+        Assert.Equal(athleteIds.Count, store.Count);
+        Assert.Equal(1, uow.SaveChangesCount);
+        Assert.Equal(0, tracker.InstanceCollisions);
+        Assert.Equal(athleteIds.Count, tracker.TotalLogged);
+        Assert.InRange(tracker.PeakGlobalConcurrency, 2, maxParallelism);
+        // Exactamente 1 instancia aislada por cada atleta procesado, sin instanciar IAiService de más en el request
+        Assert.Equal(athleteIds.Count, tracker.InstancesCreated);
     }
 }

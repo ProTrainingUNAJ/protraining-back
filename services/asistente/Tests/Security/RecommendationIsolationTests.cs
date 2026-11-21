@@ -153,7 +153,7 @@ public sealed class RecommendationIsolationTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
-            aiMock.Object,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
             uowMock.Object);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>

@@ -1,16 +1,18 @@
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
 
 /// <summary>
-/// Persists AI execution audit logs and metrics in the database.
-/// Ensures failures in logging do not fail the overall application flow.
+/// Persiste registros de auditoría y métricas de IA en la tabla ai_logs.
+/// Crea un AppDbContext independiente por escritura vía IDbContextFactory para garantizar
+/// seguridad ante concurrencia y no interferir con el ChangeTracker del pedido (KAN-491).
 /// </summary>
 public sealed class AiAuditService(
-    AppDbContext dbContext,
+    IDbContextFactory<AppDbContext> dbContextFactory,
     ICurrentUser currentUser,
     ILogger<AiAuditService> logger) : IAiAuditService
 {
@@ -23,6 +25,7 @@ public sealed class AiAuditService(
                 log.AssignPfId(currentUser.PfId.Value);
             }
 
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
             await dbContext.AiLogs.AddAsync(log, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 

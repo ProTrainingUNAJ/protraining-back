@@ -25,7 +25,7 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
     IIdentityHabitsRecommendationsClient identityClient,
     ISeguimientoClient seguimientoClient,
     IAthleteRecommendationRepository recommendationRepository,
-    IAiService aiService,
+    IScopedAiServiceRunner scopedAiServiceRunner,
     IUnitOfWork unitOfWork,
     RecommendationsOptions? options = null,
     ILogger<GenerateCategoryRecommendationsCommandHandler>? logger = null)
@@ -101,8 +101,9 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
         var belowAverageThreshold = effectiveOptions.GetEffectiveBelowAverageThresholdPercent();
         var maxParallelism = effectiveOptions.GetEffectiveMaxCategoryParallelism();
 
-        // Fase 1 (concurrente con límite): consultar permisos, métricas y redactar borradores en memoria
-        // sin tocar DbContext desde múltiples hilos.
+        // Fase 1 (concurrente con límite): consultar permisos, métricas y redactar borradores en memoria.
+        // Cada atleta resuelve IAiService en un scope aislado (vía IScopedAiServiceRunner) para evitar
+        // acceso concurrente a dependencias scoped (como DbContext en auditoría ai_logs).
         using var concurrencyGate = new SemaphoreSlim(maxParallelism, maxParallelism);
         var athleteTasks = athleteIds.Select(async athleteId =>
         {
@@ -130,13 +131,15 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
                     ? reasons
                     : (ISet<string>)new HashSet<string>(StringComparer.Ordinal);
 
-                var createdForAthlete = await RecommendationDraftGenerator.GenerateNewDraftsAsync(
-                    athleteId,
-                    category.Id,
-                    category.Name,
-                    analysis.Signals,
-                    blockedReasons,
-                    aiService,
+                var createdForAthlete = await scopedAiServiceRunner.ExecuteAsync(
+                    (scopedAiService, ct) => RecommendationDraftGenerator.GenerateNewDraftsAsync(
+                        athleteId,
+                        category.Id,
+                        category.Name,
+                        analysis.Signals,
+                        blockedReasons,
+                        scopedAiService,
+                        ct),
                     cancellationToken);
 
                 return (Evaluated: true, Created: createdForAthlete);
