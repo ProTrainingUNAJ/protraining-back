@@ -7,7 +7,8 @@ namespace Application.Common.Recommendations;
 /// <summary>
 /// Genera entidades de recomendación pendientes a partir de señales analíticas ya detectadas,
 /// deduplicando por motivo normalizado y redactando vía IA sin PII (KAN-491).
-/// No accede al repositorio ni a IUnitOfWork para poder ejecutarse de forma segura en paralelo por atleta.
+/// No accede al repositorio ni a IUnitOfWork, pero invoca a IAiService (que audita en ai_logs);
+/// por lo tanto, en ejecuciones paralelas por atleta debe invocarse con un scope/IAiService aislado por tarea.
 /// </summary>
 public static class RecommendationDraftGenerator
 {

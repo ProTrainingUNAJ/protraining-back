@@ -44,8 +44,13 @@ public static class DependencyInjection
             CommandTimeout = 3
         }.ConnectionString;
 
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)));
+        // Se registra IDbContextFactory con lifetime Scoped (requerido por ICurrentUser) para que
+        // servicios como AiAuditService creen su propio AppDbContext corto por escritura sin colisionar
+        // con el AppDbContext del request en operaciones concurrentes (KAN-491).
+        services.AddDbContextFactory<AppDbContext>(
+            options => options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)),
+            ServiceLifetime.Scoped);
+        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
@@ -134,6 +139,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAiService, ResilientAiService>();
+        services.AddSingleton<IScopedAiServiceRunner, ScopedAiServiceRunner>();
         services.AddScoped<IAthleteAdaptationContextService, AthleteAdaptationContextService>();
 
         return services;

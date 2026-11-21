@@ -373,7 +373,7 @@ public sealed class RecommendationReviewTests
 
         var controller = new RecommendationsController(
             new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, store, aiMock.Object, store),
-            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, store, aiMock.Object, store),
+            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, store, ScopedAiServiceRunnerFactory.From(aiMock.Object), store),
             new GetRecommendationsQueryHandler(store),
             new GetRecommendationByIdQueryHandler(store),
             new UpdateRecommendationCommandHandler(store, store),

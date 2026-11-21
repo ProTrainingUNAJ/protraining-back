@@ -196,7 +196,7 @@ public sealed class Kan493HabitsRecommendationsTests
             HabitsRecommendationsClientFactory.Enabled(),
             seguimiento.Object,
             repository.Object,
-            new Mock<IAiService>().Object,
+            ScopedAiServiceRunnerFactory.From(new Mock<IAiService>().Object),
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
