@@ -25,13 +25,15 @@ public class TrainingSession : BaseEntity
             : _blocks.OrderBy(b => b.Order).SelectMany(b => b.PrescribedExercises.OrderBy(pe => pe.Order)).ToList().AsReadOnly();
     private readonly List<PrescribedExercise> _prescribedExercises = new();
 
+    private const string LegacyBlockMetaPrefix = "<!--PT_BLOCK_META:";
+
     private TrainingSession(Guid trainingWeekId, string name, int order, DayOfWeek dayOfWeek, string? coachNotes, TimeOnly? startTime)
     {
         TrainingWeekId = trainingWeekId;
         Name = name;
         Order = order;
         DayOfWeek = dayOfWeek;
-        CoachNotes = coachNotes;
+        CoachNotes = SanitizeCoachNotes(coachNotes);
         StartTime = startTime;
     }
 
@@ -54,7 +56,7 @@ public class TrainingSession : BaseEntity
 
     public void UpdateCoachNotes(string? notes)
     {
-        CoachNotes = notes;
+        CoachNotes = SanitizeCoachNotes(notes);
     }
 
     public void Update(string name, int order, DayOfWeek dayOfWeek, string? coachNotes, TimeOnly? startTime = null)
@@ -68,8 +70,22 @@ public class TrainingSession : BaseEntity
         Name = name;
         Order = order;
         DayOfWeek = dayOfWeek;
-        CoachNotes = coachNotes;
+        CoachNotes = SanitizeCoachNotes(coachNotes);
         StartTime = startTime;
+    }
+
+    private static string? SanitizeCoachNotes(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+            return null;
+
+        var metaIdx = notes.IndexOf(LegacyBlockMetaPrefix, StringComparison.Ordinal);
+        var cleaned = metaIdx >= 0 ? notes[..metaIdx].Trim() : notes.Trim();
+
+        if (string.IsNullOrEmpty(cleaned))
+            return null;
+
+        return cleaned.Length > 1000 ? cleaned[..1000] : cleaned;
     }
 
     public void SetTemporaryOrder(int temporaryOrder)

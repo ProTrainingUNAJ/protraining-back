@@ -93,7 +93,9 @@ public class TrainingPlan : BaseEntity
                             ex.TargetRpe,
                             ex.TargetRir,
                             ex.Notes,
-                            newSession.Id);
+                            newSession.Id,
+                            ex.TargetDistanceMeters,
+                            ex.TargetTimeSeconds);
                         newBlock.AddPrescribedExercise(newEx);
                     }
                     newSession.AddBlock(newBlock);

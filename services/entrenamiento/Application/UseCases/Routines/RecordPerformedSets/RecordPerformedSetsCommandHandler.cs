@@ -180,7 +180,7 @@ public class RecordPerformedSetsCommandHandler
                             // Se reemplaza solo si la nueva es mayor
                             if (proposed1Rm.Value > existingPending.ProposedWeight)
                             {
-                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps, activeRecord.Id);
+                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps, activeRecord.Id, activeRecord.Weight);
                                 await _recordProposalRepository.UpdateAsync(existingPending, cancellationToken);
                                 proposalsCount++;
                             }

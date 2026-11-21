@@ -121,8 +121,9 @@ public class TrainingPlanRepository : ITrainingPlanRepository
             .Where(t => t.IsTemplate)
             .Include(p => p.Weeks)
                 .ThenInclude(w => w.Sessions)
-                    .ThenInclude(s => s.PrescribedExercises)
-                        .ThenInclude(e => e.Exercise)
+                    .ThenInclude(s => s.Blocks)
+                        .ThenInclude(b => b.PrescribedExercises)
+                            .ThenInclude(e => e.Exercise)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
