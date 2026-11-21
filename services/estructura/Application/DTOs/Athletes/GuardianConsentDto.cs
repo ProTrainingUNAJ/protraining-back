@@ -9,4 +9,4 @@ public sealed record GuardianConsentDto(
     string? GuardianPhone,
     bool AllowsPhysicalTraining,
     bool AllowsHabitsRecommendations,
-    bool AllowsProfilePhoto = true);
+    bool AllowsProfilePhoto = false);

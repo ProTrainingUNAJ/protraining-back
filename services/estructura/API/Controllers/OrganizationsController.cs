@@ -62,12 +62,18 @@ public sealed class OrganizationsController(
     }
 
     [HttpPut("{id:guid}/photo")]
+    [RequestSizeLimit(256_000)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadPhoto(Guid id, IFormFile photo, CancellationToken cancellationToken)
     {
         if (photo is null || photo.Length == 0)
         {
             throw new Domain.Exceptions.DomainException("El archivo de imagen no puede estar vacío.");
+        }
+
+        if (photo.Length > Application.Common.WebpImageValidator.MaxSizeBytes)
+        {
+            throw new Domain.Exceptions.DomainException("La foto no puede superar los 200 KB.");
         }
 
         using var memoryStream = new MemoryStream();
@@ -82,11 +88,10 @@ public sealed class OrganizationsController(
     }
 
     [HttpGet("{id:guid}/photo")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetPhoto(Guid id, CancellationToken cancellationToken)
     {
         var photo = await getPhotoHandler.HandleAsync(new GetOrganizationPhotoQuery(id), cancellationToken);
-        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
         return File(photo.Data, photo.ContentType);
     }
 

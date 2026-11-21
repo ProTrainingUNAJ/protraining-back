@@ -48,7 +48,7 @@ public sealed class DigitalConsentConfiguration : IEntityTypeConfiguration<Digit
 
         builder.Property(consent => consent.AllowsProfilePhoto)
             .HasColumnName("allows_profile_photo")
-            .HasDefaultValue(true)
+            .HasDefaultValue(false)
             .IsRequired();
 
         builder.HasIndex(consent => consent.AthleteId)

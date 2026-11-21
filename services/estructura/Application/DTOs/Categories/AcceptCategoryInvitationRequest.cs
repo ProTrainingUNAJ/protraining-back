@@ -10,5 +10,6 @@ public sealed record AcceptCategoryInvitationRequest(
     string? GuardianPhone = null,
     bool AllowsPhysicalTraining = true,
     bool AllowsHabitsRecommendations = false,
-    string? EmergencyContact = null
+    string? EmergencyContact = null,
+    bool AllowsProfilePhoto = false
 );

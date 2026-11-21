@@ -17,16 +17,18 @@ public sealed class UploadOrganizationPhotoCommandHandler(
         WebpImageValidator.Validate(command.Data);
 
         var organization = await organizationRepository.GetByIdAsync(command.OrganizationId, cancellationToken)
-            ?? throw new OrganizationNotFoundException();
+            ?? throw new OrganizationNotFoundException(command.OrganizationId);
+
+        var (width, height) = WebpImageValidator.TryGetDimensions(command.Data);
 
         var existingPhoto = await photoRepository.GetByOrganizationIdAsync(command.OrganizationId, cancellationToken);
         if (existingPhoto is not null)
         {
-            existingPhoto.Update(command.Data, command.ContentType, command.FileSize);
+            existingPhoto.Update(command.Data, command.ContentType, command.FileSize, width, height);
         }
         else
         {
-            var photo = OrganizationPhoto.Create(command.OrganizationId, command.Data, command.ContentType, command.FileSize);
+            var photo = OrganizationPhoto.Create(command.OrganizationId, command.Data, command.ContentType, command.FileSize, width, height);
             await photoRepository.AddAsync(photo, cancellationToken);
         }
 
@@ -34,4 +36,3 @@ public sealed class UploadOrganizationPhotoCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
-

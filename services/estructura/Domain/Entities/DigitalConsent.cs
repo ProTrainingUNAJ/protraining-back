@@ -14,7 +14,7 @@ public sealed class DigitalConsent : BaseEntity
     public string? GuardianPhone { get; private set; }
     public bool AllowsPhysicalTraining { get; private set; }
     public bool AllowsHabitsRecommendations { get; private set; }
-    public bool AllowsProfilePhoto { get; private set; } = true;
+    public bool AllowsProfilePhoto { get; private set; } = false;
 
     private DigitalConsent() { }
 
@@ -25,7 +25,7 @@ public sealed class DigitalConsent : BaseEntity
         string? guardianPhone,
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
-        bool allowsProfilePhoto = true)
+        bool allowsProfilePhoto = false)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");

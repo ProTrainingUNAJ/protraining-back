@@ -20,14 +20,16 @@ public sealed class UploadUserPhotoCommandHandler(
         var user = await userManager.FindByIdAsync(command.UserId.ToString())
             ?? throw new DomainException("El usuario no existe.");
 
+        var (width, height) = WebpImageValidator.TryGetDimensions(command.Data);
+
         var existingPhoto = await photoRepository.GetByUserIdAsync(command.UserId, cancellationToken);
         if (existingPhoto is not null)
         {
-            existingPhoto.Update(command.Data, command.ContentType, command.FileSize);
+            existingPhoto.Update(command.Data, command.ContentType, command.FileSize, width, height);
         }
         else
         {
-            var photo = UserPhoto.Create(command.UserId, command.Data, command.ContentType, command.FileSize);
+            var photo = UserPhoto.Create(command.UserId, command.Data, command.ContentType, command.FileSize, width, height);
             await photoRepository.AddAsync(photo, cancellationToken);
         }
 
@@ -38,4 +40,3 @@ public sealed class UploadUserPhotoCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
-

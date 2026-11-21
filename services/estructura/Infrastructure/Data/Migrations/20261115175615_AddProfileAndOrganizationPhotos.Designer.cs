@@ -365,7 +365,7 @@ namespace Infrastructure.Data.Migrations
                     b.Property<bool>("AllowsProfilePhoto")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("allows_profile_photo");
 
                     b.Property<Guid>("AthleteId")

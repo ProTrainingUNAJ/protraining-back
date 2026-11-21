@@ -318,6 +318,54 @@ public sealed class MultitenantIsolationTests : IAsyncDisposable
         Assert.DoesNotContain(catsOfAthleteB, c => c.Id == catA.Id);
     }
 
+    [Fact]
+    public async Task Given_AthleteWithPhotoOwnedByPfA_When_PfBAttemptsToGetPhoto_Then_Returns404NotFound()
+    {
+        // 1. Setup Athlete with photo under PF-A
+        var athleteResponse = await _clientPfA.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("AtletaConFoto", "Aislado", "atleta.foto@test.com", "11223344", false));
+        Assert.Equal(HttpStatusCode.Created, athleteResponse.StatusCode);
+        var athlete = await athleteResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+
+        // WebP photo payload (RIFF ... WEBP)
+        var webpBytes = new byte[64];
+        webpBytes[0] = (byte)'R'; webpBytes[1] = (byte)'I'; webpBytes[2] = (byte)'F'; webpBytes[3] = (byte)'F';
+        webpBytes[8] = (byte)'W'; webpBytes[9] = (byte)'E'; webpBytes[10] = (byte)'B'; webpBytes[11] = (byte)'P';
+
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(webpBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/webp");
+        content.Add(fileContent, "photo", "profile.webp");
+
+        var uploadResponse = await _clientPfA.PutAsync($"/api/v1/athletes/{athlete.Id}/photo", content);
+        Assert.Equal(HttpStatusCode.NoContent, uploadResponse.StatusCode);
+
+        // PF-A can see their own athlete's photo
+        var pfAResponse = await _clientPfA.GetAsync($"/api/v1/athletes/{athlete.Id}/photo");
+        Assert.Equal(HttpStatusCode.OK, pfAResponse.StatusCode);
+
+        // 2. PF-B attempts to get PF-A's athlete photo -> 404 NotFound
+        var pfBResponse = await _clientPfB.GetAsync($"/api/v1/athletes/{athlete.Id}/photo");
+        Assert.Equal(HttpStatusCode.NotFound, pfBResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithPhoto_When_UnauthenticatedClientAttemptsToGetPhoto_Then_Returns401Unauthorized()
+    {
+        // Setup athlete
+        var athleteResponse = await _clientPfA.PostAsJsonAsync(
+            "/api/v1/athletes",
+            new CreateAthleteRequest("AtletaAnonimo", "Test", "atleta.anon@test.com", "11223344", false));
+        var athlete = await athleteResponse.Content.ReadFromJsonAsync<AthleteDto>();
+        Assert.NotNull(athlete);
+
+        // Unauthenticated client attempts to access photo -> 401 Unauthorized
+        var unauthenticatedResponse = await _unauthenticatedClient.GetAsync($"/api/v1/athletes/{athlete.Id}/photo");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedResponse.StatusCode);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _clientPfA.Dispose();

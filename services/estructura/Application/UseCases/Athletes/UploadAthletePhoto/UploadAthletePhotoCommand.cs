@@ -18,21 +18,23 @@ public sealed class UploadAthletePhotoCommandHandler(
         WebpImageValidator.Validate(command.Data);
 
         var athlete = await athleteRepository.GetByIdAsync(command.AthleteId, cancellationToken)
-            ?? throw new AthleteNotFoundException();
+            ?? throw new AthleteNotFoundException(command.AthleteId);
 
         if (!athlete.AllowsProfilePhoto)
         {
             throw new DomainException("El atleta menor de edad no tiene autorización del tutor legal para tener foto de perfil.");
         }
 
+        var (width, height) = WebpImageValidator.TryGetDimensions(command.Data);
+
         var existingPhoto = await photoRepository.GetByAthleteIdAsync(command.AthleteId, cancellationToken);
         if (existingPhoto is not null)
         {
-            existingPhoto.Update(command.Data, command.ContentType, command.FileSize);
+            existingPhoto.Update(command.Data, command.ContentType, command.FileSize, width, height);
         }
         else
         {
-            var photo = AthletePhoto.Create(command.AthleteId, command.Data, command.ContentType, command.FileSize);
+            var photo = AthletePhoto.Create(command.AthleteId, command.Data, command.ContentType, command.FileSize, width, height);
             await photoRepository.AddAsync(photo, cancellationToken);
         }
 
@@ -40,4 +42,3 @@ public sealed class UploadAthletePhotoCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
-
