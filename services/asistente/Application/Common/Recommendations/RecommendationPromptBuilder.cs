@@ -167,6 +167,16 @@ public static class RecommendationPromptBuilder
             sb.AppendLine($"- Enfoque sugerido por reglas: {request.SuggestedFocus.Trim()}");
         }
 
+        if (request.IsRecurringAfterDiscard)
+        {
+            var recurringReminder = RecommendationRecurrencePolicy.BuildRecurringReminder(request.RecurringTestName, reason);
+            var measurementsClause = request.NewMeasurementsSinceDiscard.HasValue
+                ? $"tras {request.NewMeasurementsSinceDiscard.Value} mediciones nuevas"
+                : "tras nuevas mediciones";
+            sb.AppendLine($"- Reincidencia tras descarte previo: el PF descartó una recomendación anterior y {measurementsClause} el atleta sigue por debajo del promedio de su categoría.");
+            sb.AppendLine($"- Aviso sugerido para el PF (usalo como eje del título y apertura): \"{recurringReminder}\".");
+        }
+
         sb.AppendLine();
         sb.AppendLine("REGLAS ESTRICTAS DE REDACCIÓN Y SEGURIDAD:");
         sb.AppendLine("1. LA IA SÓLO REDACTA: usá exclusivamente los números y el motivo calculados por reglas detallados arriba. No inventes mediciones, porcentajes ni diagnósticos médicos.");
@@ -355,9 +365,24 @@ public static class RecommendationPromptBuilder
             ? $" en {request.CategoryName.Trim()}"
             : string.Empty;
 
-        var title = $"Recomendación de ajuste por {reason}";
-        var recommendationText =
-            $"Se detectó {reason}{categoryClause}.{metricsClause}{focusClause}";
+        string title;
+        string recommendationText;
+        if (request.IsRecurringAfterDiscard)
+        {
+            var recurringReminder = RecommendationRecurrencePolicy.BuildRecurringReminder(request.RecurringTestName, reason);
+            var measurementsClause = request.NewMeasurementsSinceDiscard.HasValue
+                ? $"Tras {request.NewMeasurementsSinceDiscard.Value} mediciones nuevas desde el descarte previo, el atleta sigue por debajo del promedio"
+                : "Tras nuevas mediciones desde el descarte previo, el atleta sigue por debajo del promedio";
+            title = recurringReminder;
+            recommendationText =
+                $"{recurringReminder}. {measurementsClause}{categoryClause}.{metricsClause}{focusClause}";
+        }
+        else
+        {
+            title = $"Recomendación de ajuste por {reason}";
+            recommendationText =
+                $"Se detectó {reason}{categoryClause}.{metricsClause}{focusClause}";
+        }
 
         return new TrainingRecommendationResponseDto(
             Title: title,

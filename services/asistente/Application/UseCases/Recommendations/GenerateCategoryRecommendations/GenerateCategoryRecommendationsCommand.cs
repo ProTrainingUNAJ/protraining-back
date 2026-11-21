@@ -1,4 +1,3 @@
-using Application.Common.Helpers;
 using Application.Common.Recommendations;
 using Application.DTOs.Recommendations;
 using Application.Exceptions;
@@ -30,12 +29,6 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
     RecommendationsOptions? options = null,
     ILogger<GenerateCategoryRecommendationsCommandHandler>? logger = null)
 {
-    private static readonly RecommendationStatus[] DeduplicationStatuses =
-    [
-        RecommendationStatus.Pending,
-        RecommendationStatus.Discarded
-    ];
-
     public async Task<RunCategoryRecommendationEngineResponseDto> HandleAsync(
         GenerateCategoryRecommendationsCommand command,
         CancellationToken cancellationToken = default)
@@ -81,7 +74,7 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
         var averagesTask = seguimientoClient.GetCategoryAveragesAsync(category.Id, cancellationToken);
         var existingTask = recommendationRepository.ListByAthleteIdsAndStatusesAsync(
             athleteIds,
-            DeduplicationStatuses,
+            RecommendationRecurrencePolicy.DeduplicationStatuses,
             cancellationToken);
         await Task.WhenAll(averagesTask, existingTask);
 
@@ -91,14 +84,13 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
             .Where(r => r.Status == RecommendationStatus.Pending)
             .ToList();
 
-        var existingReasonsByAthlete = existingRecommendations
+        var existingByAthlete = existingRecommendations
             .GroupBy(r => r.AthleteId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(r => TextNormalizer.Normalize(r.Reason)).ToHashSet(StringComparer.Ordinal));
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<AthleteRecommendation>)g.ToList());
 
         var effectiveOptions = options ?? new RecommendationsOptions();
         var belowAverageThreshold = effectiveOptions.GetEffectiveBelowAverageThresholdPercent();
+        var discardedTolerance = effectiveOptions.GetEffectiveDiscardedToleranceMeasurements();
         var maxParallelism = effectiveOptions.GetEffectiveMaxCategoryParallelism();
 
         // Fase 1 (concurrente con límite): consultar permisos, métricas y redactar borradores en memoria.
@@ -118,8 +110,9 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
                 var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(athleteId, weeks, cancellationToken);
                 await Task.WhenAll(testsTask, trendsTask);
 
+                var athleteTests = await testsTask;
                 var analysis = AthleteProfileAnalyzer.Analyze(
-                    await testsTask,
+                    athleteTests,
                     categoryAverages,
                     await trendsTask,
                     belowAverageThreshold);
@@ -127,17 +120,25 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
                 if (analysis.Signals.Count == 0)
                     return (Evaluated: true, Created: (IReadOnlyList<AthleteRecommendation>)[]);
 
-                var blockedReasons = existingReasonsByAthlete.TryGetValue(athleteId, out var reasons)
-                    ? reasons
-                    : (ISet<string>)new HashSet<string>(StringComparer.Ordinal);
+                var athleteExisting = existingByAthlete.TryGetValue(athleteId, out var history)
+                    ? history
+                    : [];
+
+                var eligibleSignals = RecommendationRecurrencePolicy.FilterEligibleSignals(
+                    analysis.Signals,
+                    athleteTests,
+                    athleteExisting,
+                    discardedTolerance);
+
+                if (eligibleSignals.Count == 0)
+                    return (Evaluated: true, Created: (IReadOnlyList<AthleteRecommendation>)[]);
 
                 var createdForAthlete = await scopedAiServiceRunner.ExecuteAsync(
                     (scopedAiService, ct) => RecommendationDraftGenerator.GenerateNewDraftsAsync(
                         athleteId,
                         category.Id,
                         category.Name,
-                        analysis.Signals,
-                        blockedReasons,
+                        eligibleSignals,
                         scopedAiService,
                         ct),
                     cancellationToken);

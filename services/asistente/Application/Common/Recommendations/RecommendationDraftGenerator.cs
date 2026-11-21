@@ -17,7 +17,6 @@ public static class RecommendationDraftGenerator
         Guid? categoryId,
         string? categoryName,
         IReadOnlyList<RecommendationSignal> signals,
-        ISet<string> existingReasons,
         IAiService aiService,
         CancellationToken cancellationToken = default)
     {
@@ -25,7 +24,7 @@ public static class RecommendationDraftGenerator
             return [];
 
         var created = new List<AthleteRecommendation>(signals.Count);
-        var seenReasons = new HashSet<string>(existingReasons, StringComparer.Ordinal);
+        var seenReasons = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var signal in signals)
         {

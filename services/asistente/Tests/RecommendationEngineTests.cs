@@ -1190,4 +1190,478 @@ public sealed class RecommendationEngineTests
         // Exactamente 1 instancia aislada por cada atleta procesado, sin instanciar IAiService de más en el request
         Assert.Equal(athleteIds.Count, tracker.InstancesCreated);
     }
+
+    [Fact]
+    public async Task GenerateForAthlete_WhenDiscarded_StaysBlockedWithOneOrTwoNewMeasurements_AndReproposesOnThirdIfStillBelowThreshold()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discardedAt = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var discarded = AthleteRecommendation.Create(
+            AthleteId,
+            "Recomendación de ajuste por salto por debajo del promedio",
+            "salto por debajo del promedio",
+            "Texto previo descartado por el PF.",
+            categoryId: CategoryId,
+            categoryName: "Primera División");
+        discarded.Discard(discardedAt);
+        await repository.AddAsync(discarded);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
+
+        var testHistory = new List<AthleteFitnessTestRemoteDto>
+        {
+            // Medición original previa al descarte (no cuenta como nueva)
+            new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 35.0m, "cm", 1, discardedAt.AddDays(-1)),
+            // 1.ª medición nueva posterior al descarte
+            new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 35.5m, "cm", 1, discardedAt.AddDays(10))
+        };
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => testHistory.ToList());
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        TrainingRecommendationRequestDto? capturedRequest = null;
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .Callback<TrainingRecommendationRequestDto, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var handler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        // Con 1 medición nueva -> sigue bloqueada
+        var afterOne = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(0, afterOne.GeneratedCount);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Con 2 mediciones nuevas -> sigue bloqueada
+        testHistory.Add(new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.8m, "cm", 1, discardedAt.AddDays(25)));
+        var afterTwo = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(0, afterTwo.GeneratedCount);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Con la 3.ª medición nueva y aún más de 10 % por debajo -> se vuelve a proponer avisando al PF
+        testHistory.Add(new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAt.AddDays(40)));
+        var afterThree = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+
+        Assert.Equal(1, afterThree.GeneratedCount);
+        Assert.Equal(2, store.Count);
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest!.IsRecurringAfterDiscard);
+        Assert.Equal("Salto Vertical", capturedRequest.RecurringTestName);
+        Assert.Equal(3, capturedRequest.NewMeasurementsSinceDiscard);
+
+        var reproposed = Assert.Single(afterThree.Recommendations);
+        Assert.Equal("Pending", reproposed.Status);
+        Assert.Equal("salto por debajo del promedio", reproposed.Reason);
+        Assert.Equal("Sigue por debajo en salto vertical: reforzar potencia de piernas", reproposed.Title);
+        Assert.Contains("Sigue por debajo en salto vertical: reforzar potencia de piernas", reproposed.RecommendationText);
+        Assert.Contains("3 mediciones nuevas", reproposed.RecommendationText);
+
+        // Si el PF vuelve a descartar esta nueva recomendación, el contador se reinicia desde el nuevo descarte
+        var savedNew = store.Single(r => r.Id == reproposed.Id);
+        savedNew.Discard(discardedAt.AddDays(41));
+
+        var afterSecondDiscard = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(0, afterSecondDiscard.GeneratedCount);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_WhenDiscardedAndThirdMeasurementRecoversWithinThreshold_DoesNotRepropose()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discardedAt = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var discarded = AthleteRecommendation.Create(
+            AthleteId, "Ajuste salto", "salto por debajo del promedio", "Descartada.", CategoryId, "Primera");
+        discarded.Discard(discardedAt);
+        await repository.AddAsync(discarded);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
+
+        // 3 mediciones nuevas, pero en la 3.ª ya mejoró a 40.5 cm vs 42 cm (-3.6 %, dentro del 10 %)
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAt.AddDays(10)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 35.0m, "cm", 1, discardedAt.AddDays(20)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 40.5m, "cm", 1, discardedAt.AddDays(30))
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        var handler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var response = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+
+        Assert.Equal(0, response.GeneratedCount);
+        Assert.Single(store);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_WhenDiscardedInJump_NewMeasurementsOfOtherTestDoNotUnlockJump_AndSpeedRecurringTextDependsOnTest()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discardedAt = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var discardedJump = AthleteRecommendation.Create(
+            AthleteId, "Ajuste salto", "salto por debajo del promedio", "Descartada salto.", CategoryId, "Primera");
+        discardedJump.Discard(discardedAt);
+        await repository.AddAsync(discardedJump);
+
+        var discardedSpeed = AthleteRecommendation.Create(
+            AthleteId, "Ajuste velocidad", "velocidad por debajo del promedio", "Descartada velocidad.", CategoryId, "Primera");
+        discardedSpeed.Discard(discardedAt);
+        await repository.AddAsync(discardedSpeed);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
+
+        // Salto Vertical no tiene mediciones nuevas tras el descarte; Carrera 30 m sí tiene 3 mediciones nuevas lentas
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAt.AddDays(-2)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Carrera 30 m", "Velocity", 4.9m, "s", 1, discardedAt.AddDays(5)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Carrera 30 m", "Velocity", 4.8m, "s", 1, discardedAt.AddDays(15)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Carrera 30 m", "Velocity", 4.85m, "s", 1, discardedAt.AddDays(25))
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [
+                    new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10),
+                    new FitnessTestAverageRemoteDto("Carrera 30 m", "s", 4.2, 10)
+                ],
+                []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var handler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var response = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+
+        // Solo velocidad se desbloquea; salto sigue bloqueado porque las 3 mediciones fueron de otro test
+        Assert.Equal(1, response.GeneratedCount);
+        var created = Assert.Single(response.Recommendations);
+        Assert.Equal("velocidad por debajo del promedio", created.Reason);
+        Assert.Equal("Sigue por debajo en carrera 30 m: reforzar aceleración y velocidad lineal", created.Title);
+
+        // Verificar que el prompt de IA también incluye el aviso de reincidencia dependiente del test
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(new TrainingRecommendationRequestDto(
+            Reason: "velocidad por debajo del promedio",
+            IsRecurringAfterDiscard: true,
+            RecurringTestName: "Carrera 30 m",
+            NewMeasurementsSinceDiscard: 3));
+        Assert.Contains("Sigue por debajo en carrera 30 m: reforzar aceleración y velocidad lineal", prompt);
+        Assert.Contains("3 mediciones nuevas", prompt);
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_WhenDiscardedToleranceConfigured_RespectsConfiguredCountAndNormalizesOptions()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{RecommendationsOptions.SectionName}:DiscardedToleranceMeasurements"] = "2"
+            })
+            .Build();
+        var bound = config.GetSection(RecommendationsOptions.SectionName).Get<RecommendationsOptions>()!;
+        Assert.Equal(2, bound.GetEffectiveDiscardedToleranceMeasurements());
+        Assert.Equal(3, new RecommendationsOptions { DiscardedToleranceMeasurements = 0 }.GetEffectiveDiscardedToleranceMeasurements());
+        Assert.Equal(3, new RecommendationsOptions { DiscardedToleranceMeasurements = -4 }.GetEffectiveDiscardedToleranceMeasurements());
+
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discardedAt = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var discarded = AthleteRecommendation.Create(
+            AthleteId, "Ajuste salto", "salto por debajo del promedio", "Descartada.", CategoryId, "Primera");
+        discarded.Discard(discardedAt);
+        await repository.AddAsync(discarded);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
+
+        // Exactamente 2 mediciones nuevas: con tolerancia default (3) no vuelve, con tolerancia configurada (2) sí vuelve
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAt.AddDays(5)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.5m, "cm", 1, discardedAt.AddDays(15))
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var defaultHandler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        Assert.Equal(0, (await defaultHandler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId))).GeneratedCount);
+
+        var configuredHandler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow,
+            bound);
+
+        var response = await configuredHandler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(1, response.GeneratedCount);
+        Assert.Contains("2 mediciones nuevas", response.Recommendations[0].RecommendationText);
+    }
+
+    [Fact]
+    public async Task GenerateForAthleteAndCategory_WhenApprovedRecommendationExists_DoesNotCreateDuplicatePending()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var approvedAt = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        var approved = AthleteRecommendation.Create(
+            AthleteId,
+            "Plan de potencia en salto",
+            "salto por debajo del promedio",
+            "Recomendación ya aprobada por el PF.",
+            categoryId: CategoryId,
+            categoryName: "Primera");
+        approved.Approve(approvedAt);
+        await repository.AddAsync(approved);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Primera"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new StructureCategoryAthleteDto(AthleteId, true),
+                new StructureCategoryAthleteDto(SecondAthleteId, true)
+            ]);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.SetupHabitsPermission(SecondAthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera")]);
+
+        // Incluso con 3 mediciones posteriores, si ya hay una aprobada vigente no debe duplicarse
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, approvedAt.AddDays(5)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.2m, "cm", 1, approvedAt.AddDays(15)),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.5m, "cm", 1, approvedAt.AddDays(25))
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(SecondAthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), SecondAthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, approvedAt.AddDays(25))
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        // 1. Corrida individual sobre el atleta con recomendación aprobada -> no crea pendiente ni llama IA
+        var athleteHandler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            aiMock.Object,
+            uow);
+
+        var athleteResponse = await athleteHandler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+        Assert.Equal(0, athleteResponse.GeneratedCount);
+        Assert.Equal(0, athleteResponse.ExistingPendingCount);
+        Assert.Empty(athleteResponse.Recommendations);
+        Assert.Single(store);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // 2. Corrida por categoría -> no duplica para AthleteId (aprobada) y sí genera para SecondAthleteId
+        var categoryHandler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            ScopedAiServiceRunnerFactory.From(aiMock.Object),
+            uow);
+
+        var categoryResponse = await categoryHandler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+        Assert.Equal(2, categoryResponse.EvaluatedAthletes);
+        Assert.Equal(1, categoryResponse.GeneratedCount);
+        Assert.Equal(0, categoryResponse.ExistingPendingCount);
+        var generated = Assert.Single(categoryResponse.Recommendations);
+        Assert.Equal(SecondAthleteId, generated.AthleteId);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == AthleteId), It.IsAny<CancellationToken>()), Times.Never);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == SecondAthleteId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_WhenAthletesHaveDiscardedRecommendations_ReproposesOnlyWhoReachedToleranceAndNormalizesLocalDates()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        var uow = new FakeUnitOfWork();
+
+        var discardedAtUtc = new DateTime(2026, 11, 10, 15, 0, 0, DateTimeKind.Utc);
+
+        var discardedAthlete1 = AthleteRecommendation.Create(
+            AthleteId, "Ajuste salto 1", "salto por debajo del promedio", "Descartada 1.", CategoryId, "Primera");
+        discardedAthlete1.Discard(discardedAtUtc);
+        await repository.AddAsync(discardedAthlete1);
+
+        var discardedAthlete2 = AthleteRecommendation.Create(
+            SecondAthleteId, "Ajuste salto 2", "salto por debajo del promedio", "Descartada 2.", CategoryId, "Primera");
+        discardedAthlete2.Discard(discardedAtUtc);
+        await repository.AddAsync(discardedAthlete2);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Primera"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new StructureCategoryAthleteDto(AthleteId, true),
+                new StructureCategoryAthleteDto(SecondAthleteId, true)
+            ]);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.SetupHabitsPermission(SecondAthleteId);
+
+        // AthleteId: 1 medición en Local previa al instante UTC de descarte + 2 nuevas -> total 2 nuevas (< 3, sigue bloqueado)
+        // SecondAthleteId: 3 mediciones nuevas en Local posteriores al instante UTC de descarte -> se vuelve a proponer
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAtUtc.AddMinutes(-5).ToLocalTime()),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.2m, "cm", 1, discardedAtUtc.AddDays(5).ToLocalTime()),
+                new(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.5m, "cm", 1, discardedAtUtc.AddDays(10).ToLocalTime())
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(SecondAthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new(Guid.NewGuid(), SecondAthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.0m, "cm", 1, discardedAtUtc.AddDays(5).ToLocalTime()),
+                new(Guid.NewGuid(), SecondAthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.2m, "cm", 1, discardedAtUtc.AddDays(10).ToLocalTime()),
+                new(Guid.NewGuid(), SecondAthleteId, Guid.NewGuid(), "Salto Vertical", "Power", 34.5m, "cm", 1, discardedAtUtc.AddDays(15).ToLocalTime())
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var aiMock = new Mock<IAiService>();
+        aiMock.Setup(a => a.GenerateTrainingRecommendationAsync(It.IsAny<TrainingRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrainingRecommendationRequestDto req, CancellationToken _) =>
+                RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
+
+        var runnerInvocations = 0;
+        var countingRunner = new Mock<IScopedAiServiceRunner>();
+        countingRunner
+            .Setup(r => r.ExecuteAsync(
+                It.IsAny<Func<IAiService, CancellationToken, Task<IReadOnlyList<AthleteRecommendation>>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((Func<IAiService, CancellationToken, Task<IReadOnlyList<AthleteRecommendation>>> op, CancellationToken ct) =>
+            {
+                Interlocked.Increment(ref runnerInvocations);
+                return op(aiMock.Object, ct);
+            });
+
+        var handler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            HabitsRecommendationsClientFactory.Enabled(),
+            seguimientoMock.Object,
+            repository,
+            countingRunner.Object,
+            uow);
+
+        var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+
+        Assert.Equal(2, response.EvaluatedAthletes);
+        Assert.Equal(1, response.GeneratedCount);
+        Assert.Equal(1, runnerInvocations);
+
+        var reproposed = Assert.Single(response.Recommendations);
+        Assert.Equal(SecondAthleteId, reproposed.AthleteId);
+        Assert.Equal("Sigue por debajo en salto vertical: reforzar potencia de piernas", reproposed.Title);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == AthleteId), It.IsAny<CancellationToken>()), Times.Never);
+        aiMock.Verify(a => a.GenerateTrainingRecommendationAsync(It.Is<TrainingRecommendationRequestDto>(r => r.AthleteId == SecondAthleteId && r.IsRecurringAfterDiscard), It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
