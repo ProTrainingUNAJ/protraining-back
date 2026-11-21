@@ -136,6 +136,158 @@ public class SubmitCheckInCommandHandlerTests
         _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // una lesión clínica activa se reconoce aunque el front envíe hasActiveInjury=false.
+    [Fact]
+    public async Task HandleAsync_WithClinicalInjury_ForcesFlagAndBuildsPainZones()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "isquiotibiales",
+            Description = "Desgarro leve",
+            Status = InjuryStatus.Active
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+        ConfigurarSinCheckInPrevio();
+
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var command = CommandValido(hasActiveInjury: false) with
+        {
+            PainZones = null,
+            Injuries = [new SubmitInjuryPain(injury.Id, 10)]
+        };
+
+        var (response, _) = await CreateHandler().HandleAsync(command);
+
+        Assert.NotNull(guardado);
+        Assert.True(guardado!.HasActiveInjury);
+        Assert.Equal("isquiotibiales:6", guardado.PainZones);
+        Assert.Equal("Red", response.TrafficLight);
+        Assert.Contains("Lesión activa", response.TrafficLightReason);
+        Assert.Equal("isquiotibiales", Assert.Single(response.CheckIn.Injuries).Zone);
+        Assert.Equal(10, response.CheckIn.Injuries[0].Level);
+        _injuryPains.Verify(
+            repo => repo.SetForCheckInAsync(
+                guardado.Id,
+                It.Is<IReadOnlyCollection<(Guid InjuryId, int Level)>>(
+                    pains => pains.Count == 1 && pains.First().InjuryId == injury.Id && pains.First().Level == 10),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // una misma zona no se representa dos veces; prevalece el marcador clínico.
+    [Fact]
+    public async Task HandleAsync_WhenClinicalZoneIsAlreadyMarked_DeduplicatesPainZones()
+    {
+        var injury = new AthleteInjury { AthleteId = AthleteId, Zone = "gemelos", Status = InjuryStatus.Active };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+        ConfigurarSinCheckInPrevio();
+
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var command = CommandValido() with
+        {
+            PainZones = "cuadriceps:2,gemelos:3",
+            Injuries = [new SubmitInjuryPain(injury.Id, 7)]
+        };
+
+        await CreateHandler().HandleAsync(command);
+
+        Assert.NotNull(guardado);
+        Assert.Equal("cuadriceps:2,gemelos:6", guardado!.PainZones);
+    }
+
+    // sin lesiones clínicas se conserva el comportamiento anterior de salud normal.
+    [Fact]
+    public async Task HandleAsync_WithoutInjuries_KeepsManualPainZonesAndFlag()
+    {
+        ConfigurarSinCheckInPrevio();
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var (response, _) = await CreateHandler().HandleAsync(
+            CommandValido(hasActiveInjury: false) with { PainZones = "cuadriceps:2" });
+
+        Assert.NotNull(guardado);
+        Assert.Equal("cuadriceps:2", guardado!.PainZones);
+        Assert.False(guardado.HasActiveInjury);
+        Assert.Equal("Yellow", response.TrafficLight);
+        Assert.Empty(response.CheckIn.Injuries);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithoutInjuriesOrPainZones_KeepsNullPainZones()
+    {
+        ConfigurarSinCheckInPrevio();
+        CheckIn? guardado = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => guardado = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var (response, _) = await CreateHandler().HandleAsync(CommandValido());
+
+        Assert.NotNull(guardado);
+        Assert.Null(guardado!.PainZones);
+        Assert.False(guardado.HasActiveInjury);
+        Assert.Equal("Green", response.TrafficLight);
+        Assert.Equal("Estado óptimo", response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithRepeatedInjuryScore_ThrowsDomainException()
+    {
+        var injury = new AthleteInjury { AthleteId = AthleteId, Zone = "gemelos", Status = InjuryStatus.Active };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var command = CommandValido() with
+        {
+            Injuries = [new SubmitInjuryPain(injury.Id, 4), new SubmitInjuryPain(injury.Id, 5)]
+        };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(command));
+
+        Assert.Equal("Hay molestias repetidas en el check-in.", exception.Message);
+        _unitOfWork.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(11)]
+    public async Task HandleAsync_WithOutOfRangeInjuryScore_ThrowsDomainException(int level)
+    {
+        var injury = new AthleteInjury { AthleteId = AthleteId, Zone = "gemelos", Status = InjuryStatus.Active };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var command = CommandValido() with { Injuries = [new SubmitInjuryPain(injury.Id, level)] };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateHandler().HandleAsync(command));
+
+        Assert.Equal("El dolor de cada molestia debe estar entre 0 y 10.", exception.Message);
+    }
+
     [Fact]
     public async Task HandleAsync_WithoutInjuryOnGreenPath_UpdatesTodaysCheckIn()
     {
