@@ -30,6 +30,8 @@ tags:
     description: Monitoreo de disponibilidad del servicio y base de datos
   - name: PushSubscriptions
     description: Gestión de suscripciones Web Push y claves públicas VAPID para notificaciones del navegador
+  - name: Internal
+    description: Endpoints internos entre microservicios (rol Servicio). Bloqueados en el gateway; no accesibles desde el frontend
 
 paths:
   /api/v1/athletes:
@@ -1698,6 +1700,123 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
+  # Endpoints internos entre microservicios (KAN-581): requieren JWT con rol Servicio y están
+  # bloqueados en el Gateway (PerimeterSecurityMiddleware). Nota sobre SDK del frontend:
+  # @hey-api/openapi-ts en protraining-front procesa los YAML completos sin filtro de exclusión
+  # (igual que con /api/v1/internal/... de identidad.yaml, entrenamiento.yaml y seguimiento.yaml);
+  # estos endpoints quedan agrupados bajo el tag Internal, no se importan en el cliente público y
+  # cualquier llamada desde el navegador es rechazada por el Gateway.
+  /api/v1/internal/athletes:
+    get:
+      tags:
+        - Internal
+      summary: Listar atletas activos con su PF y categorías (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el worker de recordatorios y el
+        microservicio de Asistente (KAN-472) para obtener los atletas activos junto con su PF y
+        categorías asignadas. Está bloqueado en el gateway y no es invocable desde el frontend.
+      operationId: listActiveAthletesInternal
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista de atletas activos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InternalAthleteSummaryDto'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/internal/categories/{categoryId}/events:
+    get:
+      tags:
+        - Internal
+      summary: Listar partidos de una categoría en un rango de fechas (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el microservicio de Asistente para el
+        borrador con IA y el worker de análisis de sobrecarga precompetitiva (KAN-473). Está
+        bloqueado en el gateway y no es invocable desde el frontend.
+      operationId: listCategoryEventsInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          description: Identificador único de la categoría deportiva.
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          description: Fecha inicial del rango a consultar (formato YYYY-MM-DD, inclusive).
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+        - name: to
+          in: query
+          required: false
+          description: Fecha final del rango a consultar (formato YYYY-MM-DD, inclusive).
+          schema:
+            type: string
+            format: date
+            example: "2026-11-30"
+      responses:
+        "200":
+          description: Lista de partidos de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompetitiveEvent'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/internal/categories/{categoryId}/athletes:
+    get:
+      tags:
+        - Internal
+      summary: Listar id y nombre de los atletas de una categoría (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el microservicio de Seguimiento para
+        la comparación del atleta con su grupo (KAN-578), devolviendo únicamente identificador y
+        nombre completo sin datos de contacto ni médicos. Está bloqueado en el gateway y no es
+        invocable desde el frontend.
+      operationId: listCategoryAthletesInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          description: Identificador único de la categoría deportiva.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista resumida de atletas de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InternalCategoryAthleteDto'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -2816,3 +2935,63 @@ components:
           type: string
           format: date
           example: "2026-02-28"
+
+    InternalAthleteSummaryDto:
+      type: object
+      description: Resumen interno de un atleta activo para comunicación entre microservicios (KAN-472).
+      required:
+        - id
+        - pfId
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        pfId:
+          type: string
+          format: uuid
+          example: "7b2a11c0-9d34-4f21-a889-1234567890ab"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Categoría activa principal del atleta.
+          example: "9a1c3f02-6c1b-4c22-8f11-9876543210cd"
+        active:
+          type: boolean
+          example: true
+        categoryIds:
+          type: array
+          nullable: true
+          description: Lista de todas las categorías activas en las que está asignado el atleta.
+          items:
+            type: string
+            format: uuid
+        firstName:
+          type: string
+          nullable: true
+          example: "Mateo"
+        lastName:
+          type: string
+          nullable: true
+          example: "Fernández"
+        fullName:
+          type: string
+          nullable: true
+          example: "Mateo Fernández"
+
+    InternalCategoryAthleteDto:
+      type: object
+      description: Resumen mínimo de un atleta de una categoría para comparación grupal en Seguimiento (KAN-578).
+      required:
+        - id
+        - fullName
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        fullName:
+          type: string
+          example: "Mateo Fernández"
