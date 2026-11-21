@@ -422,11 +422,13 @@ public sealed class RecommendationPromptAndValidationTests
     [Fact]
     public async Task GenerateNutritionRecommendationAsync_WhenPrimaryProviderUsesUnapprovedFood_FallsBackToSecondProvider()
     {
+        var athleteId = Guid.NewGuid();
         var request = new NutritionRecommendationRequestDto(
             AthleticGoal: "Recuperación deportiva",
             ApprovedFoods: SampleApprovedFoods,
             MinProteinGrams: 100,
-            MaxProteinGrams: 140);
+            MaxProteinGrams: 140,
+            AthleteId: athleteId);
 
         var badProvider = new Mock<IAiClient>();
         badProvider.Setup(p => p.ProviderName).Returns("Ollama");
@@ -450,6 +452,10 @@ public sealed class RecommendationPromptAndValidationTests
                 LegalDisclaimer: RecommendationPromptBuilder.OfficialNutritionDisclaimer,
                 ProviderUsed: "Gemini"));
 
+        // KAN-496: con atleta requerido, hace falta un structure client que devuelva permiso de adulto.
+        var structureMock = StructureClientReturning(
+            new StructureAthleteHabitsPermissionDto(IsMinor: false, AllowsHabitsRecommendations: false));
+
         var service = new ResilientAiService(
             providers: [badProvider.Object, goodProvider.Object],
             semanticValidator: null,
@@ -459,7 +465,8 @@ public sealed class RecommendationPromptAndValidationTests
             catalogService: null,
             quotaService: null,
             logger: NullLogger<ResilientAiService>.Instance,
-            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled(),
+            structureAthleteClient: structureMock.Object);
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
@@ -696,25 +703,70 @@ public sealed class RecommendationPromptAndValidationTests
     }
 
     [Fact]
-    public async Task GenerateNutritionRecommendationAsync_WhenMinorWithTutorPermission_GeneratesRecommendation()
+    public async Task GenerateNutritionRecommendationAsync_WhenMinorWithTutorPermission_ForcesIncludeQuantitiesFalse_AndGenerates()
     {
         var athleteId = Guid.NewGuid();
-        var request = NutritionRequestWithAthlete(athleteId);
+        var request = NutritionRequestWithAthlete(athleteId); // IncludeQuantities: true por defecto
 
         var structureMock = StructureClientReturning(
             new StructureAthleteHabitsPermissionDto(IsMinor: true, AllowsHabitsRecommendations: true));
 
-        var auditMock = new Mock<IAiAuditService>();
-        var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+        NutritionRecommendationRequestDto? capturedRequest = null;
+        var providerMock = new Mock<IAiClient>();
+        providerMock.Setup(p => p.ProviderName).Returns("Ollama");
+        providerMock
+            .Setup(p => p.TryGenerateNutritionRecommendationAsync(It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .Callback<NutritionRecommendationRequestDto, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new NutritionRecommendationResponseDto(
+                SuggestedPlateComposition: "Armá tu plato con pollo, huevo y arroz, y sumá una banana de colación.",
+                HydrationAndSleepGuidelines: "Tomá 2.5 litros de agua y descansá 8 horas.",
+                MentionedFoods: ["pollo", "huevo", "arroz", "banana"],
+                LegalDisclaimer: RecommendationPromptBuilder.OfficialNutritionDisclaimer,
+                ProviderUsed: "Ollama"));
 
-        var service = BuildServiceWith([ruleClient], structureMock.Object);
+        var service = BuildServiceWith([providerMock.Object], structureMock.Object);
 
         var response = await service.GenerateNutritionRecommendationAsync(request);
 
         Assert.NotNull(response);
+        // KAN-378 / KAN-496: el menor genera, pero SIEMPRE en modo cualitativo sin cantidades.
+        Assert.NotNull(capturedRequest);
+        Assert.False(capturedRequest!.IncludeQuantities);
         structureMock.Verify(
             c => c.GetHabitsPermissionAsync(athleteId, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task GenerateNutritionRecommendationAsync_WhenAdultWithPermission_KeepsIncludeQuantitiesUnchanged()
+    {
+        var athleteId = Guid.NewGuid();
+        var request = NutritionRequestWithAthlete(athleteId); // IncludeQuantities: true por defecto
+
+        var structureMock = StructureClientReturning(
+            new StructureAthleteHabitsPermissionDto(IsMinor: false, AllowsHabitsRecommendations: false));
+
+        NutritionRecommendationRequestDto? capturedRequest = null;
+        var providerMock = new Mock<IAiClient>();
+        providerMock.Setup(p => p.ProviderName).Returns("Ollama");
+        providerMock
+            .Setup(p => p.TryGenerateNutritionRecommendationAsync(It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .Callback<NutritionRecommendationRequestDto, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new NutritionRecommendationResponseDto(
+                SuggestedPlateComposition: "Armá tu plato con pollo, huevo y arroz, y sumá una banana de colación.",
+                HydrationAndSleepGuidelines: "Tomá 2.5 litros de agua y descansá 8 horas.",
+                MentionedFoods: ["pollo", "huevo", "arroz", "banana"],
+                LegalDisclaimer: RecommendationPromptBuilder.OfficialNutritionDisclaimer,
+                ProviderUsed: "Ollama"));
+
+        var service = BuildServiceWith([providerMock.Object], structureMock.Object);
+
+        var response = await service.GenerateNutritionRecommendationAsync(request);
+
+        Assert.NotNull(response);
+        // El modo sin cantidades se fuerza SOLO para menores: el adulto conserva su flag.
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest!.IncludeQuantities);
     }
 
     [Fact]
@@ -738,20 +790,23 @@ public sealed class RecommendationPromptAndValidationTests
     }
 
     [Fact]
-    public async Task GenerateNutritionRecommendationAsync_WhenAthleteIdIsNull_SkipsPermissionCheck_AndGenerates()
+    public async Task GenerateNutritionRecommendationAsync_WhenAthleteIdIsNull_ThrowsDomainException_WithoutCallingProviders()
     {
         var request = NutritionRequestWithAthlete(athleteId: null);
 
         var structureMock = StructureClientReturning(null);
 
-        var auditMock = new Mock<IAiAuditService>();
-        var ruleClient = new RuleBasedAiClient(auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+        var providerMock = new Mock<IAiClient>();
+        providerMock.Setup(p => p.ProviderName).Returns("Ollama");
 
-        var service = BuildServiceWith([ruleClient], structureMock.Object);
+        var service = BuildServiceWith([providerMock.Object], structureMock.Object);
 
-        var response = await service.GenerateNutritionRecommendationAsync(request);
+        // Fail-closed (KAN-496): sin atleta no se verifica el permiso y no se genera nada.
+        await Assert.ThrowsAsync<DomainException>(() => service.GenerateNutritionRecommendationAsync(request));
 
-        Assert.NotNull(response);
+        providerMock.Verify(
+            p => p.TryGenerateNutritionRecommendationAsync(It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()),
+            Times.Never);
         structureMock.Verify(
             c => c.GetHabitsPermissionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
