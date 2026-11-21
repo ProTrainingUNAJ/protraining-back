@@ -25,6 +25,11 @@ public sealed class SubmitCheckInCommandHandler(
 
         var pains = ValidateInjuryPains(command.Injuries, activeInjuries);
 
+        // las zonas clínicas activas también son zonas con dolor del día. Se reutiliza
+        // el formato "zona:nivel" que ya consumen el motor y Entrenamiento, y el marcador 6
+        // ("Lesión") de la escala del check-in. No se convierte el 0-10 clínico a la escala 1-5.
+        var painZones = BuildPainZones(command.PainZones, activeInjuries);
+
         // Normalización de sueño (KAN-560): el front ofrece hasta 12 h y "Más de 12";
         // cualquier valor > 12 se guarda como 13 (marca de "más de 12"). De 0 a 12 se guarda tal cual.
         double sleepHours = command.SleepHours > MaxSelectableSleepHours
@@ -57,7 +62,7 @@ public sealed class SubmitCheckInCommandHandler(
                 StressLevel = command.StressLevel,
                 IsSick = command.IsSick,
                 EffortRate = command.EffortRate,
-                PainZones = command.PainZones?.Trim(),
+                PainZones = painZones,
                 HasActiveInjury = command.HasActiveInjury || activeInjuries.Count > 0
             };
 
@@ -73,7 +78,7 @@ public sealed class SubmitCheckInCommandHandler(
             checkIn.StressLevel = command.StressLevel;
             checkIn.IsSick = command.IsSick;
             checkIn.EffortRate = command.EffortRate;
-            checkIn.PainZones = command.PainZones?.Trim();
+            checkIn.PainZones = painZones;
             checkIn.HasActiveInjury = command.HasActiveInjury || activeInjuries.Count > 0;
         }
 
@@ -122,6 +127,62 @@ public sealed class SubmitCheckInCommandHandler(
             CheckInMappings.ToDto(checkIn, responsePains));
 
         return new SubmitCheckInResult(response, created);
+    }
+
+    // Marcador "Lesión" de la escala del check-in (PAIN_LEVELS del front y parsePainZones del PF).
+    private const string ClinicalInjuryPainLevel = "6";
+
+    // una sola representación de las zonas con dolor. Parte de lo que marcó el atleta
+    // en la silueta y agrega las zonas de las lesiones clínicas activas, sin duplicarlas.
+    // Si una zona aparece en ambas fuentes, prevalece el marcador clínico: es un dato de la
+    // ficha médica, no un puntaje nuevo. El dolor 0-10 sigue viviendo en check_in_injury_pains.
+    private static string? BuildPainZones(string? provided, IReadOnlyList<AthleteInjury> activeInjuries)
+    {
+        var tokens = new List<string>();
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        void AddClinical(string zone)
+        {
+            var normalized = zone.Trim();
+            if (normalized.Length == 0) return;
+
+            if (positions.TryGetValue(normalized, out var position))
+            {
+                tokens[position] = $"{normalized}:{ClinicalInjuryPainLevel}";
+                return;
+            }
+
+            positions[normalized] = tokens.Count;
+            tokens.Add($"{normalized}:{ClinicalInjuryPainLevel}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(provided))
+        {
+            foreach (var entry in provided.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // "[]" y "{}" son listas vacías serializadas: el motor ya las ignora.
+                if (entry is "[]" or "{}") continue;
+
+                var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && parts[0].Length > 0)
+                {
+                    var zone = parts[0];
+                    if (positions.ContainsKey(zone)) continue;
+                    positions[zone] = tokens.Count;
+                    tokens.Add($"{zone}:{parts[1]}");
+                }
+                else
+                {
+                    // Conserva texto libre heredado del contrato que no siga el formato zona:nivel.
+                    tokens.Add(entry);
+                }
+            }
+        }
+
+        foreach (var injury in activeInjuries)
+            AddClinical(injury.Zone);
+
+        return tokens.Count == 0 ? null : string.Join(',', tokens);
     }
 
     private static IReadOnlyList<(Guid InjuryId, int Level)> ValidateInjuryPains(

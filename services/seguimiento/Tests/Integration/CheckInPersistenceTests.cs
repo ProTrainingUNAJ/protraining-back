@@ -98,6 +98,49 @@ public sealed class CheckInPersistenceTests : IDisposable
         Assert.Equal(TrafficLight.Red, rows[0].TrafficLight);
     }
 
+    // lesión clínica activa → HasActiveInjury, PainZones e injury_pains coherentes.
+    [Fact]
+    public async Task Given_ActiveClinicalInjury_When_Submitted_Then_PersistsConsistentHealthData()
+    {
+        Guid injuryId;
+        using (var seedDb = CreateDbContext())
+        {
+            var injury = AthleteInjury.Create(
+                _athleteId, "isquiotibiales", "Desgarro leve",
+                DateTime.Today.AddDays(-10), DateTime.Today.AddDays(20));
+            seedDb.AthleteInjuries.Add(injury);
+            await seedDb.SaveChangesAsync();
+            injuryId = injury.Id;
+        }
+
+        var (response, _) = await CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(_athleteId, 8, 4, 1, 2, 4, 2, false, 4, null, false, null,
+                [new SubmitInjuryPain(injuryId, 10)]));
+
+        using var db = CreateDbContext();
+        var saved = await db.CheckIns.IgnoreQueryFilters().SingleAsync(c => c.AthleteId == _athleteId);
+        Assert.True(saved.HasActiveInjury);
+        Assert.Equal("isquiotibiales:6", saved.PainZones);
+        Assert.Equal(TrafficLight.Red, saved.TrafficLight);
+
+        var pains = await db.CheckInInjuryPains.IgnoreQueryFilters()
+            .Where(p => p.CheckInId == saved.Id).ToListAsync();
+        Assert.Single(pains);
+        Assert.Equal(injuryId, pains[0].InjuryId);
+        Assert.Equal(10, pains[0].Level);
+        Assert.Equal("isquiotibiales", Assert.Single(response.CheckIn.Injuries).Zone);
+        Assert.Equal(10, response.CheckIn.Injuries[0].Level);
+
+        // Reenvío del mismo día: se reemplaza el dolor, sin dejar filas vivas duplicadas.
+        await CreateHandler().HandleAsync(
+            new SubmitCheckInCommand(_athleteId, 8, 4, 1, 2, 4, 2, false, 4, null, false, null,
+                [new SubmitInjuryPain(injuryId, 9)]));
+        var livePains = await db.CheckInInjuryPains
+            .Where(p => p.CheckInId == saved.Id).ToListAsync();
+        Assert.Single(livePains);
+        Assert.Equal(9, livePains[0].Level);
+    }
+
     [Fact]
     public async Task Given_InvalidSleepHours_When_Submitted_Then_ThrowsAndDoesNotPersist()
     {

@@ -327,6 +327,44 @@ public class CheckInsControllerTests
         Assert.Equal("cuadriceps:2", dto.PainZones);
     }
 
+    // la consulta devuelve la misma verdad clínica que se persistió (zona + dolor).
+    [Fact]
+    public async Task Given_ClinicalInjuryToday_When_GetToday_Then_ReturnsZoneAndPainScore()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        var injuryId = Guid.NewGuid();
+        var checkIn = new CheckIn
+        {
+            AthleteId = athleteId,
+            Date = today,
+            TrafficLight = TrafficLight.Red,
+            HasActiveInjury = true,
+            PainZones = "isquiotibiales:6"
+        };
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(checkIn);
+        _injuryPains
+            .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>
+            {
+                [checkIn.Id] = [new CheckInInjuryPainDto(injuryId, "isquiotibiales", 10)]
+            });
+
+        var result = await CreateController().GetToday(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<CheckInDto>(ok.Value);
+        Assert.True(dto.HasActiveInjury);
+        Assert.Equal("isquiotibiales:6", dto.PainZones);
+        Assert.Equal("Red", dto.TrafficLight);
+        var pain = Assert.Single(dto.Injuries);
+        Assert.Equal(injuryId, pain.InjuryId);
+        Assert.Equal("isquiotibiales", pain.Zone);
+        Assert.Equal(10, pain.Level);
+    }
+
     [Fact]
     public async Task Given_AthleteWithoutCheckInToday_When_GetToday_Then_ThrowsCheckInNotFoundException()
     {

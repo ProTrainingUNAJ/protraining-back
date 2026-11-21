@@ -1447,11 +1447,18 @@ components:
         painZones:
           type: string
           nullable: true
-          example: "Isquiotibial derecho"
+          description: >
+            Zonas con dolor en formato "zona:nivel" separadas por coma. El front envía las zonas
+            marcadas en la silueta; el backend agrega las zonas de las lesiones clínicas activas
+            con el marcador 6 ("Lesión", ya usado por la escala del check-in). No se convierten
+            los puntajes clínicos 0-10 de injuries[] a esta escala.
+          example: "cuadriceps:2,isquiotibiales:6"
         hasActiveInjury:
           type: boolean
           default: false
-          description: Lesión activa marcada por el atleta; el semáforo del día queda en Rojo.
+          description: >
+            Lesión activa marcada por el atleta o detectada en la ficha clínica; el backend la
+            fuerza a true si existe alguna lesión activa, y el semáforo del día queda en Rojo.
           example: false
         injuries:
            type: array
@@ -1564,10 +1571,13 @@ components:
         painZones:
           type: string
           nullable: true
-          example: "Isquiotibial derecho"
+          description: >
+            Zonas con dolor consolidadas ("zona:nivel", 6 = Lesión clínica). Una sola entrada
+            por zona, incluso si el atleta también la marcó en la silueta.
+          example: "isquiotibiales:6"
         hasActiveInjury:
           type: boolean
-          example: false
+          example: true
         injuries:
           type: array
           items:
@@ -1991,8 +2001,10 @@ components:
         painZones:
           type: string
           nullable: true
-          description: Zonas de dolor del check-in como "muscleId:nivel" separadas por coma.
-          example: "cuadriceps_derecho:3,espalda_baja:2"
+          description: >
+            Zonas de dolor del check-in como "muscleId:nivel" separadas por coma; el nivel 6
+            identifica una lesión clínica activa.
+          example: "cuadriceps:2,isquiotibiales:6"
 
     GroupBenchmarkResponse:
       type: object
