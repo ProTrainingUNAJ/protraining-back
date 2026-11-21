@@ -1,5 +1,6 @@
 using Application.Interfaces.Persistence;
 using Application.UseCases.Injuries.GetActiveInjuriesSummary;
+using Domain.Exceptions;
 using Moq;
 using Xunit;
 
@@ -44,6 +45,43 @@ public sealed class GetActiveInjuriesSummaryQueryHandlerTests
         Assert.Equal(2, result.Count);
         Assert.Equal(2, result.Single(item => item.AthleteId == injuredId).ActiveCount);
         Assert.Equal(0, result.Single(item => item.AthleteId == healthyId).ActiveCount);
+        _repository.Verify(
+            r => r.CountActiveByAthleteIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_MoreThanMaxAthleteIds_When_Handled_Then_ThrowsDomainExceptionWithoutQueryingRepository()
+    {
+        var athleteIds = Enumerable.Range(0, GetActiveInjuriesSummaryQueryHandler.MaxAthleteIdsPerRequest + 1)
+            .Select(_ => Guid.NewGuid())
+            .ToList();
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => _handler.HandleAsync(new GetActiveInjuriesSummaryQuery(athleteIds)));
+
+        Assert.Contains(GetActiveInjuriesSummaryQueryHandler.MaxAthleteIdsPerRequest.ToString(), exception.Message);
+        _repository.Verify(
+            r => r.CountActiveByAthleteIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_ExactlyMaxAthleteIds_When_Handled_Then_QueriesRepositoryOnce()
+    {
+        var athleteIds = Enumerable.Range(0, GetActiveInjuriesSummaryQueryHandler.MaxAthleteIdsPerRequest)
+            .Select(_ => Guid.NewGuid())
+            .ToList();
+
+        _repository
+            .Setup(r => r.CountActiveByAthleteIdsAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == GetActiveInjuriesSummaryQueryHandler.MaxAthleteIdsPerRequest),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, int>());
+
+        var result = await _handler.HandleAsync(new GetActiveInjuriesSummaryQuery(athleteIds));
+
+        Assert.Equal(GetActiveInjuriesSummaryQueryHandler.MaxAthleteIdsPerRequest, result.Count);
         _repository.Verify(
             r => r.CountActiveByAthleteIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()),
             Times.Once);

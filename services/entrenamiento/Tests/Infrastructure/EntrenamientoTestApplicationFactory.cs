@@ -5,6 +5,7 @@ using API.Controllers;
 using API.Extensions;
 using API.Middleware;
 using API.Services;
+using Application.Common;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.Services;
@@ -58,6 +59,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace Entrenamiento.Tests.Infrastructure;
@@ -128,7 +130,13 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<UpdateCoachNotesCommandHandler>();
                 services.AddScoped<GetTrainingSessionQueryHandler>();
                 services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
-                services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+                services.Configure<AdaptationOptions>(
+                    configuration.GetSection(AdaptationOptions.SectionName));
+                services.AddScoped<ILoadCalculatorEngine>(sp =>
+                {
+                    var options = sp.GetRequiredService<IOptions<AdaptationOptions>>().Value;
+                    return new LoadCalculatorEngine(options.GetEffectiveEstimatedRecordConservativePercent());
+                });
                 services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionChecker>();
                 services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
                 services.AddScoped<GetExerciseSubstitutesQueryHandler>();

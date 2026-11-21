@@ -36,6 +36,31 @@ public class LoadCalculatorEngineTests
     }
 
     [Fact]
+    public void CalculateLoad_ConPorcentajeConservadorConfigurado_DeberiaUsarValorConfigurado()
+    {
+        var customEngine = new LoadCalculatorEngine(estimatedRecordConservativePercent: 85m);
+
+        var result = customEngine.CalculateLoad(100m, RecordSource.Estimated, 80m);
+
+        Assert.False(result.IsReference);
+        Assert.Equal(67.5m, result.WeightKg); // (100 * 0.80) * 0.85 = 68.0 -> redondeado a discos de 2.5 kg = 67.5
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    [InlineData(120)]
+    public void CalculateLoad_ConPorcentajeConservadorFueraDeRango_DeberiaUsar90PorDefecto(decimal invalidPercent)
+    {
+        var fallbackEngine = new LoadCalculatorEngine(invalidPercent);
+
+        var result = fallbackEngine.CalculateLoad(100m, RecordSource.Estimated, 80m);
+
+        Assert.False(result.IsReference);
+        Assert.Equal(72.5m, result.WeightKg);
+    }
+
+    [Fact]
     public void CalculateLoad_SinRecord_DeberiaDevolverSerieDeReferencia()
     {
         var result = _engine.CalculateLoad(null, null, 80m);

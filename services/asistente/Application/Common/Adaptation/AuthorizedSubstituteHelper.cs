@@ -17,6 +17,13 @@ public static class AuthorizedSubstituteHelper
             .GroupBy(r => r.ExerciseId)
             .ToDictionary(g => g.Key, g => g.First());
 
+    public static Dictionary<Guid, ExerciseRestrictionContextDto> BuildAllRestrictionsByExercise(
+        AthleteAdaptationContextDto context) =>
+        context.Restrictions
+            .Where(r => r.ExerciseId != Guid.Empty)
+            .GroupBy(r => r.ExerciseId)
+            .ToDictionary(g => g.Key, g => g.First());
+
     public static SuggestedExerciseDto CreateAdaptedExercise(
         SuggestedExerciseDto targetExercise,
         AuthorizedSubstituteDto substitute) =>
@@ -94,6 +101,21 @@ public static class AuthorizedSubstituteHelper
         string substituteName) =>
         $"El sustituto propuesto '{proposedName}' no estaba autorizado. " +
         $"{BuildAdaptationReason(restriction, substituteName)}";
+
+    public static string BuildRemovedRestrictedExerciseReason(
+        ExerciseRestrictionContextDto restriction,
+        string proposedName) =>
+        BuildRemovedRestrictedExerciseReason(restriction.Zone, restriction.Reason, proposedName);
+
+    public static string BuildRemovedRestrictedExerciseReason(
+        string? zone,
+        string? reason,
+        string proposedName)
+    {
+        var displayZone = string.IsNullOrWhiteSpace(zone) ? "zona afectada" : zone.Trim();
+        var normalizedReason = NormalizeReason(displayZone, reason);
+        return $"Se quitó '{proposedName}' de la sesión por restricción de {displayZone} ({normalizedReason}) al no haber un sustituto autorizado libre.";
+    }
 
     public static string NormalizeReason(string? zone, string? reason)
     {

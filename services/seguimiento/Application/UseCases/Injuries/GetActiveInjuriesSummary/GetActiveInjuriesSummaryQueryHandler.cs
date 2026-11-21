@@ -1,5 +1,6 @@
 using Application.DTOs.Injuries;
 using Application.Interfaces.Persistence;
+using Domain.Exceptions;
 
 namespace Application.UseCases.Injuries.GetActiveInjuriesSummary;
 
@@ -9,12 +10,20 @@ namespace Application.UseCases.Injuries.GetActiveInjuriesSummary;
 /// </summary>
 public sealed class GetActiveInjuriesSummaryQueryHandler(IAthleteInjuryRepository repository)
 {
+    public const int MaxAthleteIdsPerRequest = 100;
+
     public async Task<IReadOnlyList<AthleteActiveInjurySummaryDto>> HandleAsync(
         GetActiveInjuriesSummaryQuery query,
         CancellationToken cancellationToken = default)
     {
         if (query.AthleteIds is null || query.AthleteIds.Count == 0)
             return [];
+
+        if (query.AthleteIds.Count > MaxAthleteIdsPerRequest)
+        {
+            throw new DomainException(
+                $"Se pueden consultar hasta {MaxAthleteIdsPerRequest} atletas por solicitud.");
+        }
 
         var distinctIds = query.AthleteIds
             .Where(id => id != Guid.Empty)
