@@ -5,13 +5,24 @@ using Application.DTOs.Recommendations;
 namespace Application.Common.Recommendations;
 
 /// <summary>
+/// Clave de identificación de un test físico evaluado por el motor (nombre y unidad).
+/// </summary>
+public sealed record RecommendationTestKey(
+    string TestName,
+    string MeasurementUnit);
+
+/// <summary>
 /// Señal accionable detectada determinísticamente a partir del perfil frente al grupo y las tendencias (#196 · KAN-491).
 /// </summary>
 public sealed record RecommendationSignal(
     string Reason,
     string SuggestedFocus,
     IReadOnlyList<ProfileMetricComparisonDto> Metrics,
-    WeeklyTrendsSummaryDto? Trends);
+    WeeklyTrendsSummaryDto? Trends,
+    IReadOnlyList<RecommendationTestKey>? SourceTests = null,
+    bool IsRecurringAfterDiscard = false,
+    string? RecurringTestName = null,
+    int? NewMeasurementsSinceDiscard = null);
 
 /// <summary>
 /// Resultado consolidado del análisis determinístico del perfil del atleta (#196 · KAN-491).
@@ -38,7 +49,8 @@ public static class AthleteProfileAnalyzer
         string Reason,
         string SuggestedFocus,
         ProfileMetricComparisonDto Metric,
-        double PercentageDifference);
+        double PercentageDifference,
+        RecommendationTestKey SourceTest);
 
     public static ProfileAnalysisResult Analyze(
         IReadOnlyList<AthleteFitnessTestRemoteDto> athleteTests,
@@ -132,7 +144,8 @@ public static class AthleteProfileAnalyzer
             if (pctDiff < belowAverageThresholdPercent)
             {
                 var (reason, focus) = MapGapReasonAndFocus(latest.TestName, latest.MotorCapacity);
-                physicalGaps.Add(new PhysicalGapCandidate(reason, focus, metric, pctDiff));
+                var sourceTest = new RecommendationTestKey(latest.TestName.Trim(), unit);
+                physicalGaps.Add(new PhysicalGapCandidate(reason, focus, metric, pctDiff, sourceTest));
             }
         }
     }
@@ -271,7 +284,8 @@ public static class AthleteProfileAnalyzer
                 Reason: primary.Reason,
                 SuggestedFocus: focus,
                 Metrics: group.Select(g => g.Metric).ToList(),
-                Trends: trendsSummary));
+                Trends: trendsSummary,
+                SourceTests: group.Select(g => g.SourceTest).ToList()));
         }
 
         if (hasNegativeWellness && trendsSummary is not null)

@@ -1,4 +1,3 @@
-using Application.Common.Helpers;
 using Application.Common.Recommendations;
 using Application.DTOs.Recommendations;
 using Application.Exceptions;
@@ -33,12 +32,6 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
     public const int DefaultWeeks = 4;
     public const int MinWeeks = 1;
     public const int MaxWeeks = 12;
-
-    private static readonly RecommendationStatus[] DeduplicationStatuses =
-    [
-        RecommendationStatus.Pending,
-        RecommendationStatus.Discarded
-    ];
 
     public async Task<RunAthleteRecommendationEngineResponseDto> HandleAsync(
         GenerateAthleteRecommendationsCommand command,
@@ -85,7 +78,7 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
         var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(command.AthleteId, weeks, cancellationToken);
         var existingTask = recommendationRepository.ListByAthleteIdsAndStatusesAsync(
             [command.AthleteId],
-            DeduplicationStatuses,
+            RecommendationRecurrencePolicy.DeduplicationStatuses,
             cancellationToken);
 
         await Task.WhenAll(testsTask, averagesTask, trendsTask, existingTask);
@@ -98,22 +91,25 @@ public sealed class GenerateAthleteRecommendationsCommandHandler(
             .Where(r => r.Status == RecommendationStatus.Pending)
             .ToList();
 
-        var belowAverageThreshold = (options ?? new RecommendationsOptions()).GetEffectiveBelowAverageThresholdPercent();
+        var effectiveOptions = options ?? new RecommendationsOptions();
+        var belowAverageThreshold = effectiveOptions.GetEffectiveBelowAverageThresholdPercent();
+        var discardedTolerance = effectiveOptions.GetEffectiveDiscardedToleranceMeasurements();
         var analysis = AthleteProfileAnalyzer.Analyze(
             athleteTests,
             categoryAverages,
             weeklyTrends,
             belowAverageThreshold);
-        var existingReasons = existingRecommendations
-            .Select(r => TextNormalizer.Normalize(r.Reason))
-            .ToHashSet(StringComparer.Ordinal);
+        var eligibleSignals = RecommendationRecurrencePolicy.FilterEligibleSignals(
+            analysis.Signals,
+            athleteTests,
+            existingRecommendations,
+            discardedTolerance);
 
         var newlyCreated = await RecommendationDraftGenerator.GenerateNewDraftsAsync(
             command.AthleteId,
             targetCategory?.Id,
             targetCategory?.Name,
-            analysis.Signals,
-            existingReasons,
+            eligibleSignals,
             aiService,
             cancellationToken);
 

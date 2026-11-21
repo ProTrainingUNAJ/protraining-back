@@ -21,7 +21,10 @@ public sealed record TrainingRecommendationRequestDto(
     IReadOnlyList<ProfileMetricComparisonDto>? Metrics = null,
     string? CategoryName = null,
     string? SuggestedFocus = null,
-    Guid? AthleteId = null);
+    Guid? AthleteId = null,
+    bool IsRecurringAfterDiscard = false,
+    string? RecurringTestName = null,
+    int? NewMeasurementsSinceDiscard = null);
 
 /// <summary>
 /// Recomendación de entrenamiento redactada y validada para revisión del preparador físico (#083 · KAN-378).

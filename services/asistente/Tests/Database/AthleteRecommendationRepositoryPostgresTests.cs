@@ -166,15 +166,26 @@ public sealed class AthleteRecommendationRepositoryPostgresTests : IAsyncLifetim
         await using (var queryContext = CreateContext(_pfAId))
         {
             var repo = new AthleteRecommendationRepository(queryContext);
-            var results = await repo.ListByAthleteIdsAndStatusesAsync(
+            var pendingAndDiscarded = await repo.ListByAthleteIdsAndStatusesAsync(
                 [_athleteAId],
                 [RecommendationStatus.Pending, RecommendationStatus.Discarded]);
 
-            Assert.Equal(2, results.Count);
-            Assert.Contains(results, r => r.Id == pending.Id && r.Status == RecommendationStatus.Pending);
-            Assert.Contains(results, r => r.Id == discarded.Id && r.Status == RecommendationStatus.Discarded);
-            Assert.DoesNotContain(results, r => r.Id == approved.Id);
-            Assert.DoesNotContain(results, r => r.Id == otherTenantPending.Id);
+            Assert.Equal(2, pendingAndDiscarded.Count);
+            Assert.Contains(pendingAndDiscarded, r => r.Id == pending.Id && r.Status == RecommendationStatus.Pending);
+            Assert.Contains(pendingAndDiscarded, r => r.Id == discarded.Id && r.Status == RecommendationStatus.Discarded);
+            Assert.DoesNotContain(pendingAndDiscarded, r => r.Id == approved.Id);
+            Assert.DoesNotContain(pendingAndDiscarded, r => r.Id == otherTenantPending.Id);
+
+            // KAN-491: la deduplicación del motor consulta Pending, Approved y Discarded aislados por PF
+            var allDeduplication = await repo.ListByAthleteIdsAndStatusesAsync(
+                [_athleteAId],
+                Application.Common.Recommendations.RecommendationRecurrencePolicy.DeduplicationStatuses);
+
+            Assert.Equal(3, allDeduplication.Count);
+            Assert.Contains(allDeduplication, r => r.Id == pending.Id && r.Status == RecommendationStatus.Pending);
+            Assert.Contains(allDeduplication, r => r.Id == discarded.Id && r.Status == RecommendationStatus.Discarded && r.ReviewedAtUtc.HasValue);
+            Assert.Contains(allDeduplication, r => r.Id == approved.Id && r.Status == RecommendationStatus.Approved && r.ReviewedAtUtc.HasValue);
+            Assert.DoesNotContain(allDeduplication, r => r.Id == otherTenantPending.Id);
         }
     }
 }

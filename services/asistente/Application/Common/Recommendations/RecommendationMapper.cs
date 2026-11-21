@@ -66,7 +66,10 @@ public static class RecommendationMapper
             Metrics: signal.Metrics,
             CategoryName: categoryName,
             SuggestedFocus: signal.SuggestedFocus,
-            AthleteId: athleteId);
+            AthleteId: athleteId,
+            IsRecurringAfterDiscard: signal.IsRecurringAfterDiscard,
+            RecurringTestName: signal.RecurringTestName,
+            NewMeasurementsSinceDiscard: signal.NewMeasurementsSinceDiscard);
 
     public static AthleteRecommendation CreatePendingTrainingEntity(
         Guid athleteId,

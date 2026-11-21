@@ -10,6 +10,8 @@ public sealed class RecommendationsOptions
     public const double DefaultBelowAverageThresholdPercent = -10.0;
     public const int DefaultMaxCategoryParallelism = 4;
     public const int MaxAllowedCategoryParallelism = 16;
+    public const int DefaultDiscardedToleranceMeasurements = 3;
+    public const int MaxAllowedDiscardedToleranceMeasurements = 50;
 
     /// <summary>
     /// Porcentaje por debajo del promedio de la categoría a partir del cual se dispara una recomendación.
@@ -22,6 +24,13 @@ public sealed class RecommendationsOptions
     /// Valor por defecto: 4.
     /// </summary>
     public int MaxCategoryParallelism { get; init; } = DefaultMaxCategoryParallelism;
+
+    /// <summary>
+    /// Cantidad de mediciones nuevas de un mismo test requeridas después de descartar una recomendación
+    /// para volver a proponerla si el atleta continúa por debajo del promedio de su categoría (KAN-491).
+    /// Valor por defecto: 3.
+    /// </summary>
+    public int DiscardedToleranceMeasurements { get; init; } = DefaultDiscardedToleranceMeasurements;
 
     /// <summary>
     /// Devuelve el umbral efectivo siempre con signo negativo (por ejemplo, 10.0 o -10.0 -> -10.0).
@@ -37,6 +46,21 @@ public sealed class RecommendationsOptions
         MaxCategoryParallelism <= 0
             ? DefaultMaxCategoryParallelism
             : Math.Min(MaxCategoryParallelism, MaxAllowedCategoryParallelism);
+
+    /// <summary>
+    /// Devuelve la cantidad efectiva de mediciones nuevas de margen tras descarte, acotada a [1, 50]
+    /// (cayendo al valor por defecto 3 si es menor o igual a 0).
+    /// </summary>
+    public int GetEffectiveDiscardedToleranceMeasurements() =>
+        NormalizeDiscardedToleranceMeasurements(DiscardedToleranceMeasurements);
+
+    /// <summary>
+    /// Normaliza la cantidad de mediciones nuevas requeridas tras descarte al rango [1, 50].
+    /// </summary>
+    public static int NormalizeDiscardedToleranceMeasurements(int value) =>
+        value <= 0
+            ? DefaultDiscardedToleranceMeasurements
+            : Math.Min(value, MaxAllowedDiscardedToleranceMeasurements);
 
     /// <summary>
     /// Normaliza cualquier valor de umbral porcentual para que sea finito, distinto de cero y negativo.
