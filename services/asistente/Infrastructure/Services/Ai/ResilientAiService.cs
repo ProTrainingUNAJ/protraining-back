@@ -734,6 +734,16 @@ public sealed class ResilientAiService : IAiService
             throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
         }
 
+        // Requiere atleta identificado para toda recomendación de alimentación (#201 · KAN-496):
+        // sin atleta no se puede verificar el permiso del tutor, así que no se genera nada (fail-closed).
+        if (!request.AthleteId.HasValue)
+        {
+            _logger.LogWarning(
+                "No se indicó AthleteId para la recomendación de alimentación. No se generará recomendación (fail-closed, KAN-496).");
+            throw new DomainException(
+                "Se requiere el identificador del atleta para generar una recomendación de alimentación.");
+        }
+
         // KAN-493: la preferencia del PF se verifica antes de consultar a cualquier proveedor de IA.
         // Si Identidad no responde o devuelve false, no se genera nada (fail-closed).
         var pfEnabled = _identityHabitsClient is not null
@@ -749,11 +759,18 @@ public sealed class ResilientAiService : IAiService
 
         // Verificación del permiso del tutor en atletas menores (#201 · KAN-496):
         // si no se puede verificar o el tutor no autorizó, no se genera ninguna recomendación (fail-closed).
-        if (request.AthleteId.HasValue)
+        var permission = _structureAthleteClient is not null
+            ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
+            : null;
+
+        if (permission is null)
         {
-            var permission = _structureAthleteClient is not null
-                ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
-                : null;
+            _logger.LogWarning(
+                "No se pudo verificar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                request.AthleteId.Value);
+            throw new DomainException(
+                $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
+        }
 
             if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
             {
@@ -762,6 +779,12 @@ public sealed class ResilientAiService : IAiService
                     request.AthleteId.Value);
                 throw new DomainException("El atleta no tiene autorizadas las recomendaciones de hábitos y alimentación.");
             }
+
+        // Menores de edad: aunque el tutor autorice, nunca se incluyen cantidades (KAN-378 / KAN-496).
+        // Se fuerza el modo cualitativo antes de armar el prompt, validar y generar el respaldo por reglas.
+        if (permission.IsMinor)
+        {
+            request = request with { IncludeQuantities = false };
         }
 
         // Verificación de cuota diaria en memoria por PF (KAN-510)

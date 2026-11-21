@@ -687,13 +687,15 @@ public sealed class GenericAgentAiClientTests : IDisposable
             _auditMock.Object,
             NullLogger<GenericAgentAiClient>.Instance);
 
+        var athleteId = Guid.NewGuid();
         var request = new NutritionRecommendationRequestDto(
             AthleticGoal: "Ganar masa muscular",
             ApprovedFoods: ["pollo", "arroz", "zanahoria"],
             MinProteinGrams: 100,
             MaxProteinGrams: 140,
             HydrationLiters: 2.5,
-            SleepHours: 8);
+            SleepHours: 8,
+            AthleteId: athleteId);
 
         // Act & Assert - caso válido
         var validResult = await goodClient.TryGenerateNutritionRecommendationAsync(request);
@@ -703,6 +705,13 @@ public sealed class GenericAgentAiClientTests : IDisposable
 
         // Act & Assert - caso inválido cae a reglas via ResilientAiService
         var rulesClient = new RuleBasedAiClient(_auditMock.Object, NullLogger<RuleBasedAiClient>.Instance);
+
+        // KAN-496: con AthleteId requerido, el motor exige verificar el permiso del tutor (adulto → genera).
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock
+            .Setup(c => c.GetHabitsPermissionAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteHabitsPermissionDto(IsMinor: false, AllowsHabitsRecommendations: false));
+
         var resilient = new ResilientAiService(
             [badClient, rulesClient],
             semanticValidator: null,
@@ -712,7 +721,8 @@ public sealed class GenericAgentAiClientTests : IDisposable
             catalogService: null,
             quotaService: null,
             logger: NullLogger<ResilientAiService>.Instance,
-            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled());
+            identityHabitsClient: HabitsRecommendationsClientFactory.Enabled(),
+            structureAthleteClient: structureMock.Object);
 
         var fallbackResult = await resilient.GenerateNutritionRecommendationAsync(request);
         Assert.Equal("Reglas", fallbackResult.ProviderUsed);
