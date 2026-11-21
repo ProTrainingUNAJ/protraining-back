@@ -36,7 +36,6 @@ public record TrainingPlanSessionDto
     public Guid Id { get; init; }
     public string Name { get; init; }
     public int Order { get; init; }
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     public DayOfWeek DayOfWeek { get; init; }
     public string? CoachNotes { get; init; }
     public List<TrainingBlockDto> Blocks { get; init; } = [];

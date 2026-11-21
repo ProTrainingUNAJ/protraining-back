@@ -159,8 +159,6 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
 
                 services.AddJwtAuthentication(configuration);
                 services.AddControllers()
-                    .AddJsonOptions(options =>
-                        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
                     .AddApplicationPart(typeof(TrainingPlanController).Assembly);
             })
             .Configure(app =>

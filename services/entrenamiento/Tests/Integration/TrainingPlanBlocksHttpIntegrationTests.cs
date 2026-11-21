@@ -15,8 +15,7 @@ public sealed class TrainingPlanBlocksHttpIntegrationTests : IAsyncLifetime
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
+        PropertyNameCaseInsensitive = true
     };
     private readonly Guid _pfId = Guid.NewGuid();
     private EntrenamientoTestApplicationFactory _factory = null!;
@@ -111,9 +110,20 @@ public sealed class TrainingPlanBlocksHttpIntegrationTests : IAsyncLifetime
         // Act 2: GET por HTTP
         var getResponse = await _clientPf.GetAsync($"/api/v1/training-plans/{createdPlan.Id}");
 
-        // Assert 2: OK y validación exhaustiva de bloques y valores
+        // Assert 2: OK, validación de dayOfWeek como entero en el JSON crudo (contrato OpenAPI) y estructura de bloques
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        var planDetail = await getResponse.Content.ReadFromJsonAsync<TrainingPlanDetailDto>(JsonOptions);
+        var rawJson = await getResponse.Content.ReadAsStringAsync();
+        using (var doc = JsonDocument.Parse(rawJson))
+        {
+            var dayOfWeekElement = doc.RootElement
+                .GetProperty("weeks")[0]
+                .GetProperty("sessions")[0]
+                .GetProperty("dayOfWeek");
+            Assert.Equal(JsonValueKind.Number, dayOfWeekElement.ValueKind);
+            Assert.Equal((int)DayOfWeek.Monday, dayOfWeekElement.GetInt32());
+        }
+
+        var planDetail = JsonSerializer.Deserialize<TrainingPlanDetailDto>(rawJson, JsonOptions);
         Assert.NotNull(planDetail);
         Assert.Equal("Plan Periodizado con Bloques", planDetail!.Name);
         Assert.Single(planDetail.Weeks);

@@ -179,7 +179,7 @@ public class RecordPerformedSetsCommandHandlerTests
     [Fact]
     public async Task UpdatesPendingProposal_WhenHigher()
     {
-        var currentRecord = AthleteRecord.Create(_athleteId, _exerciseId, 100m, RecordSource.Tested, DateTime.UtcNow);
+        var currentRecord = AthleteRecord.Create(_athleteId, _exerciseId, 102.5m, RecordSource.Tested, DateTime.UtcNow);
         _athleteRecordRepoMock
             .Setup(r => r.GetActiveRecordAsync(_athleteId, _exerciseId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(currentRecord);
@@ -197,6 +197,8 @@ public class RecordPerformedSetsCommandHandlerTests
         var result = await handler.Handle(command);
 
         Assert.Equal(1, result.ProposalsGeneratedCount);
+        Assert.Equal(currentRecord.Id, existingPending.CurrentRecordId);
+        Assert.Equal(102.5m, existingPending.CurrentWeight);
         Assert.Equal(107.5m, existingPending.ProposedWeight);
         Assert.Equal(90m, existingPending.PerformedWeight);
         Assert.Equal(6, existingPending.PerformedReps);

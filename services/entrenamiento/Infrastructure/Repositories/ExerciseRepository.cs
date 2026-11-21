@@ -333,6 +333,7 @@ namespace Infrastructure.Repositories
             // Piernas - Abductores
             ["abductores"] = ["abductors", "abductor", "abductores", "abductor"],
             ["abductor"] = ["abductors", "abductor", "abductores", "abductor"],
+            ["abductors"] = ["abductors", "abductor", "abductores", "abductor"],
         };
 
         private static string Normalize(string value)

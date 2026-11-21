@@ -312,6 +312,70 @@ public class TrainingBlocksAndWeeklyProgressionTests
         Assert.Equal("6-8", block2.Exercises[0].Reps);
         Assert.Equal("RPE", block2.Exercises[0].IntensityType);
         Assert.Equal(8.5m, block2.Exercises[0].TargetRpe);
+
+        // La lista plana respeta primero el orden de cada bloque y luego el orden del ejercicio dentro del bloque
+        Assert.Equal(2, session.Exercises.Count);
+        Assert.Equal(ex1Id, session.Exercises[0].ExerciseId);
+        Assert.Equal(ex2Id, session.Exercises[1].ExerciseId);
+    }
+
+    [Fact]
+    public void Given_PlanWithBlocksAndDistanceTimeTargets_When_CloneAs_Then_PreservesAllExerciseMetrics()
+    {
+        var plan = TrainingPlan.Create("Plan Original", "Velocidad y Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Sesión Mixta", 1, DayOfWeek.Monday);
+        var block = TrainingBlock.Create(session.Id, "Sprint y Fuerza", 1);
+        var exId = Guid.NewGuid();
+
+        var ex = PrescribedExercise.Create(
+            order: 1,
+            sets: 4,
+            reps: "6-8",
+            targetPercentage: 80m,
+            trainingBlockId: block.Id,
+            exerciseId: exId,
+            intensityType: IntensityType.RPE,
+            targetRpe: 8.5m,
+            targetRir: null,
+            notes: "Máxima velocidad",
+            trainingSessionId: session.Id,
+            targetDistanceMeters: 100m,
+            targetTimeSeconds: 12.5m);
+
+        block.AddPrescribedExercise(ex);
+        session.AddBlock(block);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var cloned = plan.CloneAs("Plantilla Clonada", isTemplate: true);
+
+        var clonedBlock = Assert.Single(cloned.Weeks.Single().Sessions.Single().Blocks);
+        var clonedEx = Assert.Single(clonedBlock.PrescribedExercises);
+
+        Assert.Equal("6-8", clonedEx.Reps);
+        Assert.Equal(IntensityType.RPE, clonedEx.IntensityType);
+        Assert.Equal(8.5m, clonedEx.TargetRpe);
+        Assert.Equal("Máxima velocidad", clonedEx.Notes);
+        Assert.Equal(100m, clonedEx.TargetDistanceMeters);
+        Assert.Equal(12.5m, clonedEx.TargetTimeSeconds);
+    }
+
+    [Fact]
+    public void Given_CoachNotesWithLegacyBlockMetaFromFrontend_When_CreateOrUpdateSession_Then_StripsMetaAndPreventsExceeding1000Chars()
+    {
+        var cleanNote = "Entrada en calor (10 min): movilidad articular y series de aproximación.";
+        var hugeMeta = "<!--PT_BLOCK_META:{\"exercises\":{\"" + string.Join("\",\"", Enumerable.Range(1, 20).Select(_ => Guid.NewGuid().ToString() + "\":{\"exerciseName\":\"Sentadilla Trasera con Barra\",\"intensityType\":\"RPE\",\"targetRpe\":8,\"repsRange\":\"6-8\"}")) + "}}-->";
+        var payloadNotes = $"{cleanNote}\n{hugeMeta}";
+
+        Assert.True(payloadNotes.Length > 1000);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Sesión 1", 1, DayOfWeek.Thursday, payloadNotes);
+
+        Assert.Equal(cleanNote, session.CoachNotes);
+
+        session.Update("Sesión 1", 1, DayOfWeek.Thursday, hugeMeta);
+        Assert.Null(session.CoachNotes);
     }
 
     // =========================================================================

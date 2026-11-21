@@ -37,7 +37,7 @@ public static class TrainingPlanMapper
                                     .ToList()
                             )).ToList();
 
-                        var flatExercises = blockDtos.SelectMany(b => b.Exercises).OrderBy(e => e.Order).ToList();
+                        var flatExercises = blockDtos.SelectMany(b => b.Exercises).ToList();
 
                         return new TrainingPlanSessionDto(
                             s.Id,
