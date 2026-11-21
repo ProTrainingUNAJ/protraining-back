@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # ProTraining - Script de Prueba de Integración Real de Purga de Atletas (KAN-501)
 # ==============================================================================
 param(
@@ -54,14 +54,34 @@ if ($offline.Count -gt 0) {
 Write-Host ""
 Write-Host "[2/2] Ejecutando prueba de integracion real entre los 5 servicios (Category=ServiceIntegration)..." -ForegroundColor Yellow
 
-$env:PROTRAINING_TEST_IDENTIDAD_URL = $IdentidadUrl
-$env:PROTRAINING_TEST_ESTRUCTURA_URL = $EstructuraUrl
-$env:PROTRAINING_TEST_ENTRENAMIENTO_URL = $EntrenamientoUrl
-$env:PROTRAINING_TEST_SEGUIMIENTO_URL = $SeguimientoUrl
-$env:PROTRAINING_TEST_ASISTENTE_URL = $AsistenteUrl
+$envBackup = @{
+    PROTRAINING_TEST_IDENTIDAD_URL     = $env:PROTRAINING_TEST_IDENTIDAD_URL
+    PROTRAINING_TEST_ESTRUCTURA_URL    = $env:PROTRAINING_TEST_ESTRUCTURA_URL
+    PROTRAINING_TEST_ENTRENAMIENTO_URL = $env:PROTRAINING_TEST_ENTRENAMIENTO_URL
+    PROTRAINING_TEST_SEGUIMIENTO_URL   = $env:PROTRAINING_TEST_SEGUIMIENTO_URL
+    PROTRAINING_TEST_ASISTENTE_URL     = $env:PROTRAINING_TEST_ASISTENTE_URL
+}
 
-dotnet test "$ProjectPath" --filter "Category=ServiceIntegration&FullyQualifiedName~AthletePurgeServiceIntegrationTests" --logger "console;verbosity=normal"
-$exitCode = $LASTEXITCODE
+try {
+    $env:PROTRAINING_TEST_IDENTIDAD_URL = $IdentidadUrl
+    $env:PROTRAINING_TEST_ESTRUCTURA_URL = $EstructuraUrl
+    $env:PROTRAINING_TEST_ENTRENAMIENTO_URL = $EntrenamientoUrl
+    $env:PROTRAINING_TEST_SEGUIMIENTO_URL = $SeguimientoUrl
+    $env:PROTRAINING_TEST_ASISTENTE_URL = $AsistenteUrl
+
+    dotnet test "$ProjectPath" --filter "Category=ServiceIntegration&FullyQualifiedName~AthletePurgeServiceIntegrationTests" --logger "console;verbosity=normal"
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    foreach ($entry in $envBackup.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item "Env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item "Env:$($entry.Key)" $entry.Value
+        }
+    }
+}
 
 Write-Host ""
 if ($exitCode -eq 0) {

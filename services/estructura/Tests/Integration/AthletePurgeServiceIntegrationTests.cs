@@ -38,11 +38,11 @@ namespace Estructura.Tests.Integration;
 [Trait("Category", "RequiresDocker")]
 public sealed class AthletePurgeServiceIntegrationTests : IAsyncLifetime
 {
-    private sealed class ServiceCurrentUser(Guid? pfId = null, string? role = "Servicio") : ICurrentUser
+    private sealed class ServiceCurrentUser : ICurrentUser
     {
-        public Guid? PfId => pfId;
-        public Guid? UserId => pfId;
-        public string? Role => role;
+        public Guid? PfId => null;
+        public Guid? UserId => null;
+        public string? Role => "Servicio";
         public string? Email => null;
     }
 
@@ -68,9 +68,10 @@ public sealed class AthletePurgeServiceIntegrationTests : IAsyncLifetime
 
         try
         {
-            using var pfEstructuraClient = CreateAuthenticatedClient(_settings.EstructuraUrl, pfId, "PreparadorFisico");
-            using var pfEntrenamientoClient = CreateAuthenticatedClient(_settings.EntrenamientoUrl, pfId, "PreparadorFisico");
-            using var pfAsistenteClient = CreateAuthenticatedClient(_settings.AsistenteUrl, pfId, "PreparadorFisico");
+            using var pfEstructuraClient = CreatePfClient(_settings.EstructuraUrl, pfId);
+            using var pfEntrenamientoClient = CreatePfClient(_settings.EntrenamientoUrl, pfId);
+            using var pfSeguimientoClient = CreatePfClient(_settings.SeguimientoUrl, pfId);
+            using var pfAsistenteClient = CreatePfClient(_settings.AsistenteUrl, pfId);
             using var identidadAnonymousClient = new HttpClient { BaseAddress = _settings.IdentidadUrl };
 
             // 1. Estructura: crear organización, categoría y token de invitación para el atleta
@@ -277,13 +278,37 @@ public sealed class AthletePurgeServiceIntegrationTests : IAsyncLifetime
                 "SELECT COUNT(*) FROM athlete_records WHERE athlete_id = @id",
                 athleteId.Value));
 
-            // 9.d) Seguimiento: 0 filas en check_ins
+            // 9.d) Seguimiento: sin check-ins por API (lista vacía o 404) y 0 filas en check_ins
+            using (var checkInsResponse = await pfSeguimientoClient.GetAsync($"api/v1/athletes/{athleteId.Value}/check-ins"))
+            {
+                if (checkInsResponse.StatusCode != HttpStatusCode.NotFound)
+                {
+                    checkInsResponse.EnsureSuccessStatusCode();
+                    var checkInsJson = await checkInsResponse.Content.ReadFromJsonAsync<JsonNode>();
+                    Assert.NotNull(checkInsJson);
+                    var items = checkInsJson is JsonArray arr ? arr : checkInsJson["items"]?.AsArray();
+                    Assert.NotNull(items);
+                    Assert.Empty(items);
+                }
+            }
+
             Assert.Equal(0, await CountRowsAsync(
                 _settings.SeguimientoDbConnectionString,
                 "SELECT COUNT(*) FROM check_ins WHERE athlete_id = @id",
                 athleteId.Value));
 
-            // 9.e) Asistente: 0 filas en preventive_alerts
+            // 9.e) Asistente: sin alertas por API para el atleta y 0 filas en preventive_alerts
+            using (var alertsResponse = await pfAsistenteClient.GetAsync("api/v1/alerts?onlyUnreviewed=false"))
+            {
+                alertsResponse.EnsureSuccessStatusCode();
+                var alertsJson = await alertsResponse.Content.ReadFromJsonAsync<JsonNode>();
+                Assert.NotNull(alertsJson);
+                var alerts = alertsJson is JsonArray arr ? arr : alertsJson["items"]?.AsArray();
+                Assert.NotNull(alerts);
+                Assert.DoesNotContain(alerts, item =>
+                    item?["athleteId"]?.GetValue<Guid>() == athleteId.Value);
+            }
+
             Assert.Equal(0, await CountRowsAsync(
                 _settings.AsistenteDbConnectionString,
                 "SELECT COUNT(*) FROM preventive_alerts WHERE athlete_id = @id",
@@ -346,8 +371,8 @@ public sealed class AthletePurgeServiceIntegrationTests : IAsyncLifetime
         return await handler.HandleAsync(new ProcessPendingPurgesCommand(RetentionDays: 0), CancellationToken.None);
     }
 
-    private HttpClient CreateAuthenticatedClient(Uri baseUrl, Guid subjectId, string role) =>
-        CreateClientWithBearer(baseUrl, CreateToken(subjectId, role));
+    private HttpClient CreatePfClient(Uri baseUrl, Guid pfId) =>
+        CreateClientWithBearer(baseUrl, CreatePfToken(pfId));
 
     private static HttpClient CreateClientWithBearer(Uri baseUrl, string token)
     {
@@ -356,19 +381,15 @@ public sealed class AthletePurgeServiceIntegrationTests : IAsyncLifetime
         return client;
     }
 
-    private string CreateToken(Guid subjectId, string role)
+    private string CreatePfToken(Guid pfId)
     {
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub, subjectId.ToString()),
-            new(JwtRegisteredClaimNames.Name, $"Test KAN-501 {subjectId:N}"),
-            new("role", role)
+            new(JwtRegisteredClaimNames.Sub, pfId.ToString()),
+            new(JwtRegisteredClaimNames.Name, $"Test KAN-501 {pfId:N}"),
+            new("role", "PreparadorFisico"),
+            new("pf_id", pfId.ToString())
         };
-
-        if (role == "PreparadorFisico")
-        {
-            claims.Add(new Claim("pf_id", subjectId.ToString()));
-        }
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.JwtKey)),
