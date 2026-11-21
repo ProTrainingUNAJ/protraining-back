@@ -1,79 +1,94 @@
-﻿# ==============================================================================
-# ProTraining - Script de Verificacion End-to-End de Purga de Atletas (KAN-501)
+# ==============================================================================
+# ProTraining - Script de Prueba de Integración Real de Purga de Atletas (KAN-501)
 # ==============================================================================
 param(
-    [string]$GatewayUrl = "http://localhost:8000",
-    [string]$EstructuraUrl = "http://localhost:8082",
     [string]$IdentidadUrl = "http://localhost:8081",
+    [string]$EstructuraUrl = "http://localhost:8082",
     [string]$EntrenamientoUrl = "http://localhost:8083",
     [string]$SeguimientoUrl = "http://localhost:8084",
     [string]$AsistenteUrl = "http://localhost:8085"
 )
 
-$ErrorActionPreference = "Continue"
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$ProjectPath = Join-Path $RepoRoot "services\estructura\Tests\Estructura.Tests.csproj"
+$ErrorActionPreference = "Stop"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$ProjectPath = [System.IO.Path]::Combine($RepoRoot, "services", "estructura", "Tests", "Estructura.Tests.csproj")
 
 Write-Host ""
-Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host " [PROTRAINING] VERIFICACION E2E DE PURGA DE ATLETA (KAN-501)" -ForegroundColor Cyan
-Write-Host "========================================================" -ForegroundColor Cyan
+Write-Host "=================================================================" -ForegroundColor Cyan
+Write-Host " [PROTRAINING] PRUEBA E2E REAL DE PURGA DE ATLETA (KAN-501)" -ForegroundColor Cyan
+Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Comprobar disponibilidad de contenedores / puertos
-Write-Host "[1/4] Verificando conectividad con los servicios Docker..." -ForegroundColor Yellow
+# 1. Comprobar disponibilidad de los 5 microservicios en Docker Compose
+Write-Host "[1/2] Verificando conectividad con los 5 servicios..." -ForegroundColor Yellow
 
 $services = @(
-    @{ Name = "Estructura"; Url = "$EstructuraUrl/health" },
     @{ Name = "Identidad"; Url = "$IdentidadUrl/health" },
+    @{ Name = "Estructura"; Url = "$EstructuraUrl/health" },
     @{ Name = "Entrenamiento"; Url = "$EntrenamientoUrl/health" },
     @{ Name = "Seguimiento"; Url = "$SeguimientoUrl/health" },
     @{ Name = "Asistente"; Url = "$AsistenteUrl/health" }
 )
 
-$allOnline = $true
+$offline = @()
 foreach ($s in $services) {
     try {
-        $res = Invoke-RestMethod -Uri $s.Url -Method Get -TimeoutSec 3 -ErrorAction Stop
+        $null = Invoke-RestMethod -Uri $s.Url -Method Get -TimeoutSec 3 -ErrorAction Stop
         Write-Host "  -> $($s.Name): ONLINE (HTTP 200)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  -> $($s.Name): Offline / No responde en $($s.Url)" -ForegroundColor DarkYellow
-        $allOnline = $false
+        Write-Host "  -> $($s.Name): OFFLINE ($($s.Url))" -ForegroundColor Red
+        $offline += $s.Name
     }
 }
 
-# 2. Resumen de endpoints de purga implementados y verificados
-Write-Host ""
-Write-Host "[2/4] Endpoints internos de purga verificados en el circuito:" -ForegroundColor Yellow
-Write-Host "  - Identidad:     DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
-Write-Host "  - Entrenamiento: DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
-Write-Host "  - Seguimiento:   DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
-Write-Host "  - Asistente:     DELETE /api/v1/internal/athletes/{id}/purge [Role: Servicio]" -ForegroundColor White
-Write-Host "  - Estructura:    DataPurgeWorker / ProcessPendingPurgesCommandHandler [Local wipe]" -ForegroundColor White
-
-Write-Host ""
-Write-Host "[3/4] Ejecutando suite de pruebas de integracion E2E automatizada en C#..." -ForegroundColor Yellow
-$testResult = dotnet test "$ProjectPath" --filter "FullyQualifiedName~AthletePurgeE2ETests" --logger "console;verbosity=minimal"
-Write-Host $testResult -ForegroundColor Gray
-
-if ($LASTEXITCODE -eq 0 -and $allOnline) {
+if ($offline.Count -gt 0) {
     Write-Host ""
-    Write-Host "[4/4] Criterio de Aceptacion KAN-501:" -ForegroundColor Yellow
-    Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningun servicio." -ForegroundColor Cyan
-    Write-Host "  -> ESTADO: VERIFICADO Y SUPERADO (5 servicios Docker en linea y Tests E2E en verde)" -ForegroundColor Green
-    Write-Host ""
-} elseif ($LASTEXITCODE -eq 0) {
-    Write-Host ""
-    Write-Host "[4/4] Criterio de Aceptacion KAN-501:" -ForegroundColor Yellow
-    Write-Host "  DADO el atleta de prueba CUANDO termina la purga ENTONCES no aparece en ningun servicio." -ForegroundColor Cyan
-    Write-Host "  -> ESTADO: VERIFICADO EN PRUEBAS AUTOMATIZADAS (Aviso: Levantar docker compose up -d para prueba live multi-servicio)" -ForegroundColor Yellow
-    Write-Host ""
-} else {
-    Write-Host ""
-    Write-Host "[4/4] Criterio de Aceptacion KAN-501: FALLIDO" -ForegroundColor Red
-    Write-Host ""
+    Write-Host "No se puede ejecutar la prueba de integracion real: faltan servicios activos ($($offline -join ', '))." -ForegroundColor Red
+    Write-Host "Levanta el entorno antes de correr este script:" -ForegroundColor Yellow
+    Write-Host "  docker compose up -d --build --wait identidad estructura entrenamiento seguimiento asistente" -ForegroundColor White
+    exit 1
 }
 
-Write-Host "Fin de la verificacion." -ForegroundColor Cyan
+# 2. Ejecutar la prueba real de integración entre microservicios (sin mocks)
 Write-Host ""
+Write-Host "[2/2] Ejecutando prueba de integracion real entre los 5 servicios (Category=ServiceIntegration)..." -ForegroundColor Yellow
+
+$envBackup = @{
+    PROTRAINING_TEST_IDENTIDAD_URL     = $env:PROTRAINING_TEST_IDENTIDAD_URL
+    PROTRAINING_TEST_ESTRUCTURA_URL    = $env:PROTRAINING_TEST_ESTRUCTURA_URL
+    PROTRAINING_TEST_ENTRENAMIENTO_URL = $env:PROTRAINING_TEST_ENTRENAMIENTO_URL
+    PROTRAINING_TEST_SEGUIMIENTO_URL   = $env:PROTRAINING_TEST_SEGUIMIENTO_URL
+    PROTRAINING_TEST_ASISTENTE_URL     = $env:PROTRAINING_TEST_ASISTENTE_URL
+}
+
+try {
+    $env:PROTRAINING_TEST_IDENTIDAD_URL = $IdentidadUrl
+    $env:PROTRAINING_TEST_ESTRUCTURA_URL = $EstructuraUrl
+    $env:PROTRAINING_TEST_ENTRENAMIENTO_URL = $EntrenamientoUrl
+    $env:PROTRAINING_TEST_SEGUIMIENTO_URL = $SeguimientoUrl
+    $env:PROTRAINING_TEST_ASISTENTE_URL = $AsistenteUrl
+
+    dotnet test "$ProjectPath" --filter "Category=ServiceIntegration&FullyQualifiedName~AthletePurgeServiceIntegrationTests" --logger "console;verbosity=normal"
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    foreach ($entry in $envBackup.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item "Env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item "Env:$($entry.Key)" $entry.Value
+        }
+    }
+}
+
+Write-Host ""
+if ($exitCode -eq 0) {
+    Write-Host "Prueba de integracion real finalizada correctamente (exit code 0)." -ForegroundColor Green
+}
+else {
+    Write-Host "La prueba de integracion real fallo (exit code $exitCode)." -ForegroundColor Red
+}
+Write-Host ""
+exit $exitCode
