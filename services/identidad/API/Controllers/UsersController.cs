@@ -109,6 +109,7 @@ public class UsersController(
     /// Uploads or updates the authenticated user's profile photo in WebP format.
     /// </summary>
     [HttpPut("me/photo")]
+    [RequestSizeLimit(256_000)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -126,6 +127,11 @@ public class UsersController(
             throw new Domain.Exceptions.DomainException("El archivo de imagen no puede estar vacío.");
         }
 
+        if (photo.Length > Application.Common.WebpImageValidator.MaxSizeBytes)
+        {
+            throw new Domain.Exceptions.DomainException("La foto no puede superar los 200 KB.");
+        }
+
         using var memoryStream = new MemoryStream();
         await photo.CopyToAsync(memoryStream, cancellationToken);
         var bytes = memoryStream.ToArray();
@@ -141,13 +147,12 @@ public class UsersController(
     /// Returns the profile photo in WebP format for the user with the given id.
     /// </summary>
     [HttpGet("{id:guid}/photo")]
-    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserPhoto(Guid id, CancellationToken cancellationToken)
     {
         var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(id), cancellationToken);
-        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
         return File(photo.Data, photo.ContentType);
     }
 
@@ -167,7 +172,7 @@ public class UsersController(
         }
 
         var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(userId.Value), cancellationToken);
-        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
         return File(photo.Data, photo.ContentType);
     }
 
@@ -189,7 +194,7 @@ public class UsersController(
         }
 
         var photo = await getPfPhotoHandler.HandleAsync(new GetPfPhotoQuery(pfId.Value), cancellationToken);
-        Response.Headers.CacheControl = "public, max-age=86400, stale-while-revalidate=3600";
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
         return File(photo.Data, photo.ContentType);
     }
 

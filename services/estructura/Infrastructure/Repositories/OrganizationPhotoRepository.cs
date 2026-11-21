@@ -10,7 +10,6 @@ public sealed class OrganizationPhotoRepository(AppDbContext context) : IOrganiz
     public async Task<OrganizationPhoto?> GetByOrganizationIdAsync(Guid organizationId, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.OrganizationPhotos
-                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(p => p.OrganizationId == organizationId, cancellationToken));
 
     public Task AddAsync(OrganizationPhoto photo, CancellationToken cancellationToken = default)

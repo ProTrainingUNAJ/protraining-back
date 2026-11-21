@@ -60,7 +60,7 @@ public sealed class Athlete : BaseEntity
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
         string? emergencyContact = null,
-        bool allowsProfilePhoto = true,
+        bool allowsProfilePhoto = false,
         string? telegramUsername = null)
     {
         var athlete = new Athlete();
@@ -103,7 +103,7 @@ public sealed class Athlete : BaseEntity
         string? phone,
         bool signsInitialConsent = false,
         string? emergencyContact = null,
-        bool allowsProfilePhoto = true,
+        bool allowsProfilePhoto = false,
         string? telegramUsername = null)
     {
         var athlete = new Athlete();
@@ -129,7 +129,7 @@ public sealed class Athlete : BaseEntity
         string? guardianPhone,
         bool allowsPhysicalTraining,
         bool allowsHabitsRecommendations,
-        bool allowsProfilePhoto = true)
+        bool allowsProfilePhoto = false)
     {
         if (!IsMinor)
             throw new DomainException("Solo los atletas menores de edad requieren consentimiento de un tutor.");

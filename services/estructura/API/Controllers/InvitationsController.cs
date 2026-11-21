@@ -41,7 +41,8 @@ public sealed class InvitationsController(
             request?.GuardianPhone,
             request?.AllowsPhysicalTraining ?? true,
             request?.AllowsHabitsRecommendations ?? false,
-            request?.EmergencyContact);
+            request?.EmergencyContact,
+            request?.AllowsProfilePhoto ?? false);
 
         var athlete = await acceptHandler.HandleAsync(command, cancellationToken);
         return Ok(athlete);

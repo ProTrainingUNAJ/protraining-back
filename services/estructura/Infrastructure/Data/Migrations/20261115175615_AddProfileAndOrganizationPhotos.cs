@@ -29,7 +29,7 @@ namespace Infrastructure.Data.Migrations
                 table: "digital_consents",
                 type: "boolean",
                 nullable: false,
-                defaultValue: true);
+                defaultValue: false);
 
             migrationBuilder.AddColumn<bool>(
                 name: "has_photo",

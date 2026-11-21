@@ -6,10 +6,18 @@ namespace Application.UseCases.Organizations.GetOrganizationPhoto;
 
 public sealed record GetOrganizationPhotoQuery(Guid OrganizationId);
 
-public sealed class GetOrganizationPhotoQueryHandler(IOrganizationPhotoRepository photoRepository)
+public sealed class GetOrganizationPhotoQueryHandler(
+    IOrganizationRepository organizationRepository,
+    IOrganizationPhotoRepository photoRepository)
 {
     public async Task<PhotoDto> HandleAsync(GetOrganizationPhotoQuery query, CancellationToken cancellationToken = default)
     {
+        var organization = await organizationRepository.GetByIdAsync(query.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            throw new OrganizationNotFoundException(query.OrganizationId);
+        }
+
         var photo = await photoRepository.GetByOrganizationIdAsync(query.OrganizationId, cancellationToken);
         if (photo is null)
         {
@@ -19,4 +27,3 @@ public sealed class GetOrganizationPhotoQueryHandler(IOrganizationPhotoRepositor
         return new PhotoDto(photo.Data, photo.ContentType);
     }
 }
-
