@@ -325,10 +325,20 @@ public static class RecommendationOutputValidator
     private const string ApprovedFoodSentinel = "__approved_food__";
 
     // Detecta candidatos que aparecen en posiciones sintácticas de enumeración de alimentos (capa 2: lista blanca).
-    // Usa lookbehind para no consumir el token aprobado previo y capturar cadenas como "pollo con arroz y burrata".
+    // Usa lookbehind para no consumir el token previo y capturar cadenas como "pollo con arroz y burrata"
+    // o "elegí alimentos como burrata" (donde "alimentos" ya fue consumido por "elegí").
+    // Restringe "con" y "como" a contextos alimentarios para evitar falsos positivos en giros habituales
+    // ("comelo con tranquilidad", "como mínimo dos veces").
     private static readonly Regex FoodSlotCueRegex = new(
-        @"(?:\b(?:combinando|combina|combinar|como|con|come|comer|suma|sumar|agrega|agregar|inclui|incluir|elegi|elegir|consumi|consumir|incorpora|incorporar|acompanado\s+de|acompanada\s+de|acompanar\s+con|plato\s+con|plato\s+de|porcion\s+de|porciones\s+de|poco\s+de)\s+|" +
-        @"(?<=" + ApprovedFoodSentinel + @")(?:\s*,\s*|\s+(?:y|o|e|u)\s+))" +
+        @"(?:\b(?:" +
+        @"combinando|combina|combinar|come|comer|suma|sumar|agrega|agregar|inclui|incluir|" +
+        @"elegi|elegir|consumi|consumir|incorpora|incorporar|" +
+        @"acompanado\s+de|acompanada\s+de|acompanar\s+con|acompanalo\s+con|acompanala\s+con|" +
+        @"plato\s+con|plato\s+de|platos\s+con|comida\s+con|comidas\s+con|menu\s+con|" +
+        @"porcion\s+de|porciones\s+de|poco\s+de" +
+        @")\s+|" +
+        @"(?<=\b(?:alimentos?|opciones?|ejemplos?|fuentes?|ingredientes?|comidas?|colaciones?|platos?|meriendas?|desayunos?|almuerzos?|cenas?|proteinas?|carbohidratos?|hidratos?|grasas?|frutas?|verduras?|hortalizas?)\s+)como\s+|" +
+        @"(?<=" + ApprovedFoodSentinel + @")(?:\s*,\s*|\s+(?:y|o|e|u|con|junto\s+con)\s+))" +
         @"(?:(?:un|una|unos|unas|el|la|los|las|tu|tus|su|sus|al|del|de|mas|algo\s+de|poco\s+de)\s+)*" +
         @"([a-z_][a-z0-9_]*)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -340,64 +350,86 @@ public static class RecommendationOutputValidator
     private static readonly HashSet<string> AllowedNonFoodSlotTokens = new(StringComparer.Ordinal)
     {
         ApprovedFoodSentinel,
-        // Conectores, artículos, preposiciones y adverbios
+        // Conectores, artículos, preposiciones, numerales y adverbios
         "a", "al", "algo", "algun", "alguna", "algunas", "algunos", "antes", "asi", "bien",
-        "cada", "casi", "como", "con", "contra", "cualquier", "cuando", "de", "del", "desde",
-        "despues", "durante", "e", "el", "ella", "en", "entre", "esa", "esas", "ese", "esos",
-        "esta", "estas", "este", "estos", "hacia", "hasta", "la", "las", "lo", "los", "luego",
-        "mas", "menos", "mientras", "misma", "mismo", "mucha", "muchas", "mucho", "muchos",
-        "muy", "ni", "no", "o", "otra", "otras", "otro", "otros", "para", "pero", "poca",
-        "pocas", "poco", "pocos", "por", "porque", "que", "se", "segun", "si", "siempre",
-        "sin", "sobre", "solo", "su", "sus", "tambien", "tan", "tanto", "toda", "todas",
-        "todo", "todos", "tras", "tu", "tus", "u", "un", "una", "unas", "uno", "unos", "y", "ya",
-        // Verbos frecuentes en recomendaciones de hábitos/plato
+        "cada", "casi", "cinco", "como", "con", "contra", "cualquier", "cuando", "cuatro",
+        "de", "del", "desde", "despacio", "despues", "dos", "durante", "e", "el", "ella",
+        "en", "entre", "esa", "esas", "ese", "esos", "esta", "estas", "este", "estos",
+        "frecuente", "hacia", "hasta", "la", "las", "lento", "lo", "los", "luego",
+        "mas", "maximo", "menos", "mientras", "minimo", "misma", "mismo", "mucha", "muchas",
+        "mucho", "muchos", "muy", "ni", "no", "o", "ocho", "otra", "otras", "otro", "otros",
+        "para", "pero", "poca", "pocas", "poco", "pocos", "por", "porque", "que", "se",
+        "seguido", "segun", "seis", "si", "siempre", "siete", "sin", "sobre", "solo",
+        "su", "sus", "tambien", "tan", "tanto", "temprano", "toda", "todas", "todo", "todos",
+        "tranquila", "tranquilo", "tras", "tres", "tu", "tus", "u", "un", "una", "unas",
+        "uno", "unos", "y", "ya",
+        // Verbos frecuentes en recomendaciones de hábitos/plato (incluyendo imperativos con enclíticos rioplatenses y gerundios)
         "acompanando", "acompanar", "acompanado", "acompanada", "acompanalo", "acompanala",
-        "activar", "adaptar", "agregar", "agrega", "agregando", "ajustar", "alimentar",
-        "alternar", "alterna", "apoyar", "aportar", "aporta", "aprovechar", "apuntar", "apunta",
-        "armar", "arma", "armando", "asegurar", "asegura", "ayudar", "beber", "bebe",
-        "buscar", "busca", "combinar", "combina", "combinando", "comer", "come", "comiendo",
-        "completar", "completa", "consumir", "consumi", "contar", "cubrir", "cuidar",
-        "descansar", "descansa", "distribuir", "distribui", "distribuidos", "distribuidas",
-        "dormir", "dormi", "elegir", "elegi", "empezar", "entrenar", "equilibrar", "estar",
-        "favorecer", "favorece", "hacer", "hidratar", "hidratate", "incluir", "inclui",
-        "incluyendo", "incorporar", "incorpora", "incorporando", "llegar", "mantener", "mantene",
-        "manteniendo", "mejorar", "mejora", "mezclar", "mezcla", "obtener", "optimizar",
-        "organizar", "organiza", "planificar", "poder", "podes", "preparar", "prepara",
-        "priorizar", "prioriza", "procurar", "procura", "recordar", "recorda", "recuperar",
-        "reforzar", "repartir", "reparti", "reponer", "repone", "respetar", "seguir", "segui",
-        "servir", "sostener", "sumar", "suma", "sumando", "tener", "tomar", "toma", "tratar",
-        "usar", "usa", "usando", "utilizar", "utiliza", "variar", "varia",
-        // Sustantivos y adjetivos nutricionales/deportivos generales (no son alimentos concretos)
+        "activar", "adaptar", "agregar", "agrega", "agregando", "agregalo", "agregala",
+        "ajustar", "alimentar", "alternar", "alterna", "alternando", "apoyar", "aportar", "aporta", "aportando",
+        "aprovechar", "aprovechando", "aprovechalo", "aprovechala", "apuntar", "apunta",
+        "armar", "arma", "armando", "armalo", "armala", "asegurar", "asegura", "asegurando", "ayudar",
+        "beber", "bebe", "buscar", "busca", "buscando",
+        "combinar", "combina", "combinando", "combinalo", "combinala",
+        "comer", "come", "comiendo", "comelo", "comela", "comelos", "comelas",
+        "completar", "completa", "completando", "consultar", "consulta", "consultando",
+        "consumir", "consumi", "consumiendo", "consumilo", "consumila", "contar", "cubrir", "cuidar", "cuidando",
+        "descansar", "descansa", "disfrutar", "disfruta", "disfrutando", "disfrutalo", "disfrutala",
+        "distribuir", "distribui", "distribuidos", "distribuidas", "distribuyendo", "distribuilo", "distribuila",
+        "dormir", "dormi", "elegir", "elegi", "eligiendo", "elegilo", "elegila",
+        "empezar", "entrenar", "equilibrar", "equilibrando", "estar", "evitar", "evitando",
+        "favorecer", "favorece", "favoreciendo", "hacer",
+        "hidratar", "hidratate", "incluir", "inclui", "incluyendo", "incluilo", "incluila",
+        "incorporar", "incorpora", "incorporando", "llegar", "lograr", "logrando",
+        "mantener", "mantene", "manteniendo", "mantenelo", "mantenela",
+        "mejorar", "mejora", "mezclar", "mezcla", "obtener", "optimizar", "optimizando",
+        "organizar", "organiza", "organizando", "planificar", "planificando", "poder", "podes",
+        "preparar", "prepara", "preparando", "preparalo", "preparala", "priorizar", "prioriza", "priorizando",
+        "procurar", "procura", "procurando", "recordar", "recorda", "recordando", "recuperar", "recuperando",
+        "reforzar", "reforzando", "repartir", "reparti", "repartiendo", "repartilo", "repartila",
+        "reponer", "repone", "respetar", "respetando",
+        "seguir", "segui", "siguiendo", "servir", "sirviendo", "servilo", "servila", "sostener", "sosteniendo",
+        "sumar", "suma", "sumando", "sumalo", "sumala",
+        "tener", "tomar", "toma", "tomando", "tomalo", "tomala", "tratar",
+        "usar", "usa", "usando", "usalo", "usala", "utilizar", "utiliza", "utilizando", "variar", "varia", "variando",
+        // Sustantivos y adjetivos nutricionales/deportivos y modales generales (no son alimentos concretos)
         "agua", "alimento", "alimentos", "almuerzo", "almuerzos", "alta", "alto", "altas", "altos",
-        "alineada", "alineadas", "alineado", "alineados",
-        "aporte", "aportes", "aprobada", "aprobadas", "aprobado", "aprobados", "atleta",
+        "alineada", "alineadas", "alineado", "alineados", "anticipacion",
+        "aporte", "aportes", "aprobada", "aprobadas", "aprobado", "aprobados", "apuro",
+        "atencion", "atenta", "atento", "atleta",
         "balance", "balanceada", "balanceado", "base", "basica", "basico", "buen", "buena",
-        "buenas", "bueno", "buenos", "calidad", "cantidad", "cantidades", "carbohidrato",
+        "buenas", "bueno", "buenos", "calidad", "calma", "cantidad", "cantidades", "carbohidrato",
         "carbohidratos", "cena", "cenas", "ciclo", "colacion", "colaciones", "combinacion",
-        "combinaciones", "comida", "comidas", "competencia", "completa", "completo", "compleja",
-        "complejas", "complejo", "complejos", "constante", "continuo", "continua", "cuerpo",
+        "combinaciones", "comida", "comidas", "competencia", "complemento", "completa", "completo",
+        "compleja", "complejas", "complejo", "complejos", "conciencia", "consciencia", "consciente",
+        "constancia", "constante", "continuo", "continua", "criterio", "cuerpo", "cuidado",
         "deporte", "deportiva", "deportivo", "desayuno", "desayunos", "descanso", "dia", "dias",
-        "diaria", "diarias", "diario", "diarios", "digestion", "energia", "energetica",
-        "energetico", "entrenamiento", "entrenamientos", "equilibrada", "equilibrado",
-        "equilibrio", "esfuerzo", "estilo", "exigencia", "fatiga", "fibra", "fibras", "fisica",
-        "fisico", "forma", "fresca", "frescas", "fresco", "frescos", "fruta", "frutas",
-        "fuente", "fuentes", "fuerza", "g", "gr", "gramo", "gramos", "grasa", "grasas",
-        "habito", "habitos", "hidratacion", "hidrato", "hidratos", "hora", "horas", "hortaliza",
-        "hortalizas", "ideal", "ingesta", "intensa", "intenso", "intensidad", "jornada",
-        "kcal", "kg", "l", "ligera", "ligero", "lista", "litro", "litros", "liviana", "liviano",
-        "magra", "magro", "manana", "masa", "mejor", "mejores", "menu", "merienda", "meriendas",
-        "mezcla", "mg", "min", "mineral", "minerales", "minuto", "minutos", "mitad", "ml",
+        "diaria", "diarias", "diario", "diarios", "digestion", "ejemplo", "ejemplos",
+        "energia", "energetica", "energetico", "entrenamiento", "entrenamientos",
+        "equilibrada", "equilibrado", "equilibrio", "esfuerzo", "estilo", "estrategia",
+        "exigencia", "fatiga", "fibra", "fibras", "fisica", "fisico", "foco", "forma",
+        "frecuencia", "fresca", "frescas", "fresco", "frescos", "fruta", "frutas",
+        "fuente", "fuentes", "fuerza", "g", "gr", "gramo", "gramos", "grasa", "grasas", "guia",
+        "habito", "habitos", "hambre", "hidratacion", "hidrato", "hidratos", "hora", "horas",
+        "hortaliza", "hortalizas", "ideal", "ingesta", "intensa", "intenso", "intensidad",
+        "jornada", "kcal", "kg", "l", "ligera", "ligero", "lista", "litro", "litros",
+        "liviana", "liviano", "magra", "magro", "manana", "masa", "medica", "medico",
+        "mejor", "mejores", "menu", "merienda", "meriendas", "mezcla", "mg", "min",
+        "mineral", "minerales", "minuto", "minutos", "mitad", "ml", "moderacion",
         "moderada", "moderado", "momento", "momentos", "muscular", "musculo", "musculos",
-        "natural", "naturales", "nivel", "noche", "nutricion", "nutricional", "nutriente",
-        "nutrientes", "objetivo", "objetivos", "opcion", "opciones", "parte", "partido",
-        "partidos", "pauta", "pautas", "pesada", "pesado", "plan", "plato", "platos", "porcion",
-        "porciones", "post", "practica", "practicas", "pre", "principal", "principales",
-        "proteica", "proteico", "proteina", "proteinas", "racion", "raciones", "rapida",
-        "rapido", "recomendacion", "recuperacion", "referencia", "referencias", "regular", "rendimiento", "reposo", "ritmo",
-        "rutina", "salud", "saludable", "saludables", "semana", "semanal", "sencilla",
-        "sencillo", "sesion", "sesiones", "simple", "simples", "suave", "sueno", "suficiente",
-        "tarde", "tiempo", "tipo", "trabajo", "variada", "variado", "variedad", "vegetal",
-        "vegetales", "verdura", "verduras", "vitamina", "vitaminas", "volumen"
+        "natural", "naturales", "nivel", "noche", "nutricion", "nutricional", "nutricionista",
+        "nutriente", "nutrientes", "objetivo", "objetivos", "opcion", "opciones",
+        "paciencia", "parte", "partido", "partidos", "pausada", "pausado", "pauta", "pautas",
+        "pesada", "pesado", "plan", "plato", "platos", "porcion", "porciones", "post",
+        "practica", "practicas", "pre", "preparacion", "preparaciones", "preparador",
+        "principal", "principales", "prioridad", "prisa", "profesional",
+        "proteica", "proteico", "proteina", "proteinas", "racion", "raciones", "rapida", "rapido",
+        "recomendacion", "recuperacion", "referencia", "referencias", "regular", "regularidad",
+        "rendimiento", "reposo", "ritmo", "rutina", "saciedad", "salud", "saludable", "saludables",
+        "sana", "sano", "semana", "semanal", "sencilla", "sencillo", "sesion", "sesiones",
+        "simple", "simples", "suave", "sueno", "suficiente", "tarde", "tiempo", "tipo",
+        "trabajo", "tranquilidad", "variada", "variado", "variedad", "vegetal", "vegetales",
+        "verdura", "verduras", "vez", "veces", "vitamina", "vitaminas", "volumen"
     };
 
     private static readonly Regex QuantityRegex = new(
