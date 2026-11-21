@@ -3,7 +3,9 @@ using API.HealthChecks;
 using API.Mcp;
 using API.Middleware;
 using API.Services;
+using Application.Common;
 using Application.Interfaces.Services;
+using Microsoft.Extensions.Options;
 using Application.Services;
 using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.AthleteRecord.ConfirmRecordsImport;
@@ -107,7 +109,13 @@ builder.Services.AddScoped<GetAthletesWithScheduledSessionQueryHandler>();
 builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
 builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
 builder.Services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
-builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+builder.Services.Configure<AdaptationOptions>(
+    builder.Configuration.GetSection(AdaptationOptions.SectionName));
+builder.Services.AddScoped<ILoadCalculatorEngine>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AdaptationOptions>>().Value;
+    return new LoadCalculatorEngine(options.GetEffectiveEstimatedRecordConservativePercent());
+});
 builder.Services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionChecker>();
 builder.Services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
 builder.Services.AddScoped<GetExerciseSubstitutesQueryHandler>();

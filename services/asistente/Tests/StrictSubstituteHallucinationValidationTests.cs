@@ -667,7 +667,7 @@ public sealed class StrictSubstituteHallucinationValidationTests
     }
 
     [Fact]
-    public async Task Given_LlmHallucinatesLegExerciseWhenOnlyAuthorizedSubstituteIsAlreadyInSession_When_ValidatingAdaptation_Then_DoesNotDuplicateExercises()
+    public async Task Given_LlmHallucinatesLegExerciseWhenOnlyAuthorizedSubstituteIsAlreadyInSession_When_ValidatingAdaptation_Then_RemovesRestrictedHallucinationWithNote()
     {
         var athleteId = Guid.NewGuid();
         var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
@@ -685,7 +685,8 @@ public sealed class StrictSubstituteHallucinationValidationTests
                     [new AuthorizedSubstituteDto(LegPressId, "Prensa de piernas")])
             ]);
 
-        // Prensa de piernas ya está en la sesión y hay un ejercicio alucinado de piernas: no debe duplicar Prensa
+        // Prensa de piernas ya está en la sesión y hay un ejercicio alucinado de la zona restringida:
+        // no debe duplicar Prensa ni dejar pasar "Sentadilla espacial con barra" como referencia.
         var draft = new RoutineSuggestionResponseDto(
             AthleteId: athleteId,
             ProposedTitle: "Tren inferior",
@@ -699,7 +700,213 @@ public sealed class StrictSubstituteHallucinationValidationTests
 
         var result = await validator.ValidateDraftAsync(draft, adaptationContext: singleSubstituteContext);
 
+        Assert.True(result.IsValid);
+        Assert.True(result.HasCorrections);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+
+        var remaining = Assert.Single(result.SanitizedRoutine.Exercises);
+        Assert.Equal(LegPressId, remaining.ExerciseId);
+        Assert.False(remaining.IsReference);
+
+        Assert.DoesNotContain(result.SanitizedRoutine.Exercises, e => e.IsReference);
+        Assert.DoesNotContain(result.SanitizedRoutine.Exercises, e => e.ExerciseName.Contains("Sentadilla", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            result.SanitizedRoutine.AdaptationWarnings!,
+            w => w.Contains("Sentadilla espacial con barra", StringComparison.OrdinalIgnoreCase) &&
+                 w.Contains("rodilla", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.ExerciseResults, r => r.Status == ExerciseValidationStatus.RemovedByRestriction);
+    }
+
+    [Fact]
+    public async Task Given_SessionContainsRestrictedExercisesWithAndWithoutIdWhenNoFreeSubstituteRemains_When_ValidatingAdaptation_Then_NoRestrictedZoneExerciseSurvives()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+
+        var singleSubstituteContext = new AthleteAdaptationContextDto(
+            AthleteId: athleteId,
+            ActiveInjuries: [CreateActiveInjury(athleteId, "rodilla", "Dolor rotuliano")],
+            CurrentRecords: [],
+            Restrictions:
+            [
+                new ExerciseRestrictionContextDto(
+                    SquatId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [new AuthorizedSubstituteDto(LegPressId, "Prensa de piernas")])
+            ]);
+
+        // Mezcla el sustituto autorizado ya presente, un ejercicio restringido CON id del catálogo,
+        // una alucinación CON guid inventado y una referencia SIN id (null), más un ejercicio seguro de pecho.
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Sesión mixta",
+            JustificationSummary: "Tren inferior y empuje",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Prensa de piernas", 4, 8, 70m, LegPressId),
+                new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 80m, SquatId),
+                new SuggestedExerciseDto("Sentadilla espacial con barra", 3, 10, 60m, Guid.NewGuid()),
+                new SuggestedExerciseDto("Zancada cuántica de rodilla", 3, 12, 0m, null),
+                new SuggestedExerciseDto("Press de banca plano con barra", 4, 6, 75m, BenchPressId)
+            ],
+            ProviderUsed: "Agente (OpenAI)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: singleSubstituteContext);
+
+        Assert.True(result.IsValid);
+        Assert.True(result.HasCorrections);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+
+        // Solo sobreviven Prensa de piernas (sustituto autorizado, sin duplicar) y Press de banca (zona segura)
+        Assert.Equal(2, result.SanitizedRoutine.Exercises.Count);
         Assert.Equal(1, result.SanitizedRoutine.Exercises.Count(e => e.ExerciseId == LegPressId));
-        Assert.True(result.SanitizedRoutine.Exercises[1].IsReference);
+        Assert.Equal(1, result.SanitizedRoutine.Exercises.Count(e => e.ExerciseId == BenchPressId));
+
+        // Ningún ejercicio de la zona restringida sobrevive, tenga id o no
+        Assert.All(result.SanitizedRoutine.Exercises, e =>
+        {
+            Assert.NotNull(e.ExerciseId);
+            Assert.NotEqual(Guid.Empty, e.ExerciseId);
+            Assert.False(e.IsReference);
+            Assert.NotEqual(SquatId, e.ExerciseId);
+            Assert.DoesNotContain("sentadilla", e.ExerciseName, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("zancada", e.ExerciseName, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("rodilla", e.ExerciseName, StringComparison.OrdinalIgnoreCase);
+        });
+
+        Assert.NotNull(result.SanitizedRoutine.AdaptationWarnings);
+        Assert.Contains(result.SanitizedRoutine.AdaptationWarnings!, w => w.Contains("Sentadilla con barra", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.SanitizedRoutine.AdaptationWarnings!, w => w.Contains("Sentadilla espacial con barra", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.SanitizedRoutine.AdaptationWarnings!, w => w.Contains("Zancada cuántica de rodilla", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Given_RestrictionWithoutAnySubstitutesAndHallucinatedZoneExercise_When_ValidatingAdaptation_Then_RemovesRestrictedExerciseAndKeepsSafeExercise()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+
+        var noSubstituteContext = new AthleteAdaptationContextDto(
+            AthleteId: athleteId,
+            ActiveInjuries: [CreateActiveInjury(athleteId, "rodilla", "Inflamación aguda")],
+            CurrentRecords: [],
+            Restrictions:
+            [
+                new ExerciseRestrictionContextDto(
+                    SquatId,
+                    "rodilla",
+                    "Evitar carga axial sobre rodilla",
+                    [])
+            ]);
+
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Sesión segura",
+            JustificationSummary: "Empuje y piernas",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Press de banca plano con barra", 4, 6, 75m, BenchPressId),
+                new SuggestedExerciseDto("Sentadilla aérea sin catálogo", 3, 8, 0m, null)
+            ],
+            ProviderUsed: "Agente (Gemini)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: noSubstituteContext);
+
+        Assert.True(result.IsValid);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+        var remaining = Assert.Single(result.SanitizedRoutine.Exercises);
+        Assert.Equal(BenchPressId, remaining.ExerciseId);
+        Assert.False(remaining.IsReference);
+        Assert.Contains(
+            result.SanitizedRoutine.AdaptationWarnings!,
+            w => w.Contains("Sentadilla aérea sin catálogo", StringComparison.OrdinalIgnoreCase) &&
+                 w.Contains("rodilla", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Given_MultipleInjuriesWhereFirstSubstituteIsAlsoRestricted_When_ValidatingAdaptation_Then_SkipsRestrictedSubstituteAndUsesSafeAlternative()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+
+        var multiInjuryContext = new AthleteAdaptationContextDto(
+            AthleteId: athleteId,
+            ActiveInjuries:
+            [
+                CreateActiveInjury(athleteId, "rodilla", "Dolor rotuliano"),
+                CreateActiveInjury(athleteId, "cadera", "Pinzamiento de cadera")
+            ],
+            CurrentRecords: [],
+            Restrictions:
+            [
+                new ExerciseRestrictionContextDto(
+                    SquatId,
+                    "rodilla",
+                    "Reduce estrés rotuliano",
+                    [
+                        new AuthorizedSubstituteDto(LegPressId, "Prensa de piernas"),
+                        new AuthorizedSubstituteDto(GluteBridgeId, "Puente de glúteos con barra")
+                    ]),
+                new ExerciseRestrictionContextDto(
+                    LegPressId,
+                    "cadera",
+                    "Evitar flexión profunda de cadera",
+                    [])
+            ]);
+
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Tren inferior",
+            JustificationSummary: "Fuerza de piernas",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 80m, SquatId),
+                new SuggestedExerciseDto("Press de banca plano con barra", 4, 6, 75m, BenchPressId)
+            ],
+            ProviderUsed: "Agente (OpenAI)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: multiInjuryContext);
+
+        Assert.True(result.IsValid);
+        Assert.True(result.SanitizedRoutine.WasAdapted);
+        Assert.DoesNotContain(result.SanitizedRoutine.Exercises, e => e.ExerciseId == SquatId || e.ExerciseId == LegPressId);
+        Assert.Contains(result.SanitizedRoutine.Exercises, e => e.ExerciseId == GluteBridgeId);
+        Assert.Contains(result.SanitizedRoutine.Exercises, e => e.ExerciseId == BenchPressId);
+    }
+
+    [Fact]
+    public async Task Given_AllSessionExercisesRemovedByRestriction_When_ValidatingAdaptation_Then_RequiresDeterministicFallbackWithExplicitMessage()
+    {
+        var athleteId = Guid.NewGuid();
+        var validator = new ExerciseSemanticValidator(CreateCatalogMock().Object);
+
+        var noSubstituteContext = new AthleteAdaptationContextDto(
+            AthleteId: athleteId,
+            ActiveInjuries: [CreateActiveInjury(athleteId, "rodilla", "Inflamación aguda")],
+            CurrentRecords: [],
+            Restrictions:
+            [
+                new ExerciseRestrictionContextDto(SquatId, "rodilla", "Evitar carga axial", [])
+            ]);
+
+        var draft = new RoutineSuggestionResponseDto(
+            AthleteId: athleteId,
+            ProposedTitle: "Piernas",
+            JustificationSummary: "Único ejercicio restringido",
+            Exercises:
+            [
+                new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 80m, SquatId)
+            ],
+            ProviderUsed: "Agente (OpenAI)");
+
+        var result = await validator.ValidateDraftAsync(draft, adaptationContext: noSubstituteContext);
+
+        Assert.False(result.IsValid);
+        Assert.True(result.RequiresDeterministicFallback);
+        Assert.Empty(result.SanitizedRoutine.Exercises);
+        Assert.Contains(
+            result.ValidationMessages,
+            m => m.Contains("Todos los ejercicios propuestos fueron quitados por restricciones activas", StringComparison.OrdinalIgnoreCase));
     }
 }

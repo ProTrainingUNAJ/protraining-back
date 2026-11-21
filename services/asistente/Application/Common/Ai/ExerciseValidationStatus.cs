@@ -19,6 +19,12 @@ public enum ExerciseValidationStatus
     AdaptedToAuthorizedSubstitute,
 
     /// <summary>
+    /// El ejercicio coincidía con un ejercicio o zona restringida y no había un sustituto autorizado libre;
+    /// fue eliminado de la sesión con una nota explicativa para el preparador físico.
+    /// </summary>
+    RemovedByRestriction,
+
+    /// <summary>
     /// El ejercicio no existe en el catálogo oficial; de acuerdo al requerimiento de ajuste (N2),
     /// se preserva con la bandera 'esReferencia = true' y 'ejercicioId = null' para revisión del preparador físico.
     /// </summary>

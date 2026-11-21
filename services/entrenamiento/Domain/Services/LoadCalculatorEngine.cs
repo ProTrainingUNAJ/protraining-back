@@ -4,8 +4,23 @@ namespace Domain.Services;
 
 public class LoadCalculatorEngine : ILoadCalculatorEngine
 {
-    private const decimal EstimatedConservativeFactor = 0.90m;
+    public const decimal DefaultEstimatedRecordConservativePercent = 90m;
     private const decimal PlateStep = 2.5m;
+
+    private readonly decimal _estimatedConservativeFactor;
+
+    public LoadCalculatorEngine()
+        : this(DefaultEstimatedRecordConservativePercent)
+    {
+    }
+
+    public LoadCalculatorEngine(decimal estimatedRecordConservativePercent)
+    {
+        var effectivePercent = estimatedRecordConservativePercent is > 0m and <= 100m
+            ? estimatedRecordConservativePercent
+            : DefaultEstimatedRecordConservativePercent;
+        _estimatedConservativeFactor = effectivePercent / 100m;
+    }
 
     public LoadResult CalculateLoad(decimal? current1Rm, RecordSource? source, decimal targetPercentage)
     {
@@ -23,7 +38,7 @@ public class LoadCalculatorEngine : ILoadCalculatorEngine
         {
             RecordSource.Tested => baseLoad,
             RecordSource.Reported => baseLoad,
-            RecordSource.Estimated => baseLoad * EstimatedConservativeFactor,
+            RecordSource.Estimated => baseLoad * _estimatedConservativeFactor,
             RecordSource.Epley => baseLoad,
             _ => baseLoad
         };

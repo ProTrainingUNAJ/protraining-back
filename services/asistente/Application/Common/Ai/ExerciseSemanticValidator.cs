@@ -102,11 +102,15 @@ public sealed class ExerciseSemanticValidator(
                 .Count();
             var maxAllowedHallucinatedAdaptations = Math.Max(policy.MaxAllowedUncataloged, activeRestrictionCount);
 
-            if (adaptation.HasCorrections &&
+            if (sanitizedRoutine.Exercises.Count == 0)
+            {
+                requiresFallback = true;
+                messages.Add("Todos los ejercicios propuestos fueron quitados por restricciones activas del atleta. Requiere conmutación determinística segura.");
+            }
+            else if (adaptation.HasCorrections &&
                 uncatalogedCount <= policy.MaxAllowedUncataloged &&
                 (policy.AllowReferenceExercises || referenceCount == 0) &&
                 (validOrCorrectedCount > 0 || referenceCount <= maxAllowedHallucinatedAdaptations) &&
-                sanitizedRoutine.Exercises.Count > 0 &&
                 sanitizedRoutine.Exercises.All(e => e.ExerciseId.HasValue && e.ExerciseId.Value != Guid.Empty && !e.IsReference))
             {
                 requiresFallback = false;
@@ -134,38 +138,68 @@ public sealed class ExerciseSemanticValidator(
         var hasExplicitBaseExercises = routine.BaseExercises is not null;
         var baseExercises = routine.BaseExercises ?? routine.Exercises.ToList();
 
-        if (context.Restrictions.Count == 0)
+        if (context.Restrictions.Count == 0 && context.ActiveInjuries.Count == 0)
             return new(routine with { BaseExercises = baseExercises }, false);
 
-        var restrictionsByExercise = AuthorizedSubstituteHelper.BuildRestrictionsByExercise(context);
-
-        if (restrictionsByExercise.Count == 0)
-            return new(routine with { BaseExercises = baseExercises }, false);
+        var allRestrictionsByExercise = AuthorizedSubstituteHelper.BuildAllRestrictionsByExercise(context);
+        var restrictionsWithSubstitutes = AuthorizedSubstituteHelper.BuildRestrictionsByExercise(context);
 
         var satisfiedRestrictionIds = new HashSet<Guid>();
         var adaptedIndices = new HashSet<int>();
-        var exercises = new List<SuggestedExerciseDto>(routine.Exercises.Count);
+        var workingExercises = new List<SuggestedExerciseDto?>(routine.Exercises.Count);
         var changes = new List<AdaptationChangeDto>();
+        var adaptationWarnings = new List<string>();
         var adaptedAny = false;
+
+        // IDs válidos de ejercicios no restringidos que ya vienen en la sesión, para evitar duplicar sustitutos en Pasada 1
+        var reservedCatalogIds = routine.Exercises
+            .Where(e => !e.IsReference &&
+                        e.ExerciseId.HasValue &&
+                        e.ExerciseId.Value != Guid.Empty &&
+                        !allRestrictionsByExercise.ContainsKey(e.ExerciseId.Value))
+            .Select(e => e.ExerciseId!.Value)
+            .ToHashSet();
 
         // Pasada 1: Violaciones directas a ejercicios restringidos y control contra BaseExercises explícito
         for (var i = 0; i < routine.Exercises.Count; i++)
         {
             var exercise = routine.Exercises[i];
             if (exercise.ExerciseId is { } exerciseId &&
-                restrictionsByExercise.TryGetValue(exerciseId, out var restriction))
+                allRestrictionsByExercise.TryGetValue(exerciseId, out var restriction))
             {
-                var substitute = restriction.Substitutes[0];
-                var message = AuthorizedSubstituteHelper.BuildAdaptationReason(restriction, substitute.Name);
-                exercises.Add(RecordSubstituteAdaptation(
-                    exercise,
-                    exercise,
-                    restriction,
-                    substitute,
-                    message,
-                    messages,
-                    changes,
-                    itemResults));
+                var substitute = restriction.Substitutes
+                    .FirstOrDefault(s =>
+                        s.ExerciseId != Guid.Empty &&
+                        !reservedCatalogIds.Contains(s.ExerciseId) &&
+                        !allRestrictionsByExercise.ContainsKey(s.ExerciseId));
+
+                if (substitute is not null)
+                {
+                    var message = AuthorizedSubstituteHelper.BuildAdaptationReason(restriction, substitute.Name);
+                    workingExercises.Add(RecordSubstituteAdaptation(
+                        exercise,
+                        exercise,
+                        restriction,
+                        substitute,
+                        message,
+                        messages,
+                        adaptationWarnings,
+                        changes,
+                        itemResults));
+                    reservedCatalogIds.Add(substitute.ExerciseId);
+                }
+                else
+                {
+                    var removalMessage = AuthorizedSubstituteHelper.BuildRemovedRestrictedExerciseReason(restriction, exercise.ExerciseName);
+                    RecordRemovedRestrictedExercise(
+                        exercise,
+                        removalMessage,
+                        messages,
+                        adaptationWarnings,
+                        itemResults);
+                    workingExercises.Add(null);
+                }
+
                 adaptedAny = true;
                 adaptedIndices.Add(i);
                 satisfiedRestrictionIds.Add(restriction.ExerciseId);
@@ -175,39 +209,62 @@ public sealed class ExerciseSemanticValidator(
             if (hasExplicitBaseExercises &&
                 i < routine.BaseExercises!.Count &&
                 routine.BaseExercises[i].ExerciseId is { } baseExerciseId &&
-                restrictionsByExercise.TryGetValue(baseExerciseId, out var baseRestriction))
+                allRestrictionsByExercise.TryGetValue(baseExerciseId, out var baseRestriction))
             {
                 var authorizedIds = baseRestriction.Substitutes.Select(s => s.ExerciseId).ToHashSet();
                 if (exercise.ExerciseId is { } proposedId && !exercise.IsReference && authorizedIds.Contains(proposedId))
                 {
-                    exercises.Add(exercise);
+                    workingExercises.Add(exercise);
+                    reservedCatalogIds.Add(proposedId);
                     satisfiedRestrictionIds.Add(baseRestriction.ExerciseId);
                     continue;
                 }
 
-                var substitute = baseRestriction.Substitutes[0];
-                var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(baseRestriction, exercise.ExerciseName, substitute.Name);
-                exercises.Add(RecordSubstituteAdaptation(
-                    exercise,
-                    routine.BaseExercises[i],
-                    baseRestriction,
-                    substitute,
-                    message,
-                    messages,
-                    changes,
-                    itemResults));
+                var substitute = baseRestriction.Substitutes
+                    .FirstOrDefault(s =>
+                        s.ExerciseId != Guid.Empty &&
+                        !reservedCatalogIds.Contains(s.ExerciseId) &&
+                        !allRestrictionsByExercise.ContainsKey(s.ExerciseId));
+
+                if (substitute is not null)
+                {
+                    var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(baseRestriction, exercise.ExerciseName, substitute.Name);
+                    workingExercises.Add(RecordSubstituteAdaptation(
+                        exercise,
+                        routine.BaseExercises[i],
+                        baseRestriction,
+                        substitute,
+                        message,
+                        messages,
+                        adaptationWarnings,
+                        changes,
+                        itemResults));
+                    reservedCatalogIds.Add(substitute.ExerciseId);
+                }
+                else
+                {
+                    var removalMessage = AuthorizedSubstituteHelper.BuildRemovedRestrictedExerciseReason(baseRestriction, exercise.ExerciseName);
+                    RecordRemovedRestrictedExercise(
+                        exercise,
+                        removalMessage,
+                        messages,
+                        adaptationWarnings,
+                        itemResults);
+                    workingExercises.Add(null);
+                }
+
                 adaptedAny = true;
                 adaptedIndices.Add(i);
                 satisfiedRestrictionIds.Add(baseRestriction.ExerciseId);
                 continue;
             }
 
-            exercises.Add(exercise);
+            workingExercises.Add(exercise);
         }
 
         // Marcar como satisfechas las restricciones cuyos sustitutos autorizados ya están presentes como válidos
-        var presentValidExerciseIds = CollectValidCatalogExerciseIds(exercises);
-        foreach (var restriction in restrictionsByExercise.Values)
+        var presentValidExerciseIds = CollectValidCatalogExerciseIds(workingExercises);
+        foreach (var restriction in allRestrictionsByExercise.Values)
         {
             if (restriction.Substitutes.Any(s => presentValidExerciseIds.Contains(s.ExerciseId)))
             {
@@ -215,15 +272,19 @@ public sealed class ExerciseSemanticValidator(
             }
         }
 
-        // Pasada 2: Alucinaciones / ejercicios fuera de catálogo únicamente cuando coinciden con el mismo
-        // grupo muscular o zona de una restricción pendiente y hay un sustituto libre sin duplicar (KAN-466)
+        // Pasada 2: Alucinaciones / ejercicios fuera de catálogo que coinciden con el grupo muscular o zona
+        // de cualquier restricción activa (pendiente o ya satisfecha) o lesión activa (KAN-466 / KAN-605).
+        // Si hay un sustituto libre se reemplaza; si no hay sustituto libre se quita de la sesión con nota.
         Dictionary<Guid, CatalogExerciseDto>? restrictedCatalogCache = null;
-        for (var i = 0; i < exercises.Count; i++)
+        for (var i = 0; i < workingExercises.Count; i++)
         {
             if (adaptedIndices.Contains(i))
                 continue;
 
-            var current = exercises[i];
+            var current = workingExercises[i];
+            if (current is null)
+                continue;
+
             var isHallucinated = current.IsReference ||
                 !current.ExerciseId.HasValue ||
                 current.ExerciseId.Value == Guid.Empty ||
@@ -233,58 +294,108 @@ public sealed class ExerciseSemanticValidator(
             if (!isHallucinated)
                 continue;
 
-            var pendingRestrictions = restrictionsByExercise.Values
-                .Where(r => !satisfiedRestrictionIds.Contains(r.ExerciseId))
-                .ToList();
-
-            if (pendingRestrictions.Count == 0)
-                continue;
-
-            restrictedCatalogCache ??= await LoadRestrictedCatalogItemsAsync(restrictionsByExercise.Keys, cancellationToken);
             var originalHallucinated = i < initialItemResults.Count ? initialItemResults[i].OriginalExercise : current;
 
-            var applicableRestriction = pendingRestrictions.FirstOrDefault(r =>
-                MatchesRestrictionMuscleGroup(originalHallucinated.ExerciseName, r, restrictedCatalogCache));
+            ExerciseRestrictionContextDto? applicableRestriction = null;
+            if (context.Restrictions.Count > 0)
+            {
+                restrictedCatalogCache ??= await LoadRestrictedCatalogItemsAsync(allRestrictionsByExercise.Keys, cancellationToken);
 
-            if (applicableRestriction is null)
+                applicableRestriction = context.Restrictions
+                    .Where(r => !satisfiedRestrictionIds.Contains(r.ExerciseId))
+                    .FirstOrDefault(r => MatchesRestrictionMuscleGroup(originalHallucinated.ExerciseName, r, restrictedCatalogCache))
+                    ?? context.Restrictions.FirstOrDefault(r =>
+                        MatchesRestrictionMuscleGroup(originalHallucinated.ExerciseName, r, restrictedCatalogCache));
+            }
+
+            if (applicableRestriction is not null)
+            {
+                var presentIds = CollectValidCatalogExerciseIds(workingExercises);
+                var substitute = applicableRestriction.Substitutes
+                    .FirstOrDefault(s =>
+                        s.ExerciseId != Guid.Empty &&
+                        !presentIds.Contains(s.ExerciseId) &&
+                        !allRestrictionsByExercise.ContainsKey(s.ExerciseId));
+
+                if (substitute is not null)
+                {
+                    var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(
+                        applicableRestriction,
+                        originalHallucinated.ExerciseName,
+                        substitute.Name);
+
+                    workingExercises[i] = RecordSubstituteAdaptation(
+                        originalHallucinated,
+                        originalHallucinated,
+                        applicableRestriction,
+                        substitute,
+                        message,
+                        messages,
+                        adaptationWarnings,
+                        changes,
+                        itemResults);
+                    satisfiedRestrictionIds.Add(applicableRestriction.ExerciseId);
+                }
+                else
+                {
+                    // Nunca dejar pasar como "referencia" un ejercicio inventado de la zona restringida
+                    var removalMessage = AuthorizedSubstituteHelper.BuildRemovedRestrictedExerciseReason(
+                        applicableRestriction,
+                        originalHallucinated.ExerciseName);
+                    RecordRemovedRestrictedExercise(
+                        originalHallucinated,
+                        removalMessage,
+                        messages,
+                        adaptationWarnings,
+                        itemResults);
+                    workingExercises[i] = null;
+                }
+
+                adaptedAny = true;
+                adaptedIndices.Add(i);
                 continue;
+            }
 
-            var presentIds = CollectValidCatalogExerciseIds(exercises);
-            var substitute = applicableRestriction.Substitutes
-                .FirstOrDefault(s => !presentIds.Contains(s.ExerciseId));
+            // Resguardo adicional: si no había restricción explícita cargada para esa zona pero sí una lesión activa,
+            // tampoco dejar pasar una referencia inventada de esa zona lesionada.
+            var matchingInjury = context.ActiveInjuries
+                .FirstOrDefault(inj => MatchesInjuryZoneMuscleGroup(originalHallucinated.ExerciseName, inj.Zone));
 
-            // Nunca duplicar un ejercicio que ya está presente en la sesión
-            if (substitute is null)
-                continue;
-
-            var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(applicableRestriction, originalHallucinated.ExerciseName, substitute.Name);
-
-            exercises[i] = RecordSubstituteAdaptation(
-                originalHallucinated,
-                originalHallucinated,
-                applicableRestriction,
-                substitute,
-                message,
-                messages,
-                changes,
-                itemResults);
-            adaptedAny = true;
-            adaptedIndices.Add(i);
-            satisfiedRestrictionIds.Add(applicableRestriction.ExerciseId);
+            if (matchingInjury is not null)
+            {
+                var removalMessage = AuthorizedSubstituteHelper.BuildRemovedRestrictedExerciseReason(
+                    matchingInjury.Zone,
+                    matchingInjury.Description,
+                    originalHallucinated.ExerciseName);
+                RecordRemovedRestrictedExercise(
+                    originalHallucinated,
+                    removalMessage,
+                    messages,
+                    adaptationWarnings,
+                    itemResults);
+                workingExercises[i] = null;
+                adaptedAny = true;
+                adaptedIndices.Add(i);
+            }
         }
 
+        var exercises = workingExercises
+            .Where(e => e is not null)
+            .Cast<SuggestedExerciseDto>()
+            .ToList();
+
         // Pasada 3: Sustituto real del catálogo pero NO autorizado en sesión de 1 ejercicio (KAN-462)
-        if (!adaptedAny && exercises.Count == 1 && restrictionsByExercise.Count >= 1)
+        if (!adaptedAny && exercises.Count == 1 && restrictionsWithSubstitutes.Count >= 1)
         {
             var proposed = exercises[0];
-            var allAuthorizedIds = restrictionsByExercise.Values
+            var allAuthorizedIds = restrictionsWithSubstitutes.Values
                 .SelectMany(r => r.Substitutes)
                 .Select(s => s.ExerciseId)
                 .ToHashSet();
 
             if (proposed.ExerciseId is not { } proposedId || !allAuthorizedIds.Contains(proposedId))
             {
-                var restriction = restrictionsByExercise.Values.First();
+                var restriction = restrictionsWithSubstitutes.Values.First();
                 var substitute = restriction.Substitutes[0];
                 var message = AuthorizedSubstituteHelper.BuildUnauthorizedSubstituteReason(restriction, proposed.ExerciseName, substitute.Name);
                 exercises[0] = RecordSubstituteAdaptation(
@@ -294,6 +405,7 @@ public sealed class ExerciseSemanticValidator(
                     substitute,
                     message,
                     messages,
+                    adaptationWarnings,
                     changes,
                     itemResults);
                 adaptedAny = true;
@@ -306,7 +418,7 @@ public sealed class ExerciseSemanticValidator(
             Exercises = exercises,
             BaseExercises = baseExercises,
             WasAdapted = adaptedAny,
-            AdaptationWarnings = messages.Where(message => message.Contains("sustituto autorizado", StringComparison.OrdinalIgnoreCase)).ToList(),
+            AdaptationWarnings = adaptationWarnings,
             AdaptationChanges = changes
         },
             adaptedAny);
@@ -338,6 +450,9 @@ public sealed class ExerciseSemanticValidator(
         if (string.IsNullOrWhiteSpace(hallucinatedName))
             return false;
 
+        if (MatchesDirectZoneMention(hallucinatedName, restriction.Zone))
+            return true;
+
         var hallucinatedGroups = ExtractExerciseMuscleGroups(hallucinatedName);
         if (hallucinatedGroups.Count == 0)
             return false;
@@ -355,6 +470,32 @@ public sealed class ExerciseSemanticValidator(
             restrictionGroups.Add(zoneGroup);
 
         return hallucinatedGroups.Any(restrictionGroups.Contains);
+    }
+
+    private static bool MatchesInjuryZoneMuscleGroup(string? hallucinatedName, string? zone)
+    {
+        if (string.IsNullOrWhiteSpace(hallucinatedName) || string.IsNullOrWhiteSpace(zone))
+            return false;
+
+        if (MatchesDirectZoneMention(hallucinatedName, zone))
+            return true;
+
+        var hallucinatedGroups = ExtractExerciseMuscleGroups(hallucinatedName);
+        if (hallucinatedGroups.Count == 0)
+            return false;
+
+        var zoneGroups = MapZoneToMuscleGroups(zone);
+        return zoneGroups.Any(hallucinatedGroups.Contains);
+    }
+
+    private static bool MatchesDirectZoneMention(string exerciseName, string? zone)
+    {
+        var normZone = TextNormalizer.Normalize(zone);
+        if (normZone.Length < 4)
+            return false;
+
+        var normName = TextNormalizer.Normalize(exerciseName);
+        return normName.Contains(normZone, StringComparison.Ordinal);
     }
 
     private static HashSet<string> ExtractExerciseMuscleGroups(string text)
@@ -401,10 +542,10 @@ public sealed class ExerciseSemanticValidator(
         return [];
     }
 
-    private static HashSet<Guid> CollectValidCatalogExerciseIds(IEnumerable<SuggestedExerciseDto> exercises) =>
+    private static HashSet<Guid> CollectValidCatalogExerciseIds(IEnumerable<SuggestedExerciseDto?> exercises) =>
         exercises
-            .Where(e => !e.IsReference && e.ExerciseId.HasValue && e.ExerciseId.Value != Guid.Empty)
-            .Select(e => e.ExerciseId!.Value)
+            .Where(e => e is not null && !e.IsReference && e.ExerciseId.HasValue && e.ExerciseId.Value != Guid.Empty)
+            .Select(e => e!.ExerciseId!.Value)
             .ToHashSet();
 
     private static SuggestedExerciseDto RecordSubstituteAdaptation(
@@ -414,12 +555,14 @@ public sealed class ExerciseSemanticValidator(
         AuthorizedSubstituteDto substitute,
         string message,
         ICollection<string> messages,
+        ICollection<string> adaptationWarnings,
         ICollection<AdaptationChangeDto> changes,
         ICollection<ExerciseSemanticValidationItemResult> itemResults)
     {
         var adapted = AuthorizedSubstituteHelper.CreateAdaptedExercise(targetExercise, substitute);
 
         messages.Add(message);
+        adaptationWarnings.Add(message);
         changes.Add(AuthorizedSubstituteHelper.CreateAdaptationChange(originalForChange, restriction, substitute, message));
         itemResults.Add(new ExerciseSemanticValidationItemResult(
             targetExercise,
@@ -428,6 +571,22 @@ public sealed class ExerciseSemanticValidator(
             message));
 
         return adapted;
+    }
+
+    private static void RecordRemovedRestrictedExercise(
+        SuggestedExerciseDto removedExercise,
+        string message,
+        ICollection<string> messages,
+        ICollection<string> adaptationWarnings,
+        ICollection<ExerciseSemanticValidationItemResult> itemResults)
+    {
+        messages.Add(message);
+        adaptationWarnings.Add(message);
+        itemResults.Add(new ExerciseSemanticValidationItemResult(
+            removedExercise,
+            removedExercise,
+            ExerciseValidationStatus.RemovedByRestriction,
+            message));
     }
 
     private sealed record AdaptationValidationResult(
