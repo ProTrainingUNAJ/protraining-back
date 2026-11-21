@@ -772,13 +772,13 @@ public sealed class ResilientAiService : IAiService
                 $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
         }
 
-            if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
-            {
-                _logger.LogWarning(
-                    "El atleta {AthleteId} no tiene habilitadas las recomendaciones (permiso del tutor no verificado o no autorizado). No se generará recomendación de alimentación (KAN-493 / KAN-496).",
-                    request.AthleteId.Value);
-                throw new DomainException("El atleta no tiene autorizadas las recomendaciones de hábitos y alimentación.");
-            }
+        if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
+        {
+            _logger.LogWarning(
+                "El atleta {AthleteId} no tiene habilitadas las recomendaciones (permiso del tutor no verificado o no autorizado). No se generará recomendación de alimentación (KAN-493 / KAN-496).",
+                request.AthleteId.Value);
+            throw new DomainException("El atleta no tiene autorizadas las recomendaciones de hábitos y alimentación.");
+        }
 
         // Menores de edad: aunque el tutor autorice, nunca se incluyen cantidades (KAN-378 / KAN-496).
         // Se fuerza el modo cualitativo antes de armar el prompt, validar y generar el respaldo por reglas.
