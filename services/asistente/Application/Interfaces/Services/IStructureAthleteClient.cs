@@ -92,7 +92,8 @@ public interface IStructureAthleteClient
 
     /// <summary>
     /// Obtiene si el atleta es menor de edad y si su tutor autorizó las recomendaciones de hábitos (#201 · KAN-496).
-    /// Devuelve <c>null</c> cuando Estructura no responde (404, 5xx, timeout) o el atleta no existe:
+    /// Devuelve <c>null</c> cuando Estructura no responde (404, 5xx, timeout), el atleta no existe,
+    /// o la respuesta trae <c>isMinor</c> / <c>allowsHabitsRecommendations</c> en null o ausentes:
     /// el consumidor debe asumir que no hay permiso y no generar recomendación (fail-closed).
     /// </summary>
     Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default);

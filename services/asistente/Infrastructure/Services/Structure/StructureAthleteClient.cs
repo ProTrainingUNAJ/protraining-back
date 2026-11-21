@@ -80,9 +80,11 @@ public sealed class StructureAthleteClient(
         }
     }
 
+    // Campos anulables para tolerar JSON incompleto (KAN-496): si alguno viene null o ausente,
+    // no se puede verificar edad ni permiso del tutor y se resuelve en modo fail-closed.
     private sealed record StructureAthletePermissionApiResponse(
-        [property: JsonPropertyName("isMinor")] bool IsMinor,
-        [property: JsonPropertyName("allowsHabitsRecommendations")] bool AllowsHabitsRecommendations);
+        [property: JsonPropertyName("isMinor")] bool? IsMinor,
+        [property: JsonPropertyName("allowsHabitsRecommendations")] bool? AllowsHabitsRecommendations);
 
     public Task<StructureAthleteHabitsPermissionDto?> GetHabitsPermissionAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
@@ -138,7 +140,17 @@ public sealed class StructureAthleteClient(
                 return null;
             }
 
-            return new StructureAthleteHabitsPermissionDto(athlete.IsMinor, athlete.AllowsHabitsRecommendations);
+            // Fail-closed (KAN-496): sin 'isMinor' o 'allowsHabitsRecommendations' explícitos no se
+            // puede saber la edad ni el permiso del tutor; nunca se asume que un menor es adulto con permiso.
+            if (athlete.IsMinor is null || athlete.AllowsHabitsRecommendations is null)
+            {
+                logger.LogWarning(
+                    "Estructura no informó 'isMinor' o 'allowsHabitsRecommendations' (null o ausente) al consultar el permiso de recomendaciones {AthleteDescription}. No se generará recomendación de alimentación (fail-closed, KAN-496).",
+                    athleteDescription);
+                return null;
+            }
+
+            return new StructureAthleteHabitsPermissionDto(athlete.IsMinor.Value, athlete.AllowsHabitsRecommendations.Value);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

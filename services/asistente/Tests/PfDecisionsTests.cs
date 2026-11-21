@@ -646,6 +646,37 @@ public sealed class PfDecisionsTests
         Assert.False(result.AllowsHabitsRecommendations);
     }
 
+    [Theory]
+    [InlineData("""{"isMinor":null,"allowsHabitsRecommendations":null}""")]
+    [InlineData("""{"isMinor":true}""")]
+    [InlineData("""{"allowsHabitsRecommendations":true}""")]
+    [InlineData("""{"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}""")]
+    public async Task Given_StructureAthleteClient_When_EstructuraOmitsOrNullsPermissionFields_Then_ReturnsNull_FailClosed(string json)
+    {
+        // Arrange: campos null o ausentes en la respuesta de Estructura (KAN-496):
+        // sin edad o permiso del tutor verificables no se puede tratar a un menor como adulto con permiso.
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.ToString().Contains($"api/v1/athletes/{MyAthleteId}")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json)
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:8082/")
+        };
+
+        var client = new StructureAthleteClient(httpClient, Mock.Of<ILogger<StructureAthleteClient>>());
+
+        // Act & Assert: sin permiso verificable → null → el consumidor no genera recomendación (fail-closed)
+        Assert.Null(await client.GetHabitsPermissionAsync(MyAthleteId));
+    }
+
     [Fact]
     public async Task Given_StructureAthleteClient_When_EstructuraReturns404Or500_Then_ReturnsNull_FailClosed()
     {
