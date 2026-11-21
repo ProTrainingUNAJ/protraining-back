@@ -265,6 +265,22 @@ public sealed class SeguimientoClient(
             cancellationToken: cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CategoryTrafficLightAthleteRemoteDto>> GetCategoryTrafficLightTodayAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        if (categoryId == Guid.Empty)
+            throw new NotFoundException("La categoría no existe o no pertenece al preparador físico autenticado.");
+
+        var items = await GetFromSeguimientoAsync<List<CategoryTrafficLightAthleteRemoteDto>>(
+            relativeUrl: $"api/v1/categories/{categoryId}/traffic-light-today",
+            notFoundMessage: "La categoría no existe o no pertenece al preparador físico autenticado.",
+            operationDescription: $"consultar el semáforo de hoy de la categoría {categoryId}",
+            cancellationToken: cancellationToken);
+
+        return items ?? [];
+    }
+
     private async Task<T?> GetFromSeguimientoAsync<T>(
         string relativeUrl,
         string notFoundMessage,
