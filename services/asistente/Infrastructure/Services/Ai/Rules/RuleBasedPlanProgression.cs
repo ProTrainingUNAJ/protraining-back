@@ -10,6 +10,8 @@ namespace Infrastructure.Services.Ai.Rules;
 /// </summary>
 public static class RuleBasedPlanProgression
 {
+    private static readonly CultureInfo EsArCulture = CultureInfo.GetCultureInfo("es-AR");
+
     public const decimal WeeklyIncrementPercentage = 2.5m;
     public const decimal ReducedWeekPercentagePenalty = 10.0m;
     public const decimal MinTargetPercentage = 40.0m;
@@ -174,7 +176,7 @@ public static class RuleBasedPlanProgression
         var mainSets = main?.Sets ?? profile.MainSets;
         var mainReps = main?.Reps ?? profile.MainReps;
         var mainPct = main?.TargetPercentage ?? profile.MainBasePercentage;
-        var formattedPct = mainPct.ToString("0.#", CultureInfo.GetCultureInfo("es-AR"));
+        var formattedPct = mainPct.ToString("0.#", EsArCulture);
         var cueSuffix = !string.IsNullOrWhiteSpace(profile.ExecutionCue)
             ? $", {profile.ExecutionCue}"
             : string.Empty;
@@ -217,13 +219,15 @@ public static class RuleBasedPlanProgression
         if (matchSet.Contains(sessionDate.AddDays(1)))
         {
             var cap = MatchDayLoadRules.MaxPercentageOneDayBeforeMatch;
-            return (cap, $"Tapering D-1: carga limitada al {cap:0.#}% por partido oficial.");
+            var formattedCap = cap.ToString("0.#", EsArCulture);
+            return (cap, $"Tapering D-1: carga limitada al {formattedCap} % por partido oficial.");
         }
 
         if (matchSet.Contains(sessionDate.AddDays(2)))
         {
             var cap = MatchDayLoadRules.MaxPercentageTwoDaysBeforeMatch;
-            return (cap, $"Tapering D-2: carga moderada al {cap:0.#}% por proximidad de partido.");
+            var formattedCap = cap.ToString("0.#", EsArCulture);
+            return (cap, $"Tapering D-2: carga moderada al {formattedCap} % por proximidad de partido.");
         }
 
         return (null, null);
