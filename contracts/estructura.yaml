@@ -1700,6 +1700,12 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
+  # Endpoints internos entre microservicios (KAN-581): requieren JWT con rol Servicio y están
+  # bloqueados en el Gateway (PerimeterSecurityMiddleware). Nota sobre SDK del frontend:
+  # @hey-api/openapi-ts en protraining-front procesa los YAML completos sin filtro de exclusión
+  # (igual que con /api/v1/internal/... de identidad.yaml, entrenamiento.yaml y seguimiento.yaml);
+  # estos endpoints quedan agrupados bajo el tag Internal, no se importan en el cliente público y
+  # cualquier llamada desde el navegador es rechazada por el Gateway.
   /api/v1/internal/athletes:
     get:
       tags:
