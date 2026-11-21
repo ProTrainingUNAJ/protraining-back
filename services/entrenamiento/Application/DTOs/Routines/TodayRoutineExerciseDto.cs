@@ -30,6 +30,14 @@ namespace Application.DTOs.Routines
         public bool IsAdapted { get; set; }
         public string? OriginalExerciseName { get; set; }
         public string? AdaptationReason { get; set; }
+
+        // Valores semanales resueltos
+        public IntensityType? IntensityType { get; set; }
+        public decimal? TargetRpe { get; set; }
+        public int? TargetRir { get; set; }
+        public string? Notes { get; set; }
+        public int? WeekNumber { get; set; }
+        public Guid? BlockId { get; set; }
     }
 
     public class TodayRoutinePerformedSetDto
