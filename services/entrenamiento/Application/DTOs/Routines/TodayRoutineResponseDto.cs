@@ -11,8 +11,9 @@ namespace Application.DTOs.Routines
         public bool AdjustedByCoach { get; set; }
         public string? AdjustmentNote { get; set; }
         public string? CoachNotes { get; set; }
-        // Hora de la sesión (hora Argentina), si el PF la cargó (KAN-558)
+        // Hora de la sesión (hora Argentina), si el PF la cargó
         public TimeOnly? StartTime { get; set; }
         public List<TodayRoutineExerciseDto> Exercises { get; set; } = [];
+        public List<TodayRoutineBlockDto> Blocks { get; set; } = [];
     }
 }

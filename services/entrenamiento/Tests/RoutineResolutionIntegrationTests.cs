@@ -364,4 +364,107 @@ public class RoutineResolutionIntegrationTests
             Assert.Null(ex2.AdaptationReason);
         }
     }
+
+    [Fact]
+    public async Task Given_VariantePorAtletaEnPlanPorBloques_When_ConsultaRutinaEnSemana2_Then_AplicaSustitutoDentroDeSuBloque()
+    {
+        var pfId = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+        var categoryId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+
+        var startDate = new DateOnly(2026, 11, 2); // Lunes -> Semana 1
+        var week2Date = startDate.AddDays(7);     // Lunes -> Semana 2
+
+        var warmup = Exercise.Create("Movilidad de Cadera", "Piernas");
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+
+        var plan = TrainingPlan.Create("Plan Por Bloques", "Fuerza");
+
+        var week1 = TrainingWeek.Create(1, plan.Id);
+        var sessionW1 = TrainingSession.Create(week1.Id, "Día 1 S1", 1, week2Date.DayOfWeek);
+        var blockW1 = TrainingBlock.Create(sessionW1.Id, "Bloque S1", 1);
+        blockW1.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, 65m, blockW1.Id, squat.Id, trainingSessionId: sessionW1.Id));
+        sessionW1.AddBlock(blockW1);
+        week1.AddSession(sessionW1);
+        plan.AddWeek(week1);
+
+        var week2 = TrainingWeek.Create(2, plan.Id);
+        var sessionW2 = TrainingSession.Create(week2.Id, "Día 1 S2", 1, week2Date.DayOfWeek);
+        var block1W2 = TrainingBlock.Create(sessionW2.Id, "Entrada en calor", 1);
+        block1W2.AddPrescribedExercise(PrescribedExercise.Create(1, 2, 12, null, block1W2.Id, warmup.Id, trainingSessionId: sessionW2.Id));
+        var block2W2 = TrainingBlock.Create(sessionW2.Id, "Fuerza Principal", 2);
+        block2W2.AddPrescribedExercise(PrescribedExercise.Create(1, 4, "6-8", 80m, block2W2.Id, squat.Id, trainingSessionId: sessionW2.Id));
+        sessionW2.AddBlock(block1W2);
+        sessionW2.AddBlock(block2W2);
+        week2.AddSession(sessionW2);
+        plan.AddWeek(week2);
+
+        var assignment = PlanAssignment.Create(plan.Id, startDate, categoryId: categoryId);
+        var variant = AthleteVariant.Create(
+            athleteId,
+            squat.Id,
+            legPress.Id,
+            isApproved: true,
+            isActive: true,
+            validFrom: startDate,
+            note: "Variante aprobada por molestia de rodilla");
+
+        // 1RM 135 kg * 80% = 108 kg -> redondeado a múltiplo de 2.5 kg = 107.5 kg
+        var substituteRecord = AthleteRecord.Create(athleteId, legPress.Id, 135m, RecordSource.Tested, DateTime.UtcNow);
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            await context.Exercises.AddRangeAsync(warmup, squat, legPress);
+            await context.TrainingPlans.AddAsync(plan);
+            await context.PlanAssignments.AddAsync(assignment);
+            await context.AthleteVariants.AddAsync(variant);
+            await context.AthleteRecords.AddAsync(substituteRecord);
+            await context.SaveChangesAsync();
+        }
+
+        var structureClientMock = new Mock<IStructureClient>();
+        structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Plantel Superior", null)]);
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Fernández"));
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            var handler = new GetTodayRoutineQueryHandler(
+                new AthleteRecordRepository(context),
+                new TrainingSessionRepository(context),
+                new LoadCalculatorEngine(),
+                structureClientMock.Object,
+                new ExerciseVideoRepository(context),
+                new PerformedSetRepository(context),
+                adjustmentRepository: new AthleteSessionAdjustmentRepository(context),
+                exerciseRepository: new ExerciseRepository(context),
+                athleteVariantRepository: new AthleteVariantRepository(context));
+
+            var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = week2Date });
+
+            Assert.True(result.RoutineAdapted);
+            Assert.False(result.AdjustedByCoach);
+            Assert.Equal(2, result.Blocks.Count);
+
+            Assert.Equal("Entrada en calor", result.Blocks[0].Title);
+            var b1Ex = Assert.Single(result.Blocks[0].Exercises);
+            Assert.Equal(warmup.Id, b1Ex.ExerciseId);
+            Assert.False(b1Ex.IsAdapted);
+
+            Assert.Equal("Fuerza Principal", result.Blocks[1].Title);
+            var b2Ex = Assert.Single(result.Blocks[1].Exercises);
+            Assert.Equal(legPress.Id, b2Ex.ExerciseId);
+            Assert.Equal("Prensa de piernas", b2Ex.Name);
+            Assert.True(b2Ex.IsAdapted);
+            Assert.Equal("Sentadilla", b2Ex.OriginalExerciseName);
+            Assert.Equal("Variante aprobada por molestia de rodilla", b2Ex.AdaptationReason);
+            Assert.Equal(135.0, b2Ex.Current1RmKg);
+            Assert.Equal(107.5, b2Ex.WeightKg);
+        }
+    }
 }

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Application.DTOs.Routines;
 using Application.DTOs.TrainingSessions;
 using Application.Exceptions;
@@ -7,6 +6,7 @@ using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Services;
+using System.Text.Json;
 
 namespace Application.UseCases.Routines.GetTodayRoutine
 {
@@ -104,7 +104,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     RoutineAdapted = false,
                     AdjustedByCoach = false,
                     AdjustmentNote = null,
-                    Exercises = []
+                    Exercises = [],
+                    Blocks = [],
                 };
             }
 
@@ -169,18 +170,19 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 substituteExercisesById = loadedSubstitutes.ToDictionary(e => e.Id);
             }
 
-            var exercisesDto = new List<TodayRoutineExerciseDto>();
+            var prescribedExercises = routine.Blocks.Count > 0 ? routine.Blocks.OrderBy(b => b.Order)
+                                                                               .SelectMany(b => b.PrescribedExercises).ToList()
+                                                                               : routine.PrescribedExercises.ToList();
 
-            var effectiveExerciseIds = routine.PrescribedExercises
+            var effectiveExerciseIds = prescribedExercises
                 .Select(p => replacementsByOriginal.TryGetValue(p.ExerciseId, out var subId) ? subId : p.ExerciseId)
-                .Distinct()
-                .ToList();
+                .Distinct().ToList();
 
             var pfVideos = await exerciseVideoRepository.GetVideosByExerciseIdsAsync(effectiveExerciseIds, cancellationToken);
 
             var performedSets = await performedSetRepository.GetByAthleteAndDateAsNoTrackingAsync(athleteId, date, cancellationToken);
 
-            var hasTimedExercise = routine.PrescribedExercises.Any(p =>
+            var hasTimedExercise = prescribedExercises.Any(p =>
             {
                 var ex = replacementsByOriginal.TryGetValue(p.ExerciseId, out var subId)
                     && substituteExercisesById.TryGetValue(subId, out var sub)
@@ -200,118 +202,59 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 }
             }
 
-            // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
-            foreach (var prescribed in routine.PrescribedExercises)
+            var blocksDto = new List<TodayRoutineBlockDto>();
+            var exercisesDto = new List<TodayRoutineExerciseDto>();
+
+            var resolutionContext = new ExerciseResolutionContext(
+                athleteId,
+                replacementsByOriginal,
+                substituteExercisesById,
+                variantReasons,
+                activeAdjustment,
+                pfVideos,
+                performedSets,
+                bestMarksByExerciseName);
+
+            if (routine.Blocks.Count > 0)
             {
-                var effectiveExerciseId = prescribed.ExerciseId;
-                var effectiveExercise = prescribed.Exercise;
-                bool isAdapted = false;
-                string? originalExerciseName = null;
-                string? adaptationReason = null;
-
-                if (replacementsByOriginal.TryGetValue(prescribed.ExerciseId, out var substituteId))
+                foreach (var block in routine.Blocks.OrderBy(b => b.Order))
                 {
-                    effectiveExerciseId = substituteId;
-                    substituteExercisesById.TryGetValue(substituteId, out effectiveExercise);
-                    isAdapted = true;
-                    originalExerciseName = prescribed.Exercise?.Name;
-                    variantReasons.TryGetValue(prescribed.ExerciseId, out adaptationReason);
-                }
+                    var blockExercises = new List<TodayRoutineExerciseDto>();
 
-                var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
-                bool isTimedExercise = exerciseType is ExerciseType.Distance or ExerciseType.Time;
-
-                var activeRecord = isTimedExercise
-                    ? null
-                    : await athleteRecordRepository.GetActiveRecordAsync(athleteId, effectiveExerciseId, cancellationToken);
-
-                decimal percentage = prescribed.TargetPercentage ?? 100m;
-                if (activeAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
-                {
-                    percentage = Math.Round(percentage * (100m - reduction) / 100m, 2);
-                    var reductionText = $"Reducción de carga del {reduction}%";
-                    adaptationReason = string.IsNullOrWhiteSpace(adaptationReason)
-                        ? (string.IsNullOrWhiteSpace(activeAdjustment.Note)
-                            ? reductionText
-                            : $"{activeAdjustment.Note.Trim()} ({reductionText})")
-                        : $"{adaptationReason} · {reductionText}";
-                }
-
-                double? targetTime = null;
-
-                double? bestMark = null;
-
-                if (isTimedExercise)
-                {
-                    // Si el ejercicio tiene test/marca de tiempo
-                    decimal? bestTestTime = effectiveExercise?.Name is { } exerciseName
-                        && bestMarksByExerciseName.TryGetValue(exerciseName.Trim(), out var mark)
-                        ? mark
-                        : null;
-
-                    var timeResult = calculator.CalculateTimeTarget(bestTestTime, percentage);
-
-                    targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
-
-                    bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
-                }
-
-                decimal? current1RmKg = isTimedExercise ? null : activeRecord?.Weight;
-
-                var source = isTimedExercise ? null : activeRecord?.Source;
-
-                var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
-
-                bool isBarbell = Equipment.IsBarbell(effectiveExercise?.Equipment);
-
-                double? barWeight = isBarbell ? 20 : null;
-
-                double? totalWeight = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null;
-
-                double? weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
-
-                var effectiveVideoUrl = pfVideos.TryGetValue(effectiveExerciseId, out var customVideo)
-                    ? customVideo
-                    : effectiveExercise?.VideoUrl;
-
-                exercisesDto.Add(new TodayRoutineExerciseDto
-                {
-                    ExerciseId = effectiveExerciseId,
-                    Name = effectiveExercise?.Name ?? string.Empty,
-                    MuscleGroup = effectiveExercise?.MuscleGroup ?? string.Empty,
-                    VideoUrl = effectiveVideoUrl,
-                    Images = effectiveExercise?.Images.ToList() ?? [],
-                    // Ilustraciones del catálogo (KAN-549): solo para ejercicios del catálogo global.
-                    Media = effectiveExercise is { Origin: Origin.Catalog } && effectiveExercise.PfId == Guid.Empty && exerciseMediaCatalog is not null
-                        ? exerciseMediaCatalog.GetForCatalogImages(effectiveExercise.Images).ToList()
-                        : [],
-                    PrimaryMuscles = effectiveExercise?.PrimaryMuscles.ToList() ?? [],
-                    SecondaryMuscles = effectiveExercise?.SecondaryMuscles.ToList() ?? [],
-                    ExerciseType = exerciseType,
-                    Sets = prescribed.Sets,
-                    Reps = int.TryParse(prescribed.Reps, out var parsedReps) ? parsedReps : (int.TryParse(prescribed.Reps.Split('-')[0].Trim(), out var minReps) ? minReps : 0),
-                    RepsRange = prescribed.Reps,
-                    Percentage = (double)percentage,
-                    WeightKg = totalWeight,
-                    BarWeight = barWeight,
-                    WeightPerSide = weightPerSide,
-                    Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
-                    IsReference = loadResult.IsReference,
-                    TargetTimeSeconds = targetTime,
-                    BestMarkSeconds = bestMark,
-                    PerformedSets = performedSets.Where(p => p.ExerciseId == effectiveExerciseId).OrderBy(p => p.SetNumber ?? 0)
-                    .Select(p => new TodayRoutinePerformedSetDto
+                    foreach (var prescribed in block.PrescribedExercises.OrderBy(pe => pe.Order))
                     {
-                        SetNumber = p.SetNumber,
-                        Weight = p.Weight,
-                        Reps = p.Reps,
-                        TimeSeconds = p.TimeSeconds
-                    })
-                    .ToList(),
-                    IsAdapted = isAdapted,
-                    OriginalExerciseName = originalExerciseName,
-                    AdaptationReason = adaptationReason
-                });
+                        var resolvedExercise = await ResolveExerciseAsync(prescribed, resolutionContext, cancellationToken);
+                        blockExercises.Add(resolvedExercise);
+                        exercisesDto.Add(resolvedExercise);
+                    }
+
+                    blocksDto.Add(new TodayRoutineBlockDto
+                    {
+                        Id = block.Id,
+                        Title = block.Title,
+                        Order = block.Order,
+                        Exercises = blockExercises
+                    });
+                }
+            }
+            else
+            {
+                // Fallback por si alguna sesión legada o test unitario no cargó bloques
+                foreach (var prescribed in routine.PrescribedExercises.OrderBy(pe => pe.Order))
+                {
+                    exercisesDto.Add(await ResolveExerciseAsync(prescribed, resolutionContext, cancellationToken));
+                }
+
+                if (exercisesDto.Count > 0)
+                {
+                    blocksDto.Add(new TodayRoutineBlockDto
+                    {
+                        Id = routine.Id,
+                        Title = "Principal",
+                        Order = 1,
+                        Exercises = exercisesDto.ToList()
+                    });
+                }
             }
 
             var effectiveCoachNotes = adjustedByCoach && !string.IsNullOrWhiteSpace(adjustmentNote)
@@ -330,7 +273,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 AdjustmentNote = adjustmentNote,
                 CoachNotes = effectiveCoachNotes,
                 StartTime = routine.StartTime,
-                Exercises = exercisesDto
+                Exercises = exercisesDto,
+                Blocks = blocksDto
             };
 
             return todayRoutineDto;
@@ -350,5 +294,121 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 return [];
             }
         }
+
+        private async Task<TodayRoutineExerciseDto> ResolveExerciseAsync(PrescribedExercise prescribed, ExerciseResolutionContext context, CancellationToken cancellationToken)
+        {
+            // Por cada ejercicio prescrito (o su sustituto si fue ajustado hoy), resolvemos la carga a partir de su 1RM
+            var effectiveExerciseId = prescribed.ExerciseId;
+            var effectiveExercise = prescribed.Exercise;
+            bool isAdapted = false;
+            string? originalExerciseName = null;
+            string? adaptationReason = null;
+            
+            if (context.ReplacementsByOriginal.TryGetValue(prescribed.ExerciseId, out var substituteId))
+            {
+                effectiveExerciseId = substituteId;
+                context.SubstituteExercisesById.TryGetValue(substituteId, out effectiveExercise);
+                isAdapted = true;
+                originalExerciseName = prescribed.Exercise?.Name;
+                context.VariantReasons.TryGetValue(prescribed.ExerciseId, out adaptationReason);
+            }
+            
+            var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
+            bool isTimedExercise = exerciseType is ExerciseType.Distance or ExerciseType.Time;
+            
+            var activeRecord = isTimedExercise
+                ? null
+                : await athleteRecordRepository.GetActiveRecordAsync(context.AthleteId, effectiveExerciseId, cancellationToken);
+            
+            decimal percentage = prescribed.TargetPercentage ?? 100m;
+            
+            if (context.ActiveAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
+            {
+                percentage = Math.Round(percentage * (100m - reduction) / 100m, 2);
+                var reductionText = $"Reducción de carga del {reduction}%";
+                adaptationReason = string.IsNullOrWhiteSpace(adaptationReason)
+                    ? (string.IsNullOrWhiteSpace(context.ActiveAdjustment.Note)
+                        ? reductionText
+                        : $"{context.ActiveAdjustment.Note.Trim()} ({reductionText})")
+                    : $"{adaptationReason} · {reductionText}";
+            }
+            
+            double? targetTime = null;
+            double? bestMark = null;
+            
+            if (isTimedExercise)
+            {
+                // Si el ejercicio tiene test/marca de tiempo
+                decimal? bestTestTime = effectiveExercise?.Name is { } exerciseName
+                    && context.BestMarksByExerciseName.TryGetValue(exerciseName.Trim(), out var mark)
+                    ? mark
+                    : null;
+                
+                var timeResult = calculator.CalculateTimeTarget(bestTestTime, percentage);
+                targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
+                bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
+            }
+            
+            decimal? current1RmKg = isTimedExercise ? null : activeRecord?.Weight;
+            var source = isTimedExercise ? null : activeRecord?.Source;
+            var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
+            bool isBarbell = Equipment.IsBarbell(effectiveExercise?.Equipment);
+            double? barWeight = isBarbell ? 20 : null;
+            double? totalWeight = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null;
+            double? weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
+            
+            var effectiveVideoUrl = context.PfVideos.TryGetValue(effectiveExerciseId, out var customVideo)
+                ? customVideo
+                : effectiveExercise?.VideoUrl;
+            
+            return new TodayRoutineExerciseDto
+            {
+                ExerciseId = effectiveExerciseId,
+                Name = effectiveExercise?.Name ?? string.Empty,
+                MuscleGroup = effectiveExercise?.MuscleGroup ?? string.Empty,
+                VideoUrl = effectiveVideoUrl,
+                Images = effectiveExercise?.Images.ToList() ?? [],
+                // Ilustraciones del catálogo (KAN-549): solo para ejercicios del catálogo global.
+                Media = effectiveExercise is { Origin: Origin.Catalog } && effectiveExercise.PfId == Guid.Empty && exerciseMediaCatalog is not null
+                    ? exerciseMediaCatalog.GetForCatalogImages(effectiveExercise.Images).ToList()
+                    : [],
+                PrimaryMuscles = effectiveExercise?.PrimaryMuscles.ToList() ?? [],
+                SecondaryMuscles = effectiveExercise?.SecondaryMuscles.ToList() ?? [],
+                ExerciseType = exerciseType,
+                Sets = prescribed.Sets,
+                Reps = int.TryParse(prescribed.Reps, out var parsedReps) ? parsedReps : (int.TryParse(prescribed.Reps.Split('-')[0].Trim(), out var minReps) ? minReps : 0),
+                RepsRange = prescribed.Reps,
+                Percentage = (double)percentage,
+                WeightKg = totalWeight,
+                BarWeight = barWeight,
+                WeightPerSide = weightPerSide,
+                Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
+                IsReference = loadResult.IsReference,
+                TargetTimeSeconds = targetTime,
+                BestMarkSeconds = bestMark,
+                PerformedSets = context.PerformedSets.Where(p => p.ExerciseId == effectiveExerciseId).OrderBy(p => p.SetNumber ?? 0)
+                    .Select(p => new TodayRoutinePerformedSetDto
+                    {
+                        SetNumber = p.SetNumber,
+                        Weight = p.Weight,
+                        Reps = p.Reps,
+                        TimeSeconds = p.TimeSeconds
+                    })
+                    .ToList(),
+                IsAdapted = isAdapted,
+                OriginalExerciseName = originalExerciseName,
+                AdaptationReason = adaptationReason
+            };
+        }
+
+        private sealed record ExerciseResolutionContext(
+            Guid AthleteId,
+            IReadOnlyDictionary<Guid, Guid> ReplacementsByOriginal,
+            IReadOnlyDictionary<Guid, Domain.Entities.Exercise> SubstituteExercisesById,
+            IReadOnlyDictionary<Guid, string?> VariantReasons,
+            AthleteSessionAdjustment? ActiveAdjustment,
+            IReadOnlyDictionary<Guid, string> PfVideos,
+            IReadOnlyList<PerformedSet> PerformedSets,
+            IReadOnlyDictionary<string, decimal> BestMarksByExerciseName);
     }
 }

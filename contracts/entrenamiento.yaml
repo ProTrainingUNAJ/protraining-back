@@ -2244,11 +2244,35 @@ components:
           description: Motivo o nota de la adaptación aplicada al ejercicio.
           example: "Variante aprobada por molestia de rodilla"
 
+    TodayRoutineBlock:
+      type: object
+      required:
+        - id
+        - title
+        - order
+        - exercises
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Fuerza Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodayRoutineExercise'
+
     TodayRoutineResponse:
       type: object
       required:
         - date
         - exercises
+        - blocks
       properties:
         athleteId:
           type: string
@@ -2282,6 +2306,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+        blocks:
+          type: array
+          description: Bloques de la sesión del día ordenados con los valores de la semana en curso (KAN-586).
+          items:
+            $ref: '#/components/schemas/TodayRoutineBlock'
 
         sessionId:
           type: string
