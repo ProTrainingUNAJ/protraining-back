@@ -34,6 +34,7 @@ using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
 using Application.UseCases.Trends.GetAthleteWeeklyTrends;
 using Application.UseCases.Trends.GetCategoryWeeklyTrends;
+using Application.UseCases.Dashboard.GetCategoryDashboardSummary;
 using Application.Services;
 using Infrastructure.Services;
 using Domain.Services;
@@ -133,6 +134,8 @@ builder.Services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
 builder.Services.AddScoped<GetAthleteEvolutionQueryHandler>();
 builder.Services.AddScoped<GetAthleteWeeklyTrendsQueryHandler>();
 builder.Services.AddScoped<GetCategoryWeeklyTrendsQueryHandler>();
+// Dashboard consolidado por categoría (KAN-504): resumen de asistencia, lesiones y carga.
+builder.Services.AddScoped<GetCategoryDashboardSummaryQueryHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();

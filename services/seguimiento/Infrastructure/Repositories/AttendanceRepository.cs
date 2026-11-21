@@ -21,6 +21,19 @@ public sealed class AttendanceRepository(AppDbContext context) : IAttendanceRepo
                 .Where(attendance => athleteIds.Contains(attendance.AthleteId) && attendance.Date == date)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<Attendance>> GetByAthletesAndDateRangeAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+            await context.Attendances
+                .AsNoTracking()
+                .Where(attendance => athleteIds.Contains(attendance.AthleteId)
+                    && attendance.Date >= from.ToDateTime(TimeOnly.MinValue)
+                    && attendance.Date <= to.ToDateTime(TimeOnly.MaxValue))
+                .ToListAsync(cancellationToken));
+
     public async Task<IReadOnlyList<Attendance>> GetByDateAsync(DateTime date, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.Attendances

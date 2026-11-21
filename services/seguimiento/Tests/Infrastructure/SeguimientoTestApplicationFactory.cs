@@ -9,6 +9,7 @@ using API.Services;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
+using Application.UseCases.Dashboard.GetCategoryDashboardSummary;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
@@ -185,6 +186,9 @@ services.AddScoped<Application.UseCases.CheckIns.ListResolvedInjuries.ListResolv
                 services.AddScoped<GetAthleteEvolutionQueryHandler>();
                 services.AddScoped<GetAthleteWeeklyTrendsQueryHandler>();
                 services.AddScoped<GetCategoryWeeklyTrendsQueryHandler>();
+
+                // Dashboard consolidado por categoría (KAN-504): mismo registro que Program.cs.
+                services.AddScoped<GetCategoryDashboardSummaryQueryHandler>();
 
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.

@@ -274,6 +274,13 @@ load_live_parts() {
   fi
   check_in atleta@protraining.com "$lucas_body"
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+
+  echo "Avisos preventivos (Centro de Avisos):"
+  api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
+    "$(jq -nc --arg a "$LUCAS_ID" '{athleteId:$a,athleteName:"Lucas Gómez",severity:"High",type:"AccumulatedFatigue",reason:"Fatiga muscular acumulada y partido en 48 hs",suggestion:"Reducción preventiva (-20% de series hoy)",suggestedAdjustmentType:"LoadReduction",suggestedAdjustmentPercentage:20}')" >/dev/null
+  api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
+    "$(jq -nc --arg a "$CAMILA_ID" '{athleteId:$a,athleteName:"Camila Torres",severity:"Medium",type:"InjuryRisk",reason:"Molestia reportada en tendón rotuliano tras último entrenamiento",suggestion:"Adaptación de sesión: sustituir carga axial por trabajo en máquina",suggestedAdjustmentType:"RoutineAdjustment"}')" >/dev/null
+  echo "  Camila Torres (rotuliano) y Lucas Gómez (fatiga y partido en 48 hs)"
 }
 
 if [[ "$MODE" == "checkins" ]]; then
