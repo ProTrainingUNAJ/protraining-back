@@ -53,4 +53,12 @@ public interface ISeguimientoClient
         Guid athleteId,
         int weeks = 4,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene el resumen del semáforo de hoy de todos los atletas de una categoría para evaluar
+    /// conflictos de dolor en lote (KAN-574). Lanza NotFoundException si la categoría no existe o no pertenece al PF.
+    /// </summary>
+    Task<IReadOnlyList<CategoryTrafficLightAthleteRemoteDto>> GetCategoryTrafficLightTodayAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default);
 }

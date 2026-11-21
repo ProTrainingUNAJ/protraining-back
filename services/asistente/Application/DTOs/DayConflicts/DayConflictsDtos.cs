@@ -54,3 +54,23 @@ public sealed record DayConflictsResponseDto(
     string? Message = null,
     Guid? SessionId = null
 );
+
+public sealed record TrafficLightIndicatorsRemoteDto(
+    string? PainZones
+);
+
+public sealed record CategoryTrafficLightAthleteRemoteDto(
+    Guid AthleteId,
+    bool HasReportedToday,
+    TrafficLightIndicatorsRemoteDto? Indicators
+);
+
+public sealed record CategoryAthleteDayConflictDto(
+    Guid AthleteId,
+    bool HasConflicts
+);
+
+public sealed record CategoryDayConflictsResponseDto(
+    Guid CategoryId,
+    IReadOnlyList<CategoryAthleteDayConflictDto> Athletes
+);
