@@ -4,8 +4,17 @@
 # Carga, con la API real y el token del PF de prueba, lo que la demo necesita ya armado:
 # 20 atletas en 3 lugares (Club Quilmes, Personalizados y Gimnasio), con cuentas vinculadas o
 # registradas por invitación (incluidos 2 menores con su tutor), récords, la planificación
-# "Fuerza base" (sin asignar), videos de YouTube del PF, el partido del sábado y los check-ins
-# que no se muestran en vivo.
+# "Fuerza base" por bloques (4 semanas, lunes, martes, jueves y viernes a las 18; sin asignar), videos de
+# YouTube del PF, el partido del sábado, las fases de la temporada, avisos en el Centro de Avisos, el perfil
+# físico y la ficha médica para alimentación, y los check-ins que no se muestran en vivo.
+#
+# Planificación por bloques (KAN-585/587/588): cada día tiene Entrada en calor, Activación, Fuerza principal
+# y Accesorios. El principal progresa 4×6 al 70 % → 4×5 al 75 % → 4×4 al 80 % → descarga 3×5 al 65 %.
+# Los accesorios van con RPE o RIR y nadie tiene récord: muestran la "serie de referencia". Con "completo"
+# se asigna desde el lunes de la semana pasada, así esta semana es la 2.
+#
+# Alimentación (KAN-494/634): Martín (78 kg, ganar masa, ficha sin patologías) recibe cantidades;
+# Joaquín (asma en la ficha) se deriva a un profesional; Santino (menor, el tutor habilita) no recibe gramos.
 #
 # Los 20 atletas (KAN-479) y su semáforo, con "completo":
 #   Club Quilmes · Primera División (10):
@@ -32,6 +41,7 @@
 #   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy (la mañana del ensayo y de la demo)
 #   docker compose --profile seed run --rm seed completo    lo mismo que sin argumentos, más lo que en la demo se hace
 #                                                           en vivo: récord de Lucas, asignación del plan y check-ins de Lucas y Martín
+#                                                           (para el QA, usar este: sin asignación no hay rutina ni "Próximo entrenamiento")
 #
 # También se puede correr directo desde la raíz del repo (necesita bash, docker, curl y jq):
 #   ./scripts/demo-data.sh [checkins|completo]
@@ -79,12 +89,18 @@ run_sql() {
   fi
 }
 
-# login <email> → imprime la respuesta completa del login
+# login <email> → imprime la respuesta completa del login. Reintenta unos segundos: recién levantado el compose,
+# Identidad puede estar terminando de crear las cuentas de prueba y responder 500 al primer pedido.
 login() {
-  curl -sf -X POST "$GATEWAY/identidad/api/v1/auth/login" \
-    -H 'Content-Type: application/json' \
-    -d "{\"email\":\"$1\",\"password\":\"$PASSWORD\",\"deviceId\":\"demo-data\"}" \
-    || { echo "No se pudo iniciar sesión con $1. ¿Está levantado el compose?" >&2; exit 1; }
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    curl -sf -X POST "$GATEWAY/identidad/api/v1/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"email\":\"$1\",\"password\":\"$PASSWORD\",\"deviceId\":\"demo-data\"}" && return 0
+    sleep 5
+  done
+  echo "No se pudo iniciar sesión con $1. ¿Está levantado el compose?" >&2
+  exit 1
 }
 
 # api <método> <ruta> <token> [json] → imprime el cuerpo; corta el script si la respuesta no es 2xx
@@ -103,11 +119,16 @@ api() {
   printf '%s' "$response"
 }
 
-# Lunes de esta semana, en hora Argentina (UTC-3): así la semana 1 del plan es la actual
-monday_this_week() {
+# Lunes de la semana pasada, en hora Argentina: con la asignación desde ahí, esta semana es la 2 del plan
+monday_last_week() {
   jq -nr '(now - 10800) as $t
     | ($t | strftime("%u") | tonumber) as $dow
-    | ($t - ($dow - 1) * 86400) | strftime("%Y-%m-%d")'
+    | ($t - ($dow - 1 + 7) * 86400) | strftime("%Y-%m-%d")'
+}
+
+# date_plus <AAAA-MM-DD> <días> → la fecha corrida esa cantidad de días (puede ser negativa)
+date_plus() {
+  jq -nr --arg d "$1" --argjson n "$2" '($d + "T12:00:00Z" | fromdateiso8601) + $n * 86400 | strftime("%Y-%m-%d")'
 }
 
 # exercise_id <nombre exacto> → id del ejercicio en el catálogo
@@ -195,6 +216,25 @@ invite_minor() {
 
 PF_TOKEN=$(login pf@protraining.com | jq -r .accessToken)
 
+# Recién levantado el compose, los servicios figuran sanos antes de terminar de arrancar (migraciones y catálogo
+# de ejercicios) y el primer pedido puede fallar. Se espera a que cada uno responda de verdad, hasta 2 minutos.
+wait_until_ready() {
+  local path waited
+  for path in /estructura/api/v1/organizations /entrenamiento/api/v1/exercises?pageSize=1 \
+    /seguimiento/api/v1/fitness-tests /asistente/api/v1/alerts; do
+    waited=0
+    until curl -sf -o /dev/null "$GATEWAY$path" -H "Authorization: Bearer $PF_TOKEN"; do
+      if (( waited >= 120 )); then
+        echo "El servicio de $path no respondió en 2 minutos. Revisá: docker compose ps" >&2
+        exit 1
+      fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+  done
+}
+wait_until_ready
+
 # --- check-ins de hoy (los que no se hacen en vivo) ------------------------
 
 load_check_ins() {
@@ -249,13 +289,14 @@ load_live_parts() {
 
   plan_id=$(api GET "/entrenamiento/api/v1/training-plans" "$PF_TOKEN" \
     | jq -r '(if type == "array" then . else .items end)[] | select(.name == "Fuerza base") | .id' | head -1)
-  start=$(monday_this_week)
+  # Desde el lunes de la semana pasada: esta semana es la 2 y se ve que los valores cambian de semana a semana.
+  start=$(monday_last_week)
   api POST "/entrenamiento/api/v1/training-plans/assignments" "$PF_TOKEN" \
     "{\"trainingPlanId\":\"$plan_id\",\"startDate\":\"$start\",\"categoryId\":\"$PRIMERA_ID\"}" >/dev/null
-  echo "  plan \"Fuerza base\" asignado a Primera División desde el $start"
+  echo "  plan \"Fuerza base\" asignado a Primera División desde el $start (esta semana es la 2)"
 
   # Martín registra 115 kg × 5 en sentadilla: Epley estima ~132,5 kg > su récord de 120 kg, así que queda una
-  # propuesta de récord pendiente en el inicio del PF (KAN-392/394). Solo hay rutina de miércoles a viernes.
+  # propuesta de récord pendiente en el inicio del PF (KAN-392/394). Hay sentadilla lunes, jueves y viernes.
   local martin_token
   martin_token=$(login martin@protraining.com | jq -r .accessToken)
   if curl -sf -X POST "$GATEWAY/entrenamiento/api/v1/me/today-routine/performed-sets" \
@@ -263,7 +304,7 @@ load_live_parts() {
     -d "[{\"exerciseId\":\"$squat_id\",\"weight\":115,\"reps\":5}]" >/dev/null; then
     echo "  Martín registró sentadilla 115 kg × 5 → propuesta de récord para el PF"
   else
-    echo "  (hoy no hay sesión en el plan: la propuesta de récord de Martín se genera de miércoles a viernes)" >&2
+    echo "  (hoy no hay sentadilla en el plan: la propuesta de récord de Martín se genera lunes, jueves y viernes)" >&2
   fi
 
   # Lucas con lesión activa en el isquiotibial → rojo (la zona se ve pintada en la ficha del PF); Martín bien → verde
@@ -274,13 +315,39 @@ load_live_parts() {
   fi
   check_in atleta@protraining.com "$lucas_body"
   check_in martin@protraining.com '{"sleepHours":8,"sleepQuality":4,"muscleSoreness":1,"fatigueLevel":2,"moodRate":4,"stressLevel":2,"effortRate":5,"isSick":false,"painZones":null,"hasActiveInjury":false}'
+}
 
+# Avisos del Centro de Avisos (KAN-474/570): los que genera el proceso de la noche, ya cargados para que el
+# cajón del PF no arranque vacío. Uno de cada tipo y de cada gravedad, coherentes con el check-in de cada atleta.
+load_alerts() {
   echo "Avisos preventivos (Centro de Avisos):"
-  api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
-    "$(jq -nc --arg a "$LUCAS_ID" '{athleteId:$a,athleteName:"Lucas Gómez",severity:"High",type:"AccumulatedFatigue",reason:"Fatiga muscular acumulada y partido en 48 hs",suggestion:"Reducción preventiva (-20% de series hoy)",suggestedAdjustmentType:"LoadReduction",suggestedAdjustmentPercentage:20}')" >/dev/null
-  api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
-    "$(jq -nc --arg a "$CAMILA_ID" '{athleteId:$a,athleteName:"Camila Torres",severity:"Medium",type:"InjuryRisk",reason:"Molestia reportada en tendón rotuliano tras último entrenamiento",suggestion:"Adaptación de sesión: sustituir carga axial por trabajo en máquina",suggestedAdjustmentType:"RoutineAdjustment"}')" >/dev/null
-  echo "  Camila Torres (rotuliano) y Lucas Gómez (fatiga y partido en 48 hs)"
+  alert() {  # alert <atleta> <nombre> <categoría> <gravedad> <tipo> <motivo> <sugerencia> [ajuste] [porcentaje]
+    api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
+      "$(jq -nc --arg a "$1" --arg n "$2" --arg c "$3" --arg s "$4" --arg t "$5" --arg r "$6" --arg g "$7" \
+        --arg adj "${8:-}" --arg pct "${9:-}" \
+        '{athleteId:$a,athleteName:$n,categoryId:$c,severity:$s,type:$t,reason:$r,suggestion:$g}
+          + (if $adj != "" then {suggestedAdjustmentType:$adj} else {} end)
+          + (if $pct != "" then {suggestedAdjustmentPercentage:($pct|tonumber)} else {} end)')" >/dev/null
+  }
+  alert "$LUCAS_ID" "Lucas Gómez" "$PRIMERA_ID" High AccumulatedFatigue \
+    "Fatiga acumulada en la semana y partido el sábado" \
+    "Bajar 20 % las series hasta el partido" LoadReduction 20
+  alert "$MATEO_ID" "Mateo Ríos" "$PRIMERA_ID" High AcuteOverload \
+    "Carga aguda alta: esfuerzo 9 de 10 y la carga de la semana muy por encima de su promedio" \
+    "Bajar 30 % el volumen de hoy" LoadReduction 30
+  alert "$CAMILA_ID" "Camila Torres" "$PARTICULARES_ID" Medium InjuryRisk \
+    "Sigue con molestia en el hombro (manguito rotador) en los últimos check-ins" \
+    "Cambiar el press por ejercicios sin carga por encima de la cabeza" RoutineAdjustment
+  alert "$SOFIA_ID" "Sofía Méndez" "$PRIMERA_ID" Medium WellnessAlert \
+    "Durmió menos de 4 horas" \
+    "Hoy, descanso activo y hablar con la atleta" Rest
+  alert "$BRUNO_ID" "Bruno Castro" "$PRIMERA_ID" Low WellnessAlert \
+    "Durmió más de 12 horas en 3 de los últimos 7 días" \
+    "Preguntarle si está enfermo o con sobrecarga antes de entrenar"
+  alert "$IGNACIO_ID" "Ignacio Luna" "$MUSCULACION_ID" Low AccumulatedFatigue \
+    "Sueño moderado varios días seguidos" \
+    "Bajar 10 % la carga esta semana" LoadReduction 10
+  echo "  6 pendientes: Lucas y Mateo (alta), Camila y Sofía (media), Bruno e Ignacio (baja)"
 }
 
 if [[ "$MODE" == "checkins" ]]; then
@@ -344,20 +411,20 @@ echo "Atletas registrados por invitación:"
 SOFIA_ID=$(invite_athlete "Sofía" "Méndez" "sofia@protraining.com" "1150000009" "$PRIMERA_ID")
 BRUNO_ID=$(invite_athlete "Bruno" "Castro" "bruno@protraining.com" "1150000010" "$PRIMERA_ID")
 DIEGO_ID=$(invite_athlete "Diego" "Funes" "diego@protraining.com" "1150000011" "$PRIMERA_ID")
-invite_athlete "Mateo" "Ríos" "mateo@protraining.com" "1150000013" "$PRIMERA_ID" >/dev/null
+MATEO_ID=$(invite_athlete "Mateo" "Ríos" "mateo@protraining.com" "1150000013" "$PRIMERA_ID")
 invite_athlete "Ramiro" "Acosta" "ramiro@protraining.com" "1150000014" "$PRIMERA_ID" >/dev/null
 echo "  Sofía, Bruno, Diego, Mateo y Ramiro en Primera División"
 invite_athlete "Lautaro" "Medina" "lautaro@protraining.com" "1150000015" "$RESERVA_ID" >/dev/null
 # Menores: el tutor de Santino habilita las recomendaciones de alimentación y el de Bautista no
-invite_minor "Santino" "Vega" "santino@protraining.com" "1150000016" "$RESERVA_ID" \
-  "2010-05-10" "Claudia Vega" "1150000116" true >/dev/null
+SANTINO_ID=$(invite_minor "Santino" "Vega" "santino@protraining.com" "1150000016" "$RESERVA_ID" \
+  "2010-05-10" "Claudia Vega" "1150000116" true)
 invite_minor "Bautista" "Ojeda" "bautista@protraining.com" "1150000017" "$RESERVA_ID" \
   "2009-08-20" "Marcelo Ojeda" "1150000117" false >/dev/null
 echo "  Lautaro, Santino (16) y Bautista (17) en Reserva; los menores, con el consentimiento de su tutor"
 invite_athlete "Florencia" "Navarro" "florencia@protraining.com" "1150000018" "$PARTICULARES_ID" >/dev/null
 echo "  Florencia en Alumnos particulares"
 invite_athlete "Paula" "Romero" "paula@protraining.com" "1150000019" "$MUSCULACION_ID" >/dev/null
-invite_athlete "Ignacio" "Luna" "ignacio@protraining.com" "1150000020" "$MUSCULACION_ID" >/dev/null
+IGNACIO_ID=$(invite_athlete "Ignacio" "Luna" "ignacio@protraining.com" "1150000020" "$MUSCULACION_ID")
 echo "  Paula e Ignacio en Musculación (20 atletas en total)"
 
 # Vincular cada atleta a su cuenta de Identidad. Lo hace la invitación por QR (Sprint 2);
@@ -433,31 +500,57 @@ record "$DIEGO_ID" "$SQUAT_ID" 105 TestedInSession
 record "$DIEGO_ID" "$BENCH_ID" 80 Reported
 echo "  15 récords (falta a propósito la sentadilla de Lucas)"
 
-# Sesiones el miércoles, jueves y viernes: así hay rutina hoy, en el ensayo y en la demo.
-# DayOfWeek va como número (3 = miércoles, 4 = jueves, 5 = viernes).
+# Planificación por bloques (KAN-585): 4 semanas, lunes, martes, jueves y viernes a las 18, así hay rutina en el
+# QA (lunes y martes), en el ensayo (jueves) y en la demo (viernes). La sentadilla va lunes, jueves y viernes:
+# de eso dependen el ajuste de Diego por el cuádriceps, la variante de Lucas y la propuesta de récord de Martín.
+# DayOfWeek va como número (1 = lunes … 5 = viernes). Los ejercicios por tiempo llevan reps 1 y la meta en segundos.
+# Progresión lineal del principal (+5 %/semana) con la 4.ª de descarga, dentro de la tabla de carga por objetivo de
+# la NSCA (Essentials of Strength Training and Conditioning, 4.ª ed.) que ya usan las reglas de la KAN-605.
 echo "Planificación:"
-PLAN_JSON=$(jq -nc --arg squat "$SQUAT_ID" --arg bench "$BENCH_ID" --arg rdl "$RDL_ID" '{
-  name: "Fuerza base",
-  objective: "Base de fuerza para la pretemporada",
-  weeks: [{
-    weekNumber: 1,
-    sessions: [
-      {name: "Día A · Fuerza", order: 1, dayOfWeek: 3, coachNotes: "Entrada en calor de 10 minutos antes de cargar la barra.",
-        exercises: [
-          {exerciseId: $squat, order: 1, sets: 4, reps: 5, targetPercentage: 75},
-          {exerciseId: $bench, order: 2, sets: 4, reps: 6, targetPercentage: 70}]},
-      {name: "Día B · Fuerza", order: 2, dayOfWeek: 4, coachNotes: "Pausa de 2 minutos entre series.",
-        exercises: [
-          {exerciseId: $squat, order: 1, sets: 4, reps: 5, targetPercentage: 80},
-          {exerciseId: $rdl, order: 2, sets: 3, reps: 8, targetPercentage: 70}]},
-      {name: "Día C · Fuerza", order: 3, dayOfWeek: 5, coachNotes: "Controlar la técnica en el descenso.",
-        exercises: [
-          {exerciseId: $squat, order: 1, sets: 4, reps: 5, targetPercentage: 80},
-          {exerciseId: $bench, order: 2, sets: 4, reps: 6, targetPercentage: 75},
-          {exerciseId: $rdl, order: 3, sets: 3, reps: 8, targetPercentage: 70}]}
-    ]}]}')
+JOG_ID=$(exercise_id "Trote suave o bicicleta (5 min, entrada en calor)")
+JACKS_ID=$(exercise_id "Jumping jacks (entrada en calor)")
+PLANK_ID=$(exercise_id "Plancha (activación)")
+LUNGE_ID=$(exercise_id "Zancada con barra")
+ROW_ID=$(exercise_id "Remo con mancuerna a una mano")
+OHP_ID=$(exercise_id "Press de hombros con barra")
+PLAN_JSON=$(jq -nc \
+  --arg squat "$SQUAT_ID" --arg bench "$BENCH_ID" --arg rdl "$RDL_ID" \
+  --arg jog "$JOG_ID" --arg jacks "$JACKS_ID" --arg plank "$PLANK_ID" \
+  --arg lunge "$LUNGE_ID" --arg row "$ROW_ID" --arg ohp "$OHP_ID" '
+  # Valores de cada semana: el principal con %RM y los accesorios con RPE o RIR
+  [ {n: 1, sets: 4, reps: "6", pct: 70, rpe: 7,   rir: 3, note: null},
+    {n: 2, sets: 4, reps: "5", pct: 75, rpe: 7.5, rir: 2, note: null},
+    {n: 3, sets: 4, reps: "4", pct: 80, rpe: 8,   rir: 2, note: null},
+    {n: 4, sets: 3, reps: "5", pct: 65, rpe: 6,   rir: 4, note: "Semana de descarga: bajar la carga para recuperar."} ] as $weeks
+  | def warmup: {title: "Entrada en calor", order: 1, exercises: [
+        {exerciseId: $jog, order: 1, sets: 1, reps: "1", targetTimeSeconds: 300},
+        {exerciseId: $jacks, order: 2, sets: 2, reps: "1", targetTimeSeconds: 60}]};
+    def activation: {title: "Activación", order: 2, exercises: [
+        {exerciseId: $plank, order: 1, sets: 3, reps: "1", targetTimeSeconds: 30}]};
+    def main($w; $ids): {title: "Fuerza principal", order: 3, exercises: ($ids | to_entries | map(
+        {exerciseId: .value, order: (.key + 1), sets: $w.sets, reps: $w.reps, targetPercentage: $w.pct,
+         notes: ($w.note // "Pausa de 2 a 3 minutos entre series.")}))};
+    def acc_rpe($w; $id; $order): {exerciseId: $id, order: $order, sets: 3, reps: "8-10",
+        intensityType: "RPE", targetRpe: $w.rpe};
+    def acc_rir($w; $id; $order): {exerciseId: $id, order: $order, sets: 3, reps: "10",
+        intensityType: "RIR", targetRir: $w.rir};
+    def session($w; $name; $order; $day; $main; $acc): {name: $name, order: $order, dayOfWeek: $day,
+        startTime: "18:00:00", coachNotes: "Entrada en calor completa antes de cargar la barra.",
+        blocks: [warmup, activation, main($w; $main), {title: "Accesorios", order: 4, exercises: $acc}]};
+  {
+    name: "Fuerza base",
+    objective: "Base de fuerza para la pretemporada de Primera",
+    weeks: ($weeks | map(. as $w | {
+      weekNumber: $w.n,
+      sessions: [
+        session($w; "Tren inferior A"; 1; 1; [$squat]; [acc_rpe($w; $lunge; 1)]),
+        session($w; "Tren superior A"; 2; 2; [$bench]; [acc_rir($w; $row; 1), acc_rpe($w; $ohp; 2)]),
+        session($w; "Tren inferior B"; 3; 4; [$rdl, $squat]; [acc_rpe($w; $lunge; 1)]),
+        session($w; "Cuerpo completo"; 4; 5; [$squat, $bench, $rdl]; [acc_rir($w; $row; 1)])
+      ]}))
+  }')
 api POST "/entrenamiento/api/v1/training-plans" "$PF_TOKEN" "$PLAN_JSON" >/dev/null
-echo "  \"Fuerza base\": semana 1, miércoles, jueves y viernes (sin asignar)"
+echo "  \"Fuerza base\" por bloques: 4 semanas (70 → 75 → 80 % y descarga al 65 %), lunes, martes, jueves y viernes a las 18 (sin asignar)"
 
 # Videos de técnica del PF (KAN-380): se pueden embeber (verificado con oEmbed el 11/11).
 # El peso muerto rumano queda sin video a propósito: sin link, no aparece el botón "Ver video".
@@ -475,6 +568,48 @@ MATCH_DATE=$(next_saturday)
 api POST "/estructura/api/v1/categories/$PRIMERA_ID/events" "$PF_TOKEN" \
   "$(jq -nc --arg d "$MATCH_DATE" '{date:$d,startTime:"15:30:00",opponent:"Atlético Varela",venue:"Home",type:"Official",notes:"Fecha del torneo"}')" >/dev/null
 echo "  Primera División vs. Atlético Varela, el $MATCH_DATE a las 15:30"
+
+# Fases de la temporada (KAN-403): la pretemporada termina el viernes y el torneo arranca con el partido del sábado.
+phase() {
+  api POST "/estructura/api/v1/categories/$PRIMERA_ID/season-phases" "$PF_TOKEN" \
+    "$(jq -nc --arg n "$1" --arg t "$2" --arg s "$3" --arg e "$4" '{name:$n,type:$t,startDate:$s,endDate:$e}')" >/dev/null
+}
+phase "Pretemporada" Preseason "$(date_plus "$MATCH_DATE" -42)" "$(date_plus "$MATCH_DATE" -1)"
+phase "Torneo Apertura" Competitive "$MATCH_DATE" "$(date_plus "$MATCH_DATE" 120)"
+echo "  fases de Primera: Pretemporada (6 semanas) y Torneo Apertura (desde el $MATCH_DATE)"
+
+# Perfil físico y ficha médica para las recomendaciones de alimentación (KAN-494/634). Las cantidades solo salen
+# si la ficha dice explícitamente que no hay condiciones; cualquier condición deriva a un profesional.
+echo "Perfil físico y ficha médica (alimentación):"
+physical_profile() {
+  api PATCH "/estructura/api/v1/athletes/$1/physical-profile" "$PF_TOKEN" \
+    "$(jq -nc --argjson w "$2" --arg g "$3" '{weightKg:$w,athleticGoal:$g}')" >/dev/null
+}
+medical_record() {  # medical_record <atleta> <antecedentes> <patologías>
+  api PUT "/estructura/api/v1/athletes/$1/medical-record" "$PF_TOKEN" \
+    "$(jq -nc --arg h "$2" --arg p "$3" --arg from "$(day_ago 60)" --arg to "$(day_ago -305)" \
+      '{justification:"Carga inicial de la ficha (datos de la demo)",medicalHistory:$h,surgeries:null,pathologies:$p,
+        hasPhysicalFitnessCertificate:true,physicalFitnessIssuedAt:$from,physicalFitnessExpiresAt:$to}')" >/dev/null
+}
+# Sin el consentimiento digital firmado no se puede cargar la ficha, y sin "hábitos" habilitado no hay
+# recomendaciones de alimentación, ni siquiera para un adulto. Lo firma cada atleta desde su sesión.
+sign_consent() {
+  local token
+  token=$(login "$1" | jq -r .accessToken)
+  api POST "/estructura/api/v1/me/consent" "$token" '{"allowsHabitsRecommendations":true,"allowsPhysicalTraining":true}' >/dev/null
+}
+sign_consent martin@protraining.com
+sign_consent facundo@protraining.com
+sign_consent joaquin@protraining.com
+physical_profile "$MARTIN_ID" 78 "Ganar masa muscular"
+medical_record "$MARTIN_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$FACUNDO_ID" 82 "Rendimiento deportivo"
+medical_record "$FACUNDO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$JOAQUIN_ID" 70 "Ganar masa muscular"
+medical_record "$JOAQUIN_ID" "Sin alergias." "Asma leve, controlada con inhalador."
+physical_profile "$SANTINO_ID" 65 "Ganar masa muscular"
+medical_record "$SANTINO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+echo "  Martín y Facundo (ficha sin condiciones: con cantidades), Joaquín (asma: se deriva), Santino (menor: sin gramos)"
 
 # WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
 # Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh
@@ -556,6 +691,8 @@ field_result "$CMJ_TEST" "$FACUNDO_ID" 45
 field_result "$SPRINT_TEST" "$MARTIN_ID" 4.31
 field_result "$SPRINT_TEST" "$FACUNDO_ID" 4.18
 echo "  \"Evaluación de pretemporada\" (Primera División), en curso: salto CMJ y 30 m cargados, sentadilla 1RM para cargar en vivo"
+
+load_alerts
 
 load_check_ins
 
