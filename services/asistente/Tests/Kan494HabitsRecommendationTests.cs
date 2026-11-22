@@ -236,6 +236,53 @@ public sealed class Kan494HabitsRecommendationTests
         Assert.Contains(context.MissingData, m => m.Contains("texto libre", StringComparison.OrdinalIgnoreCase));
     }
 
+    // Antes "na" se borraba como subcadena: "renal" quedaba "re l" y "anafilaxia", "a filaxia", y esas fichas
+    // recibían gramos de proteína. Una negación tampoco puede anular un riesgo que está en otra parte del texto.
+    [Theory]
+    [InlineData("Insuficiencia renal crónica", "Sin alergias")]
+    [InlineData("Enfermedad renal", "Sin alergias")]
+    [InlineData("Anafilaxia a la penicilina", "Sin antecedentes")]
+    [InlineData("Sin alergias. Insuficiencia renal", "Sin antecedentes")]
+    [InlineData("Sin patologías", "Sin alergias, asma")]
+    public void MedicalRules_GivenConditionNextToNegation_RequiresReferral(string pathologies, string history)
+    {
+        var record = VerifiedRecord() with { Pathologies = pathologies, MedicalHistory = history };
+
+        var context = HabitsMedicalContextRules.Evaluate(record, ArgentinaTime.Today);
+
+        Assert.Equal(MedicalRecommendationStatus.RegisteredRisk, context.Status);
+        Assert.True(context.RequiresReferral);
+    }
+
+    [Theory]
+    [InlineData("N/A", "na")]
+    [InlineData("-", "s/d")]
+    public void MedicalRules_GivenPlaceholdersOnly_TreatsRecordAsEmpty(string pathologies, string history)
+    {
+        var record = VerifiedRecord() with { Pathologies = pathologies, MedicalHistory = history, Surgeries = null };
+
+        var context = HabitsMedicalContextRules.Evaluate(record, ArgentinaTime.Today);
+
+        Assert.Equal(MedicalRecommendationStatus.Incomplete, context.Status);
+        Assert.True(context.RequiresReferral);
+    }
+
+    [Fact]
+    public void MedicalRules_GivenTextWithoutExplicitNegation_RequiresReferral()
+    {
+        var record = VerifiedRecord() with
+        {
+            Pathologies = "Juega al fútbol tres veces por semana",
+            MedicalHistory = null,
+            Surgeries = null
+        };
+
+        var context = HabitsMedicalContextRules.Evaluate(record, ArgentinaTime.Today);
+
+        Assert.Equal(MedicalRecommendationStatus.Incomplete, context.Status);
+        Assert.True(context.RequiresReferral);
+    }
+
     [Fact]
     public void MedicalRules_GivenRegisteredAllergy_RequiresReferral()
     {

@@ -171,15 +171,33 @@ public static class RecommendationMapper
             Status: entity.Status.ToString());
     }
 
-    public static MyRecommendationResponseDto ToMyResponseDto(AthleteRecommendation entity) =>
-        new(
+    // Para el atleta, el aviso del nutricionista viaja aparte y siempre con el texto oficial (KAN-634):
+    // se agrega al leer, así aparece aunque el PF haya editado el texto o la recomendación sea anterior.
+    public static MyRecommendationResponseDto ToMyResponseDto(AthleteRecommendation entity)
+    {
+        var isHabits = entity.Type == RecommendationType.Habits;
+        return new(
             Id: entity.Id,
             CategoryId: entity.CategoryId,
             CategoryName: entity.CategoryName,
             Type: entity.Type.ToString(),
             Title: entity.Title,
             Reason: entity.Reason,
-            RecommendationText: entity.RecommendationText,
+            RecommendationText: isHabits ? RemoveDisclaimer(entity.RecommendationText) : entity.RecommendationText,
             ReviewedAtUtc: entity.ReviewedAtUtc,
-            CreatedAt: entity.CreatedAt);
+            CreatedAt: entity.CreatedAt,
+            LegalDisclaimer: isHabits ? RecommendationPromptBuilder.OfficialNutritionDisclaimer : null);
+    }
+
+    // Texto de hábitos con el aviso del nutricionista al final, sin duplicarlo (lo usa la edición del PF).
+    public static string EnsureDisclaimer(string text)
+    {
+        var body = RemoveDisclaimer(text);
+        return string.IsNullOrWhiteSpace(body)
+            ? RecommendationPromptBuilder.OfficialNutritionDisclaimer
+            : $"{body}\n{RecommendationPromptBuilder.OfficialNutritionDisclaimer}";
+    }
+
+    private static string RemoveDisclaimer(string text) =>
+        text.Replace(RecommendationPromptBuilder.OfficialNutritionDisclaimer, string.Empty, StringComparison.Ordinal).Trim();
 }

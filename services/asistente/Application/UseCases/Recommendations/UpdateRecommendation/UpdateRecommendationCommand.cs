@@ -3,6 +3,7 @@ using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Domain.Entities;
+using Domain.Exceptions;
 
 namespace Application.UseCases.Recommendations.UpdateRecommendation;
 
@@ -25,7 +26,19 @@ public sealed class UpdateRecommendationCommandHandler(
         if (recommendation.Status != RecommendationStatus.Pending)
             throw new ConflictException(recommendation.GetNonPendingStatusMessage());
 
-        recommendation.UpdateContent(command.Title, command.RecommendationText);
+        var text = command.RecommendationText;
+        if (recommendation.Type == RecommendationType.Habits)
+        {
+            // Lo que edita el PF en una de alimentación pasa por las mismas reglas que lo que propone la IA:
+            // sin suplementos ni pautas para bajar de peso, y siempre con el aviso del nutricionista (KAN-634).
+            if (RecommendationOutputValidator.TryFindForbiddenSupplement(text, out var supplement))
+                throw new DomainException($"La recomendación de alimentación no puede mencionar suplementos ('{supplement}').");
+            if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(text, out var weightLoss))
+                throw new DomainException($"La recomendación de alimentación no puede incluir pautas para bajar de peso ('{weightLoss}').");
+            text = RecommendationMapper.EnsureDisclaimer(text);
+        }
+
+        recommendation.UpdateContent(command.Title, text);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return RecommendationMapper.ToResponseDto(recommendation);

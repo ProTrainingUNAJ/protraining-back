@@ -131,7 +131,7 @@ public static class HabitsRecommendationRules
         var includeQuantities = false; // sin datos/rangos validados o menor/riesgo => no cantidades
         if (!input.IsMinor && referralReasons.Count == 0 && (weightKg is null || weightKg <= 0 || !IsGoalRangeDefined(goal)))
         {
-            missing.Add("Rango de proteína no definido/validado para el objetivo o faltan datos; se entrega guía cualitativa sin cantidades (TODO validar rangos g/kg).");
+            missing.Add("Sin rango de proteína definido para este objetivo, o falta el peso: se entrega una guía cualitativa sin cantidades.");
         }
 
         return BuildQualitativeOrReferral(goal, input.IsMinor, includeQuantities, mode, moments, missing, referralReasons, forceNoWeightLoss: false);
@@ -182,14 +182,15 @@ public static class HabitsRecommendationRules
     private static bool TryComputeProteinRange(double weightKg, string goal, out double minG, out double maxG, out string note)
     {
         minG = 0; maxG = 0; note = string.Empty;
-        // Único caso definido en el ticket: 70 kg + ganar masa => 100-140 g/día.
-        // Generalización determinística asumida solo para "ganar masa/músculo" (~1.43-2.0 g/kg) basada en el ejemplo del ticket.
-        // TODO: validar rango g/kg exacto con nutricionista.
+        // Ganar masa muscular en un adulto sano que entrena: ~1,43 a 2,0 g/kg/día (70 kg → 100-140 g, el caso del
+        // ticket). Queda dentro del rango de 1,4 a 2,0 g/kg/día de la posición de la ISSN (Jäger et al., J Int Soc
+        // Sports Nutr 2017;14:20) y del de 1,2 a 2,0 de ACSM/AND/DC (Thomas, Erdman y Burke, Med Sci Sports Exerc
+        // 2016;48(3)). Criterio aprobado por el PM el 22/11 (KAN-494).
         if (IsGainMuscleGoal(goal))
         {
             minG = Math.Round(weightKg * (100.0 / 70.0), 0, MidpointRounding.AwayFromZero);
             maxG = Math.Round(weightKg * (140.0 / 70.0), 0, MidpointRounding.AwayFromZero);
-            note = $"Cálculo determinístico (supuesto basado en ejemplo 70 kg => 100-140 g/d): {minG:0}-{maxG:0} g/día para {weightKg:0.#} kg y objetivo de ganar masa. TODO: validar fórmula/rango con profesional.";
+            note = $"Cálculo por reglas: {minG:0}-{maxG:0} g/día para {weightKg:0.#} kg y objetivo de ganar masa (~1,43-2,0 g/kg/día; ISSN 2017 y ACSM/AND/DC 2016).";
             return true;
         }
 

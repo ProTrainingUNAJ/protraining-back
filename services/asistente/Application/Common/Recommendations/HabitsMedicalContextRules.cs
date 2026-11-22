@@ -1,5 +1,6 @@
 namespace Application.Common.Recommendations;
 
+using System.Text.RegularExpressions;
 using Application.Common.Helpers;
 using Application.Interfaces.Services;
 
@@ -59,10 +60,26 @@ public static class HabitsMedicalContextRules
         "no presenta patologias",
         "no refiere patologias",
         "sin condiciones medicas",
-        "sin antecedentes",
-        "n/a",
-        "na"
+        "sin antecedentes"
     ];
+
+    // Criterio del PM (22/11, KAN-494): se dan cantidades solo si la ficha dice explícitamente que no hay
+    // alergias ni condiciones; ante cualquier condición, o una ficha dudosa, se deriva a un profesional. Una
+    // negación nunca anula un riesgo: "Sin alergias. Insuficiencia renal" deriva. Fuentes: ACSM/AND/DC,
+    // "Nutrition and Athletic Performance" (Thomas, Erdman y Burke, Med Sci Sports Exerc 2016) para derivar
+    // ante condiciones médicas, y KDOQI 2020 (Ikizler et al., Am J Kidney Dis) para la enfermedad renal,
+    // que pide restringir la proteína.
+    //
+    // Las negaciones se buscan como frase completa: antes se borraban como subcadena y "na" se comía
+    // "renal" ("re l") y "anafilaxia" ("a filaxia"), y esas fichas recibían gramos de proteína.
+    private static readonly Regex[] ExplicitNegativePatterns = ExplicitNegativeMarkers
+        .Select(marker => new Regex(
+            $@"\b{Regex.Escape(TextNormalizer.Normalize(marker))}\b",
+            RegexOptions.CultureInvariant))
+        .ToArray();
+
+    // Un campo que solo dice "N/A", "-" o "s/d" no informa nada: cuenta como vacío, nunca como "sin condiciones".
+    private static readonly HashSet<string> EmptyFieldPlaceholders = ["na", "n/a", "n/d", "s/d", "-", "--"];
 
     private static readonly string[] ClinicalRiskMarkers =
     [
@@ -113,11 +130,20 @@ public static class HabitsMedicalContextRules
                 ["Ficha médica no registrada: no se asume ausencia de alergias."]);
         }
 
-        var rawClinicalText = $"{record.Pathologies} {record.MedicalHistory} {record.Surgeries}";
-        var clinicalText = TextNormalizer.Normalize(rawClinicalText);
+        var clinicalText = string.Join(
+            " ",
+            new[] { record.Pathologies, record.MedicalHistory, record.Surgeries }.Select(NormalizeField)).Trim();
+        var hasClinicalText = clinicalText.Length > 0;
 
-        foreach (var negative in ExplicitNegativeMarkers)
-            clinicalText = clinicalText.Replace(TextNormalizer.Normalize(negative), " ");
+        // Se borra solo la frase negada ("sin alergias"), así lo que quede del texto se sigue revisando.
+        var hasExplicitNegation = false;
+        foreach (var pattern in ExplicitNegativePatterns)
+        {
+            if (!pattern.IsMatch(clinicalText))
+                continue;
+            hasExplicitNegation = true;
+            clinicalText = pattern.Replace(clinicalText, " ");
+        }
 
         var hasRegisteredRisk = ClinicalRiskMarkers.Any(marker =>
             clinicalText.Contains(TextNormalizer.Normalize(marker), StringComparison.Ordinal));
@@ -143,12 +169,23 @@ public static class HabitsMedicalContextRules
                 missing);
         }
 
-        if (string.IsNullOrWhiteSpace(TextNormalizer.Normalize(rawClinicalText)) && !structuredCleared)
+        if (!hasClinicalText && !structuredCleared)
         {
             missing.Insert(0, "Ficha médica sin datos clínicos cargados: no se asume ausencia de alergias.");
             return new MedicalRecommendationContext(
                 MedicalRecommendationStatus.Incomplete,
                 ["La ficha médica está vacía o incompleta; se requiere verificación profesional antes de indicar pautas nutricionales."],
+                missing);
+        }
+
+        // Hay texto, pero no dice que no haya alergias ni condiciones (por ejemplo, "juega al fútbol"):
+        // no se asume nada y se deriva.
+        if (!hasExplicitNegation && !structuredCleared)
+        {
+            missing.Insert(0, "La ficha médica no indica explícitamente que no haya alergias ni condiciones: no se asume ausencia.");
+            return new MedicalRecommendationContext(
+                MedicalRecommendationStatus.Incomplete,
+                ["La ficha médica no dice explícitamente que no haya alergias ni condiciones; se requiere verificación profesional antes de indicar pautas nutricionales."],
                 missing);
         }
 
@@ -160,5 +197,11 @@ public static class HabitsMedicalContextRules
             MedicalRecommendationStatus.VerifiedNoKnownRisk,
             [],
             missing);
+    }
+
+    private static string NormalizeField(string? value)
+    {
+        var normalized = TextNormalizer.Normalize(value);
+        return EmptyFieldPlaceholders.Contains(normalized) ? string.Empty : normalized;
     }
 }
