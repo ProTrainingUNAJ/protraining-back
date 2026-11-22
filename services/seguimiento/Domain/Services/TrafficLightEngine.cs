@@ -22,6 +22,19 @@ public sealed class TrafficLightEngine
     public const string ProlongedSleepReason =
         "Durmió más de 12 horas en 3 de los últimos 7 días. Puede venir con cansancio acumulado o algo de salud: conviene charlarlo antes de entrenar.";
 
+    // ---- Regla de lesiones "En recuperación" (KAN-644 / KAN-590) ----
+    // "En recuperación" quiere decir que el atleta está en vuelta progresiva, entrenando con ajustes;
+    // no está parado (Ardern et al., 2016 Consensus statement on return to sport, Br J Sports Med 2016).
+    // El umbral de 5/10 sale del modelo de monitoreo del dolor que se usa en rehabilitación: con dolor
+    // de hasta 5/10 se sigue entrenando (Amarillo), y si pasa de 5 o empeora de un día a otro, se frena
+    // (Rojo) (Silbernagel et al., Am J Sports Med 2007).
+    public const int RecoveryPainThreshold = 5;
+    public const string RecoveryInjuryWorsenedReason = "Lesión en recuperación con más dolor";
+
+    // Marcador "Lesión" en PainZones ("zona:6") que se conserva para que Entrenamiento mantenga
+    // las restricciones de ejercicios de la zona mientras la lesión no tenga el alta médica.
+    private const string ClinicalInjuryPainLevel = "6";
+
     // Opciones de serialización: ignora mayúsculas/minúsculas para claves JSON
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,11 +49,21 @@ public sealed class TrafficLightEngine
         bool noCheckIn = checkInData == null;
 
         // Prioridad 1: lesión activa detectada (máxima prioridad → Rojo)
-        // El campo canónico es has_active_injury del check-in; hasInjury/hasWound se mantienen
-        // por compatibilidad con los JSON de evaluación de KAN-363.
+        // El campo canónico es has_active_injury del check-in (solo lesiones Active); hasInjury/hasWound
+        // se mantienen por compatibilidad con los JSON de evaluación de KAN-363.
         bool hasActiveInjury = checkInData?.HasActiveInjury == true ||
                                checkInData?.HasInjury == true ||
                                checkInData?.HasWound == true;
+
+        // Lesión "En recuperación" (InRecovery): señal amarilla si el dolor de hoy es 0–5 y no subió
+        // respecto al check-in anterior; escala a roja si supera 5 o es más alto que en el check-in anterior.
+        int? recoveryPainToday = checkInData?.RecoveryInjuryMaxPainToday;
+        int? recoveryPainPrevious = checkInData?.RecoveryInjuryPreviousPain;
+        bool hasRecoveryInjury = recoveryPainToday.HasValue;
+        bool recoveryInjuryWorsened = hasRecoveryInjury &&
+                                      (recoveryPainToday!.Value > RecoveryPainThreshold ||
+                                       (recoveryPainPrevious.HasValue && recoveryPainToday.Value > recoveryPainPrevious.Value));
+        bool recoveryInjuryStable = hasRecoveryInjury && !recoveryInjuryWorsened;
 
         // Prioridad 2: señales de alerta (Amarillo)
         // Cada condición evalúa el VALOR REAL del campo, no solo la presencia de la clave
@@ -56,7 +79,8 @@ public sealed class TrafficLightEngine
         bool moderateSleep = checkInData?.SleepHours >= VeryLowSleepThreshold &&
                              checkInData?.SleepHours < LowSleepThreshold;
 
-        // Dolor nuevo: PainZones con contenido real O HasNewPain explícito (KAN-364).
+        // Dolor nuevo: PainZones con contenido real (excluyendo el marcador clínico ":6" de lesiones
+        // registradas) O HasNewPain explícito (KAN-364).
         // Un "[]" o "{}" (lista vacía serializada por el front) NO es dolor: se normaliza
         // para evitar el falso positivo de amarillo "dolor nuevo".
         bool newPain = HasPainZones(checkInData?.PainZones) ||
@@ -73,6 +97,8 @@ public sealed class TrafficLightEngine
         // en orden de severidad, nombrando todas las señales encontradas.
         var reasons = new List<string>();
         if (hasActiveInjury) reasons.Add("Lesión activa");
+        if (recoveryInjuryWorsened) reasons.Add(RecoveryInjuryWorsenedReason);
+        else if (recoveryInjuryStable) reasons.Add($"Lesión en recuperación (dolor {recoveryPainToday!.Value}/10)");
         if (highEffort) reasons.Add("Esfuerzo alto");
         if (veryLowSleep) reasons.Add("Muy poco sueño");
         else if (moderateSleep) reasons.Add("Sueño moderado");
@@ -81,10 +107,10 @@ public sealed class TrafficLightEngine
         if (isSick) reasons.Add("Enfermedad");
         if (noCheckIn) reasons.Add("Sin check-in");
 
-        // El color más grave gana: Rojo por lesión activa o muy poco sueño; si no, Amarillo
-        // por cualquier otra señal; si no, Verde.
-        bool hasRedSign = hasActiveInjury || veryLowSleep;
-        bool hasYellowSign = highEffort || moderateSleep || prolongedSleep ||
+        // El color más grave gana: Rojo por lesión activa, lesión en recuperación con más dolor
+        // o muy poco sueño; si no, Amarillo por cualquier otra señal; si no, Verde.
+        bool hasRedSign = hasActiveInjury || recoveryInjuryWorsened || veryLowSleep;
+        bool hasYellowSign = recoveryInjuryStable || highEffort || moderateSleep || prolongedSleep ||
                              newPain || isSick || noCheckIn;
 
         TrafficLight light;
@@ -148,11 +174,27 @@ public sealed class TrafficLightEngine
     }
 
     // PainZones con contenido real: distingue "sin zonas" (null, vacío, "[]", "{}")
-    // de una lista con ítems. Evita el falso positivo de "dolor nuevo" con "[]" (KAN-364).
+    // de una lista con ítems, e ignora los marcadores clínicos ":6" de lesiones ya registradas
+    // para que el marcador conservado en PainZones para Entrenamiento no dispare "Dolor nuevo".
     private static bool HasPainZones(string? painZones)
     {
         var normalized = painZones?.Trim();
-        return !string.IsNullOrEmpty(normalized) && normalized is not ("[]" or "{}");
+        if (string.IsNullOrEmpty(normalized) || normalized is "[]" or "{}")
+            return false;
+
+        foreach (var entry in normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (entry is "[]" or "{}")
+                continue;
+
+            var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && parts[1] == ClinicalInjuryPainLevel)
+                continue;
+
+            return true;
+        }
+
+        return false;
     }
 
     // Sueño prolongado (KAN-560): cuenta los días con más de 12 h dentro de la ventana que
@@ -180,8 +222,12 @@ public sealed class CheckInData
     public string? PainZones { get; set; }
     public bool? HasNewPain { get; set; }
 
-    // Lesión activa marcada en el check-in diario (columna has_active_injury).
+    // Lesión activa marcada en el check-in diario (columna has_active_injury, solo lesiones Active).
     public bool? HasActiveInjury { get; set; }
+
+    // Dolor máximo de hoy y del check-in anterior para lesiones en estado InRecovery (KAN-644 / KAN-590).
+    public int? RecoveryInjuryMaxPainToday { get; set; }
+    public int? RecoveryInjuryPreviousPain { get; set; }
 
     // Claves heredadas de la evaluación JSON de KAN-363; se conservan por compatibilidad.
     public bool? HasInjury { get; set; }

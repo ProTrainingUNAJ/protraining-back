@@ -32,6 +32,9 @@ public class SubmitCheckInCommandHandlerTests
         _injuries
             .Setup(repo => repo.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AthleteInjury>());
+        _injuryPains
+            .Setup(repo => repo.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<Application.DTOs.CheckIns.CheckInInjuryPainDto>>());
         _unitOfWork
             .Setup(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -208,6 +211,132 @@ public class SubmitCheckInCommandHandlerTests
 
         Assert.NotNull(guardado);
         Assert.Equal("cuadriceps:2,gemelos:6", guardado!.PainZones);
+    }
+
+    // ---------- Regla del semáforo para lesiones "En recuperación" (InRecovery, KAN-644 / KAN-590) ----------
+
+    [Fact]
+    public async Task HandleAsync_WithInRecoveryInjuryAndPain3_ReturnsYellowAndKeepsZoneRestriction()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "rodilla",
+            Description = "Tendinopatía rotuliana",
+            Status = InjuryStatus.InRecovery
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+        ConfigurarSinCheckInPrevio();
+
+        CheckIn? savedCheckIn = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => savedCheckIn = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var command = CommandValido(hasActiveInjury: true) with
+        {
+            PainZones = null,
+            Injuries = [new SubmitInjuryPain(injury.Id, 3)]
+        };
+
+        var (response, _) = await CreateHandler().HandleAsync(command);
+
+        Assert.NotNull(savedCheckIn);
+        Assert.False(savedCheckIn!.HasActiveInjury); // InRecovery no marca HasActiveInjury aunque el front mande hasActiveInjury=true (KAN-644)
+        Assert.Equal("rodilla:6", savedCheckIn.PainZones); // La restricción de la zona se mantiene para Entrenamiento
+        Assert.Equal("Yellow", response.TrafficLight);
+        Assert.Equal("Lesión en recuperación (dolor 3/10)", response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithInRecoveryInjuryAndPain7_ReturnsRedAndKeepsZoneRestriction()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "rodilla",
+            Status = InjuryStatus.InRecovery
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+        ConfigurarSinCheckInPrevio();
+
+        CheckIn? savedCheckIn = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => savedCheckIn = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var command = CommandValido(hasActiveInjury: false) with
+        {
+            PainZones = null,
+            Injuries = [new SubmitInjuryPain(injury.Id, 7)]
+        };
+
+        var (response, _) = await CreateHandler().HandleAsync(command);
+
+        Assert.NotNull(savedCheckIn);
+        Assert.False(savedCheckIn!.HasActiveInjury);
+        Assert.Equal("rodilla:6", savedCheckIn.PainZones);
+        Assert.Equal("Red", response.TrafficLight);
+        Assert.Equal("Lesión en recuperación con más dolor", response.TrafficLightReason);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithInRecoveryInjuryPain4WhenYesterdayWas2_ReturnsRed()
+    {
+        var injury = new AthleteInjury
+        {
+            AthleteId = AthleteId,
+            Zone = "rodilla",
+            Status = InjuryStatus.InRecovery
+        };
+        _injuries
+            .Setup(repo => repo.ListNotClearedByAthleteAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+        ConfigurarSinCheckInPrevio();
+
+        var yesterdayCheckIn = new CheckIn
+        {
+            AthleteId = AthleteId,
+            Date = ArgentinaTime.Today.AddDays(-1).ToDateTime(TimeOnly.MinValue),
+            SleepHours = 8,
+            IsSick = false
+        };
+        ConfigurarVentanaDeSueno(yesterdayCheckIn);
+
+        _injuryPains
+            .Setup(repo => repo.ListByCheckInIdsAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(yesterdayCheckIn.Id)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<Application.DTOs.CheckIns.CheckInInjuryPainDto>>
+            {
+                [yesterdayCheckIn.Id] = [new Application.DTOs.CheckIns.CheckInInjuryPainDto(injury.Id, "rodilla", 2)]
+            });
+
+        CheckIn? savedCheckIn = null;
+        _checkIns
+            .Setup(repo => repo.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()))
+            .Callback<CheckIn, CancellationToken>((checkIn, _) => savedCheckIn = checkIn)
+            .Returns(Task.CompletedTask);
+
+        var command = CommandValido(hasActiveInjury: false) with
+        {
+            PainZones = null,
+            Injuries = [new SubmitInjuryPain(injury.Id, 4)]
+        };
+
+        var (response, _) = await CreateHandler().HandleAsync(command);
+
+        Assert.NotNull(savedCheckIn);
+        Assert.False(savedCheckIn!.HasActiveInjury);
+        Assert.Equal("rodilla:6", savedCheckIn.PainZones);
+        Assert.Equal("Red", response.TrafficLight);
+        Assert.Equal("Lesión en recuperación con más dolor", response.TrafficLightReason);
     }
 
     // sin lesiones clínicas se conserva el comportamiento anterior de salud normal.
