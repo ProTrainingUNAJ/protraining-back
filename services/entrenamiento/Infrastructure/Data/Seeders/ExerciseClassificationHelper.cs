@@ -46,14 +46,24 @@ public static class ExerciseClassificationHelper
             return "Hombros";
         }
 
-        // 5. Press de banca y fondos -> Pecho
+        // 5. Press de banca y fondos -> Pecho (excluyendo variantes específicas de tríceps, que van a Brazos)
         if (n.Contains("press de banca") || id.Contains("bench_press") || id.Contains("floor_press") || n.Contains("prensa de piso") || n.Contains("prensa de suelo"))
         {
+            if (n.Contains("tríceps") || n.Contains("triceps") || id.Contains("triceps") || id.Contains("skull_crusher"))
+            {
+                return "Brazos";
+            }
+
             return "Pecho";
         }
 
         if (n.Contains("fondos") || id.StartsWith("dip") || id.Contains("dip_machine") || id == "bench_dips")
         {
+            if (n.Contains("tríceps") || n.Contains("triceps") || n.Contains("en banco") || id.Contains("triceps") || id.Contains("bench_dip") || id.Contains("dip_machine"))
+            {
+                return "Brazos";
+            }
+
             return "Pecho";
         }
 
@@ -68,10 +78,10 @@ public static class ExerciseClassificationHelper
             return "Espalda";
         }
 
-        // 7. Remos de espalda (excluyendo remo vertical / al cuello que trabaja deltoides/trapecios) -> Espalda
-        if (n.Contains("remo con") || n.Contains("remo en") || n.Contains("remo inclinado") || n.Contains("remo largo") || n.Contains("remo renegade") || id.Contains("barbell_rear_delt_row") || id.Contains("cable_rope_rear-delt_rows"))
+        // 7. Remos de espalda (excluyendo remo vertical / al cuello y remos de deltoides posterior que van a Hombros) -> Espalda
+        if (n.Contains("remo con") || n.Contains("remo en") || n.Contains("remo inclinado") || n.Contains("remo largo") || n.Contains("remo renegade"))
         {
-            if (n.Contains("vertical") || id.Contains("upright") || n.Contains("cuello"))
+            if (n.Contains("vertical") || id.Contains("upright") || n.Contains("cuello") || n.Contains("deltoides posterior") || id.Contains("rear_delt") || id.Contains("rear-delt"))
             {
                 return "Hombros";
             }

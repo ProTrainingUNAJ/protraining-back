@@ -62,7 +62,7 @@ public sealed class ExerciseCatalogClassificationTests : IAsyncLifetime
     [InlineData("Sentadilla frontal con barra", "Front_Barbell_Squat", "Piernas")]
     [InlineData("Sentadilla con copa", "Goblet_Squat", "Piernas")]
     [InlineData("Prensa de piernas", "Leg_Press", "Piernas")]
-    // Press de banca y fondos -> Pecho
+    // Press de banca y fondos -> Pecho (variantes de tríceps -> Brazos)
     [InlineData("Press de banca con barra - Agarre medio", "Barbell_Bench_Press_-_Medium_Grip", "Pecho")]
     [InlineData("Press de banca con barra con agarre cerrado", "Close-Grip_Barbell_Bench_Press", "Pecho")]
     [InlineData("Press de banca inclinado con barra - Agarre medio", "Barbell_Incline_Bench_Press_-_Medium_Grip", "Pecho")]
@@ -71,14 +71,19 @@ public sealed class ExerciseCatalogClassificationTests : IAsyncLifetime
     [InlineData("Press de banca - Levantamiento de pesas", "Bench_Press_-_Powerlifting", "Pecho")]
     [InlineData("Press de banca con mancuernas en el piso", "Dumbbell_Floor_Press", "Pecho")]
     [InlineData("Press de banca en máquina Smith", "Smith_Machine_Bench_Press", "Pecho")]
-    [InlineData("Fondos - Versión para tríceps", "Dips_-_Triceps_Version", "Pecho")]
     [InlineData("Fondos - Versión de pecho", "Dips_-_Chest_Version", "Pecho")]
-    [InlineData("fondos en banco", "Bench_Dips", "Pecho")]
-    // Press militar -> Hombros
+    // Variantes de tríceps -> Brazos
+    [InlineData("Fondos - Versión para tríceps", "Dips_-_Triceps_Version", "Brazos")]
+    [InlineData("fondos en banco", "Bench_Dips", "Brazos")]
+    [InlineData("Press de banca inverso para tríceps", "Reverse_Triceps_Bench_Press", "Brazos")]
+    [InlineData("Press de banca con agarre cerrado declinado a máquina de press de banca", "Decline_Close-Grip_Bench_To_Skull_Crusher", "Brazos")]
+    // Press militar y deltoides posteriores -> Hombros
     [InlineData("Press militar con barra sentado", "Seated_Barbell_Military_Press", "Hombros")]
     [InlineData("Prensa militar permanente", "Standing_Military_Press", "Hombros")]
     [InlineData("Prensa de hombro a máquina (militar)", "Machine_Shoulder_Military_Press", "Hombros")]
     [InlineData("Press militar con pesa rusa a dos brazos", "Two-Arm_Kettlebell_Military_Press", "Hombros")]
+    [InlineData("Remo con barra para deltoides posteriores", "Barbell_Rear_Delt_Row", "Hombros")]
+    [InlineData("Remo con cuerda y cable para deltoides posteriores", "Cable_Rope_Rear-Delt_Rows", "Hombros")]
     // Dominadas, remos y jalones -> Espalda
     [InlineData("Dominadas", "Pullups", "Espalda")]
     [InlineData("dominadas", "Chin-up", "Espalda")]
@@ -105,10 +110,11 @@ public sealed class ExerciseCatalogClassificationTests : IAsyncLifetime
         {
             var pesoMuertoViejo = Exercise.Create("Peso muerto con barra", "Espalda", origin: Origin.Catalog);
             var pressCerradoViejo = Exercise.Create("Press de banca con barra con agarre cerrado", "Brazos", origin: Origin.Catalog);
-            var fondosViejo = Exercise.Create("fondos en banco", "Brazos", origin: Origin.Catalog);
+            var oldBenchDips = Exercise.Create("fondos en banco", "Pecho", origin: Origin.Catalog);
+            var oldRearDeltRow = Exercise.Create("Remo con barra para deltoides posteriores", "Espalda", origin: Origin.Catalog);
             var facePullViejo = Exercise.Create("Face pull con banda (activación)", "Hombros", origin: Origin.Catalog, exerciseType: ExerciseType.Weight);
 
-            await seedContext.Exercises.AddRangeAsync(pesoMuertoViejo, pressCerradoViejo, fondosViejo, facePullViejo);
+            await seedContext.Exercises.AddRangeAsync(pesoMuertoViejo, pressCerradoViejo, oldBenchDips, oldRearDeltRow, facePullViejo);
             await seedContext.SaveChangesAsync();
         }
 
@@ -128,7 +134,10 @@ public sealed class ExerciseCatalogClassificationTests : IAsyncLifetime
             Assert.Equal("Pecho", bench.MuscleGroup);
 
             var dips = await verifyContext.Exercises.FirstAsync(e => e.Name == "fondos en banco");
-            Assert.Equal("Pecho", dips.MuscleGroup);
+            Assert.Equal("Brazos", dips.MuscleGroup);
+
+            var rearDelt = await verifyContext.Exercises.FirstAsync(e => e.Name == "Remo con barra para deltoides posteriores");
+            Assert.Equal("Hombros", rearDelt.MuscleGroup);
 
             var facePull = await verifyContext.Exercises.FirstAsync(e => e.Name == "Face pull con banda (activación)");
             Assert.Equal(ExerciseType.Reps, facePull.ExerciseType);

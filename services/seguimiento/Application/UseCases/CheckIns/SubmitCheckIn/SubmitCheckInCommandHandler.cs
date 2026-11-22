@@ -48,6 +48,14 @@ public sealed class SubmitCheckInCommandHandler(
 
         var created = checkIn is null;
 
+        // KAN-644 / KAN-590: si el atleta tiene lesiones clínicas registradas (Active o InRecovery),
+        // HasActiveInjury es true únicamente si al menos una está en estado Active (porque el front
+        // en KAN-644 envía hasActiveInjury=true siempre que activeInjuries.length > 0, incluyendo InRecovery).
+        // Si no tiene lesiones clínicas registradas en la ficha, se respeta el flag manual command.HasActiveInjury.
+        var hasStrictlyActiveInjury = activeInjuries.Count > 0
+            ? activeInjuries.Any(i => i.Status == InjuryStatus.Active)
+            : command.HasActiveInjury;
+
         if (created)
         {
             checkIn = new CheckIn
@@ -63,7 +71,7 @@ public sealed class SubmitCheckInCommandHandler(
                 IsSick = command.IsSick,
                 EffortRate = command.EffortRate,
                 PainZones = painZones,
-                HasActiveInjury = command.HasActiveInjury || activeInjuries.Count > 0
+                HasActiveInjury = hasStrictlyActiveInjury
             };
 
             await repository.AddAsync(checkIn, cancellationToken);
@@ -79,7 +87,7 @@ public sealed class SubmitCheckInCommandHandler(
             checkIn.IsSick = command.IsSick;
             checkIn.EffortRate = command.EffortRate;
             checkIn.PainZones = painZones;
-            checkIn.HasActiveInjury = command.HasActiveInjury || activeInjuries.Count > 0;
+            checkIn.HasActiveInjury = hasStrictlyActiveInjury;
         }
 
         await injuryPainRepository.SetForCheckInAsync(checkIn.Id, pains, cancellationToken);
@@ -98,8 +106,50 @@ public sealed class SubmitCheckInCommandHandler(
             .ToList();
         sleepWindow.Add(new SleepWindowEntry { SleepHours = checkIn.SleepHours, IsSick = checkIn.IsSick });
 
+        // Lesiones "En recuperación" (InRecovery, KAN-644 / KAN-590): se pasa al motor el dolor máximo
+        // de hoy (de injury_pains) y el del check-in anterior para evaluar si está en 0–5 o si empeoró.
+        int? recoveryMaxPainToday = null;
+        int? recoveryPreviousPain = null;
+        var recoveryInjuryIds = activeInjuries
+            .Where(i => i.Status == InjuryStatus.InRecovery)
+            .Select(i => i.Id)
+            .ToHashSet();
+
+        if (recoveryInjuryIds.Count > 0)
+        {
+            var todayRecoveryPains = pains
+                .Where(p => recoveryInjuryIds.Contains(p.InjuryId))
+                .Select(p => p.Level)
+                .ToList();
+
+            if (todayRecoveryPains.Count > 0)
+                recoveryMaxPainToday = todayRecoveryPains.Max();
+
+            var lastPreviousCheckIn = previousCheckIns
+                .OrderByDescending(c => c.Date)
+                .FirstOrDefault();
+
+            if (lastPreviousCheckIn is not null)
+            {
+                var previousPainsByCheckIn = await injuryPainRepository.ListByCheckInIdsAsync(
+                    [lastPreviousCheckIn.Id], cancellationToken);
+
+                if (previousPainsByCheckIn.TryGetValue(lastPreviousCheckIn.Id, out var prevPainList))
+                {
+                    var prevRecoveryLevels = prevPainList
+                        .Where(p => recoveryInjuryIds.Contains(p.InjuryId))
+                        .Select(p => p.Level)
+                        .ToList();
+
+                    if (prevRecoveryLevels.Count > 0)
+                        recoveryPreviousPain = prevRecoveryLevels.Max();
+                }
+            }
+        }
+
         // Semáforo: motor puro con los datos recién cargados, sin ninguna llamada externa.
-        // has_active_injury o muy poco sueño (< 4 h) obligan Rojo; el resto de señales → Amarillo.
+        // has_active_injury, lesión en recuperación con más dolor o muy poco sueño (< 4 h) obligan Rojo;
+        // el resto de señales → Amarillo.
         var evaluation = trafficLightEngine.Evaluate(
             new CheckInData
             {
@@ -107,7 +157,9 @@ public sealed class SubmitCheckInCommandHandler(
                 IsSick = checkIn.IsSick,
                 EffortRate = checkIn.EffortRate,
                 PainZones = checkIn.PainZones,
-                HasActiveInjury = checkIn.HasActiveInjury
+                HasActiveInjury = checkIn.HasActiveInjury,
+                RecoveryInjuryMaxPainToday = recoveryMaxPainToday,
+                RecoveryInjuryPreviousPain = recoveryPreviousPain
             },
             new ContextData { SleepWindow = sleepWindow });
 
