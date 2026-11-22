@@ -1,10 +1,13 @@
 using Application.Common.Recommendations;
 using Application.DTOs.Recommendations;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Application.UseCases.Recommendations.GenerateHabitsRecommendation;
 
@@ -24,7 +27,8 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
     IAiService aiService,
     IUnitOfWork unitOfWork,
     IHabitsAthleteContextProvider athleteContextProvider,
-    IHabitsTrainingDayContextProvider trainingDayContextProvider)
+    IHabitsTrainingDayContextProvider trainingDayContextProvider,
+    ILogger<GenerateHabitsRecommendationCommandHandler>? logger = null)
 {
     public async Task<HabitsRecommendationResponseDto> HandleAsync(
         GenerateHabitsRecommendationCommand command,
@@ -61,7 +65,11 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
                 matchDates.AddRange(dates);
                 matchQueriesSucceeded = true;
             }
-            catch
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (StructureServiceUnavailableException)
             {
                 // Fail-safe: una categoría sin datos no invalida a las demás; si todas fallan, se desconoce el momento.
             }
@@ -95,7 +103,11 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
                     contextNotes.Add($"El último check-in disponible es del {latestDate:yyyy-MM-dd}; el descanso puede no ser reciente.");
             }
         }
-        catch
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SeguimientoServiceUnavailableException)
         {
             // Fail-safe: sin historial de check-ins, no inferir descanso.
             hasInsufficientRest = null;
@@ -109,8 +121,13 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
             isHeavyTrainingDay = await trainingDayContextProvider.IsHeavyTrainingDayAsync(
                 command.AthleteId, today, cancellationToken);
         }
-        catch
+        catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "No se pudo determinar si el día es pesado de entrenamiento; se trata como desconocido.");
             isHeavyTrainingDay = null;
         }
 
@@ -152,7 +169,48 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
         }
         catch (DomainException)
         {
-            // Fallback defensivo: si el pipeline de IA rechaza por alguna razón, usar redacción determinística segura.
+            // Bloqueo por políticas/restricciones del sistema: no se elude mediante fallback por reglas.
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (AiServiceUnavailableException ex)
+        {
+            logger?.LogWarning(ex, "Servicio de IA no disponible; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger?.LogWarning(ex, "Error de comunicación con el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (TimeoutException ex)
+        {
+            logger?.LogWarning(ex, "Tiempo de espera agotado en el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (IOException ex)
+        {
+            logger?.LogWarning(ex, "Error de I/O en el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (JsonException ex)
+        {
+            logger?.LogWarning(ex, "Respuesta inválida del servicio de IA; se usa redacción determinística por reglas.");
             drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
             var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
             if (validation.IsValid && validation.Value is not null)
