@@ -65,7 +65,8 @@ public class UsersControllerTests
             updatePhoneUseCase,
             updateProfileUseCase,
             updateMyTelegramUseCase,
-            deactivateAccountUseCase);
+            deactivateAccountUseCase,
+            _mockUserManager.Object);
     }
 
     // Roles que exige el atributo [Authorize] puesto en el método del controller.
@@ -285,5 +286,61 @@ public class UsersControllerTests
         var result = await _controller.GetPfHabitsRecommendations();
 
         Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_OwnUserId_When_GettingUserPhoto_Then_ReturnsFileResult()
+    {
+        var myId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(myId);
+        var photoBytes = new byte[] { 0x52, 0x49, 0x46, 0x46 };
+        var photo = UserPhoto.Create(myId, photoBytes, "image/webp", photoBytes.Length);
+        _mockPhotoRepo.Setup(r => r.GetByUserIdAsync(myId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(photo);
+
+        var result = await _controller.GetUserPhoto(myId, CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/webp", fileResult.ContentType);
+        Assert.Equal(photoBytes, fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Given_PfUser_When_GettingAssignedAthletePhoto_Then_ReturnsFileResult()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+
+        var athleteUser = new User { Id = athleteId, PfId = pfId };
+        _mockUserManager.Setup(m => m.FindByIdAsync(athleteId.ToString())).ReturnsAsync(athleteUser);
+
+        var photoBytes = new byte[] { 0x52, 0x49, 0x46, 0x46 };
+        var photo = UserPhoto.Create(athleteId, photoBytes, "image/webp", photoBytes.Length);
+        _mockPhotoRepo.Setup(r => r.GetByUserIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(photo);
+
+        var result = await _controller.GetUserPhoto(athleteId, CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/webp", fileResult.ContentType);
+        Assert.Equal(photoBytes, fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Given_User_When_GettingOtherUserPhotoWhoIsNotTheirAthlete_Then_ReturnsNotFound()
+    {
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(userId);
+
+        var otherUser = new User { Id = otherUserId, PfId = Guid.NewGuid() /* different PF */ };
+        _mockUserManager.Setup(m => m.FindByIdAsync(otherUserId.ToString())).ReturnsAsync(otherUser);
+
+        var result = await _controller.GetUserPhoto(otherUserId, CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(404, problem.Status);
     }
 }
