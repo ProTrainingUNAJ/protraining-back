@@ -24,6 +24,7 @@ namespace Application.DTOs.Routines
         public double? WeightPerSide { get; set; } 
         public double? Current1RmKg { get; set; }
         public bool IsReference { get; set; }
+        public double? TargetDistanceMeters { get; set; }
         public double? TargetTimeSeconds { get; set; }
         public double? BestMarkSeconds { get; set; }
         public List<TodayRoutinePerformedSetDto> PerformedSets { get; set; } = [];

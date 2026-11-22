@@ -34,6 +34,7 @@ public class TrainingSessionRepository : ITrainingSessionRepository
     {
         // 1. Obtenemos las asignaciones del atleta o sus categorías, incluyendo el plan completo con semanas y sesiones
         var assignments = await _context.PlanAssignments
+            .AsNoTracking()
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)

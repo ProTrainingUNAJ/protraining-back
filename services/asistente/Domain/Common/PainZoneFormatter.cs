@@ -74,9 +74,16 @@ public static class PainZoneFormatter
 
     public static string Format(string? rawPainZones)
     {
+        var entries = FormatEntries(rawPainZones);
+        return entries.Count == 0 ? string.Empty : string.Join(", ", entries);
+    }
+
+
+    public static IReadOnlyList<string> FormatEntries(string? rawPainZones)
+    {
         if (string.IsNullOrWhiteSpace(rawPainZones))
         {
-            return string.Empty;
+            return [];
         }
 
         var formattedEntries = new List<string>();
@@ -112,7 +119,7 @@ public static class PainZoneFormatter
                 : zoneLabel);
         }
 
-        return string.Join(", ", formattedEntries);
+        return formattedEntries;
     }
 
     private static string ResolveZoneLabel(string zoneId)
@@ -139,7 +146,7 @@ public static class PainZoneFormatter
         }
 
         return level >= 6
-            ? "Nivel 6 - Lesión activa"
+            ? "Lesión activa"
             : $"Nivel {level}";
     }
 }

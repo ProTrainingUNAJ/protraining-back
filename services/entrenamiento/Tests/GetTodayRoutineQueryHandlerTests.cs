@@ -720,4 +720,196 @@ public class GetTodayRoutineQueryHandlerTests
         Assert.Null(ex.TargetTimeSeconds);
         Assert.Null(ex.BestMarkSeconds);
     }
+
+    [Fact]
+    public async Task Given_EjercicioDeFuerzaSinPorcentajeRmConRpe_When_ConsultaRutina_Then_NoCalcula100PorCientoNiMarcaComoReferencia()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Día 1", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Fuerza Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 4,
+            reps: "6",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: squat.Id,
+            intensityType: IntensityType.RPE,
+            targetRpe: 8m,
+            trainingSessionId: session.Id);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [squat]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, squat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(athleteId, squat.Id, 140m, RecordSource.Tested, DateTime.UtcNow));
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Null(item.WeightKg);
+        Assert.Null(item.BarWeight);
+        Assert.Null(item.WeightPerSide);
+        Assert.Null(item.Current1RmKg);
+        Assert.False(item.IsReference);
+        Assert.Equal(0.0, item.Percentage);
+        Assert.Equal(IntensityType.RPE, item.IntensityType);
+        Assert.Equal(8m, item.TargetRpe);
+        _athleteRecordRepoMock.Verify(r => r.GetActiveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioDeTipoReps_When_ConsultaRutina_Then_NoCalculaCargaNiMarcaComoReferencia()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var mobility = Exercise.Create("Movilidad de cadera", "Core", exerciseType: ExerciseType.Reps);
+        var session = CreateSessionWithExercise(mobility, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(ExerciseType.Reps, item.ExerciseType);
+        Assert.Null(item.WeightKg);
+        Assert.Null(item.BarWeight);
+        Assert.Null(item.WeightPerSide);
+        Assert.Null(item.Current1RmKg);
+        Assert.False(item.IsReference);
+        _athleteRecordRepoMock.Verify(r => r.GetActiveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioTimeConTargetTimeSecondsYSinTest_When_ConsultaRutina_Then_DevuelveMetaDelPfEIsReferenceFalse()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var trote = Exercise.Create("Trote suave 5 min", "Cardio", exerciseType: ExerciseType.Time);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Entrada en calor", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Activación", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 1,
+            reps: "1",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: trote.Id,
+            trainingSessionId: session.Id,
+            targetTimeSeconds: 300m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [trote]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        var result = await CreateHandler(trackingClient: trackingMock.Object)
+            .Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(300.0, item.TargetTimeSeconds);
+        Assert.False(item.IsReference);
+        Assert.Equal(0.0, item.Percentage);
+        Assert.Null(item.WeightKg);
+        trackingMock.Verify(c => c.GetAthleteBestMarksAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioTimeConTargetTimeSecondsYConTest_When_ConsultaRutina_Then_PriorizaMetaDelPfSobreTest()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Time);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Velocidad", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 3,
+            reps: "1",
+            targetPercentage: 90m,
+            trainingBlockId: block.Id,
+            exerciseId: pasadas.Id,
+            trainingSessionId: session.Id,
+            targetTimeSeconds: 20m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [pasadas]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Application.DTOs.Tracking.TrackingBestMarkDto(Guid.NewGuid(), "Carrera 100 m", "Pasadas", 14m, "s")]);
+
+        var result = await CreateHandler(trackingClient: trackingMock.Object)
+            .Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(20.0, item.TargetTimeSeconds);
+        Assert.False(item.IsReference);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioDistanceConTargetDistanceMeters_When_ConsultaRutina_Then_DevuelveDistanciaDelPfEIsReferenceFalse()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Velocidad", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 4,
+            reps: "1",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: pasadas.Id,
+            trainingSessionId: session.Id,
+            targetDistanceMeters: 400m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [pasadas]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(400.0, item.TargetDistanceMeters);
+        Assert.False(item.IsReference);
+        Assert.Null(item.WeightKg);
+    }
 }

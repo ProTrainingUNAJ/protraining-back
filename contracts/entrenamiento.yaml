@@ -2218,6 +2218,12 @@ components:
           type: boolean
           description: True si el ejercicio no tiene récord previo y la serie se prescribe como de referencia para probar y registrar.
           example: false
+        targetDistanceMeters:
+          type: number
+          format: double
+          nullable: true
+          description: Meta de distancia prescripta por el preparador físico en metros.
+          example: 400.0
         targetTimeSeconds:
           type: number
           format: double
