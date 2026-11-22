@@ -19,7 +19,7 @@ public sealed record AthleteCheckInRecord(
     bool HasActiveInjury);
 
 /// <summary>
-/// Resultado del análisis de patrones de sobrecarga sobre una ventana de check-ins (#177 · KAN-472 / #178 · KAN-473).
+/// Resultado del análisis de patrones de sobrecarga sobre una ventana de check-ins
 /// </summary>
 public sealed record OverloadPatternResult(
     bool HasPattern,
@@ -41,7 +41,7 @@ public sealed record OverloadPatternResult(
 }
 
 /// <summary>
-/// Detector de patrones de sobrecarga, fatiga acumulada, riesgo de lesión y correlación precompetitiva (D-2 / D-3) en el dominio (#177 · KAN-472 / #178 · KAN-473 / #182 · KAN-477).
+/// Detector de patrones de sobrecarga, fatiga acumulada, riesgo de lesión y correlación precompetitiva en el dominio
 /// Evalúa el historial de check-ins del atleta (típicamente los últimos 7 días) cruzado con el fixture de partidos mediante reglas determinísticas.
 /// </summary>
 public static class OverloadPatternDetector
@@ -68,17 +68,13 @@ public static class OverloadPatternDetector
         {
             const string reasonPrefix = "Riesgo de lesión inminente: el atleta reporta lesión activa o molestia aguda";
             const string reasonSuffix = " en sus check-ins recientes.";
-            var formattedPainZones = PainZoneFormatter.Format(injuryRecord.PainZones);
+            var painEntries = PainZoneFormatter.FormatEntries(injuryRecord.PainZones);
             var painDescription = string.Empty;
-            if (!string.IsNullOrWhiteSpace(formattedPainZones))
+            if (painEntries.Count > 0)
             {
                 const string zonePrefix = " en zona: ";
                 var maxZonesLength = PreventiveAlert.MaxReasonLength - reasonPrefix.Length - zonePrefix.Length - reasonSuffix.Length;
-                if (formattedPainZones.Length > maxZonesLength)
-                {
-                    formattedPainZones = $"{formattedPainZones[..(maxZonesLength - 3)].TrimEnd(',', ' ')}...";
-                }
-
+                var formattedPainZones = FormatEntriesWithinLimit(painEntries, maxZonesLength);
                 painDescription = $"{zonePrefix}{formattedPainZones}";
             }
 
@@ -92,8 +88,8 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 50);
         }
 
-        // 2. Patrón Pre-Partido (D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días
-        // 2. Patrón Pre-Partido (D-1 / D-2 · #178 · KAN-473): Esfuerzo alto reciente con partido oficial en dos días o menos
+        // 2. Patrón Pre-Partido: Esfuerzo alto reciente con partido oficial en dos días
+        // 2. Patrón Pre-Partido: Esfuerzo alto reciente con partido oficial en dos días o menos
         if (hasMatchInTwoDays || (daysUntilMatch.HasValue && daysUntilMatch.Value is 1 or 2))
         {
             var recentHighEffort = ordered.LastOrDefault(r => r.EffortRate.HasValue && r.EffortRate.Value >= 8);
@@ -129,9 +125,9 @@ public static class OverloadPatternDetector
                 SuggestedAdjustmentPercentage: 25);
         }
 
-        // 4. Patrón de Alarma B: Sobrecarga aguda acumulada con umbral adaptativo (#177 · KAN-472 / #182 · KAN-477)
+        // 4. Patrón de Alarma B: Sobrecarga aguda acumulada con umbral adaptativo
         // Umbral normal: 3 o más sesiones con RPE >= 8 en los últimos 7 días.
-        // Umbral reducido (partido en D0 a D+3): 2 o más sesiones con RPE >= 8 (#182 · KAN-477).
+        // Umbral reducido (partido en D0 a D+3): 2 o más sesiones con RPE >= 8
         var isMatchInProximityWindow = hasUpcomingMatchInProximity ||
             (daysUntilMatch.HasValue && daysUntilMatch.Value is >= 0 and <= 3) ||
             hasMatchInTwoDays;
@@ -175,5 +171,28 @@ public static class OverloadPatternDetector
         }
 
         return OverloadPatternResult.None;
+    }
+
+    private static string FormatEntriesWithinLimit(IReadOnlyList<string> entries, int maxLength)
+    {
+        var full = string.Join(", ", entries);
+        if (full.Length <= maxLength)
+        {
+            return full;
+        }
+
+        for (var take = entries.Count - 1; take >= 1; take--)
+        {
+            var remaining = entries.Count - take;
+            var suffix = remaining == 1 ? " y 1 zona más" : $" y {remaining} zonas más";
+            var candidate = $"{string.Join(", ", entries.Take(take))}{suffix}";
+            if (candidate.Length <= maxLength)
+            {
+                return candidate;
+            }
+        }
+
+        var fallback = $"{entries.Count} zonas afectadas";
+        return fallback.Length <= maxLength ? fallback : fallback[..Math.Max(0, maxLength)];
     }
 }

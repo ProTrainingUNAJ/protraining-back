@@ -184,6 +184,9 @@ namespace Application.UseCases.Routines.GetTodayRoutine
 
             var hasTimedExercise = prescribedExercises.Any(p =>
             {
+                if (p.TargetTimeSeconds.HasValue)
+                    return false;
+
                 var ex = replacementsByOriginal.TryGetValue(p.ExerciseId, out var subId)
                     && substituteExercisesById.TryGetValue(subId, out var sub)
                         ? sub
@@ -315,19 +318,22 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 originalExerciseName = prescribed.Exercise?.Name;
                 context.VariantReasons.TryGetValue(prescribed.ExerciseId, out adaptationReason);
             }
-            
+
             var exerciseType = effectiveExercise?.ExerciseType ?? ExerciseType.Weight;
             bool isTimedExercise = exerciseType is ExerciseType.Distance or ExerciseType.Time;
-            
-            var activeRecord = isTimedExercise
-                ? null
-                : await athleteRecordRepository.GetActiveRecordAsync(context.AthleteId, effectiveExerciseId, cancellationToken);
-            
-            decimal percentage = prescribed.TargetPercentage ?? 100m;
-            
+            bool isRepsExercise = exerciseType == ExerciseType.Reps;
+
+            decimal percentage = prescribed.TargetPercentage ?? 0m;
+            decimal? effectivePercentage = prescribed.TargetPercentage;
+
             if (context.ActiveAdjustment?.LoadReductionPercentage is { } reduction && reduction > 0)
             {
-                percentage = Math.Round(percentage * (100m - reduction) / 100m, 2);
+                if (effectivePercentage.HasValue)
+                {
+                    effectivePercentage = Math.Round(effectivePercentage.Value * (100m - reduction) / 100m, 2);
+                    percentage = effectivePercentage.Value;
+                }
+
                 var reductionText = $"Reducción de carga del {reduction}%";
                 adaptationReason = string.IsNullOrWhiteSpace(adaptationReason)
                     ? (string.IsNullOrWhiteSpace(context.ActiveAdjustment.Note)
@@ -335,35 +341,66 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                         : $"{context.ActiveAdjustment.Note.Trim()} ({reductionText})")
                     : $"{adaptationReason} · {reductionText}";
             }
-            
+
+            double? targetDistanceMeters = null;
             double? targetTime = null;
             double? bestMark = null;
-            
+            decimal? current1RmKg = null;
+            double? barWeight = null;
+            double? totalWeight = null;
+            double? weightPerSide = null;
+            bool isReference = false;
+
             if (isTimedExercise)
             {
-                // Si el ejercicio tiene test/marca de tiempo
-                decimal? bestTestTime = effectiveExercise?.Name is { } exerciseName
-                    && context.BestMarksByExerciseName.TryGetValue(exerciseName.Trim(), out var mark)
-                    ? mark
+                targetDistanceMeters = prescribed.TargetDistanceMeters.HasValue
+                    ? (double)prescribed.TargetDistanceMeters.Value
                     : null;
-                
-                var timeResult = calculator.CalculateTimeTarget(bestTestTime, percentage);
-                targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
-                bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
+
+                if (prescribed.TargetTimeSeconds.HasValue)
+                {
+                    // La meta explícita del PF manda; el test queda como respaldo.
+                    targetTime = (double)prescribed.TargetTimeSeconds.Value;
+                }
+                else
+                {
+                    decimal? bestTestTime = effectiveExercise?.Name is { } exerciseName
+                        && context.BestMarksByExerciseName.TryGetValue(exerciseName.Trim(), out var mark)
+                        ? mark
+                        : null;
+
+                    decimal testPercentage = effectivePercentage ?? 100m;
+                    if (!effectivePercentage.HasValue && context.ActiveAdjustment?.LoadReductionPercentage is { } timeReduction && timeReduction > 0)
+                    {
+                        testPercentage = Math.Round(testPercentage * (100m - timeReduction) / 100m, 2);
+                    }
+
+                    var timeResult = calculator.CalculateTimeTarget(bestTestTime, testPercentage);
+                    targetTime = timeResult.HasValue ? (double)timeResult.Value : null;
+                    bestMark = bestTestTime.HasValue ? (double)bestTestTime.Value : null;
+                }
+
+                isReference = !prescribed.TargetTimeSeconds.HasValue
+                    && !prescribed.TargetDistanceMeters.HasValue
+                    && !targetTime.HasValue;
             }
-            
-            decimal? current1RmKg = isTimedExercise ? null : activeRecord?.Weight;
-            var source = isTimedExercise ? null : activeRecord?.Source;
-            var loadResult = calculator.CalculateLoad(current1RmKg, source, percentage);
-            bool isBarbell = Equipment.IsBarbell(effectiveExercise?.Equipment);
-            double? barWeight = isBarbell ? 20 : null;
-            double? totalWeight = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null;
-            double? weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
-            
-            var effectiveVideoUrl = context.PfVideos.TryGetValue(effectiveExerciseId, out var customVideo)
-                ? customVideo
-                : effectiveExercise?.VideoUrl;
-            
+            else if (!isRepsExercise && effectivePercentage.HasValue)
+            {
+                // Solo calculamos carga en kg para ejercicios de fuerza con %RM explícito.
+                var activeRecord = await athleteRecordRepository.GetActiveRecordAsync(context.AthleteId, effectiveExerciseId, cancellationToken);
+                current1RmKg = activeRecord?.Weight;
+                var source = activeRecord?.Source;
+
+                var loadResult = calculator.CalculateLoad(current1RmKg, source, effectivePercentage.Value);
+                bool isBarbell = Equipment.IsBarbell(effectiveExercise?.Equipment);
+                barWeight = isBarbell ? 20 : null;
+                totalWeight = loadResult.WeightKg.HasValue ? (double)loadResult.WeightKg.Value : null;
+                weightPerSide = isBarbell ? calculator.CalculateWeightPerSide(totalWeight, barWeight!.Value) : null;
+                isReference = loadResult.IsReference;
+            }
+
+            var effectiveVideoUrl = context.PfVideos.TryGetValue(effectiveExerciseId, out var customVideo) ? customVideo : effectiveExercise?.VideoUrl;
+
             return new TodayRoutineExerciseDto
             {
                 ExerciseId = effectiveExerciseId,
@@ -386,7 +423,8 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                 BarWeight = barWeight,
                 WeightPerSide = weightPerSide,
                 Current1RmKg = current1RmKg.HasValue ? (double)current1RmKg.Value : null,
-                IsReference = loadResult.IsReference,
+                IsReference = isReference,
+                TargetDistanceMeters = targetDistanceMeters,
                 TargetTimeSeconds = targetTime,
                 BestMarkSeconds = bestMark,
                 PerformedSets = context.PerformedSets.Where(p => p.ExerciseId == effectiveExerciseId).OrderBy(p => p.SetNumber ?? 0)

@@ -1,6 +1,7 @@
 using Domain.Common;
 using Domain.Entities;
 using Xunit;
+using System.Text.RegularExpressions;
 
 namespace Asistente.Tests;
 
@@ -416,9 +417,10 @@ public sealed class OverloadPatternDetectorTests
         Assert.True(result.HasPattern);
         Assert.Equal(AlertType.InjuryRisk, result.Type);
         Assert.Contains("Abdominales [Nivel 1]", result.Reason);
-        Assert.Contains("Bíceps izquierdo [Nivel 6 - Lesión activa]", result.Reason);
+        Assert.Contains("Bíceps izquierdo [Lesión activa]", result.Reason);
         Assert.Contains("Pecho derecho [Nivel 5]", result.Reason);
         Assert.Contains("Rodilla derecha [Nivel 3]", result.Reason);
+        Assert.DoesNotContain("Nivel 6", result.Reason);
         Assert.DoesNotContain("biceps_izquierdo:6", result.Reason);
     }
 
@@ -438,11 +440,12 @@ public sealed class OverloadPatternDetectorTests
         var result = OverloadPatternDetector.Detect(_athleteId, records);
 
         Assert.True(result.HasPattern);
-        Assert.Contains("Isquiotibiales [Nivel 6 - Lesión activa]", result.Reason);
+        Assert.Contains("Isquiotibiales [Lesión activa]", result.Reason);
+        Assert.DoesNotContain("Nivel 6", result.Reason);
     }
 
     [Fact]
-    public void Given_ActiveInjuryWithManyPainZones_When_Detect_Then_TruncatesWithinMaxReasonLength()
+    public void Given_ActiveInjuryWithManyPainZones_When_Detect_Then_DropsWholeZonesWithoutCuttingWords()
     {
         var manyZones = string.Join(
             ",",
@@ -457,7 +460,12 @@ public sealed class OverloadPatternDetectorTests
 
         Assert.True(result.HasPattern);
         Assert.True(result.Reason.Length <= PreventiveAlert.MaxReasonLength);
-        Assert.Contains("...", result.Reason);
-        Assert.EndsWith(" en sus check-ins recientes.", result.Reason);
+        Assert.DoesNotContain("...", result.Reason);
+        Assert.Matches(@"y \d+ zonas? más en sus check-ins recientes\.$", result.Reason);
+
+        // Ninguna zona ni etiqueta [Lesión activa] queda cortada por la mitad
+        var zonesPart = Regex.Split(result.Reason.Split(" en zona: ")[1],@" y \d+ zonas? más")[0];
+        var shownZones = zonesPart.Split(", ");
+        Assert.All(shownZones, zone => Assert.EndsWith(" [Lesión activa]", zone));
     }
 }

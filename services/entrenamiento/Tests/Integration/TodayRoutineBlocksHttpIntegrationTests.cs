@@ -1,12 +1,18 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Application.DTOs.Memberships;
 using Application.DTOs.Routines;
 using Application.DTOs.TrainingPlans;
 using Application.DTOs.TrainingSessions;
+using Application.Interfaces.Services;
+using Application.UseCases.Routines.RecordPerformedSets;
+using Domain.Common;
 using Domain.Entities;
 using Entrenamiento.Tests.Infrastructure;
+using Infrastructure.Data;
+using Infrastructure.Repositories;
+using Moq;
 using Xunit;
 
 namespace Entrenamiento.Tests.Integration;
@@ -16,8 +22,7 @@ public sealed class TodayRoutineBlocksHttpIntegrationTests : IAsyncLifetime
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
+        PropertyNameCaseInsensitive = true
     };
 
     private readonly Guid _pfId = Guid.NewGuid();
@@ -324,6 +329,9 @@ public sealed class TodayRoutineBlocksHttpIntegrationTests : IAsyncLifetime
         var unchangedAccessory = block2.Exercises[1];
         Assert.Equal(accessoryExercise.Id, unchangedAccessory.ExerciseId);
         Assert.False(unchangedAccessory.IsAdapted);
+        Assert.Null(unchangedAccessory.WeightKg);
+        Assert.False(unchangedAccessory.IsReference);
+        Assert.Equal(0.0, unchangedAccessory.Percentage);
     }
 
     [Fact]
@@ -341,5 +349,122 @@ public sealed class TodayRoutineBlocksHttpIntegrationTests : IAsyncLifetime
         Assert.Null(routine!.SessionId);
         Assert.Empty(routine.Blocks);
         Assert.Empty(routine.Exercises);
+    }
+
+    [Fact]
+    public async Task Given_DiaConDosSesiones_When_AtletaRegistraSerie_Then_NoReescribeElPlanEnBaseDeDatos()
+    {
+        var today = ArgentinaTime.Today;
+        var exercise1 = _seedData.CatalogExercise;
+        var exercise2 = _seedData.CustomExercise;
+
+        var planRequest = new SaveTrainingPlanRequest(
+            Name: "Plan Doble Sesión",
+            Objective: "Integridad",
+            Weeks:
+            [
+                new TrainingWeekRequest(
+                    WeekNumber: 1,
+                    Sessions:
+                    [
+                        new TrainingSessionRequest(
+                            Name: "Sesión Mañana",
+                            Order: 1,
+                            DayOfWeek: today.DayOfWeek,
+                            Blocks:
+                            [
+                                new TrainingBlockRequest(
+                                    Title: "Entrada en calor",
+                                    Order: 1,
+                                    Exercises:
+                                    [
+                                        new PrescribedExerciseRequest(
+                                            exerciseId: exercise1.Id,
+                                            order: 1,
+                                            sets: 2,
+                                            reps: "10",
+                                            targetPercentage: 50m)
+                                    ])
+                            ]),
+                        new TrainingSessionRequest(
+                            Name: "Sesión Tarde",
+                            Order: 2,
+                            DayOfWeek: today.DayOfWeek,
+                            Blocks:
+                            [
+                                new TrainingBlockRequest(
+                                    Title: "Fuerza Principal",
+                                    Order: 1,
+                                    Exercises:
+                                    [
+                                        new PrescribedExerciseRequest(
+                                            exerciseId: exercise2.Id,
+                                            order: 1,
+                                            sets: 4,
+                                            reps: "6",
+                                            targetPercentage: 80m)
+                                    ])
+                            ])
+                    ])
+            ]);
+
+        var createPlanResponse = await _clientPf.PostAsJsonAsync("/api/v1/training-plans", planRequest);
+        Assert.Equal(HttpStatusCode.Created, createPlanResponse.StatusCode);
+        var createdPlan = await createPlanResponse.Content.ReadFromJsonAsync<TrainingPlanDetailDto>(JsonOptions);
+        Assert.NotNull(createdPlan);
+
+        var assignResponse = await _clientPf.PostAsJsonAsync(
+            "/api/v1/training-plans/assignments",
+            new AssignPlanRequest(createdPlan!.Id, today, AthleteId: _seedData.AthleteId));
+        Assert.Equal(HttpStatusCode.Created, assignResponse.StatusCode);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetMeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteMeDto
+            {
+                AthleteId = _seedData.AthleteId,
+                FirstName = "Test",
+                LastName = "Atleta",
+                FullName = "Test Atleta",
+                Active = true,
+                Categories = []
+            });
+
+        // Dispara GetByAthleteIdAsync + SaveChangesAsync al registrar la serie
+        using (var context = _factory.CreateDbContext(_pfId))
+        {
+            var recordSetsHandler = new RecordPerformedSetsCommandHandler(
+                structureMock.Object,
+                new TrainingSessionRepository(context),
+                new AthleteRecordRepository(context),
+                new PerformedSetRepository(context),
+                new RecordProposalRepository(context),
+                new UnitOfWork(context));
+
+            var result = await recordSetsHandler.Handle(new RecordPerformedSetsCommand(
+                [new PerformedSetInputDto { ExerciseId = exercise2.Id, Weight = 80m, Reps = 6, SetNumber = 1 }]));
+
+            Assert.Equal(1, result.RecordedSetsCount);
+        }
+
+        // Volvemos a leer el plan y confirmamos que ambas sesiones y sus bloques siguen intactos
+        var getPlanResponse = await _clientPf.GetAsync($"/api/v1/training-plans/{createdPlan.Id}");
+        Assert.Equal(HttpStatusCode.OK, getPlanResponse.StatusCode);
+        var persistedPlan = await getPlanResponse.Content.ReadFromJsonAsync<TrainingPlanDetailDto>(JsonOptions);
+        Assert.NotNull(persistedPlan);
+
+        var sessions = persistedPlan!.Weeks.Single().Sessions.OrderBy(s => s.Order).ToList();
+        Assert.Equal(2, sessions.Count);
+
+        var session1Block = Assert.Single(sessions[0].Blocks);
+        Assert.Equal("Entrada en calor", session1Block.Title);
+        Assert.Equal(1, session1Block.Order);
+        Assert.Equal(exercise1.Id, Assert.Single(session1Block.Exercises).ExerciseId);
+
+        var session2Block = Assert.Single(sessions[1].Blocks);
+        Assert.Equal("Fuerza Principal", session2Block.Title);
+        Assert.Equal(1, session2Block.Order);
+        Assert.Equal(exercise2.Id, Assert.Single(session2Block.Exercises).ExerciseId);
     }
 }
