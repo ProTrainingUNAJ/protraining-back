@@ -66,15 +66,27 @@ public static class OverloadPatternDetector
         var injuryRecord = ordered.LastOrDefault(r => r.HasActiveInjury);
         if (injuryRecord is not null)
         {
-            var painDescription = !string.IsNullOrWhiteSpace(injuryRecord.PainZones)
-                ? $" en zona: {injuryRecord.PainZones.Trim()}"
-                : string.Empty;
+            const string reasonPrefix = "Riesgo de lesión inminente: el atleta reporta lesión activa o molestia aguda";
+            const string reasonSuffix = " en sus check-ins recientes.";
+            var formattedPainZones = PainZoneFormatter.Format(injuryRecord.PainZones);
+            var painDescription = string.Empty;
+            if (!string.IsNullOrWhiteSpace(formattedPainZones))
+            {
+                const string zonePrefix = " en zona: ";
+                var maxZonesLength = PreventiveAlert.MaxReasonLength - reasonPrefix.Length - zonePrefix.Length - reasonSuffix.Length;
+                if (formattedPainZones.Length > maxZonesLength)
+                {
+                    formattedPainZones = $"{formattedPainZones[..(maxZonesLength - 3)].TrimEnd(',', ' ')}...";
+                }
+
+                painDescription = $"{zonePrefix}{formattedPainZones}";
+            }
 
             return new OverloadPatternResult(
                 HasPattern: true,
                 Severity: AlertSeverity.High,
                 Type: AlertType.InjuryRisk,
-                Reason: $"Riesgo de lesión inminente: el atleta reporta lesión activa o molestia aguda{painDescription} en sus check-ins recientes.",
+                Reason: $"{reasonPrefix}{painDescription}{reasonSuffix}",
                 Suggestion: "Suspender ejercicios que sobrecarguen la zona afectada, priorizar kinesiología o descanso preventivo.",
                 SuggestedAdjustmentType: SuggestedAdjustmentType.Rest,
                 SuggestedAdjustmentPercentage: 50);

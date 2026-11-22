@@ -397,4 +397,67 @@ public sealed class OverloadPatternDetectorTests
 
         Assert.False(result.HasPattern);
     }
+
+    [Fact]
+    public void Given_ActiveInjuryWithSerializedPainZones_When_Detect_Then_FormatsZonesInReadableSpanish()
+    {
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(
+                new DateOnly(2026, 11, 2),
+                7.0, 3, 3, 3, 3, 2, 6,
+                false,
+                "abdominales:1,biceps_izquierdo:6,pecho_derecho:5,rodilla_derecha:3",
+                true)
+        };
+
+        var result = OverloadPatternDetector.Detect(_athleteId, records);
+
+        Assert.True(result.HasPattern);
+        Assert.Equal(AlertType.InjuryRisk, result.Type);
+        Assert.Contains("Abdominales [Nivel 1]", result.Reason);
+        Assert.Contains("Bíceps izquierdo [Nivel 6 - Lesión activa]", result.Reason);
+        Assert.Contains("Pecho derecho [Nivel 5]", result.Reason);
+        Assert.Contains("Rodilla derecha [Nivel 3]", result.Reason);
+        Assert.DoesNotContain("biceps_izquierdo:6", result.Reason);
+    }
+
+    [Fact]
+    public void Given_ActiveInjuryWithClinicalZoneId_When_Detect_Then_FormatsClinicalZoneReadable()
+    {
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(
+                new DateOnly(2026, 11, 2),
+                7.0, 3, 3, 3, 3, 2, 6,
+                false,
+                "isquiotibiales:6",
+                true)
+        };
+
+        var result = OverloadPatternDetector.Detect(_athleteId, records);
+
+        Assert.True(result.HasPattern);
+        Assert.Contains("Isquiotibiales [Nivel 6 - Lesión activa]", result.Reason);
+    }
+
+    [Fact]
+    public void Given_ActiveInjuryWithManyPainZones_When_Detect_Then_TruncatesWithinMaxReasonLength()
+    {
+        var manyZones = string.Join(
+            ",",
+            Enumerable.Range(1, 30).Select(i => $"cuello_trapecio_izquierdo_zona_{i}:6"));
+
+        var records = new List<AthleteCheckInRecord>
+        {
+            new(new DateOnly(2026, 11, 2), 7.0, 3, 3, 3, 3, 2, 6, false, manyZones, true)
+        };
+
+        var result = OverloadPatternDetector.Detect(_athleteId, records);
+
+        Assert.True(result.HasPattern);
+        Assert.True(result.Reason.Length <= PreventiveAlert.MaxReasonLength);
+        Assert.Contains("...", result.Reason);
+        Assert.EndsWith(" en sus check-ins recientes.", result.Reason);
+    }
 }
