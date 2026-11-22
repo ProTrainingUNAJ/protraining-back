@@ -484,10 +484,44 @@ public sealed class ResilientAiService : IAiService
                     _quotaService?.RecordUsage(pfId);
                 }
 
+                var rawRequestedExercises = GoalConstraintExtractor.ExtractRawRequestedExercisesPerSession(request.Goal);
                 var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
                 if (requestedMaxExercises is > 0)
                 {
-                    content = PlanDraftBlockParser.EnforceMaxExercisesPerSession(content, requestedMaxExercises.Value);
+                    IReadOnlyList<CatalogExerciseDto> catalogForAdjustment = [];
+                    if (_catalogService != null)
+                    {
+                        try
+                        {
+                            var goalCatalog = await _catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
+                            if (goalCatalog is not { Count: > 0 })
+                            {
+                                goalCatalog = await _catalogService.GetAllAsync(cancellationToken);
+                            }
+                            if (goalCatalog is { Count: > 0 })
+                            {
+                                catalogForAdjustment = goalCatalog;
+                            }
+                        }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "No se pudo consultar el catálogo filtrado para ajustar la cantidad de ejercicios por sesión.");
+                        }
+                    }
+
+                    content = PlanDraftBlockParser.EnforceExactExercisesPerSession(
+                        content,
+                        requestedMaxExercises.Value,
+                        rawRequestedExercises,
+                        catalogForAdjustment,
+                        request.Goal,
+                        request.StartDate,
+                        matchDates,
+                        request.AdaptationContext);
                 }
 
                 if (_catalogService != null)

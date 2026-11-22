@@ -84,28 +84,60 @@ public sealed class PlanDraftPromptLanguageTests
     }
 
     [Theory]
+    [InlineData("rutina de 5 ejercicios", 5)]
+    [InlineData("rutina de 8", 8)]
     [InlineData("Fuerza de piernas para rodilla, por día quiero 5 ejericcios como maximo", 5)]
     [InlineData("Fuerza de piernas para rodilla, por día quiero 5 ejercicios como maximo", 5)]
     [InlineData("fuerza de piernas para mejorar la rodilla, que la rutina tenga 5 ejercicios por día", 5)]
     [InlineData("Hipertrofia torso, máximo 4 ejercicios por sesión", 4)]
     [InlineData("Potencia, no más de cinco ejercicios", 5)]
     [InlineData("Fuerza general, solo 3 ejercicios", 3)]
-    public void ExtractMaxExercisesPerSession_WhenGoalContainsLimit_ReturnsExpectedCount(string goal, int expectedMax)
+    [InlineData("8 ejercicios por día", 8)]
+    [InlineData("rutina de 12 ejercicios", 12)]
+    [InlineData("rutina de 15 ejercicios", 12)]
+    [InlineData("Hipertrofia de tren superior, incluir un ejercicio de core al final", null)]
+    [InlineData("Fuerza general, 4 días, con 2 ejercicios de movilidad al inicio", null)]
+    [InlineData("Potencia, sumá un ejercicio pliométrico", null)]
+    [InlineData("Fuerza máxima en básicos", null)]
+    [InlineData("Fuerza de piernas para pretemporada, 3 días", null)]
+    [InlineData("Plan de 4 semanas y 3 días por semana", null)]
+    [InlineData("Hipertrofia 4 series de 8 al 75% desde 2026-11-20", null)]
+    public void ExtractMaxExercisesPerSession_HandlesSessionCountsAndRejectsSpecificExerciseQualifiers(string goal, int? expectedCount)
     {
         var actual = GoalConstraintExtractor.ExtractMaxExercisesPerSession(goal);
 
-        Assert.Equal(expectedMax, actual);
+        Assert.Equal(expectedCount, actual);
     }
 
     [Theory]
-    [InlineData("Fuerza de piernas para pretemporada, 3 días")]
-    [InlineData("Plan de 4 semanas y 3 días por semana")]
-    [InlineData("Hipertrofia 4 series de 8 al 75% desde 2026-11-20")]
-    public void ExtractMaxExercisesPerSession_WhenGoalHasNoExerciseLimit_ReturnsNull(string goal)
+    [InlineData("calcar la rutina de fuerza", new string[0])]
+    [InlineData("Fuerza de piernas para rodilla", new[] { "rodilla" })]
+    [InlineData("Rehabilitación de LCA y cuidado lumbar", new[] { "rodilla", "lumbar" })]
+    public void ExtractProtectedZones_UsesWholeWordBoundaries_SoCalcarDoesNotMatchLca(string goal, string[] expectedZones)
     {
-        var actual = GoalConstraintExtractor.ExtractMaxExercisesPerSession(goal);
+        var zones = GoalConstraintExtractor.ExtractProtectedZones(goal);
 
-        Assert.Null(actual);
+        Assert.Equal(expectedZones, zones);
+    }
+
+    [Fact]
+    public void BuildPlanDraftPrompt_WhenGoalRequestsEightExercises_AsksForExactlyEight()
+    {
+        var request = new CreatePlanDraftRequestDto(
+            CategoryId: Guid.NewGuid(),
+            Goal: "rutina de 8 ejercicios",
+            Weeks: 2,
+            DaysPerWeek: 3,
+            StartDate: new DateOnly(2026, 11, 23));
+        var exercises = new List<CatalogExerciseDto>
+        {
+            new(Guid.NewGuid(), "Sentadilla con barra", "Piernas", "Barra")
+        };
+
+        var prompt = RoutinePromptBuilder.BuildPlanDraftPrompt(request, exercises);
+
+        Assert.Contains("exactly 8 different exercises", prompt);
+        Assert.DoesNotContain("between 5 and 6 different exercises", prompt);
     }
 
     [Fact]
@@ -124,8 +156,9 @@ public sealed class PlanDraftPromptLanguageTests
 
         var prompt = RoutinePromptBuilder.BuildBlockPlanDraftPrompt(request, exercises);
 
-        Assert.Contains("como máximo 5 ejercicios por día/sesión", prompt);
-        Assert.Contains("warmUp + strengthA + strengthB + accessories <= 5", prompt);
+        Assert.Contains("exactamente 5 ejercicios por día/sesión", prompt);
+        Assert.Contains("exactly 5 exercises per session", prompt);
+        Assert.Contains("warmUp + strengthA + strengthB + accessories = 5", prompt);
         Assert.Contains("FOCO ARTICULAR / PREVENTIVO EN EL OBJETIVO (rodilla)", prompt);
         Assert.DoesNotContain("Usá entre 5 y 6 ejercicios por sesión", prompt);
     }

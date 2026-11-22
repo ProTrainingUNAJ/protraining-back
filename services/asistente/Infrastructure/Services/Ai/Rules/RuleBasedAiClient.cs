@@ -3,6 +3,7 @@ using System.Globalization;
 using Application.Common.Ai;
 using Application.Common.DayAdjustments;
 using Application.Common.Helpers;
+using Application.Common.PlanDrafts;
 using Application.Common.Recommendations;
 using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
@@ -99,11 +100,13 @@ public sealed class RuleBasedAiClient(
             return null;
         }
 
-        // KAN-605: Detectar objetivo según tabla deportiva y armar reparto equilibrado o foco pedido por el PF
+        // KAN-605 / KAN-652: Detectar objetivo según tabla deportiva y armar reparto equilibrado o foco pedido por el PF
         var profile = RuleBasedGoalProfiles.Detect(request.Goal);
         var selectedDays = ResolveTrainingDays(request.TrainingDays, request.DaysPerWeek);
         var startDate = request.StartDate ?? ArgentinaTime.Today;
-        var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal) ?? ExercisesPerSession;
+        var rawRequestedExercises = GoalConstraintExtractor.ExtractRawRequestedExercisesPerSession(request.Goal);
+        var requestedExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+        var maxExercisesPerSession = requestedExercisesPerSession ?? ExercisesPerSession;
 
         var splitPlan = RuleBasedSplitPlanner.BuildSplit(
             catalog,
@@ -149,6 +152,20 @@ public sealed class RuleBasedAiClient(
             JustificationSummary: justification,
             Weeks: weeks
         );
+
+        if (requestedExercisesPerSession is > 0)
+        {
+            var safeCatalog = PlanDraftBlockParser.FilterCatalogForRestrictions(catalog, request.AdaptationContext);
+            content = PlanDraftBlockParser.EnforceExactExercisesPerSession(
+                content,
+                requestedExercisesPerSession.Value,
+                rawRequestedExercises,
+                safeCatalog,
+                request.Goal,
+                startDate,
+                matchDates,
+                request.AdaptationContext);
+        }
 
         var prompt = $"Objetivo: {request.Goal}. Semanas: {request.Weeks}. Días: {request.DaysPerWeek}. Partidos: {matchCount}";
         await aiAuditService.LogAsync(AiLog.Create(

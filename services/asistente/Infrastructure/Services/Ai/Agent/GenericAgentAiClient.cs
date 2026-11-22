@@ -256,7 +256,7 @@ public sealed class GenericAgentAiClient : IAiClient
             {
                 overallStopwatch.Stop();
                 var cleanedJson = AiRoutineParser.CleanMarkdownFences(assistantMessage.Content);
-                var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+                var rawRequestedExercises = GoalConstraintExtractor.ExtractRawRequestedExercisesPerSession(request.Goal);
 
                 // La traducción de índices usa el mismo catálogo numerado que se mostró en el prompt
                 var parseResult = PlanDraftBlockParser.ParseAndExpand(
@@ -265,7 +265,9 @@ public sealed class GenericAgentAiClient : IAiClient
                     request.Weeks,
                     request.StartDate,
                     matchDates,
-                    maxExercisesPerSession);
+                    rawRequestedExercises,
+                    request.Goal,
+                    request.AdaptationContext);
 
                 if (parseResult.IsValid && parseResult.Content != null)
                 {
@@ -304,10 +306,6 @@ public sealed class GenericAgentAiClient : IAiClient
                     )).ToList();
 
                     directContent = directContent with { Weeks = normalizedWeeks };
-                    if (maxExercisesPerSession is > 0)
-                    {
-                        directContent = PlanDraftBlockParser.EnforceMaxExercisesPerSession(directContent, maxExercisesPerSession.Value);
-                    }
 
                     // El modelo puede devolver varias semanas: se toma solo la primera y el resto lo proyecta la regla
                     directContent = PlanDraftBlockParser.KeepFirstWeekAndProject(
@@ -315,6 +313,20 @@ public sealed class GenericAgentAiClient : IAiClient
                         request.Weeks,
                         request.StartDate,
                         matchDates);
+
+                    var targetExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+                    if (targetExercises is > 0)
+                    {
+                        directContent = PlanDraftBlockParser.EnforceExactExercisesPerSession(
+                            directContent,
+                            targetExercises.Value,
+                            rawRequestedExercises,
+                            catalog,
+                            request.Goal,
+                            request.StartDate,
+                            matchDates,
+                            request.AdaptationContext);
+                    }
 
                     await SafeAuditAsync(
                         prompt: $"PlanDraft: {request.Goal}",
