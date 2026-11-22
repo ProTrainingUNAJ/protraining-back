@@ -550,12 +550,14 @@ public sealed class GeminiClient(
             return null;
         }
 
+        var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
         var (isValid, content, errorMessage) = PlanDraftBlockParser.ParseAndExpand(
             text,
             availableExercises,
             request.Weeks,
             request.StartDate,
-            matchDates);
+            matchDates,
+            maxExercisesPerSession);
         if (!isValid)
         {
             var validationTag = "SchemaInvalido";

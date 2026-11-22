@@ -235,4 +235,57 @@ public sealed class PlanDraftBlockParserTests
         Assert.False(exercise.IsReference);
         Assert.Equal("Sentadilla Trasera", exercise.ExerciseName);
     }
+
+    [Fact]
+    public void Given_ModelSessionWithSixExercisesAndMaxFiveRequested_When_Parsing_Then_TrimsToFivePreservingCoreLifts()
+    {
+        var catalog = CreateSampleCatalog();
+        var json = """
+        {
+          "name": "Planificación Fuerza de Piernas para Rodilla",
+          "objective": "Incrementar fuerza cuidando rodilla",
+          "justificationSummary": "6 ejercicios devueltos por el modelo cuando el PF pidió máximo 5",
+          "modelSessions": [
+            {
+              "name": "Sesión 1 - Fuerza Piernas",
+              "dayOfWeek": "Monday",
+              "order": 1,
+              "coachNotes": "Controlar fase excéntrica",
+              "warmUp": [
+                { "exerciseIndex": 4, "sets": 2, "reps": 8 },
+                { "exerciseIndex": null, "exerciseName": "Círculos de cadera", "muscleGroup": "Piernas", "sets": 2, "reps": 10 }
+              ],
+              "strengthA": [
+                { "exerciseIndex": 1, "sets": 4, "reps": 6, "targetPercentage": 80 }
+              ],
+              "strengthB": [
+                { "exerciseIndex": 3, "sets": 3, "reps": 8, "targetPercentage": 75 }
+              ],
+              "accessories": [
+                { "exerciseIndex": 5, "sets": 3, "reps": 12 },
+                { "exerciseIndex": 2, "sets": 3, "reps": 15 }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var (isValid, content, error) = PlanDraftBlockParser.ParseAndExpand(
+            json,
+            catalog,
+            requestedWeeks: 4,
+            maxExercisesPerSession: 5);
+
+        Assert.True(isValid, error);
+        Assert.NotNull(content);
+        Assert.All(content.Weeks, week =>
+        {
+            var session = Assert.Single(week.Sessions);
+            Assert.Equal(5, session.Exercises.Count);
+            Assert.Equal([1, 2, 3, 4, 5], session.Exercises.Select(e => e.Order).ToArray());
+            // Verifica que se preservaron los bloques principales de fuerza (Sentadilla Trasera y Remo con Barra)
+            Assert.Contains(session.Exercises, e => e.ExerciseId == catalog[0].Id);
+            Assert.Contains(session.Exercises, e => e.ExerciseId == catalog[2].Id);
+        });
+    }
 }

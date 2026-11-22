@@ -256,6 +256,7 @@ public sealed class GenericAgentAiClient : IAiClient
             {
                 overallStopwatch.Stop();
                 var cleanedJson = AiRoutineParser.CleanMarkdownFences(assistantMessage.Content);
+                var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
 
                 // La traducción de índices usa el mismo catálogo numerado que se mostró en el prompt
                 var parseResult = PlanDraftBlockParser.ParseAndExpand(
@@ -263,7 +264,8 @@ public sealed class GenericAgentAiClient : IAiClient
                     catalog,
                     request.Weeks,
                     request.StartDate,
-                    matchDates);
+                    matchDates,
+                    maxExercisesPerSession);
 
                 if (parseResult.IsValid && parseResult.Content != null)
                 {
@@ -301,9 +303,15 @@ public sealed class GenericAgentAiClient : IAiClient
                         )).ToList()
                     )).ToList();
 
+                    directContent = directContent with { Weeks = normalizedWeeks };
+                    if (maxExercisesPerSession is > 0)
+                    {
+                        directContent = PlanDraftBlockParser.EnforceMaxExercisesPerSession(directContent, maxExercisesPerSession.Value);
+                    }
+
                     // El modelo puede devolver varias semanas: se toma solo la primera y el resto lo proyecta la regla
                     directContent = PlanDraftBlockParser.KeepFirstWeekAndProject(
-                        directContent with { Weeks = normalizedWeeks },
+                        directContent,
                         request.Weeks,
                         request.StartDate,
                         matchDates);
