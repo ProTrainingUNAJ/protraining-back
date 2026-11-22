@@ -38,7 +38,8 @@ public class UsersController(
     Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase updateAthletePhoneUseCase,
     UpdateProfileUseCase updateProfileUseCase,
     Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase updateMyTelegramUseCase,
-    DeactivateAccountUseCase deactivateAccountUseCase) : ControllerBase
+    DeactivateAccountUseCase deactivateAccountUseCase,
+    Microsoft.AspNetCore.Identity.UserManager<Domain.Entities.User> userManager) : ControllerBase
 {
     /// <summary>
     /// Actualiza el número de WhatsApp del usuario autenticado.
@@ -145,14 +146,39 @@ public class UsersController(
 
     /// <summary>
     /// Returns the profile photo in WebP format for the user with the given id.
+    /// Only the user themselves or the physical trainer assigned to the athlete can access it.
     /// </summary>
     [HttpGet("{id:guid}/photo")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserPhoto(Guid id, CancellationToken cancellationToken)
     {
+        var currentUserId = currentUser.UserId;
+        if (currentUserId is null)
+        {
+            return Unauthorized();
+        }
+
+        // Solo se permite ver la propia foto o la de un atleta a cargo del PF autenticado.
+        if (currentUserId.Value != id)
+        {
+            var targetUser = await userManager.FindByIdAsync(id.ToString());
+            if (targetUser is null || !targetUser.PfId.HasValue || targetUser.PfId.Value != currentUserId.Value)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Foto de perfil no encontrada."
+                });
+            }
+        }
+
         var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(id), cancellationToken);
-        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        if (Response != null)
+        {
+            Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        }
         return File(photo.Data, photo.ContentType);
     }
 
@@ -172,7 +198,10 @@ public class UsersController(
         }
 
         var photo = await getPhotoHandler.HandleAsync(new GetUserPhotoQuery(userId.Value), cancellationToken);
-        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        if (Response != null)
+        {
+            Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        }
         return File(photo.Data, photo.ContentType);
     }
 
@@ -194,7 +223,10 @@ public class UsersController(
         }
 
         var photo = await getPfPhotoHandler.HandleAsync(new GetPfPhotoQuery(pfId.Value), cancellationToken);
-        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        if (Response != null)
+        {
+            Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        }
         return File(photo.Data, photo.ContentType);
     }
 
