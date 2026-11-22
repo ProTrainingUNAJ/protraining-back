@@ -46,7 +46,11 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
     public FakeEmailSender EmailSender { get; } = new();
     public FakeGoogleTokenValidator GoogleTokenValidator { get; } = new();
 
-    public IdentidadTestApplicationFactory()
+    public IdentidadTestApplicationFactory() : this(null)
+    {
+    }
+
+    internal IdentidadTestApplicationFactory(TimeProvider? timeProvider)
     {
         Structure = new FakeStructureHandler();
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
@@ -137,6 +141,8 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();
                 services.AddScoped<Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler>();
+                services.AddSingleton(timeProvider ?? TimeProvider.System);
+                services.AddSingleton<IForgotPasswordRateLimiter, global::Infrastructure.Services.ForgotPasswordRateLimiter>();
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
                 services.AddScoped<Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase>();
@@ -201,6 +207,21 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
             })
             .Configure(app =>
             {
+                app.Use(async (context, next) =>
+                {
+                    if (context.Request.Headers.TryGetValue("X-Remote-Ip", out var remoteIpHeader)
+                        && System.Net.IPAddress.TryParse(remoteIpHeader.FirstOrDefault(), out var parsedIp))
+                    {
+                        context.Connection.RemoteIpAddress = parsedIp;
+                    }
+                    else if (context.Connection.RemoteIpAddress is null)
+                    {
+                        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.1");
+                    }
+
+                    await next();
+                });
+                app.UseProTrainingForwardedHeaders();
                 app.UseMiddleware<CorrelationIdMiddleware>();
                 app.UseMiddleware<ExceptionMiddleware>();
 

@@ -1,8 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Text;
 using API.Middleware;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -100,5 +102,25 @@ public static class ServiceCollectionExtensions
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Configura ForwardedHeaders para resolver la IP real del cliente detrás de proxies privados confiables (Docker / Gateway),
+    /// ignorando cabeceras X-Forwarded-For enviadas directamente desde orígenes no confiables.
+    /// </summary>
+    public static IApplicationBuilder UseProTrainingForwardedHeaders(this IApplicationBuilder app)
+    {
+        var forwardedHeadersOptions = new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor,
+            ForwardLimit = 1
+        };
+        forwardedHeadersOptions.KnownProxies.Clear();
+        forwardedHeadersOptions.KnownNetworks.Clear();
+        forwardedHeadersOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+        forwardedHeadersOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+        forwardedHeadersOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+
+        return app.UseForwardedHeaders(forwardedHeadersOptions);
     }
 }

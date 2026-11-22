@@ -91,6 +91,9 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IForgotPasswordRateLimiter, Infrastructure.Services.ForgotPasswordRateLimiter>();
+
 // Cliente HTTP hacia Estructura para validar invitaciones (KAN-397)
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"] ?? "http://localhost:8082";
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
@@ -157,6 +160,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseProTrainingForwardedHeaders();
 
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
 app.UseRateLimiter();
