@@ -103,12 +103,13 @@ public sealed class RuleBasedAiClient(
         var profile = RuleBasedGoalProfiles.Detect(request.Goal);
         var selectedDays = ResolveTrainingDays(request.TrainingDays, request.DaysPerWeek);
         var startDate = request.StartDate ?? ArgentinaTime.Today;
+        var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal) ?? ExercisesPerSession;
 
         var splitPlan = RuleBasedSplitPlanner.BuildSplit(
             catalog,
             request.Goal,
             selectedDays.Count,
-            ExercisesPerSession);
+            maxExercisesPerSession);
 
         // KAN-605: Si el borrador es para un atleta con molestias activas, aplicar restricciones y sustitutos
         var adaptedSessions = splitPlan.Sessions;

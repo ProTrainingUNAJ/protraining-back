@@ -484,6 +484,12 @@ public sealed class ResilientAiService : IAiService
                     _quotaService?.RecordUsage(pfId);
                 }
 
+                var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+                if (requestedMaxExercises is > 0)
+                {
+                    content = PlanDraftBlockParser.EnforceMaxExercisesPerSession(content, requestedMaxExercises.Value);
+                }
+
                 if (_catalogService != null)
                 {
                     try

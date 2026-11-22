@@ -33,6 +33,7 @@ public static class RoutinePromptBuilder
         AppendPfDecisionContext(sb, request.PreviousPfDecisions);
 
         var exercises = availableExercises ?? request.AvailableExercises;
+        var maxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
         if (exercises is { Count: > 0 })
         {
             sb.AppendLine("EJERCICIOS DISPONIBLES EN LA BIBLIOTECA OFICIAL DEL CLUB:");
@@ -47,11 +48,19 @@ public static class RoutinePromptBuilder
             sb.AppendLine("1. Utiliza preferentemente los ejercicios disponibles listados arriba.");
             sb.AppendLine("2. Para cada ejercicio que elijas del catálogo, debes incluir su 'ejercicioId' exacto y su 'ejercicioNombre' tal como aparece en la lista.");
             sb.AppendLine("3. Si consideras indispensable sugerir una variante fuera de catálogo, indícala con 'ejercicioId': null y su 'ejercicioNombre'.");
+            if (maxExercises.HasValue)
+            {
+                sb.AppendLine($"4. RESTRICCIÓN OBLIGATORIA DEL PF: Incluye como máximo {maxExercises.Value} ejercicios en total.");
+            }
         }
         else
         {
             sb.AppendLine("DIRECTIVAS:");
             sb.AppendLine("1. Propón ejercicios metodológicamente coherentes con el objetivo y el grupo muscular solicitado.");
+            if (maxExercises.HasValue)
+            {
+                sb.AppendLine($"2. RESTRICCIÓN OBLIGATORIA DEL PF: Incluye como máximo {maxExercises.Value} ejercicios en total.");
+            }
         }
 
         sb.AppendLine();
@@ -203,7 +212,15 @@ public static class RoutinePromptBuilder
         // El PF lee el nombre, el objetivo, la justificación y las notas: van en español (KAN-578)
         sb.AppendLine("7. Write every text value the coach reads ('name', 'objective', 'justificationSummary', session 'name' and 'coachNotes') in Spanish from Argentina, using 'vos' (e.g. 'Fuerza de piernas', 'Activá glúteos antes de sentadilla'). Never write those values in English.");
         // Sin esta regla los modelos chicos copian el ejemplo (un ejercicio) y arman sesiones de 1 o 2 ejercicios
-        sb.AppendLine("8. Every session MUST include between 5 and 6 different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+        if (requestedMaxExercises.HasValue)
+        {
+            sb.AppendLine($"8. MANDATORY COACH CONSTRAINT: The coach explicitly requested at most {requestedMaxExercises.Value} exercises per session/day. Every session MUST include at most {requestedMaxExercises.Value} different exercises from the list above (NEVER exceed {requestedMaxExercises.Value} exercises per session): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        }
+        else
+        {
+            sb.AppendLine("8. Every session MUST include between 5 and 6 different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        }
         // El catálogo no tiene ejercicios de entrada en calor: va como texto al principio de la nota de la sesión
         sb.AppendLine("9. Start every session's 'coachNotes' with a concrete warm-up of about 10 minutes, in Spanish ('Entrada en calor (10 min): ...'): joint mobility for the muscles of the day and ramp-up sets at 40-60% before the first heavy lift. Then add the technical note for the session.");
         // El ejemplo de abajo tiene una sola semana y los modelos chicos lo copian: hay que pedir la cantidad exacta
@@ -267,12 +284,32 @@ public static class RoutinePromptBuilder
             sb.AppendLine();
         }
 
+        var protectedZones = GoalConstraintExtractor.ExtractProtectedZones(request.Goal);
+        if (protectedZones.Count > 0)
+        {
+            var zonesLabel = string.Join(", ", protectedZones);
+            sb.AppendLine($"FOCO ARTICULAR / PREVENTIVO EN EL OBJETIVO ({zonesLabel}):");
+            sb.AppendLine($"- El preparador físico indicó foco o cuidado específico en {zonesLabel}. Priorizá ejercicios biomecánicamente seguros y estables para {zonesLabel}, evitando sobrecarga articular directa o ejercicios restringidos para esa zona.");
+            sb.AppendLine();
+        }
+
+        var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+
         sb.AppendLine("BLOQUES OBLIGATORIOS Y PAUTAS DE CARGA:");
         sb.AppendLine("1. warmUp: 1-2 ejercicios de entrada en calor, movilidad articular o activación neuromuscular. Sin porcentaje de RM.");
         sb.AppendLine("2. strengthA: ejercicio principal multiarticular, 3-5 series de 3-8 repeticiones (intensidad objetivo 75-85% RM).");
         sb.AppendLine("3. strengthB: segundo patrón de fuerza complementario o unilateral, 3-4 series de 5-10 repeticiones (intensidad objetivo 70-80% RM).");
         sb.AppendLine("4. accessories: 1-3 ejercicios analíticos, de aislamiento o zona media/core, 2-4 series de 8-15 repeticiones (sin RM o moderado).");
-        sb.AppendLine("Usá entre 5 y 6 ejercicios por sesión cuando el catálogo lo permita, sin repetir un ejercicio dentro de la sesión.");
+        if (maxExercisesPerSession.HasValue)
+        {
+            sb.AppendLine($"RESTRICCIÓN PRIORITARIA DEL PREPARADOR FÍSICO: El objetivo pide como máximo {maxExercisesPerSession.Value} ejercicios por día/sesión.");
+            sb.AppendLine($"Usá como máximo {maxExercisesPerSession.Value} ejercicios por sesión en total sumando todos los bloques (warmUp + strengthA + strengthB + accessories <= {maxExercisesPerSession.Value}; por ejemplo: 1 en warmUp, 1 en strengthA, 1 en strengthB y {Math.Max(0, maxExercisesPerSession.Value - 3)} en accessories), sin repetir un ejercicio dentro de la sesión.");
+        }
+        else
+        {
+            sb.AppendLine("Usá entre 5 y 6 ejercicios por sesión cuando el catálogo lo permita, sin repetir un ejercicio dentro de la sesión.");
+        }
+        sb.AppendLine("DIRECTIVA DE CUMPLIMIENTO DEL OBJETIVO: Toda condición específica pedida por el preparador físico en el objetivo (cantidad máxima de ejercicios por día, foco articular, equipamiento o ejercicios puntuales) es OBLIGATORIA y tiene prioridad sobre las pautas generales.");
         sb.AppendLine("Escribí name, objective, justificationSummary y coachNotes en español de Argentina, de forma concreta y técnica.");
         sb.AppendLine("En coachNotes indicá descansos recomendados (ej. 2-3 min en básicos, 60-90 s en accesorios) y foco técnico en fase excéntrica.");
         sb.AppendLine("No calcules progresiones semanales: eso lo hará una regla determinística en C#.");

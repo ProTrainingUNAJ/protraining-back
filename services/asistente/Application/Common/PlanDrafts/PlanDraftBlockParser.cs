@@ -20,13 +20,15 @@ public static class PlanDraftBlockParser
 
     /// <summary>
     /// Parsea la respuesta estructurada por bloques de la IA y genera el borrador de planificación multisesión completo.
+    /// Si <paramref name="maxExercisesPerSession"/> está definido, poda determinísticamente el excedente preservando los bloques principales de fuerza.
     /// </summary>
     public static (bool IsValid, PlanDraftContentDto? Content, string? ErrorMessage) ParseAndExpand(
         string rawResponse,
         IReadOnlyList<CatalogExerciseDto> catalog,
         int requestedWeeks,
         DateOnly? startDate = null,
-        IReadOnlyList<DateOnly>? matchDates = null)
+        IReadOnlyList<DateOnly>? matchDates = null,
+        int? maxExercisesPerSession = null)
     {
         if (string.IsNullOrWhiteSpace(rawResponse))
         {
@@ -46,11 +48,17 @@ public static class PlanDraftBlockParser
             var blockModel = JsonSerializer.Deserialize<BlockWeekModelDto>(cleanedJson, JsonOptions);
             if (blockModel?.ModelSessions is { Count: > 0 })
             {
+                var effectiveMax = maxExercisesPerSession ?? GoalConstraintExtractor.ExtractMaxExercisesPerSession(blockModel.Objective);
                 var modelSessions = new List<PlanDraftSessionDto>();
 
                 for (var sessionIdx = 0; sessionIdx < blockModel.ModelSessions.Count; sessionIdx++)
                 {
                     var blockSession = blockModel.ModelSessions[sessionIdx];
+                    if (effectiveMax is > 0)
+                    {
+                        blockSession = TrimBlockSessionToMaxExercises(blockSession, effectiveMax.Value);
+                    }
+
                     var dayOfWeek = ParseDayOfWeek(blockSession.DayOfWeek);
                     var sessionExercises = new List<PlanDraftExerciseDto>();
                     var currentOrder = 1;
@@ -64,6 +72,14 @@ public static class PlanDraftBlockParser
                         return (false, null, errStrB);
                     if (AppendBlock(sessionExercises, blockSession.Accessories, catalog, ref currentOrder, defaultSets: 3, defaultReps: 12, defaultPct: null) is { } errAcc)
                         return (false, null, errAcc);
+
+                    if (effectiveMax is > 0 && sessionExercises.Count > effectiveMax.Value)
+                    {
+                        sessionExercises = sessionExercises
+                            .Take(effectiveMax.Value)
+                            .Select((ex, idx) => ex with { Order = idx + 1 })
+                            .ToList();
+                    }
 
                     if (sessionExercises.Count == 0)
                     {
@@ -102,6 +118,12 @@ public static class PlanDraftBlockParser
             var fallbackContent = PlanDraftMapper.DeserializeContent(cleanedJson);
             if (fallbackContent?.Weeks is { Count: > 0 })
             {
+                var effectiveMax = maxExercisesPerSession ?? GoalConstraintExtractor.ExtractMaxExercisesPerSession(fallbackContent.Objective);
+                if (effectiveMax is > 0)
+                {
+                    fallbackContent = EnforceMaxExercisesPerSession(fallbackContent, effectiveMax.Value);
+                }
+
                 // Solo importa la primera semana del modelo: las demás las proyecta el motor de progresión
                 fallbackContent = KeepFirstWeekAndProject(fallbackContent, requestedWeeks, startDate, matchDates);
 
@@ -148,6 +170,100 @@ public static class PlanDraftBlockParser
                 requestedWeeks,
                 startDate,
                 matchDates)
+        };
+    }
+
+    /// <summary>
+    /// Garantiza determinísticamente que ninguna sesión supere el tope de ejercicios pedido por el preparador físico.
+    /// </summary>
+    public static PlanDraftContentDto EnforceMaxExercisesPerSession(
+        PlanDraftContentDto content,
+        int maxExercisesPerSession)
+    {
+        if (content?.Weeks is not { Count: > 0 } || maxExercisesPerSession <= 0)
+            return content!;
+
+        var anyTrimmed = content.Weeks
+            .SelectMany(w => w.Sessions ?? [])
+            .Any(s => (s.Exercises?.Count ?? 0) > maxExercisesPerSession);
+
+        if (!anyTrimmed)
+            return content;
+
+        var cappedWeeks = content.Weeks.Select(w => w with
+        {
+            Sessions = (w.Sessions ?? []).Select(s =>
+            {
+                var exercises = s.Exercises ?? [];
+                if (exercises.Count <= maxExercisesPerSession)
+                    return s;
+
+                var trimmed = exercises
+                    .Take(maxExercisesPerSession)
+                    .Select((ex, idx) => ex with { Order = idx + 1 })
+                    .ToList();
+
+                return s with { Exercises = trimmed };
+            }).ToList()
+        }).ToList();
+
+        return content with { Weeks = cappedWeeks };
+    }
+
+    /// <summary>
+    /// Poda una sesión por bloques cuando el modelo devolvió más ejercicios de los que pidió el PF,
+    /// preservando los núcleos principales de fuerza (strengthA y strengthB) y al menos 1 ejercicio de entrada en calor.
+    /// </summary>
+    private static BlockSessionModelDto TrimBlockSessionToMaxExercises(
+        BlockSessionModelDto session,
+        int maxExercises)
+    {
+        if (maxExercises <= 0)
+            return session;
+
+        var warmUp = new List<BlockExerciseItemDto>(session.WarmUp ?? []);
+        var strengthA = new List<BlockExerciseItemDto>(session.StrengthA ?? []);
+        var strengthB = new List<BlockExerciseItemDto>(session.StrengthB ?? []);
+        var accessories = new List<BlockExerciseItemDto>(session.Accessories ?? []);
+
+        int TotalCount() => warmUp.Count + strengthA.Count + strengthB.Count + accessories.Count;
+
+        if (TotalCount() <= maxExercises)
+            return session;
+
+        // 1. Si hay más de 2 accesorios, recortar primero los accesorios excedentes
+        while (TotalCount() > maxExercises && accessories.Count > 2)
+            accessories.RemoveAt(accessories.Count - 1);
+
+        // 2. Si hay más de 1 entrada en calor, dejar 1 sola entrada en calor
+        while (TotalCount() > maxExercises && warmUp.Count > 1)
+            warmUp.RemoveAt(warmUp.Count - 1);
+
+        // 3. Si aún sobra, recortar accesorios restantes (de atrás hacia adelante)
+        while (TotalCount() > maxExercises && accessories.Count > 0)
+            accessories.RemoveAt(accessories.Count - 1);
+
+        // 4. Si aún sobra, recortar excedentes de strengthB (> 1)
+        while (TotalCount() > maxExercises && strengthB.Count > 1)
+            strengthB.RemoveAt(strengthB.Count - 1);
+
+        // 5. Si el tope es muy bajo (<= 2), recortar warmUp
+        while (TotalCount() > maxExercises && warmUp.Count > 0)
+            warmUp.RemoveAt(warmUp.Count - 1);
+
+        // 6. Si aún sobra, recortar excedentes de strengthA (> 1) y luego strengthB
+        while (TotalCount() > maxExercises && strengthA.Count > 1)
+            strengthA.RemoveAt(strengthA.Count - 1);
+
+        while (TotalCount() > maxExercises && strengthB.Count > 0)
+            strengthB.RemoveAt(strengthB.Count - 1);
+
+        return session with
+        {
+            WarmUp = warmUp,
+            StrengthA = strengthA,
+            StrengthB = strengthB,
+            Accessories = accessories
         };
     }
 

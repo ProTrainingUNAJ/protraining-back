@@ -82,4 +82,51 @@ public sealed class PlanDraftPromptLanguageTests
         Assert.Contains("Hombros", groups);
         Assert.DoesNotContain("Piernas", groups);
     }
+
+    [Theory]
+    [InlineData("Fuerza de piernas para rodilla, por día quiero 5 ejericcios como maximo", 5)]
+    [InlineData("Fuerza de piernas para rodilla, por día quiero 5 ejercicios como maximo", 5)]
+    [InlineData("fuerza de piernas para mejorar la rodilla, que la rutina tenga 5 ejercicios por día", 5)]
+    [InlineData("Hipertrofia torso, máximo 4 ejercicios por sesión", 4)]
+    [InlineData("Potencia, no más de cinco ejercicios", 5)]
+    [InlineData("Fuerza general, solo 3 ejercicios", 3)]
+    public void ExtractMaxExercisesPerSession_WhenGoalContainsLimit_ReturnsExpectedCount(string goal, int expectedMax)
+    {
+        var actual = GoalConstraintExtractor.ExtractMaxExercisesPerSession(goal);
+
+        Assert.Equal(expectedMax, actual);
+    }
+
+    [Theory]
+    [InlineData("Fuerza de piernas para pretemporada, 3 días")]
+    [InlineData("Plan de 4 semanas y 3 días por semana")]
+    [InlineData("Hipertrofia 4 series de 8 al 75% desde 2026-11-20")]
+    public void ExtractMaxExercisesPerSession_WhenGoalHasNoExerciseLimit_ReturnsNull(string goal)
+    {
+        var actual = GoalConstraintExtractor.ExtractMaxExercisesPerSession(goal);
+
+        Assert.Null(actual);
+    }
+
+    [Fact]
+    public void BuildBlockPlanDraftPrompt_WhenGoalRequestsMaxFiveExercisesAndKneeFocus_InjectsStrictConstraints()
+    {
+        var request = new CreatePlanDraftRequestDto(
+            CategoryId: Guid.NewGuid(),
+            Goal: "Fuerza de piernas para rodilla, por día quiero 5 ejericcios como maximo",
+            Weeks: 4,
+            DaysPerWeek: 3,
+            StartDate: new DateOnly(2026, 11, 23));
+        var exercises = new List<CatalogExerciseDto>
+        {
+            new(Guid.NewGuid(), "Prensa de piernas", "Piernas", "Máquina")
+        };
+
+        var prompt = RoutinePromptBuilder.BuildBlockPlanDraftPrompt(request, exercises);
+
+        Assert.Contains("como máximo 5 ejercicios por día/sesión", prompt);
+        Assert.Contains("warmUp + strengthA + strengthB + accessories <= 5", prompt);
+        Assert.Contains("FOCO ARTICULAR / PREVENTIVO EN EL OBJETIVO (rodilla)", prompt);
+        Assert.DoesNotContain("Usá entre 5 y 6 ejercicios por sesión", prompt);
+    }
 }

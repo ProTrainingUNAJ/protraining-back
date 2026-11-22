@@ -41,6 +41,7 @@ public static class AgentPromptBuilder
         4. CONTEXTO DEL PEDIDO:
            - Si el pedido incluye restricciones por lesión o dolor, no propongas ejercicios restringidos y usá únicamente los sustitutos autorizados que figuren en el pedido.
            - Si incluye decisiones previas del preparador físico, usalas como evidencia de su criterio, sin tratarlas como reglas absolutas si contradicen las restricciones actuales.
+           - PRIORIDAD DE INSTRUCCIONES ESPECIALES DEL PF: Analizá con atención todo el texto del Objetivo. Si el preparador físico solicita condiciones específicas (como un número máximo o exacto de ejercicios por día/sesión, cuidado de una articulación como rodilla/lumbar/hombro, equipamiento específico o ejercicios puntuales), esas instrucciones son OBLIGATORIAS y tienen prioridad absoluta sobre las cantidades estándar por bloque.
 
         5. FORMATO DE SALIDA ESTRICTO (JSON):
            - Si el pedido trae un CATÁLOGO OFICIAL numerado y un esquema JSON por bloques (warmUp, strengthA, strengthB, accessories), respondé ÚNICAMENTE con un JSON que cumpla ese esquema: usá el "exerciseIndex" de la lista y diseñá solo la sesión modelo de la primera semana.
