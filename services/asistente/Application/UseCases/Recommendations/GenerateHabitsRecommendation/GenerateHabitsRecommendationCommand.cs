@@ -7,6 +7,7 @@ using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Application.UseCases.Recommendations.GenerateHabitsRecommendation;
 
@@ -175,10 +176,41 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (AiServiceUnavailableException ex)
         {
-            // Fallback por reglas solo para errores técnicos recuperables del proveedor de IA.
-            logger?.LogWarning(ex, "Fallo técnico del servicio de IA; se usa redacción determinística por reglas.");
+            logger?.LogWarning(ex, "Servicio de IA no disponible; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger?.LogWarning(ex, "Error de comunicación con el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (TimeoutException ex)
+        {
+            logger?.LogWarning(ex, "Tiempo de espera agotado en el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (IOException ex)
+        {
+            logger?.LogWarning(ex, "Error de I/O en el servicio de IA; se usa redacción determinística por reglas.");
+            drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
+            var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
+            if (validation.IsValid && validation.Value is not null)
+                drafted = validation.Value;
+        }
+        catch (JsonException ex)
+        {
+            logger?.LogWarning(ex, "Respuesta inválida del servicio de IA; se usa redacción determinística por reglas.");
             drafted = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(nutritionRequest, "Reglas");
             var validation = RecommendationOutputValidator.ValidateNutritionDto(drafted, nutritionRequest);
             if (validation.IsValid && validation.Value is not null)
