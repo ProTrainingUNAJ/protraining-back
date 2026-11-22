@@ -286,7 +286,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -361,7 +360,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -429,7 +427,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -460,7 +457,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             new Mock<ISeguimientoClient>().Object,
             repository,
             new Mock<IAiService>().Object,
@@ -527,7 +523,6 @@ public sealed class RecommendationEngineTests
 
         var handlerStructureDown = new GenerateAthleteRecommendationsCommandHandler(
             structureDown.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             new Mock<ISeguimientoClient>().Object,
             repository,
             new Mock<IAiService>().Object,
@@ -552,7 +547,6 @@ public sealed class RecommendationEngineTests
 
         var handlerSeguimientoDown = new GenerateAthleteRecommendationsCommandHandler(
             structureOk.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoDown.Object,
             repository,
             new Mock<IAiService>().Object,
@@ -600,8 +594,8 @@ public sealed class RecommendationEngineTests
                 RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(req, "Reglas"));
 
         var controller = new RecommendationsController(
-            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, aiMock.Object, uow),
-            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, HabitsRecommendationsClientFactory.Enabled(), seguimientoMock.Object, repository, ScopedAiServiceRunnerFactory.From(aiMock.Object), uow),
+            new GenerateAthleteRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, aiMock.Object, uow),
+            new GenerateCategoryRecommendationsCommandHandler(structureMock.Object, seguimientoMock.Object, repository, ScopedAiServiceRunnerFactory.From(aiMock.Object), uow),
             new GetRecommendationsQueryHandler(repository),
             new GetRecommendationByIdQueryHandler(repository),
             new UpdateRecommendationCommandHandler(repository, uow),
@@ -697,7 +691,6 @@ public sealed class RecommendationEngineTests
 
         var defaultHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -709,7 +702,6 @@ public sealed class RecommendationEngineTests
 
         var customHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -760,7 +752,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -830,7 +821,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -908,7 +898,6 @@ public sealed class RecommendationEngineTests
 
         var defaultHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -920,7 +909,6 @@ public sealed class RecommendationEngineTests
 
         var customHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -1036,7 +1024,6 @@ public sealed class RecommendationEngineTests
         const int maxParallelism = 3;
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -1170,7 +1157,6 @@ public sealed class RecommendationEngineTests
         const int maxParallelism = 4;
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             serviceProvider.GetRequiredService<IScopedAiServiceRunner>(),
@@ -1242,7 +1228,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1323,7 +1308,6 @@ public sealed class RecommendationEngineTests
         var aiMock = new Mock<IAiService>();
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1387,7 +1371,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1462,7 +1445,6 @@ public sealed class RecommendationEngineTests
 
         var defaultHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1472,7 +1454,6 @@ public sealed class RecommendationEngineTests
 
         var configuredHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1543,7 +1524,6 @@ public sealed class RecommendationEngineTests
         // 1. Corrida individual sobre el atleta con recomendación aprobada -> no crea pendiente ni llama IA
         var athleteHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -1559,7 +1539,6 @@ public sealed class RecommendationEngineTests
         // 2. Corrida por categoría -> no duplica para AthleteId (aprobada) y sí genera para SecondAthleteId
         var categoryHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
@@ -1646,7 +1625,6 @@ public sealed class RecommendationEngineTests
 
         var handler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             countingRunner.Object,

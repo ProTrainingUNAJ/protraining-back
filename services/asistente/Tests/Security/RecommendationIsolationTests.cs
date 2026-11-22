@@ -142,7 +142,6 @@ public sealed class RecommendationIsolationTests
 
         var athleteHandler = new GenerateAthleteRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             aiMock.Object,
@@ -150,7 +149,6 @@ public sealed class RecommendationIsolationTests
 
         var categoryHandler = new GenerateCategoryRecommendationsCommandHandler(
             structureMock.Object,
-            HabitsRecommendationsClientFactory.Enabled(),
             seguimientoMock.Object,
             repository,
             ScopedAiServiceRunnerFactory.From(aiMock.Object),
