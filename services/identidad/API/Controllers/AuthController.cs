@@ -37,6 +37,7 @@ public class AuthController(
     ResetAthletePasswordUseCase resetAthletePasswordUseCase,
     ForgotPasswordUseCase forgotPasswordUseCase,
     ResetPasswordWithTokenUseCase resetPasswordWithTokenUseCase,
+    IForgotPasswordRateLimiter forgotPasswordRateLimiter,
     ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>
@@ -234,10 +235,27 @@ public class AuthController(
     [AllowAnonymous]
     [ProducesResponseType(typeof(ForgotPasswordResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] ForgotPasswordRequestDto request,
         CancellationToken cancellationToken)
     {
+        // Usar exclusivamente Connection.RemoteIpAddress (resuelta por ForwardedHeaders solo para proxies confiables)
+        // para impedir evasión del límite mediante cabeceras X-Forwarded-For arbitrarias.
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = forgotPasswordRateLimiter.TryAcquire(clientIp, request.Email);
+        if (!decision.IsAllowed)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((decision.RetryAfter ?? TimeSpan.FromMinutes(15)).TotalSeconds));
+            Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Demasiadas solicitudes.",
+                Detail = "Realizaste demasiadas solicitudes. Esperá unos minutos antes de volver a intentarlo."
+            });
+        }
+
         var response = await forgotPasswordUseCase.ExecuteAsync(request, cancellationToken);
         return Accepted(response);
     }
