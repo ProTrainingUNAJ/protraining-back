@@ -12,6 +12,7 @@ using Application.UseCases.Recommendations.GenerateHabitsRecommendation;
 using Application.UseCases.Recommendations.GetHabitsRecommendation;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -671,7 +672,7 @@ public sealed class Kan494HabitsRecommendationTests
         fixture.SetContext("Ganar masa muscular", 70);
         fixture.Calendar.Setup(c => c.GetMatchDatesAsync(
                 It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Calendario no disponible"));
+            .ThrowsAsync(new StructureServiceUnavailableException("Calendario no disponible"));
 
         var response = await fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId));
 
@@ -689,7 +690,7 @@ public sealed class Kan494HabitsRecommendationTests
                 It.IsAny<DateOnly>(),
                 It.IsAny<DateOnly>(),
                 It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Seguimiento no disponible"));
+            .ThrowsAsync(new SeguimientoServiceUnavailableException("Seguimiento no disponible"));
 
         var response = await fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId));
 
@@ -747,6 +748,94 @@ public sealed class Kan494HabitsRecommendationTests
 
         Assert.DoesNotContain("Día pesado de entrenamiento", response.DetectedMoments!);
         Assert.Contains(response.MissingData!, m => m.Contains("día pesado", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Handler_WhenCalendarThrowsCancellation_Propagates()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.Calendar.Setup(c => c.GetMatchDatesAsync(
+                It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId)));
+    }
+
+    [Fact]
+    public async Task Handler_WhenCheckInsThrowCancellation_Propagates()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.Seguimiento.Setup(s => s.GetAthleteCheckInsHistoryAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId)));
+    }
+
+    [Fact]
+    public async Task Handler_WhenTrainingDayProviderThrowsCancellation_Propagates()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.TrainingDayProvider.Setup(p => p.IsHeavyTrainingDayAsync(
+                It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId)));
+    }
+
+    [Fact]
+    public async Task Handler_WhenAiThrowsDomainException_DoesNotGenerateOrPersist()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.Ai.Setup(a => a.GenerateNutritionRecommendationAsync(
+                It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DomainException("Bloqueo de política."));
+
+        await Assert.ThrowsAsync<DomainException>(() =>
+            fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId)));
+
+        fixture.Repository.Verify(r => r.AddAsync(It.IsAny<AthleteRecommendation>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.UnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handler_WhenAiThrowsTechnicalError_FallsBackToRulesAndPersists()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.Ai.Setup(a => a.GenerateNutritionRecommendationAsync(
+                It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Servicio de IA no disponible"));
+
+        var response = await fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId));
+
+        Assert.Equal(100d, response.MinProteinGrams!.Value);
+        Assert.Equal(140d, response.MaxProteinGrams!.Value);
+        Assert.NotNull(fixture.Saved);
+        fixture.UnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handler_WhenAiThrowsCancellation_Propagates()
+    {
+        var fixture = new HandlerFixture();
+        fixture.SetContext("Ganar masa muscular", 70);
+        fixture.Ai.Setup(a => a.GenerateNutritionRecommendationAsync(
+                It.IsAny<NutritionRecommendationRequestDto>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.BuildHandler().HandleAsync(new GetHabitsRecommendationForAthleteQuery(AthleteId)));
     }
 
     [Fact]
