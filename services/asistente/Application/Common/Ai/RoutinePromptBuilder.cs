@@ -215,7 +215,7 @@ public static class RoutinePromptBuilder
         var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
         if (requestedMaxExercises.HasValue)
         {
-            sb.AppendLine($"8. MANDATORY COACH CONSTRAINT: The coach explicitly requested at most {requestedMaxExercises.Value} exercises per session/day. Every session MUST include at most {requestedMaxExercises.Value} different exercises from the list above (NEVER exceed {requestedMaxExercises.Value} exercises per session): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+            sb.AppendLine($"8. Every session MUST include exactly {requestedMaxExercises.Value} different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
         }
         else
         {
@@ -302,8 +302,9 @@ public static class RoutinePromptBuilder
         sb.AppendLine("4. accessories: 1-3 ejercicios analíticos, de aislamiento o zona media/core, 2-4 series de 8-15 repeticiones (sin RM o moderado).");
         if (maxExercisesPerSession.HasValue)
         {
-            sb.AppendLine($"RESTRICCIÓN PRIORITARIA DEL PREPARADOR FÍSICO: El objetivo pide como máximo {maxExercisesPerSession.Value} ejercicios por día/sesión.");
-            sb.AppendLine($"Usá como máximo {maxExercisesPerSession.Value} ejercicios por sesión en total sumando todos los bloques (warmUp + strengthA + strengthB + accessories <= {maxExercisesPerSession.Value}; por ejemplo: 1 en warmUp, 1 en strengthA, 1 en strengthB y {Math.Max(0, maxExercisesPerSession.Value - 3)} en accessories), sin repetir un ejercicio dentro de la sesión.");
+            var (warmUpCount, strengthACount, strengthBCount, accessoriesCount) = CalculateBlockDistribution(maxExercisesPerSession.Value);
+            sb.AppendLine($"RESTRICCIÓN PRIORITARIA DEL PREPARADOR FÍSICO: El objetivo exige exactamente {maxExercisesPerSession.Value} ejercicios por día/sesión (exactly {maxExercisesPerSession.Value} exercises per session).");
+            sb.AppendLine($"Usá exactamente {maxExercisesPerSession.Value} ejercicios por sesión en total sumando todos los bloques (warmUp + strengthA + strengthB + accessories = {maxExercisesPerSession.Value}; repartidos en {warmUpCount} en warmUp, {strengthACount} en strengthA, {strengthBCount} en strengthB y {accessoriesCount} en accessories), sin repetir un ejercicio dentro de la sesión.");
         }
         else
         {
@@ -359,6 +360,22 @@ public static class RoutinePromptBuilder
         }
         sb.AppendLine("Priorizá los patrones repetidos del PF y explicá cuando una restricción actual obligue a apartarse de ellos.");
         sb.AppendLine();
+    }
+
+    private static (int WarmUp, int StrengthA, int StrengthB, int Accessories) CalculateBlockDistribution(int totalExercises)
+    {
+        return totalExercises switch
+        {
+            <= 1 => (0, 1, 0, 0),
+            2 => (0, 1, 1, 0),
+            3 => (1, 1, 1, 0),
+            4 => (1, 1, 1, 1),
+            5 => (1, 1, 1, 2),
+            6 => (2, 1, 1, 2),
+            7 => (2, 1, 1, 3),
+            8 => (2, 1, 2, 3),
+            _ => (2, 2, 2, Math.Max(0, totalExercises - 6))
+        };
     }
 
     /// <summary>
