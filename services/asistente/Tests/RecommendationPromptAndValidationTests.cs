@@ -668,6 +668,21 @@ public sealed class RecommendationPromptAndValidationTests
         Assert.Equal(RecommendationPromptBuilder.OfficialNutritionDisclaimer, response.LegalDisclaimer);
     }
 
+    [Fact]
+    public void BuildDeterministicNutritionRecommendation_DoesNotPutMissingDataInTextForTheAthlete()
+    {
+        // El texto lo lee el atleta (KAN-634): los datos faltantes van solo en MissingData, para el PF.
+        var request = new NutritionRecommendationRequestDto(
+            AthleticGoal: "Ganar masa muscular",
+            MissingData: ["Criterio/fuente de día pesado no disponible (definición pendiente)."]);
+
+        var response = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request);
+
+        Assert.DoesNotContain("Datos pendientes", response.SuggestedPlateComposition, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TODO", response.SuggestedPlateComposition, StringComparison.Ordinal);
+        Assert.DoesNotContain("definición pendiente", response.SuggestedPlateComposition, StringComparison.OrdinalIgnoreCase);
+    }
+
     #endregion
 
     #region 6. Permiso del tutor para alimentación en menores (#201 · KAN-496)

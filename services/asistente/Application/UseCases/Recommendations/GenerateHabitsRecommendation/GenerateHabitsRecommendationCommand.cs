@@ -227,14 +227,15 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
         var parts = new List<string> { $"Objetivo: {evaluation.AthleticGoal}." };
         if (evaluation.DetectedMoments.Count > 0)
             parts.Add($"Momentos: {string.Join(", ", evaluation.DetectedMoments)}.");
-        if (evaluation.MissingData.Count > 0)
-            parts.Add("Hay datos faltantes o pendientes de validación (ver detalle).");
+        // El motivo también lo lee el atleta: los datos faltantes quedan solo en el snapshot del PF (KAN-634).
         if (evaluation.RequiresProfessionalReferral)
-            parts.Add("Se sugiere derivación profesional por seguridad.");
+            parts.Add("Se sugiere consultar a un profesional de la salud.");
         var reason = string.Join(" ", parts);
         return reason.Length > AthleteRecommendation.MaxReasonLength ? reason[..AthleteRecommendation.MaxReasonLength] : reason;
     }
 
+    // Texto que le llega al atleta cuando el PF aprueba (KAN-634): le habla a él y sin vocabulario interno.
+    // Los motivos de derivación y los datos faltantes quedan en el snapshot, que ve solo el PF.
     private static string BuildRecommendationText(HabitsRecommendationSnapshotDto snapshot)
     {
         var parts = new List<string>
@@ -243,11 +244,9 @@ public sealed class GenerateHabitsRecommendationCommandHandler(
             snapshot.HydrationAndSleepGuidelines
         };
         if (snapshot.MinProteinGrams.HasValue && snapshot.MaxProteinGrams.HasValue)
-            parts.Add($"Rango estimado de proteína diaria: {snapshot.MinProteinGrams:0.#}-{snapshot.MaxProteinGrams:0.#} g (calculado por reglas).");
-        if (snapshot.ReferralReasons is { Count: > 0 })
-            parts.Add($"Derivación/precaución: {string.Join("; ", snapshot.ReferralReasons)}");
-        if (snapshot.MissingData is { Count: > 0 })
-            parts.Add($"Datos faltantes/TODO: {string.Join("; ", snapshot.MissingData)}");
+            parts.Add($"Proteína diaria orientativa: entre {snapshot.MinProteinGrams:0.#} y {snapshot.MaxProteinGrams:0.#} g, según tu peso y tu objetivo.");
+        if (snapshot.RequiresProfessionalReferral)
+            parts.Add("Antes de hacer cambios en tu alimentación, consultá con un profesional de la salud (médico o nutricionista).");
         parts.Add(snapshot.LegalDisclaimer);
         var text = string.Join("\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
         return text.Length > AthleteRecommendation.MaxRecommendationTextLength

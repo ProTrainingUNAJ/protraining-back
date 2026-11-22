@@ -124,6 +124,8 @@ public static class RecommendationOutputValidator
         @"|(?:reducir|reduci|reduzca|disminuir|disminui|achicar|achica|recortar|recorta|limitar|limita|bajar|baja|restringir|restringi)\s+(?:las?\s+|tus?\s+|sus?\s+)?(?:porcion(?:es)?|racion(?:es)?|comida(?:s)?|ingesta|caloria(?:s)?|cantidad(?:es)?\s+de\s+comida)" +
         @"|(?:saltar|saltear|evitar|suprimir|omitir)(?:se|te)?\s+(?:el\s+|la\s+|las?\s+|los?\s+)?(?:desayuno|almuerzo|merienda|cena|comida(?:s)?)" +
         @"|(?:bajar|perder|reducir|disminuir)\s+(?:el\s+|tu\s+|su\s+|de\s+)?(?:peso|grasa|kilo(?:s)?)" +
+        // Imperativo con vos y una cantidad: "bajá 5 kg", "perdé 3 kilos" (KAN-634, edición del PF).
+        @"|(?:bajar|baja|perder|perde|reducir|reduci)\s+(?:unos?\s+)?\d+(?:[.,]\d+)?\s*(?:kg|kilo(?:s)?)" +
         @")\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 

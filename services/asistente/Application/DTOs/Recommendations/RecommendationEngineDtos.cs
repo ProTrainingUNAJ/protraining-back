@@ -95,7 +95,9 @@ public sealed record MyRecommendationResponseDto(
     string Reason,
     string RecommendationText,
     DateTime? ReviewedAtUtc,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    // Aviso del nutricionista, aparte del texto para que el front lo destaque (KAN-634). Solo en las de hábitos.
+    string? LegalDisclaimer = null);
 
 /// <summary>
 /// Respuesta de recomendación de hábitos/nutrición para validación del PF (contrato hábitos extendido).

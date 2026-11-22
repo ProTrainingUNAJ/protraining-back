@@ -1,5 +1,6 @@
 using System.Reflection;
 using API.Controllers;
+using Application.Common.Recommendations;
 using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
@@ -172,6 +173,61 @@ public sealed class RecommendationReviewTests
         Assert.Equal("Agregamos 3x5 saltos al cajón al inicio del martes y jueves.", updated.RecommendationText);
         Assert.Equal("salto por debajo del promedio", updated.Reason);
         Assert.Equal(1, store.SaveChangesCount);
+    }
+
+    // KAN-634: lo que edita el PF en una de alimentación sigue las mismas reglas que lo que propone la IA.
+    [Fact]
+    public async Task Given_PendingHabitsRecommendation_When_PfRemovesDisclaimer_Then_DisclaimerIsKeptAtTheEnd()
+    {
+        var store = new InMemoryRecommendationStore();
+        var pending = AthleteRecommendation.Create(
+            AthleteId, "Hábitos", "Objetivo: ganar masa muscular.",
+            $"Sumá legumbres al almuerzo.\n{RecommendationPromptBuilder.OfficialNutritionDisclaimer}",
+            CategoryId, "Primera", RecommendationType.Habits);
+        await store.AddAsync(pending);
+
+        var handler = new UpdateRecommendationCommandHandler(store, store);
+        var updated = await handler.HandleAsync(new UpdateRecommendationCommand(
+            pending.Id, "Hábitos", "Sumá legumbres al almuerzo y fruta en la merienda."));
+
+        Assert.EndsWith(RecommendationPromptBuilder.OfficialNutritionDisclaimer, updated.RecommendationText);
+        Assert.StartsWith("Sumá legumbres al almuerzo y fruta en la merienda.", updated.RecommendationText);
+    }
+
+    [Theory]
+    [InlineData("Tomá un suplemento de proteína después de entrenar.")]
+    [InlineData("Bajá 5 kg en un mes.")]
+    public async Task Given_PendingHabitsRecommendation_When_PfWritesForbiddenContent_Then_Rejects(string text)
+    {
+        var store = new InMemoryRecommendationStore();
+        var pending = AthleteRecommendation.Create(
+            AthleteId, "Hábitos", "Objetivo: ganar masa muscular.", "Texto original",
+            CategoryId, "Primera", RecommendationType.Habits);
+        await store.AddAsync(pending);
+
+        var handler = new UpdateRecommendationCommandHandler(store, store);
+
+        await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new UpdateRecommendationCommand(pending.Id, "Hábitos", text)));
+        Assert.Equal(0, store.SaveChangesCount);
+    }
+
+    [Fact]
+    public void Given_ApprovedHabitsRecommendation_When_AthleteReadsIt_Then_DisclaimerComesApartFromText()
+    {
+        var habits = AthleteRecommendation.Create(
+            AthleteId, "Hábitos", "Objetivo: ganar masa muscular.",
+            $"Sumá legumbres al almuerzo.\n{RecommendationPromptBuilder.OfficialNutritionDisclaimer}",
+            CategoryId, "Primera", RecommendationType.Habits);
+        var training = AthleteRecommendation.Create(AthleteId, "Potencia", "salto bajo", "3x5 saltos al cajón");
+
+        var habitsDto = RecommendationMapper.ToMyResponseDto(habits);
+        var trainingDto = RecommendationMapper.ToMyResponseDto(training);
+
+        Assert.Equal("Sumá legumbres al almuerzo.", habitsDto.RecommendationText);
+        Assert.Equal(RecommendationPromptBuilder.OfficialNutritionDisclaimer, habitsDto.LegalDisclaimer);
+        Assert.Equal("3x5 saltos al cajón", trainingDto.RecommendationText);
+        Assert.Null(trainingDto.LegalDisclaimer);
     }
 
     [Fact]

@@ -480,7 +480,7 @@ public static class RecommendationPromptBuilder
             if (hasWeightLossGoal)
                 plateParts.Add("No se incluyen pautas ni cantidades de pérdida de peso.");
             if (!quantitiesAllowed && !request.IsMinor && !hasWeightLossGoal && (request.WeightKg is null || request.WeightKg <= 0 || missingData.Count > 0))
-                plateParts.Add("No se indican cantidades de proteína porque faltan datos o definiciones validadas; se brinda una guía general.");
+                plateParts.Add("Por ahora no se indican cantidades de proteína: esta es una guía general.");
         }
 
         if (moments.Any(m => m.Contains("Partido cercano", StringComparison.OrdinalIgnoreCase)))
@@ -492,8 +492,7 @@ public static class RecommendationPromptBuilder
 
         // Seguridad: prohibidos los suplementos (no mencionar términos prohibidos en el texto generado).
 
-        if (missingData.Count > 0)
-            plateParts.Add($"Datos pendientes/por validar: {string.Join("; ", missingData)}.");
+        // Los datos faltantes no van en el texto: lo lee el atleta. Quedan en MissingData, que ve solo el PF (KAN-634).
 
         var plateComposition = string.Join(" ", plateParts.Where(p => !string.IsNullOrWhiteSpace(p)));
 

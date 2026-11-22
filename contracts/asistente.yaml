@@ -2710,3 +2710,11 @@ components:
           type: string
           format: date-time
           example: "2026-11-19T18:00:00Z"
+        legalDisclaimer:
+          type: string
+          nullable: true
+          description: >-
+            Aviso del nutricionista, aparte del texto para que el front lo destaque (KAN-634). Solo en las de
+            tipo Habits, y siempre con el texto oficial aunque el PF haya editado la recomendación. En las de
+            entrenamiento es null.
+          example: "Esto es una recomendación general; para un plan a tu medida, consultá a un nutricionista."
