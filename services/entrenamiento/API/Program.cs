@@ -43,6 +43,7 @@ using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.RejectAthleteAdjustment;
 using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
 using Application.UseCases.TrainingSessions.UpdateCoachNotes;
 using Domain.Services;
@@ -109,6 +110,7 @@ builder.Services.AddScoped<GetAthletesWithScheduledSessionQueryHandler>();
 builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
 builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
 builder.Services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
+builder.Services.AddScoped<RejectAthleteSessionAdjustmentCommandHandler>();
 builder.Services.Configure<AdaptationOptions>(
     builder.Configuration.GetSection(AdaptationOptions.SectionName));
 builder.Services.AddScoped<ILoadCalculatorEngine>(sp =>

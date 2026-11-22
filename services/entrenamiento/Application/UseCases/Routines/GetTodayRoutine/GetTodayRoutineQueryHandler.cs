@@ -141,6 +141,12 @@ namespace Application.UseCases.Routines.GetTodayRoutine
                     date,
                     cancellationToken);
 
+                if (activeAdjustment != null && activeAdjustment.IsRejected)
+                {
+                    // Un rechazo persistido mantiene la rutina base del grupo sin aplicar sustituciones ni reducción de carga (KAN-636).
+                    activeAdjustment = null;
+                }
+
                 if (activeAdjustment != null)
                 {
                     var parsedItems = ParseAdjustmentItems(activeAdjustment.Items);

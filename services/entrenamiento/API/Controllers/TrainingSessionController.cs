@@ -3,6 +3,7 @@ using Application.DTOs.TrainingSessions;
 using Application.Interfaces.Persistence;
 using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.RejectAthleteAdjustment;
 using Application.UseCases.TrainingSessions.UpdateCoachNotes;
 using Domain.Common;
 using Domain.Exceptions;
@@ -25,18 +26,21 @@ public class TrainingSessionController : ControllerBase
     private readonly UpdateCoachNotesCommandHandler _updateCoachNotesHandler;
     private readonly GetTrainingSessionQueryHandler _getSessionHandler;
     private readonly ApplyAthleteSessionAdjustmentCommandHandler? _applyAdjustmentHandler;
+    private readonly RejectAthleteSessionAdjustmentCommandHandler? _rejectAdjustmentHandler;
     private readonly IAthleteSessionAdjustmentRepository? _adjustmentRepository;
 
     public TrainingSessionController(
         UpdateCoachNotesCommandHandler updateCoachNotesHandler,
         GetTrainingSessionQueryHandler getSessionHandler,
         ApplyAthleteSessionAdjustmentCommandHandler? applyAdjustmentHandler = null,
-        IAthleteSessionAdjustmentRepository? adjustmentRepository = null)
+        IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
+        RejectAthleteSessionAdjustmentCommandHandler? rejectAdjustmentHandler = null)
     {
         _updateCoachNotesHandler = updateCoachNotesHandler;
         _getSessionHandler = getSessionHandler;
         _applyAdjustmentHandler = applyAdjustmentHandler;
         _adjustmentRepository = adjustmentRepository;
+        _rejectAdjustmentHandler = rejectAdjustmentHandler;
     }
 
     // Solo PF (KAN-450): una sesión puede ser de la planificación de otro atleta. El atleta ve
@@ -96,7 +100,8 @@ public class TrainingSessionController : ControllerBase
             Note: adjustment.Note,
             Items: items,
             TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
-            LoadReductionPercentage: adjustment.LoadReductionPercentage));
+            LoadReductionPercentage: adjustment.LoadReductionPercentage,
+            Status: adjustment.Status));
     }
 
     // Aplicarlo en la rutina del atleta al aprobar el ajuste del día (KAN-452, KAN-463)
@@ -112,6 +117,24 @@ public class TrainingSessionController : ControllerBase
 
         var result = await _applyAdjustmentHandler.Handle(
             new ApplyAthleteSessionAdjustmentCommand(sessionId, request),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    // Rechazar la propuesta de adaptación del día para un atleta y sesión (KAN-636)
+    [HttpPost("{sessionId:guid}/athlete-adjustments/reject")]
+    [Authorize(Roles = "PreparadorFisico")]
+    public async Task<ActionResult<AthleteSessionAdjustmentResponseDto>> RejectAthleteAdjustments(
+        Guid sessionId,
+        [FromBody] RejectAthleteSessionAdjustmentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (_rejectAdjustmentHandler is null)
+            throw new InvalidOperationException("RejectAthleteSessionAdjustmentCommandHandler no está configurado.");
+
+        var result = await _rejectAdjustmentHandler.Handle(
+            new RejectAthleteSessionAdjustmentCommand(sessionId, request),
             cancellationToken);
 
         return Ok(result);

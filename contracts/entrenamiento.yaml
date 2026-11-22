@@ -1209,6 +1209,46 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-sessions/{sessionId}/athlete-adjustments/reject:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Rechazar propuesta de adaptación de sesión por atleta y fecha
+      description: >
+        Registra el rechazo del preparador físico sobre la propuesta de adaptación para un atleta,
+        sesión y fecha, desactiva variantes activas previas de los ejercicios de la sesión y mantiene
+        la rutina base del grupo (KAN-636). Requiere rol PreparadorFisico.
+      operationId: rejectAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectAthleteSessionAdjustmentRequest'
+      responses:
+        "200":
+          description: Rechazo registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/internal/training-sessions/athletes-with-session:
     get:
       tags:
@@ -2699,6 +2739,34 @@ components:
           items:
             $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
+    RejectAthleteSessionAdjustmentRequest:
+      type: object
+      required:
+        - athleteId
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la planificación vigente vinculada (opcional).
+          example: "11111111-2222-3333-4444-555555555555"
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de la sesión (YYYY-MM-DD). Si se omite, toma hoy en hora Argentina.
+          example: "2026-11-22"
+        note:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Motivo opcional del rechazo indicado por el PF.
+          example: "Molestia leve superada, mantiene la rutina base del grupo."
+
     ApplyAthleteSessionAdjustmentResponse:
       type: object
       required:
@@ -2734,6 +2802,13 @@ components:
         adjustedByCoach:
           type: boolean
           example: true
+        status:
+          type: string
+          enum:
+            - Approved
+            - Rejected
+          description: Estado de la decisión del PF sobre la adaptación (KAN-636).
+          example: "Approved"
         loadReductionPercentage:
           type: integer
           nullable: true
