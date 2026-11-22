@@ -21,7 +21,6 @@ public sealed record GenerateCategoryRecommendationsCommand(
 /// </summary>
 public sealed class GenerateCategoryRecommendationsCommandHandler(
     IStructureAthleteClient structureClient,
-    IIdentityHabitsRecommendationsClient identityClient,
     ISeguimientoClient seguimientoClient,
     IAthleteRecommendationRepository recommendationRepository,
     IScopedAiServiceRunner scopedAiServiceRunner,
@@ -46,12 +45,6 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
 
         var category = await structureClient.GetCategoryAsync(command.CategoryId, cancellationToken)
             ?? throw new NotFoundException("La categoría no existe o no pertenece al preparador físico autenticado.");
-
-        // KAN-493: la preferencia del PF se consulta una sola vez para toda la categoría.
-        // Con la opción desactivada (o Identidad no disponible) no se analiza ningún atleta.
-        var pfEnabled = await identityClient.GetMyHabitsRecommendationsEnabledAsync(cancellationToken);
-        if (pfEnabled is not true)
-            return EmptyResult(category.Id, category.Name);
 
         var categoryAthletes = await structureClient.GetCategoryAthletesAsync(command.CategoryId, cancellationToken);
         var athleteIds = categoryAthletes
@@ -93,7 +86,7 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
         var discardedTolerance = effectiveOptions.GetEffectiveDiscardedToleranceMeasurements();
         var maxParallelism = effectiveOptions.GetEffectiveMaxCategoryParallelism();
 
-        // Fase 1 (concurrente con límite): consultar permisos, métricas y redactar borradores en memoria.
+        // Fase 1 (concurrente con límite): consultar métricas y redactar borradores en memoria.
         // Cada atleta resuelve IAiService en un scope aislado (vía IScopedAiServiceRunner) para evitar
         // acceso concurrente a dependencias scoped (como DbContext en auditoría ai_logs).
         using var concurrencyGate = new SemaphoreSlim(maxParallelism, maxParallelism);
@@ -102,10 +95,6 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
             await concurrencyGate.WaitAsync(cancellationToken);
             try
             {
-                var permission = await structureClient.GetHabitsPermissionAsync(athleteId, cancellationToken);
-                if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
-                    return (Evaluated: false, Created: (IReadOnlyList<AthleteRecommendation>)[]);
-
                 var testsTask = seguimientoClient.GetAthleteFitnessTestsAsync(athleteId, cancellationToken);
                 var trendsTask = seguimientoClient.GetAthleteWeeklyTrendsAsync(athleteId, weeks, cancellationToken);
                 await Task.WhenAll(testsTask, trendsTask);
@@ -187,13 +176,4 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
             ExistingPendingCount: existingPending.Count,
             Recommendations: responseItems);
     }
-
-    private static RunCategoryRecommendationEngineResponseDto EmptyResult(Guid categoryId, string categoryName) =>
-        new(
-            CategoryId: categoryId,
-            CategoryName: categoryName,
-            EvaluatedAthletes: 0,
-            GeneratedCount: 0,
-            ExistingPendingCount: 0,
-            Recommendations: []);
 }
