@@ -74,6 +74,9 @@ public sealed class InternalAthletesEndpointsTests : IAsyncDisposable
         Assert.Single(match.CategoryIds!);
         Assert.Equal(cat.Id, match.CategoryIds![0]);
         Assert.True(match.Active);
+        Assert.Equal("Lionel", match.FirstName);
+        Assert.Equal("Messi", match.LastName);
+        Assert.Equal("Lionel Messi", match.FullName);
     }
 
     [Fact]
