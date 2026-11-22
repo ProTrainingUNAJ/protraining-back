@@ -49,12 +49,15 @@ public sealed class SubmitCheckInCommandHandler(
         var created = checkIn is null;
 
         // KAN-644 / KAN-590: si el atleta tiene lesiones clínicas registradas (Active o InRecovery),
-        // HasActiveInjury es true únicamente si al menos una está en estado Active (porque el front
-        // en KAN-644 envía hasActiveInjury=true siempre que activeInjuries.length > 0, incluyendo InRecovery).
-        // Si no tiene lesiones clínicas registradas en la ficha, se respeta el flag manual command.HasActiveInjury.
+        // el front envía hasActiveInjury=true siempre que activeInjuries.length > 0.
+        // Por eso HasActiveInjury es true si:
+        // 1) hay al menos una lesión en estado Active en la ficha, O
+        // 2) el atleta pintó con nivel 6 ("Lesión") en command.PainZones una zona que NO pertenece a sus lesiones registradas, O
+        // 3) no tiene lesiones registradas en la ficha y envió command.HasActiveInjury=true.
+        var hasUnregisteredInjuryZone = HasUnregisteredInjuryZone(command.PainZones, activeInjuries);
         var hasStrictlyActiveInjury = activeInjuries.Count > 0
-            ? activeInjuries.Any(i => i.Status == InjuryStatus.Active)
-            : command.HasActiveInjury;
+            ? activeInjuries.Any(i => i.Status == InjuryStatus.Active) || hasUnregisteredInjuryZone
+            : command.HasActiveInjury || hasUnregisteredInjuryZone;
 
         if (created)
         {
@@ -129,6 +132,15 @@ public sealed class SubmitCheckInCommandHandler(
                 .OrderByDescending(c => c.Date)
                 .FirstOrDefault();
 
+            // Si el atleta no entrenó en los últimos 6 días (fuera de la ventana de sueño),
+            // buscamos su último check-in anterior en el historial para comparar el dolor.
+            if (lastPreviousCheckIn is null)
+            {
+                var olderCheckIns = await repository.GetByAthleteAndDateRangeAsync(
+                    command.AthleteId, startDate: null, endDate: date.AddDays(-1), limit: 1, cancellationToken);
+                lastPreviousCheckIn = olderCheckIns.LastOrDefault();
+            }
+
             if (lastPreviousCheckIn is not null)
             {
                 var previousPainsByCheckIn = await injuryPainRepository.ListByCheckInIdsAsync(
@@ -136,12 +148,28 @@ public sealed class SubmitCheckInCommandHandler(
 
                 if (previousPainsByCheckIn.TryGetValue(lastPreviousCheckIn.Id, out var prevPainList))
                 {
-                    var prevRecoveryLevels = prevPainList
-                        .Where(p => recoveryInjuryIds.Contains(p.InjuryId))
-                        .Select(p => p.Level)
-                        .ToList();
+                    var prevByInjury = prevPainList.ToDictionary(p => p.InjuryId, p => p.Level);
+                    var prevRecoveryLevels = new List<int>();
 
-                    if (prevRecoveryLevels.Count > 0)
+                    // Si alguna lesión en recuperación subió de dolor respecto a su propio valor anterior,
+                    // forzamos que recoveryPreviousPain refleje ese empeoramiento individual además del máximo.
+                    foreach (var (injuryId, todayLevel) in pains)
+                    {
+                        if (!recoveryInjuryIds.Contains(injuryId))
+                            continue;
+
+                        if (prevByInjury.TryGetValue(injuryId, out var prevLevel))
+                        {
+                            prevRecoveryLevels.Add(prevLevel);
+                            if (todayLevel > prevLevel && recoveryMaxPainToday.HasValue)
+                            {
+                                // Garantiza que recoveryMaxPainToday > recoveryPreviousPain cuando una lesión individual empeoró.
+                                recoveryPreviousPain = Math.Min(recoveryPreviousPain ?? prevLevel, recoveryMaxPainToday.Value - 1);
+                            }
+                        }
+                    }
+
+                    if (!recoveryPreviousPain.HasValue && prevRecoveryLevels.Count > 0)
                         recoveryPreviousPain = prevRecoveryLevels.Max();
                 }
             }
@@ -159,7 +187,8 @@ public sealed class SubmitCheckInCommandHandler(
                 PainZones = checkIn.PainZones,
                 HasActiveInjury = checkIn.HasActiveInjury,
                 RecoveryInjuryMaxPainToday = recoveryMaxPainToday,
-                RecoveryInjuryPreviousPain = recoveryPreviousPain
+                RecoveryInjuryPreviousPain = recoveryPreviousPain,
+                RegisteredInjuryZones = activeInjuries.Select(i => i.Zone.Trim()).ToList()
             },
             new ContextData { SleepWindow = sleepWindow });
 
@@ -183,6 +212,34 @@ public sealed class SubmitCheckInCommandHandler(
 
     // Marcador "Lesión" de la escala del check-in (PAIN_LEVELS del front y parsePainZones del PF).
     private const string ClinicalInjuryPainLevel = "6";
+
+    // Detecta si en command.PainZones hay alguna zona pintada con nivel 6 ("Lesión") que NO corresponda
+    // a una lesión ya registrada en la ficha del atleta (ej. tiene rodilla en recuperación y hoy se lesiona el hombro).
+    private static bool HasUnregisteredInjuryZone(string? provided, IReadOnlyList<AthleteInjury> activeInjuries)
+    {
+        if (string.IsNullOrWhiteSpace(provided))
+            return false;
+
+        var registeredZones = activeInjuries
+            .Select(i => i.Zone.Trim())
+            .Where(z => z.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in provided.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (entry is "[]" or "{}")
+                continue;
+
+            var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && parts[0].Length > 0 && parts[1] == ClinicalInjuryPainLevel)
+            {
+                if (!registeredZones.Contains(parts[0]))
+                    return true;
+            }
+        }
+
+        return false;
+    }
 
     // una sola representación de las zonas con dolor. Parte de lo que marcó el atleta
     // en la silueta y agrega las zonas de las lesiones clínicas activas, sin duplicarlas.

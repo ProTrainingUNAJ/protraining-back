@@ -589,4 +589,26 @@ public class TrafficLightEngineTests
         Assert.Equal($"Lesión en recuperación (dolor {painToday}/10)", result.Reason);
         Assert.Equal(50, result.ResultValue);
     }
+
+    [Fact]
+    public void Evaluate_WithRecoveryInjuryPain2AndUnregisteredShoulderAtLevel6_ReturnsRedWithActiveInjury()
+    {
+        // Rodilla en recuperación con dolor 2 + hombro pintado con nivel 6 (no perteneciente a las zonas registradas) -> Rojo ("Lesión activa").
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = 2,
+                RegisteredInjuryZones = ["rodilla"],
+                PainZones = "rodilla:6,hombros:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Contains("Lesión activa", result.Reason, StringComparison.Ordinal);
+        Assert.Equal(20, result.ResultValue);
+    }
 }

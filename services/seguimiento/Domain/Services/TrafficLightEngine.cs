@@ -49,11 +49,12 @@ public sealed class TrafficLightEngine
         bool noCheckIn = checkInData == null;
 
         // Prioridad 1: lesión activa detectada (máxima prioridad → Rojo)
-        // El campo canónico es has_active_injury del check-in (solo lesiones Active); hasInjury/hasWound
-        // se mantienen por compatibilidad con los JSON de evaluación de KAN-363.
+        // El campo canónico es has_active_injury del check-in (solo lesiones Active o zona nueva con nivel 6);
+        // hasInjury/hasWound se mantienen por compatibilidad con los JSON de evaluación de KAN-363.
         bool hasActiveInjury = checkInData?.HasActiveInjury == true ||
                                checkInData?.HasInjury == true ||
-                               checkInData?.HasWound == true;
+                               checkInData?.HasWound == true ||
+                               HasUnregisteredLevel6Zone(checkInData?.PainZones, checkInData?.RegisteredInjuryZones, checkInData?.RecoveryInjuryMaxPainToday.HasValue == true);
 
         // Lesión "En recuperación" (InRecovery): señal amarilla si el dolor de hoy es 0–5 y no subió
         // respecto al check-in anterior; escala a roja si supera 5 o es más alto que en el check-in anterior.
@@ -79,8 +80,8 @@ public sealed class TrafficLightEngine
         bool moderateSleep = checkInData?.SleepHours >= VeryLowSleepThreshold &&
                              checkInData?.SleepHours < LowSleepThreshold;
 
-        // Dolor nuevo: PainZones con contenido real (excluyendo el marcador clínico ":6" de lesiones
-        // registradas) O HasNewPain explícito (KAN-364).
+        // Dolor nuevo: PainZones con contenido real (niveles 1 a 5 o texto libre; el marcador ":6" representa
+        // lesión y no dolor nuevo) O HasNewPain explícito (KAN-364).
         // Un "[]" o "{}" (lista vacía serializada por el front) NO es dolor: se normaliza
         // para evitar el falso positivo de amarillo "dolor nuevo".
         bool newPain = HasPainZones(checkInData?.PainZones) ||
@@ -173,9 +174,49 @@ public sealed class TrafficLightEngine
         return Evaluate(checkInData, context);
     }
 
-    // PainZones con contenido real: distingue "sin zonas" (null, vacío, "[]", "{}")
-    // de una lista con ítems, e ignora los marcadores clínicos ":6" de lesiones ya registradas
-    // para que el marcador conservado en PainZones para Entrenamiento no dispare "Dolor nuevo".
+    // Detecta si en PainZones hay una zona marcada con ":6" (Lesión) que NO está en las lesiones
+    // registradas de la ficha (ej. tiene rodilla en recuperación y hoy pinta hombro con nivel 6).
+    // El marcador ":6" solo se ignora para las zonas de lesiones registradas.
+    private static bool HasUnregisteredLevel6Zone(
+        string? painZones,
+        IReadOnlyCollection<string>? registeredInjuryZones,
+        bool hasRecoveryInjury)
+    {
+        var normalized = painZones?.Trim();
+        if (string.IsNullOrEmpty(normalized) || normalized is "[]" or "{}")
+            return false;
+
+        HashSet<string>? registeredSet = registeredInjuryZones is { Count: > 0 }
+            ? registeredInjuryZones.Select(z => z.Trim()).Where(z => z.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : null;
+
+        foreach (var entry in normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (entry is "[]" or "{}")
+                continue;
+
+            var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && parts[0].Length > 0 && parts[1] == ClinicalInjuryPainLevel)
+            {
+                if (registeredSet is not null)
+                {
+                    if (!registeredSet.Contains(parts[0]))
+                        return true;
+                }
+                else if (!hasRecoveryInjury)
+                {
+                    // Sin lesiones registradas en la ficha: cualquier zona con ":6" es una lesión nueva reportada hoy.
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // PainZones con contenido real (niveles 1..5 o texto libre): distingue "sin zonas" (null, vacío, "[]", "{}")
+    // de una lista con ítems. Los tokens ":6" son marcadores de lesión (evaluados por HasUnregisteredLevel6Zone
+    // o pertenecientes a lesiones de la ficha), no "Dolor nuevo" muscular.
     private static bool HasPainZones(string? painZones)
     {
         var normalized = painZones?.Trim();
@@ -228,6 +269,10 @@ public sealed class CheckInData
     // Dolor máximo de hoy y del check-in anterior para lesiones en estado InRecovery (KAN-644 / KAN-590).
     public int? RecoveryInjuryMaxPainToday { get; set; }
     public int? RecoveryInjuryPreviousPain { get; set; }
+
+    // Zonas de lesiones registradas en la ficha (Active o InRecovery): el marcador ":6" en PainZones
+    // solo se ignora para estas zonas registradas.
+    public IReadOnlyCollection<string>? RegisteredInjuryZones { get; set; }
 
     // Claves heredadas de la evaluación JSON de KAN-363; se conservan por compatibilidad.
     public bool? HasInjury { get; set; }
