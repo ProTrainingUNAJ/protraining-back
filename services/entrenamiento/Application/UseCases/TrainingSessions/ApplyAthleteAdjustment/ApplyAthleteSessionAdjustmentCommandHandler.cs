@@ -160,6 +160,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             Note: adjustment.Note,
             Items: items,
             TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
-            LoadReductionPercentage: adjustment.LoadReductionPercentage);
+            LoadReductionPercentage: adjustment.LoadReductionPercentage,
+            Status: adjustment.Status);
     }
 }

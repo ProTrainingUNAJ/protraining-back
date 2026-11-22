@@ -1,3 +1,5 @@
+using Domain.Entities;
+
 namespace Application.DTOs.TrainingSessions;
 
 public sealed record AthleteSessionAdjustmentItemDto(
@@ -14,6 +16,13 @@ public sealed record ApplyAthleteSessionAdjustmentRequest(
     int? LoadReductionPercentage = null
 );
 
+public sealed record RejectAthleteSessionAdjustmentRequest(
+    Guid AthleteId,
+    DateOnly? Date = null,
+    string? Note = null,
+    Guid? TrainingPlanId = null
+);
+
 public sealed record AthleteSessionAdjustmentResponseDto(
     Guid Id,
     Guid SessionId,
@@ -22,5 +31,6 @@ public sealed record AthleteSessionAdjustmentResponseDto(
     string? Note,
     IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
     Guid? TrainingPlanId = null,
-    int? LoadReductionPercentage = null
+    int? LoadReductionPercentage = null,
+    string Status = AthleteSessionAdjustmentStatuses.Approved
 );
