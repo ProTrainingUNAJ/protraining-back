@@ -32,5 +32,6 @@ public sealed record AthleteSessionAdjustmentResponseDto(
     IReadOnlyList<AthleteSessionAdjustmentItemDto> Items,
     Guid? TrainingPlanId = null,
     int? LoadReductionPercentage = null,
-    string Status = AthleteSessionAdjustmentStatuses.Approved
+    string Status = AthleteSessionAdjustmentStatuses.Approved,
+    string? RejectionReason = null
 );

@@ -21,6 +21,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
     public Guid TrainingPlanId { get; private set; }
     public DateOnly Date { get; private set; }
     public string? Note { get; private set; }
+    public string? RejectionReason { get; private set; }
     public string Items { get; private set; } = "[]";
     public int? LoadReductionPercentage { get; private set; }
     public string Status { get; private set; } = AthleteSessionAdjustmentStatuses.Approved;
@@ -78,6 +79,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
             Date = date,
             Items = normalizedItems,
             Note = normalizedNote,
+            RejectionReason = null,
             LoadReductionPercentage = loadReductionPercentage,
             Status = AthleteSessionAdjustmentStatuses.Approved,
             UpdatedAt = DateTime.UtcNow
@@ -88,7 +90,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
         Guid trainingSessionId,
         Guid athleteId,
         DateOnly date,
-        string? note = null,
+        string? rejectionReason = null,
         Guid? trainingPlanId = null)
     {
         if (trainingSessionId == Guid.Empty)
@@ -100,7 +102,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
         if (date == default)
             throw new DomainException("La fecha del rechazo es obligatoria.");
 
-        var normalizedNote = NormalizeNote(note);
+        var normalizedReason = NormalizeNote(rejectionReason);
 
         return new AthleteSessionAdjustment
         {
@@ -109,7 +111,8 @@ public sealed class AthleteSessionAdjustment : BaseEntity
             TrainingPlanId = trainingPlanId ?? Guid.Empty,
             Date = date,
             Items = "[]",
-            Note = normalizedNote,
+            Note = null,
+            RejectionReason = normalizedReason,
             LoadReductionPercentage = null,
             Status = AthleteSessionAdjustmentStatuses.Rejected,
             UpdatedAt = DateTime.UtcNow
@@ -129,6 +132,7 @@ public sealed class AthleteSessionAdjustment : BaseEntity
 
         Items = normalizedItems;
         Note = normalizedNote;
+        RejectionReason = null;
         if (trainingPlanId.HasValue && trainingPlanId.Value != Guid.Empty)
         {
             TrainingPlanId = trainingPlanId.Value;
@@ -138,17 +142,16 @@ public sealed class AthleteSessionAdjustment : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void MarkRejected(string? note = null, Guid? trainingPlanId = null)
+    public void MarkRejected(string? rejectionReason = null, Guid? trainingPlanId = null)
     {
-        var normalizedNote = NormalizeNote(note);
+        var normalizedReason = NormalizeNote(rejectionReason);
 
-        Items = "[]";
-        Note = normalizedNote;
+        // Se conservan Items, Note y LoadReductionPercentage previos para mantener trazabilidad de lo que se había aprobado.
+        RejectionReason = normalizedReason;
         if (trainingPlanId.HasValue && trainingPlanId.Value != Guid.Empty)
         {
             TrainingPlanId = trainingPlanId.Value;
         }
-        LoadReductionPercentage = null;
         Status = AthleteSessionAdjustmentStatuses.Rejected;
         UpdatedAt = DateTime.UtcNow;
     }

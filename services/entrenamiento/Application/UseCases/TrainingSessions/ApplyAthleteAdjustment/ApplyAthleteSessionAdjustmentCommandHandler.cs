@@ -150,7 +150,15 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             }
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            throw new ConflictException(
+                "Ya existe una decisión registrada simultáneamente para esta sesión, atleta y fecha. Recargá e intentá de nuevo.");
+        }
 
         return new AthleteSessionAdjustmentResponseDto(
             Id: adjustment.Id,
@@ -161,6 +169,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             Items: items,
             TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
             LoadReductionPercentage: adjustment.LoadReductionPercentage,
-            Status: adjustment.Status);
+            Status: adjustment.Status,
+            RejectionReason: adjustment.RejectionReason);
     }
 }

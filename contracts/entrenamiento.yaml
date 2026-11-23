@@ -1208,6 +1208,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/training-sessions/{sessionId}/athlete-adjustments/reject:
     post:
@@ -1216,8 +1218,9 @@ paths:
       summary: Rechazar propuesta de adaptación de sesión por atleta y fecha
       description: >
         Registra el rechazo del preparador físico sobre la propuesta de adaptación para un atleta,
-        sesión y fecha, desactiva variantes activas previas de los ejercicios de la sesión y mantiene
-        la rutina base del grupo (KAN-636). Requiere rol PreparadorFisico.
+        sesión y fecha, desactiva únicamente las variantes activas creadas por el ajuste previo de esa
+        sesión y fecha, preserva el registro de lo que se había aprobado y mantiene la rutina base del
+        grupo (KAN-636). Requiere rol PreparadorFisico.
       operationId: rejectAthleteSessionAdjustment
       parameters:
         - name: sessionId
@@ -1248,6 +1251,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/internal/training-sessions/athletes-with-session:
     get:
@@ -2816,9 +2821,17 @@ components:
         note:
           type: string
           nullable: true
+          description: Nota del ajuste aprobado (se preserva como historial aunque el ajuste luego se rechace).
           example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        rejectionReason:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Motivo del rechazo registrado por el PF cuando status es Rejected (KAN-636).
+          example: "Molestia leve superada, mantiene la rutina base del grupo."
         items:
           type: array
+          description: Sustituciones de ejercicios aprobadas (se preservan como historial si el ajuste luego se rechaza; no se aplican a la rutina cuando status es Rejected).
           items:
             $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
