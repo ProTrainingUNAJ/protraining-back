@@ -120,6 +120,11 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("rejection_reason");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -148,7 +153,9 @@ namespace Infrastructure.Data.Migrations
                         .HasDatabaseName("IX_athlete_session_adjustments_plan_athlete");
 
                     b.HasIndex("TrainingSessionId", "AthleteId", "Date")
-                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date");
+                        .IsUnique()
+                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("athlete_session_adjustments", (string)null);
                 });

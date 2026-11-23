@@ -65,38 +65,31 @@ public sealed class RejectAthleteSessionAdjustmentCommandHandler(
             targetDate,
             cancellationToken);
 
-        // 4. Desactivar variantes activas previas de los ejercicios afectados para restaurar la rutina base.
-        if (variantRepository is not null)
+        var preservedItems = existing is not null
+            ? DeserializeItems(existing.Items)
+            : [];
+
+        // 4. Desactivar únicamente las variantes creadas por el ajuste previo que se rechaza (KAN-636).
+        // Si no había ajuste previo aprobado ese día, no se desactiva ninguna variante del atleta.
+        if (variantRepository is not null &&
+            existing is not null &&
+            !existing.IsRejected &&
+            preservedItems.Count > 0)
         {
-            var originalExerciseIds = new HashSet<Guid>();
-
-            if (existing is not null && !string.IsNullOrWhiteSpace(existing.Items))
+            var distinctPairs = new HashSet<(Guid OriginalExerciseId, Guid SubstituteExerciseId)>();
+            foreach (var item in preservedItems)
             {
-                try
+                if (item.OriginalExerciseId == Guid.Empty ||
+                    item.SubstituteExerciseId == Guid.Empty ||
+                    item.OriginalExerciseId == item.SubstituteExerciseId)
                 {
-                    var previousItems = JsonSerializer.Deserialize<List<AthleteSessionAdjustmentItemDto>>(existing.Items, JsonOptions);
-                    if (previousItems is not null)
-                    {
-                        foreach (var item in previousItems)
-                        {
-                            if (item.OriginalExerciseId != Guid.Empty)
-                                originalExerciseIds.Add(item.OriginalExerciseId);
-                        }
-                    }
+                    continue;
                 }
-                catch (JsonException)
-                {
-                    // Si los ítems previos no se pueden deserializar, continuamos con los ejercicios prescriptos de la sesión.
-                }
+
+                distinctPairs.Add((item.OriginalExerciseId, item.SubstituteExerciseId));
             }
 
-            foreach (var prescribed in session.PrescribedExercises)
-            {
-                if (prescribed.ExerciseId != Guid.Empty)
-                    originalExerciseIds.Add(prescribed.ExerciseId);
-            }
-
-            foreach (var originalExerciseId in originalExerciseIds)
+            foreach (var (originalExerciseId, substituteExerciseId) in distinctPairs)
             {
                 var activeVariant = await variantRepository.GetActiveByAthleteAndOriginalExerciseAsync(
                     athlete.Id,
@@ -107,10 +100,13 @@ public sealed class RejectAthleteSessionAdjustmentCommandHandler(
                 if (activeVariant is null)
                     continue;
 
-                var endDate = targetDate > activeVariant.ValidFrom
-                    ? targetDate.AddDays(-1)
-                    : activeVariant.ValidFrom;
-                activeVariant.Deactivate(endDate);
+                if (activeVariant.ValidFrom != targetDate ||
+                    activeVariant.SubstituteExerciseId != substituteExerciseId)
+                {
+                    continue;
+                }
+
+                activeVariant.Deactivate(targetDate);
             }
         }
 
@@ -126,13 +122,21 @@ public sealed class RejectAthleteSessionAdjustmentCommandHandler(
                 trainingSessionId: session.Id,
                 athleteId: athlete.Id,
                 date: targetDate,
-                note: request.Note,
+                rejectionReason: request.Note,
                 trainingPlanId: trainingPlanId);
 
             await adjustmentRepository.AddAsync(adjustment, cancellationToken);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            throw new ConflictException(
+                "Ya existe una decisión registrada simultáneamente para esta sesión, atleta y fecha. Recargá e intentá de nuevo.");
+        }
 
         return new AthleteSessionAdjustmentResponseDto(
             Id: adjustment.Id,
@@ -140,9 +144,25 @@ public sealed class RejectAthleteSessionAdjustmentCommandHandler(
             AthleteId: adjustment.AthleteId,
             Date: adjustment.Date,
             Note: adjustment.Note,
-            Items: [],
+            Items: preservedItems,
             TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
-            LoadReductionPercentage: null,
-            Status: adjustment.Status);
+            LoadReductionPercentage: adjustment.LoadReductionPercentage,
+            Status: adjustment.Status,
+            RejectionReason: adjustment.RejectionReason);
+    }
+
+    private static List<AthleteSessionAdjustmentItemDto> DeserializeItems(string? itemsJson)
+    {
+        if (string.IsNullOrWhiteSpace(itemsJson))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<AthleteSessionAdjustmentItemDto>>(itemsJson, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 }
