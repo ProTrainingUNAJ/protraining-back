@@ -39,12 +39,17 @@
 # Uso recomendado (igual en Windows, Mac y Linux; solo necesita Docker, con el compose levantado):
 #   docker compose --profile seed run --rm seed             carga todo lo de abajo (una vez, con la base de cero)
 #   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy (la mañana del ensayo y de la demo)
+#   docker compose --profile seed run --rm seed demo        LA MAÑANA DE LA DEMO (y después de cada ensayo): deja el día listo
+#                                                           sobre la base ya cargada. Check-ins de hoy, avisos pendientes,
+#                                                           cargas del día (podio "Mayor carga") y la propuesta de récord de
+#                                                           Martín si no está. Se puede correr las veces que haga falta: no
+#                                                           duplica avisos ni propuestas. Al final imprime qué quedó listo.
 #   docker compose --profile seed run --rm seed completo    lo mismo que sin argumentos, más lo que en la demo se hace
 #                                                           en vivo: récord de Lucas, asignación del plan y check-ins de Lucas y Martín
 #                                                           (para el QA, usar este: sin asignación no hay rutina ni "Próximo entrenamiento")
 #
 # También se puede correr directo desde la raíz del repo (necesita bash, docker, curl y jq):
-#   ./scripts/demo-data.sh [checkins|completo]
+#   ./scripts/demo-data.sh [checkins|completo|demo]
 #
 # Las cuentas las crea el seed de Identidad (IdentityDataSeed), con ASPNETCORE_ENVIRONMENT=Development.
 set -euo pipefail
@@ -56,9 +61,9 @@ MODE="${1:-base}"
 cd "$(dirname "$0")/.."
 
 case "$MODE" in
-  base | checkins | completo) ;;
+  base | checkins | completo | demo) ;;
   *)
-    echo "Uso: $0 [checkins|completo]" >&2
+    echo "Uso: $0 [checkins|completo|demo]" >&2
     exit 1
     ;;
 esac
@@ -322,6 +327,11 @@ load_live_parts() {
 load_alerts() {
   echo "Avisos preventivos (Centro de Avisos):"
   alert() {  # alert <atleta> <nombre> <categoría> <gravedad> <tipo> <motivo> <sugerencia> [ajuste] [porcentaje]
+    # En el modo "demo" se saltean los atletas que ya tienen un aviso sin revisar: no se duplican.
+    if [[ " ${PENDING_ALERT_ATHLETES:-} " == *" $1 "* ]]; then
+      echo "  (ya tiene un aviso pendiente: $2)"
+      return 0
+    fi
     api POST "/asistente/api/v1/alerts" "$PF_TOKEN" \
       "$(jq -nc --arg a "$1" --arg n "$2" --arg c "$3" --arg s "$4" --arg t "$5" --arg r "$6" --arg g "$7" \
         --arg adj "${8:-}" --arg pct "${9:-}" \
@@ -347,12 +357,111 @@ load_alerts() {
   alert "$IGNACIO_ID" "Ignacio Luna" "$MUSCULACION_ID" Low AccumulatedFatigue \
     "Sueño moderado varios días seguidos" \
     "Bajar 10 % la carga esta semana" LoadReduction 10
-  echo "  6 pendientes: Lucas y Mateo (alta), Camila y Sofía (media), Bruno e Ignacio (baja)"
+  echo "  los 6 de la demo: Lucas y Mateo (alta), Camila y Sofía (media), Bruno e Ignacio (baja)"
+}
+
+# --- la mañana de la demo (modo "demo") --------------------------------------
+
+# category_id_of <nombre> → id de la categoría del PF con ese nombre
+category_id_of() {
+  local id
+  id=$(api GET "/estructura/api/v1/categories" "$PF_TOKEN" | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -1)
+  [[ -n "$id" ]] || { echo "No encontré la categoría \"$1\". ¿Se cargó la base? (docker compose --profile seed run --rm seed)" >&2; exit 1; }
+  printf '%s' "$id"
+}
+
+# daily_load <email> <json> → carga del día con el token del atleta (como la pantalla "Carga del día")
+daily_load() {
+  local token athlete_id
+  token=$(login "$1" | jq -r .accessToken)
+  athlete_id=$(api GET "/estructura/api/v1/me" "$token" | jq -r .athleteId)
+  api POST "/seguimiento/api/v1/athletes/$athlete_id/daily-load" "$token" "$2" \
+    | jq -r --arg who "$1" '"  carga de \($who): \(.totalMinutes) min · \(.totalLoad) UA"'
+}
+
+# Cargas del día (minutos × RPE = UA): alimentan el podio "Mayor carga" del Inicio y la asistencia de Seguimiento.
+# Coherentes con el semáforo: Mateo, que viene muy cargado, es el que más carga tiene. Lucas y Martín no: lo suyo
+# se hace en vivo.
+load_daily_loads() {
+  echo "Cargas del día:"
+  daily_load mateo@protraining.com '{"sportTraining":{"minutes":90,"rpe":9},"gym":{"minutes":60,"rpe":8}}'
+  daily_load facundo@protraining.com '{"sportTraining":{"minutes":90,"rpe":6},"gym":{"minutes":45,"rpe":6}}'
+  daily_load ramiro@protraining.com '{"sportTraining":{"minutes":90,"rpe":6},"gym":{"minutes":30,"rpe":5}}'
+  daily_load joaquin@protraining.com '{"sportTraining":{"minutes":90,"rpe":5}}'
+  daily_load bruno@protraining.com '{"sportTraining":{"minutes":60,"rpe":5}}'
+  daily_load diego@protraining.com '{"individualWork":{"minutes":45,"rpe":4}}'
+  daily_load lautaro@protraining.com '{"sportTraining":{"minutes":90,"rpe":5}}'
+  daily_load santino@protraining.com '{"sportTraining":{"minutes":75,"rpe":5}}'
+  daily_load paula@protraining.com '{"gym":{"minutes":60,"rpe":7}}'
+  daily_load florencia@protraining.com '{"individualWork":{"minutes":45,"rpe":6}}'
+}
+
+# Propuesta de récord de Martín (KAN-392/394): solo si no hay una pendiente (si se aprobó en el ensayo, vuelve).
+load_martin_proposal() {
+  local pending squat_id martin_token
+  pending=$(api GET "/entrenamiento/api/v1/record-proposals?status=Pending" "$PF_TOKEN" \
+    | jq -r '[(if type == "array" then . else .items end)[] | select(.athleteName | startswith("Martín"))] | length')
+  if [[ "$pending" != 0 ]]; then
+    echo "  propuesta de récord de Martín: ya está pendiente"
+    return 0
+  fi
+  squat_id=$(exercise_id "Sentadilla con barra")
+  martin_token=$(login martin@protraining.com | jq -r .accessToken)
+  if curl -sf -X POST "$GATEWAY/entrenamiento/api/v1/me/today-routine/performed-sets" \
+    -H "Authorization: Bearer $martin_token" -H 'Content-Type: application/json' \
+    -d "[{\"exerciseId\":\"$squat_id\",\"weight\":115,\"reps\":5}]" >/dev/null; then
+    echo "  Martín registró sentadilla 115 kg × 5 → propuesta de récord para el PF"
+  else
+    echo "  ⚠ hoy no hay sentadilla en la rutina de Martín: la propuesta solo se genera lunes, jueves y viernes" >&2
+  fi
+}
+
+# Resumen final: qué va a ver el PF en cada bloque de la demo. Si algo da 0, se ve antes de empezar.
+print_demo_summary() {
+  local today categories traffic pending_alerts proposals sessions loads
+  today=$(day_ago 0)
+  echo ""
+  echo "Listo para la demo de hoy ($today):"
+  traffic=$(api GET "/seguimiento/api/v1/categories/$PRIMERA_ID/traffic-light-today" "$PF_TOKEN" \
+    | jq -r '"\([.[] | select(.hasReportedToday and .trafficLight == "Red")] | length) rojo · \([.[] | select(.hasReportedToday and .trafficLight == "Yellow")] | length) amarillo · \([.[] | select(.hasReportedToday and .trafficLight == "Green")] | length) verde · \([.[] | select(.hasReportedToday | not)] | length) sin check-in"')
+  echo "  Semáforo de Primera:        $traffic"
+  pending_alerts=$(api GET "/asistente/api/v1/alerts?onlyUnreviewed=true" "$PF_TOKEN" | jq 'length')
+  echo "  Centro de Avisos:           $pending_alerts pendientes"
+  proposals=$(api GET "/entrenamiento/api/v1/record-proposals?status=Pending" "$PF_TOKEN" \
+    | jq '(if type == "array" then . else .items end) | length')
+  echo "  Propuestas de récord:       $proposals pendientes"
+  loads=$(api GET "/seguimiento/api/v1/categories/$PRIMERA_ID/attendance-today" "$PF_TOKEN" \
+    | jq -r '[.athletes[]? | select((.totalLoad // 0) > 0)] | sort_by(-.totalLoad) | "\(length) con carga · más alta: \(.[0].athleteName // "-") (\(.[0].totalLoad // 0) UA)"')
+  echo "  Cargas de Primera:          $loads"
+  sessions=$(api GET "/entrenamiento/api/v1/training-plans/schedule?date=$today" "$PF_TOKEN" \
+    | jq -r 'if length == 0 then "⚠ no hay sesión hoy (el plan entrena lunes, martes, jueves y viernes; si es uno de esos días, falta asignarlo: modo completo)" else (map("\(.sessionName) \(.startTime // "todo el día")") | join(", ")) end')
+  echo "  Sesión de hoy:              $sessions"
+  echo "  En vivo (no se cargan):     check-in de Lucas y de Martín, y el de Diego se rehace desde el celular"
 }
 
 if [[ "$MODE" == "checkins" ]]; then
   load_check_ins
   echo "Listo."
+  exit 0
+fi
+
+if [[ "$MODE" == "demo" ]]; then
+  PRIMERA_ID=$(category_id_of "Primera División")
+  PARTICULARES_ID=$(category_id_of "Alumnos particulares")
+  MUSCULACION_ID=$(category_id_of "Musculación")
+  LUCAS_ID=$(athlete_id_of atleta@protraining.com)
+  MATEO_ID=$(athlete_id_of mateo@protraining.com)
+  CAMILA_ID=$(athlete_id_of camila@protraining.com)
+  SOFIA_ID=$(athlete_id_of sofia@protraining.com)
+  BRUNO_ID=$(athlete_id_of bruno@protraining.com)
+  IGNACIO_ID=$(athlete_id_of ignacio@protraining.com)
+  PENDING_ALERT_ATHLETES=$(api GET "/asistente/api/v1/alerts?onlyUnreviewed=true" "$PF_TOKEN" | jq -r '[.[].athleteId] | join(" ")')
+  load_check_ins
+  load_alerts
+  load_daily_loads
+  echo "Récords:"
+  load_martin_proposal
+  print_demo_summary
   exit 0
 fi
 
