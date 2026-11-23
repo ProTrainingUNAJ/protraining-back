@@ -41,8 +41,8 @@
 #   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy (la mañana del ensayo y de la demo)
 #   docker compose --profile seed run --rm seed demo        LA MAÑANA DE LA DEMO (y después de cada ensayo): deja el día listo
 #                                                           sobre la base ya cargada. Check-ins de hoy, avisos pendientes,
-#                                                           cargas del día (podio "Mayor carga") y la propuesta de récord de
-#                                                           Martín si no está. Se puede correr las veces que haga falta: no
+#                                                           cargas del día (podio "Mayor carga"), 4 o 5 recomendaciones
+#                                                           por aprobar y la propuesta de récord de Martín si no está. Se puede correr las veces que haga falta: no
 #                                                           duplica avisos ni propuestas. Al final imprime qué quedó listo.
 #   docker compose --profile seed run --rm seed completo    lo mismo que sin argumentos, más lo que en la demo se hace
 #                                                           en vivo: récord de Lucas, asignación del plan y check-ins de Lucas y Martín
@@ -416,6 +416,33 @@ load_martin_proposal() {
   fi
 }
 
+# Recomendaciones pendientes de aprobar (KAN-491/634): la tarjeta "Recomendaciones por aprobar" del Inicio
+# y la pantalla de Recomendaciones no arrancan vacías. 2 de entrenamiento (motor de la categoría) y 3 de
+# hábitos y alimentación de los atletas con ficha y consentimiento (Martín, Facundo, Joaquín y Santino, menor con el tutor que habilita). Las de hábitos
+# pasan por la IA (unos 10 s cada una); si la IA no responde, se avisa y se sigue. Si ya hay 4 o más
+# pendientes no se genera nada: así no se duplican al correrlo después de cada ensayo.
+load_recommendations() {
+  echo "Recomendaciones por aprobar:"
+  local pending athlete_id email
+  pending=$(api GET "/asistente/api/v1/recommendations?status=Pending" "$PF_TOKEN" \
+    | jq '(if type == "array" then . else .items end) | length')
+  if (( pending >= 4 )); then
+    echo "  ya hay $pending pendientes"
+    return 0
+  fi
+  api POST "/asistente/api/v1/categories/$PRIMERA_ID/recommendations" "$PF_TOKEN" '{"weeks":4}' \
+    | jq -r '"  entrenamiento (Primera): \(.generatedCount) nuevas"'
+  for email in martin@protraining.com facundo@protraining.com joaquin@protraining.com santino@protraining.com; do
+    athlete_id=$(athlete_id_of "$email")
+    if curl -sf -m 120 "$GATEWAY/asistente/api/v1/athletes/$athlete_id/habits-recommendation" \
+      -H "Authorization: Bearer $PF_TOKEN" >/dev/null; then
+      echo "  hábitos de $email: pendiente"
+    else
+      echo "  ⚠ no se pudo generar la de hábitos de $email (¿la IA no responde?)" >&2
+    fi
+  done
+}
+
 # Resumen final: qué va a ver el PF en cada bloque de la demo. Si algo da 0, se ve antes de empezar.
 print_demo_summary() {
   local today categories traffic pending_alerts proposals sessions loads
@@ -430,6 +457,8 @@ print_demo_summary() {
   proposals=$(api GET "/entrenamiento/api/v1/record-proposals?status=Pending" "$PF_TOKEN" \
     | jq '(if type == "array" then . else .items end) | length')
   echo "  Propuestas de récord:       $proposals pendientes"
+  echo "  Recomendaciones por aprobar: $(api GET "/asistente/api/v1/recommendations?status=Pending" "$PF_TOKEN" \
+    | jq -r '(if type == "array" then . else .items end) | "\(length) (\([.[] | select(.type == "Habits")] | length) de hábitos)"')"
   loads=$(api GET "/seguimiento/api/v1/categories/$PRIMERA_ID/attendance-today" "$PF_TOKEN" \
     | jq -r '[.athletes[]? | select((.totalLoad // 0) > 0)] | sort_by(-.totalLoad) | "\(length) con carga · más alta: \(.[0].athleteName // "-") (\(.[0].totalLoad // 0) UA)"')
   echo "  Cargas de Primera:          $loads"
@@ -459,6 +488,7 @@ if [[ "$MODE" == "demo" ]]; then
   load_check_ins
   load_alerts
   load_daily_loads
+  load_recommendations
   echo "Récords:"
   load_martin_proposal
   print_demo_summary
