@@ -829,6 +829,19 @@ sign_consent() {
 sign_consent martin@protraining.com
 sign_consent facundo@protraining.com
 sign_consent joaquin@protraining.com
+sign_consent atleta@protraining.com
+sign_consent ramiro@protraining.com
+sign_consent mateo@protraining.com
+sign_consent diego@protraining.com
+sign_consent bruno@protraining.com
+sign_consent sofia@protraining.com
+sign_consent lautaro@protraining.com
+sign_consent camila@protraining.com
+sign_consent valentina@protraining.com
+sign_consent florencia@protraining.com
+sign_consent paula@protraining.com
+sign_consent ignacio@protraining.com
+
 physical_profile "$MARTIN_ID" 78 "Ganar masa muscular"
 medical_record "$MARTIN_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 physical_profile "$FACUNDO_ID" 82 "Rendimiento deportivo"
@@ -837,7 +850,33 @@ physical_profile "$JOAQUIN_ID" 70 "Ganar masa muscular"
 medical_record "$JOAQUIN_ID" "Sin alergias." "Asma leve, controlada con inhalador."
 physical_profile "$SANTINO_ID" 65 "Ganar masa muscular"
 medical_record "$SANTINO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-echo "  Martín y Facundo (ficha sin condiciones: con cantidades), Joaquín (asma: se deriva), Santino (menor: sin gramos)"
+
+# Atletas adicionales con perfil físico y ficha médica para hábitos (KAN-664)
+physical_profile "$LUCAS_ID" 76 "Rendimiento deportivo"
+medical_record "$LUCAS_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$RAMIRO_ID" 74 "Ganar masa muscular"
+medical_record "$RAMIRO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$MATEO_ID" 80 "Rendimiento deportivo"
+medical_record "$MATEO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$DIEGO_ID" 83 "Mantener"
+medical_record "$DIEGO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$BRUNO_ID" 85 "Ganar masa muscular"
+medical_record "$BRUNO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$SOFIA_ID" 62 "Rendimiento deportivo"
+medical_record "$SOFIA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$LAUTARO_ID" 71 "Rendimiento deportivo"
+medical_record "$LAUTARO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$CAMILA_ID" 60 "Ganar masa muscular"
+medical_record "$CAMILA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$VALENTINA_ID" 58 "Rendimiento deportivo"
+medical_record "$VALENTINA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$FLORENCIA_ID" 64 "Mantener"
+medical_record "$FLORENCIA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$PAULA_ID" 59 "Rendimiento deportivo"
+medical_record "$PAULA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+physical_profile "$IGNACIO_ID" 77 "Rendimiento deportivo"
+medical_record "$IGNACIO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+echo "  Perfil físico (peso/objetivo) y ficha médica cargados para todos los atletas del plantel"
 
 # WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
 # Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh
