@@ -46,6 +46,13 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
         builder.Property(athlete => athlete.PhysicalProfileUpdatedAt)
             .HasColumnName("physical_profile_updated_at");
 
+        builder.Property(athlete => athlete.BirthDate)
+            .HasColumnName("birth_date");
+
+        builder.Property(athlete => athlete.Gender)
+            .HasColumnName("gender")
+            .HasMaxLength(20);
+
         builder.Property(athlete => athlete.IsMinor)
             .HasColumnName("is_minor")
             .IsRequired();

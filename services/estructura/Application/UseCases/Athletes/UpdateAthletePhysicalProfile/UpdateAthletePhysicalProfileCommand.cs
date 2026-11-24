@@ -8,7 +8,9 @@ namespace Application.UseCases.Athletes.UpdateAthletePhysicalProfile;
 public sealed record UpdateAthletePhysicalProfileCommand(
     Guid Id,
     decimal? WeightKg,
-    string? AthleticGoal);
+    string? AthleticGoal,
+    DateOnly? BirthDate = null,
+    string? Gender = null);
 
 /// <summary>
 /// Edición del perfil físico por el preparador físico. El tenant del PF se aplica
@@ -27,6 +29,10 @@ public sealed class UpdateAthletePhysicalProfileCommandHandler(
             throw new AthleteNotFoundException();
 
         athlete.UpdatePhysicalProfile(command.WeightKg, command.AthleticGoal);
+        if (command.BirthDate.HasValue || command.Gender is not null)
+        {
+            athlete.UpdatePersonalInfo(command.BirthDate, command.Gender);
+        }
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return AthleteMappings.ToDto(athlete);

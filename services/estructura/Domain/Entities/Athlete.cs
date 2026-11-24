@@ -14,6 +14,8 @@ public sealed class Athlete : BaseEntity
     public decimal? WeightKg { get; private set; }
     public AthleticGoal? AthleticGoal { get; private set; }
     public DateTime? PhysicalProfileUpdatedAt { get; private set; }
+    public DateOnly? BirthDate { get; private set; }
+    public string? Gender { get; private set; }
     public bool IsMinor { get; private set; }
     public string? EmergencyContact { get; private set; }
     public bool Active { get; private set; } = true;
@@ -292,6 +294,33 @@ public sealed class Athlete : BaseEntity
             : null;
         AthleticGoal = goal;
         PhysicalProfileUpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdatePersonalInfo(DateOnly? birthDate, string? gender)
+    {
+        if (birthDate.HasValue && birthDate.Value > ArgentinaTime.Today)
+            throw new DomainException("La fecha de nacimiento no puede ser futura.");
+
+        if (!string.IsNullOrWhiteSpace(gender))
+        {
+            var g = gender.Trim();
+            if (!string.Equals(g, "Femenino", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(g, "Masculino", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DomainException("El género debe ser 'Femenino' o 'Masculino'.");
+            }
+            Gender = char.ToUpperInvariant(g[0]) + g[1..].ToLowerInvariant();
+        }
+        else
+        {
+            Gender = null;
+        }
+
+        BirthDate = birthDate;
+        if (birthDate.HasValue)
+        {
+            IsMinor = IsMinorOn(birthDate.Value, ArgentinaTime.Today);
+        }
     }
 
     public void SetActive(bool active) => Active = active;

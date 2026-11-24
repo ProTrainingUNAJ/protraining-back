@@ -35,7 +35,9 @@ public static class AthleteMappings
             athlete.TelegramUsername,
             athlete.WeightKg,
             Domain.Entities.AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
-            athlete.PhysicalProfileUpdatedAt);
+            athlete.PhysicalProfileUpdatedAt,
+            athlete.BirthDate,
+            athlete.Gender);
 
     public static MedicalRecordDto ToMedicalRecordDto(Guid athleteId, MedicalRecord? record) =>
         record is null
