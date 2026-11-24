@@ -162,17 +162,33 @@ public sealed class TrainingPlanServiceClient(
         }
     }
 
-    public async Task<TodayRoutineRemoteDto?> GetTodayRoutineAsync(
+    public Task<TodayRoutineRemoteDto?> GetTodayRoutineAsync(
         Guid athleteId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        GetRoutineAsync(athleteId, date: null, cancellationToken);
+
+    public Task<TodayRoutineRemoteDto?> GetRoutineForDateAsync(
+        Guid athleteId,
+        DateOnly date,
+        CancellationToken cancellationToken = default) =>
+        GetRoutineAsync(athleteId, date, cancellationToken);
+
+    private async Task<TodayRoutineRemoteDto?> GetRoutineAsync(
+        Guid athleteId,
+        DateOnly? date,
+        CancellationToken cancellationToken)
     {
         if (httpClient.BaseAddress is null)
             throw new TrainingServiceUnavailableException(TrainingUnavailableMessage);
 
+        var url = date.HasValue
+            ? $"api/v1/athletes/{athleteId}/today-routine?date={date.Value:yyyy-MM-dd}"
+            : $"api/v1/athletes/{athleteId}/today-routine";
+
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync($"api/v1/athletes/{athleteId}/today-routine", cancellationToken);
+            response = await httpClient.GetAsync(url, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

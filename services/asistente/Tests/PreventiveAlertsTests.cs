@@ -385,6 +385,72 @@ public sealed class PreventiveAlertsTests
     }
 
     [Fact]
+    public async Task Given_NextSessionFlag_When_AthleteTrainsInTwoDays_Then_AppliesToThatSessionAndDate()
+    {
+        var alert = PreventiveAlert.Create(
+            athleteId: AthleteId,
+            athleteName: AthleteName,
+            reason: ReasonFatigue,
+            suggestion: SuggestionAdjustment,
+            severity: AlertSeverity.High,
+            type: AlertType.AccumulatedFatigue,
+            suggestedAdjustmentType: SuggestedAdjustmentType.LoadReduction,
+            suggestedAdjustmentPercentage: 20);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>())).ReturnsAsync(alert);
+
+        var today = Domain.Common.ArgentinaTime.Today;
+        var sessionDate = today.AddDays(2);
+        var sessionId = Guid.NewGuid();
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        // Mañana descansa (sin sesión); pasado mañana entrena
+        clientMock.Setup(c => c.GetRoutineForDateAsync(AthleteId, today.AddDays(1), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(AthleteId, today.AddDays(1), [], SessionId: null));
+        clientMock.Setup(c => c.GetRoutineForDateAsync(AthleteId, sessionDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TodayRoutineRemoteDto(AthleteId, sessionDate, [], SessionId: sessionId));
+
+        var uowMock = new Mock<IUnitOfWork>();
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+
+        var result = await handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id, NextSession: true));
+
+        Assert.Equal(sessionDate, result.SessionDate);
+        Assert.Equal(AlertStatus.Applied, alert.Status);
+        clientMock.Verify(c => c.ApplyAthleteSessionAdjustmentAsync(
+            sessionId,
+            It.Is<ApplyAthleteAdjustmentRequestRemoteDto>(req =>
+                req.Date == sessionDate && req.AthleteId == AthleteId && req.LoadReductionPercentage == 20),
+            It.IsAny<CancellationToken>()), Times.Once);
+        // La de hoy no se consulta: el PF eligió explícitamente la próxima
+        clientMock.Verify(c => c.GetTodayRoutineAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_NextSessionFlag_When_NoSessionInNextWeek_Then_ThrowsAndAlertRemainsPending()
+    {
+        var alert = PreventiveAlert.Create(AthleteId, AthleteName, ReasonFatigue, SuggestionAdjustment);
+
+        var repoMock = new Mock<IPreventiveAlertRepository>();
+        repoMock.Setup(r => r.GetByIdAsync(alert.Id, It.IsAny<CancellationToken>())).ReturnsAsync(alert);
+
+        // Sin configurar: Moq devuelve null para cada día (no hay rutina)
+        var clientMock = new Mock<ITrainingPlanServiceClient>();
+        var uowMock = new Mock<IUnitOfWork>();
+        var handler = new ApplyAlertAdjustmentCommandHandler(repoMock.Object, clientMock.Object, uowMock.Object);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
+            handler.HandleAsync(new ApplyAlertAdjustmentCommand(alert.Id, NextSession: true)));
+
+        Assert.Contains("próximos 7 días", ex.Message);
+        Assert.Equal(AlertStatus.Pending, alert.Status);
+        clientMock.Verify(c => c.GetRoutineForDateAsync(AthleteId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()), Times.Exactly(7));
+        clientMock.Verify(c => c.ApplyAthleteSessionAdjustmentAsync(It.IsAny<Guid>(), It.IsAny<ApplyAthleteAdjustmentRequestRemoteDto>(), It.IsAny<CancellationToken>()), Times.Never);
+        uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Given_ApplyAlertAdjustmentCommand_When_NoSessionToday_Then_ThrowsDomainException()
     {
         var alert = PreventiveAlert.Create(AthleteId, AthleteName, ReasonFatigue, SuggestionAdjustment);
@@ -539,7 +605,7 @@ public sealed class PreventiveAlertsTests
             new CreatePreventiveAlertCommandHandler(repoMock.Object, structureMock.Object, currentUserMock.Object, uowMock.Object),
             applyHandler);
 
-        var actionResult = await controller.Apply(alert.Id, CancellationToken.None);
+        var actionResult = await controller.Apply(alert.Id, cancellationToken: CancellationToken.None);
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
         var dto = Assert.IsType<ApplyAlertAdjustmentResponseDto>(okResult.Value);
 
