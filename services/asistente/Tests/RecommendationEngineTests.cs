@@ -658,6 +658,108 @@ public sealed class RecommendationEngineTests
         Assert.Contains("Por debajo del promedio", strictResult.EvaluatedMetrics[0].Trend);
     }
 
+    // Las de hábitos tienen su propia pestaña: si el motor las contara como "pendientes previas",
+    // el aviso diría "ya había 2 pendientes" con la lista del análisis vacía (reporte del ensayo, KAN-481).
+    private static async Task SeedHabitsAndTrainingPendingAsync(InMemoryTenantRecommendationRepository repository)
+    {
+        await repository.AddAsync(AthleteRecommendation.Create(
+            AthleteId,
+            "Hábitos y alimentación",
+            "objetivo no informado",
+            "Proteína según peso y objetivo.",
+            categoryId: CategoryId,
+            categoryName: "Primera División",
+            type: RecommendationType.Habits));
+        await repository.AddAsync(AthleteRecommendation.Create(
+            AthleteId,
+            "Refuerzo de velocidad",
+            "sprint por debajo del promedio",
+            "Trabajo de aceleración.",
+            categoryId: CategoryId,
+            categoryName: "Primera División"));
+    }
+
+    [Fact]
+    public async Task GenerateForAthlete_WithPendingHabits_CountsOnlyTrainingAsExistingPending()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        await SeedHabitsAndTrainingPendingAsync(repository);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.IsOwnAthleteAsync(AthleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        structureMock.SetupHabitsPermission(AthleteId);
+        structureMock.Setup(s => s.GetAthleteCategoriesAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryDto(CategoryId, "Primera División")]);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 46.0m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 10, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, 10)], []));
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(AthleteId, 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var handler = new GenerateAthleteRecommendationsCommandHandler(
+            structureMock.Object,
+            seguimientoMock.Object,
+            repository,
+            new Mock<IAiService>().Object,
+            new FakeUnitOfWork());
+
+        var response = await handler.HandleAsync(new GenerateAthleteRecommendationsCommand(AthleteId));
+
+        Assert.Equal(0, response.GeneratedCount);
+        Assert.Equal(1, response.ExistingPendingCount);
+        var returned = Assert.Single(response.Recommendations);
+        Assert.Equal("Refuerzo de velocidad", returned.Title);
+    }
+
+    [Fact]
+    public async Task GenerateForCategory_WithPendingHabits_CountsOnlyTrainingAsExistingPending()
+    {
+        var store = new List<AthleteRecommendation>();
+        var repository = new InMemoryTenantRecommendationRepository(store, () => PfId);
+        await SeedHabitsAndTrainingPendingAsync(repository);
+
+        var structureMock = new Mock<IStructureAthleteClient>();
+        structureMock.Setup(s => s.GetCategoryAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureCategoryDto(CategoryId, "Primera División"));
+        structureMock.Setup(s => s.GetCategoryAthletesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StructureCategoryAthleteDto(AthleteId, true)]);
+        structureMock.SetupHabitsPermission(AthleteId);
+
+        var seguimientoMock = new Mock<ISeguimientoClient>();
+        seguimientoMock.Setup(s => s.GetCategoryAveragesAsync(CategoryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryAveragesRemoteDto(
+                CategoryId, 8, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 15),
+                [new FitnessTestAverageRemoteDto("Salto Vertical CMJ", "cm", 42.0, 8)], []));
+        seguimientoMock.Setup(s => s.GetAthleteFitnessTestsAsync(AthleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new AthleteFitnessTestRemoteDto(Guid.NewGuid(), AthleteId, Guid.NewGuid(), "Salto Vertical CMJ", "Power", 46.0m, "cm", 1, DateTime.UtcNow)
+            ]);
+        seguimientoMock.Setup(s => s.GetAthleteWeeklyTrendsAsync(It.IsAny<Guid>(), 4, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AthleteWeeklyTrendsRemoteDto?)null);
+
+        var handler = new GenerateCategoryRecommendationsCommandHandler(
+            structureMock.Object,
+            seguimientoMock.Object,
+            repository,
+            ScopedAiServiceRunnerFactory.From(new Mock<IAiService>().Object),
+            new FakeUnitOfWork());
+
+        var response = await handler.HandleAsync(new GenerateCategoryRecommendationsCommand(CategoryId));
+
+        Assert.Equal(0, response.GeneratedCount);
+        Assert.Equal(1, response.ExistingPendingCount);
+        var returned = Assert.Single(response.Recommendations);
+        Assert.Equal("Refuerzo de velocidad", returned.Title);
+    }
+
     [Fact]
     public async Task GenerateForAthlete_GivenConfiguredOptions_AppliesConfiguredThreshold()
     {

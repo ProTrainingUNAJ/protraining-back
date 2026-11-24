@@ -73,8 +73,10 @@ public sealed class GenerateCategoryRecommendationsCommandHandler(
 
         var categoryAverages = await averagesTask;
         var existingRecommendations = await existingTask;
+        // Solo las de entrenamiento: las de hábitos se revisan en su propia pestaña y, si se
+        // contaran acá, el aviso diría "ya había N pendientes" con la lista del análisis vacía.
         var existingPending = existingRecommendations
-            .Where(r => r.Status == RecommendationStatus.Pending)
+            .Where(r => r.Status == RecommendationStatus.Pending && r.Type == RecommendationType.Training)
             .ToList();
 
         var existingByAthlete = existingRecommendations
