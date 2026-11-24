@@ -40,6 +40,7 @@ namespace Identidad.Tests.Infrastructure;
 public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposable
 {
     private readonly SqliteConnection _sqliteConnection;
+    private readonly string _sqliteConnectionString;
     private readonly TestServer _server;
 
     public FakeStructureHandler Structure { get; }
@@ -53,7 +54,12 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
     internal IdentidadTestApplicationFactory(TimeProvider? timeProvider)
     {
         Structure = new FakeStructureHandler();
-        _sqliteConnection = new SqliteConnection("DataSource=:memory:");
+        // Base en memoria con nombre y caché compartida: cada DbContext abre su propia conexión,
+        // así los pedidos simultáneos (rate limiting de forgot-password) no comparten una sola
+        // conexión SQLite, que no es thread-safe y hacía fallar el test de concurrencia de a ratos.
+        // Esta conexión queda abierta solo para que la base viva mientras dure la factory.
+        _sqliteConnectionString = $"DataSource=file:identidad-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+        _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
         _sqliteConnection.Open();
 
         var configuration = new ConfigurationBuilder()
@@ -76,7 +82,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
 
                 // SQLite en memoria para aislar los tests de la base real
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseSqlite(_sqliteConnection));
+                    options.UseSqlite(_sqliteConnectionString));
 
                 // Identity Core
                 services.AddIdentityCore<User>(options =>
