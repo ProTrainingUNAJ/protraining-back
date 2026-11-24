@@ -71,6 +71,12 @@ public sealed class GetCategoryDayConflictsQueryHandler(
         try
         {
             var routine = await trainingClient.GetTodayRoutineAsync(athlete.AthleteId, cancellationToken);
+            if (routine?.AdjustedByCoach == true)
+            {
+                // Ya tiene el ajuste del día aplicado: el conflicto está resuelto por el PF
+                return new CategoryAthleteDayConflictDto(athlete.AthleteId, HasConflicts: false, AdjustedToday: true);
+            }
+
             var exercises = routine?.Exercises;
             if (exercises is null || exercises.Count == 0)
             {

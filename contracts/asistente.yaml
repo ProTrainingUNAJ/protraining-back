@@ -2181,6 +2181,10 @@ components:
         hasConflicts:
           type: boolean
           example: true
+        adjustedToday:
+          type: boolean
+          description: El PF ya ajustó la sesión de hoy del atleta; no se vuelve a ofrecer el ajuste.
+          example: false
 
     CategoryDayConflictsResponse:
       type: object

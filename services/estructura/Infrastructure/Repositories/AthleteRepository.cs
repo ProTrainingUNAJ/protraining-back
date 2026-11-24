@@ -17,6 +17,23 @@ public sealed class AthleteRepository(AppDbContext context) : IAthleteRepository
                 .ThenBy(athlete => athlete.FirstName)
                 .ToListAsync(cancellationToken));
 
+    // El filtro global del DbContext ya limita al PF del token y saca los borrados lógicos.
+    // Se compara en minúsculas porque hay atletas viejos guardados solo con Trim (sin índice único todavía).
+    public async Task<bool> EmailExistsAsync(
+        string email,
+        Guid? excludeAthleteId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        return await PersistenceErrors.ExecuteAsync(async () =>
+            await context.Athletes
+                .AsNoTracking()
+                .AnyAsync(
+                    athlete => athlete.Email.ToLower() == normalized &&
+                               (excludeAthleteId == null || athlete.Id != excludeAthleteId),
+                    cancellationToken));
+    }
+
     public async Task<Athlete?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.Athletes

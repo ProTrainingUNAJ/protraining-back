@@ -333,7 +333,9 @@ public sealed class Athlete : BaseEntity
         if (string.IsNullOrWhiteSpace(cleanLast) || cleanLast.Length > 100)
             throw new DomainException("El apellido es obligatorio y debe tener entre 1 y 100 caracteres.");
 
-        var cleanEmail = email?.Trim();
+        // En minúsculas, igual que Identidad y UpdateEmail: así "Lucas@X.com" y "lucas@x.com" son el mismo
+        // correo para detectar duplicados (KAN-660).
+        var cleanEmail = email?.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(cleanEmail) || cleanEmail.Length > 150 || !cleanEmail.Contains('@'))
             throw new DomainException("El correo electrónico es obligatorio y debe tener un formato válido.");
 

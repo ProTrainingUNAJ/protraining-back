@@ -2,6 +2,7 @@ using Application.DTOs.Athletes;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Mappings;
+using Application.UseCases.Athletes.CreateAthlete;
 
 namespace Application.UseCases.Athletes.UpdateAthleteEmail;
 
@@ -20,6 +21,9 @@ public sealed class UpdateAthleteEmailCommandHandler(IAthleteRepository reposito
             throw new AthleteNotFoundException();
 
         athlete.UpdateEmail(command.Email);
+
+        if (await repository.EmailExistsAsync(athlete.Email, athlete.Id, cancellationToken))
+            throw new ConflictException(AthleteEmailMessages.AlreadyExists);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return AthleteMappings.ToDto(athlete);

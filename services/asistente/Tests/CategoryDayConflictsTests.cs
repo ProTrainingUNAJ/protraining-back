@@ -64,6 +64,62 @@ public sealed class CategoryDayConflictsTests
         new(new HttpClient(handler) { BaseAddress = new Uri("http://entrenamiento:8080/") }, NullLogger<TrainingPlanServiceClient>.Instance);
 
     [Fact]
+    public async Task Given_AthleteWithPainAndDayAlreadyAdjusted_When_RequestingCategoryDayConflicts_Then_ReportsAdjustedTodayWithoutCheckingRestrictions()
+    {
+        // KAN-660 (hallazgo 3): si el PF ya ajustó la sesión de hoy, no se vuelve a ofrecer el ajuste
+        var seguimientoHandler = new FakeHttpHandler(request =>
+            request.RequestUri!.AbsolutePath.EndsWith($"/api/v1/categories/{CategoryId}/traffic-light-today")
+                ? Json(HttpStatusCode.OK, $$"""
+                [
+                    {
+                        "athleteId": "{{AthleteConflictId}}",
+                        "athleteName": "Diego",
+                        "trafficLight": "Yellow",
+                        "hasReportedToday": true,
+                        "indicators": { "painZones": "cuadriceps:2" }
+                    }
+                ]
+                """)
+                : new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var restrictionChecks = 0;
+        var trainingHandler = new FakeHttpHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith($"/api/v1/athletes/{AthleteConflictId}/today-routine"))
+            {
+                return Json(HttpStatusCode.OK, $$"""
+                {
+                    "athleteId": "{{AthleteConflictId}}",
+                    "date": "2026-11-21",
+                    "adjustedByCoach": true,
+                    "exercises": [
+                        { "exerciseId": "{{BoxJumpId}}", "name": "Salto al cajón" }
+                    ]
+                }
+                """);
+            }
+
+            if (request.RequestUri!.AbsolutePath.EndsWith("/api/v1/exercises/restrictions/check"))
+            {
+                restrictionChecks++;
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var handler = new GetCategoryDayConflictsQueryHandler(
+            CreateTrainingClient(trainingHandler),
+            CreateSeguimientoClient(seguimientoHandler));
+
+        var response = await handler.HandleAsync(new GetCategoryDayConflictsQuery(CategoryId));
+
+        var athlete = Assert.Single(response.Athletes);
+        Assert.False(athlete.HasConflicts);
+        Assert.True(athlete.AdjustedToday);
+        Assert.Equal(0, restrictionChecks);
+    }
+
+    [Fact]
     public async Task Given_CategoryWithMixedAthletes_When_RequestingCategoryDayConflicts_Then_EvaluatesOnlyAthletesWithPainInOneSeguimientoCall()
     {
         var seguimientoHandler = new FakeHttpHandler(request =>

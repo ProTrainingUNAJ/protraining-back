@@ -16,7 +16,9 @@ public sealed record TodayRoutineRemoteDto(
     Guid AthleteId,
     DateOnly Date,
     IReadOnlyList<TodayRoutineExerciseRemoteDto> Exercises,
-    Guid? SessionId = null
+    Guid? SessionId = null,
+    // Entrenamiento lo marca cuando el PF ya ajustó la sesión de ese día para el atleta
+    bool AdjustedByCoach = false
 );
 
 public sealed record CheckExerciseRestrictionsRequestDto(
@@ -67,7 +69,9 @@ public sealed record CategoryTrafficLightAthleteRemoteDto(
 
 public sealed record CategoryAthleteDayConflictDto(
     Guid AthleteId,
-    bool HasConflicts
+    bool HasConflicts,
+    // El PF ya ajustó la sesión de hoy: no se vuelve a ofrecer el ajuste (KAN-660, hallazgo 3)
+    bool AdjustedToday = false
 );
 
 public sealed record CategoryDayConflictsResponseDto(
