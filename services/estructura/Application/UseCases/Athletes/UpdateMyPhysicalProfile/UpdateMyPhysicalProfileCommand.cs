@@ -5,12 +5,18 @@ using Domain.Entities;
 
 namespace Application.UseCases.Athletes.UpdateMyPhysicalProfile;
 
-public sealed record UpdateMyPhysicalProfileCommand(decimal? WeightKg, string? AthleticGoal);
+public sealed record UpdateMyPhysicalProfileCommand(
+    decimal? WeightKg,
+    string? AthleticGoal,
+    DateOnly? BirthDate = null,
+    string? Gender = null);
 
 public sealed record UpdateMyPhysicalProfileResponseDto(
     decimal? WeightKg,
     string AthleticGoal,
-    DateTime? PhysicalProfileUpdatedAt);
+    DateTime? PhysicalProfileUpdatedAt,
+    DateOnly? BirthDate = null,
+    string? Gender = null);
 
 /// <summary>
 /// Autoservicio del atleta autenticado: actualiza peso y objetivo desde el token, sin ids en la ruta.
@@ -31,11 +37,17 @@ public sealed class UpdateMyPhysicalProfileCommandHandler(
             throw new AthleteNotFoundException();
 
         athlete.UpdatePhysicalProfile(command.WeightKg, command.AthleticGoal);
+        if (command.BirthDate.HasValue || command.Gender is not null)
+        {
+            athlete.UpdatePersonalInfo(command.BirthDate, command.Gender);
+        }
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new UpdateMyPhysicalProfileResponseDto(
             athlete.WeightKg,
             AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
-            athlete.PhysicalProfileUpdatedAt);
+            athlete.PhysicalProfileUpdatedAt,
+            athlete.BirthDate,
+            athlete.Gender);
     }
 }

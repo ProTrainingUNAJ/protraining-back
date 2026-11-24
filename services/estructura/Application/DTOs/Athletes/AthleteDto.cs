@@ -18,4 +18,6 @@ public sealed record AthleteDto(
     string? TelegramUsername = null,
     decimal? WeightKg = null,
     string? AthleticGoal = null,
-    DateTime? PhysicalProfileUpdatedAt = null);
+    DateTime? PhysicalProfileUpdatedAt = null,
+    DateOnly? BirthDate = null,
+    string? Gender = null);

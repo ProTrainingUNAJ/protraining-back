@@ -66,6 +66,6 @@ public sealed class MeController(
         [FromBody] UpdatePhysicalProfileRequest request,
         CancellationToken cancellationToken) =>
         Ok(await updateMyPhysicalProfileHandler.HandleAsync(
-            new UpdateMyPhysicalProfileCommand(request.WeightKg, request.AthleticGoal),
+            new UpdateMyPhysicalProfileCommand(request.WeightKg, request.AthleticGoal, request.BirthDate, request.Gender),
             cancellationToken));
 }

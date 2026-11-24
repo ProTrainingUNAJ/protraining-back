@@ -40,6 +40,8 @@ public sealed class GetMeQueryHandler(
             athlete.IsMinor,
             athlete.WeightKg,
             Domain.Entities.AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
-            athlete.PhysicalProfileUpdatedAt);
+            athlete.PhysicalProfileUpdatedAt,
+            athlete.BirthDate,
+            athlete.Gender);
     }
 }

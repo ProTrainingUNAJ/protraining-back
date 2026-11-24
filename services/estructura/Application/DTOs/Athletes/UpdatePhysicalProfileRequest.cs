@@ -8,4 +8,6 @@ namespace Application.DTOs.Athletes;
 /// </summary>
 public sealed record UpdatePhysicalProfileRequest(
     decimal? WeightKg = null,
-    string? AthleticGoal = null);
+    string? AthleticGoal = null,
+    DateOnly? BirthDate = null,
+    string? Gender = null);
