@@ -518,6 +518,29 @@ PARTICULARES_ID=$(new_category "$PERSONAL_ID" "Alumnos particulares")
 MUSCULACION_ID=$(new_category "$GYM_ID" "Musculación")
 echo "  Club Quilmes (Primera División, Reserva), Personalizados, Gimnasio"
 
+ASSETS_DIR="$(dirname "$0")/assets"
+upload_org_photo() {
+  local org_id="$1" file_path="$2"
+  if [[ -f "$file_path" ]]; then
+    curl -sf -X PUT "$GATEWAY/estructura/api/v1/organizations/$org_id/photo" \
+      -H "Authorization: Bearer $PF_TOKEN" \
+      -F "photo=@$file_path;type=image/webp" >/dev/null || true
+  fi
+}
+upload_pf_photo() {
+  local file_path="$1"
+  if [[ -f "$file_path" ]]; then
+    curl -sf -X PUT "$GATEWAY/identidad/api/v1/users/me/photo" \
+      -H "Authorization: Bearer $PF_TOKEN" \
+      -F "photo=@$file_path;type=image/webp" >/dev/null || true
+  fi
+}
+upload_org_photo "$CLUB_ID" "$ASSETS_DIR/quilmes.webp"
+upload_org_photo "$GYM_ID" "$ASSETS_DIR/gimnasio.webp"
+upload_org_photo "$PERSONAL_ID" "$ASSETS_DIR/personalizados.webp"
+upload_pf_photo "$ASSETS_DIR/pf.webp"
+echo "  Logos de organizaciones y foto de perfil del PF cargados"
+
 # new_athlete <nombre> <apellido> <email> <teléfono> <categoría…> → imprime el id
 new_athlete() {
   local first="$1" last="$2" email="$3" phone="$4"
@@ -537,11 +560,11 @@ LUCAS_ID=$(new_athlete "Lucas" "Gómez" "atleta@protraining.com" "1150000001" "$
 MARTIN_ID=$(new_athlete "Martín" "Pérez" "martin@protraining.com" "1150000002" "$PRIMERA_ID")
 JOAQUIN_ID=$(new_athlete "Joaquín" "Díaz" "joaquin@protraining.com" "1150000003" "$PRIMERA_ID")
 FACUNDO_ID=$(new_athlete "Facundo" "Sosa" "facundo@protraining.com" "1150000004" "$PRIMERA_ID")
-new_athlete "Nicolás" "Herrera" "nicolas@protraining.com" "1150000005" "$PRIMERA_ID" >/dev/null
-new_athlete "Agustina" "Morales" "agustina@protraining.com" "1150000006" "$RESERVA_ID" >/dev/null
+NICOLAS_ID=$(new_athlete "Nicolás" "Herrera" "nicolas@protraining.com" "1150000005" "$PRIMERA_ID")
+AGUSTINA_ID=$(new_athlete "Agustina" "Morales" "agustina@protraining.com" "1150000006" "$RESERVA_ID")
 VALENTINA_ID=$(new_athlete "Valentina" "Ruiz" "valentina@protraining.com" "1150000007" "$PARTICULARES_ID")
 CAMILA_ID=$(new_athlete "Camila" "Torres" "camila@protraining.com" "1150000008" "$PARTICULARES_ID" "$MUSCULACION_ID")
-new_athlete "Thiago" "Benítez" "thiago@protraining.com" "1150000012" "$RESERVA_ID" >/dev/null
+THIAGO_ID=$(new_athlete "Thiago" "Benítez" "thiago@protraining.com" "1150000012" "$RESERVA_ID")
 echo "  9 atletas (Nicolás, Agustina y Thiago sin cuenta: en el semáforo quedan sin check-in)"
 
 # Sofía, Bruno y Diego se registran solos por la invitación de Primera División (KAN-397/398),
@@ -551,18 +574,18 @@ SOFIA_ID=$(invite_athlete "Sofía" "Méndez" "sofia@protraining.com" "1150000009
 BRUNO_ID=$(invite_athlete "Bruno" "Castro" "bruno@protraining.com" "1150000010" "$PRIMERA_ID")
 DIEGO_ID=$(invite_athlete "Diego" "Funes" "diego@protraining.com" "1150000011" "$PRIMERA_ID")
 MATEO_ID=$(invite_athlete "Mateo" "Ríos" "mateo@protraining.com" "1150000013" "$PRIMERA_ID")
-invite_athlete "Ramiro" "Acosta" "ramiro@protraining.com" "1150000014" "$PRIMERA_ID" >/dev/null
+RAMIRO_ID=$(invite_athlete "Ramiro" "Acosta" "ramiro@protraining.com" "1150000014" "$PRIMERA_ID")
 echo "  Sofía, Bruno, Diego, Mateo y Ramiro en Primera División"
-invite_athlete "Lautaro" "Medina" "lautaro@protraining.com" "1150000015" "$RESERVA_ID" >/dev/null
+LAUTARO_ID=$(invite_athlete "Lautaro" "Medina" "lautaro@protraining.com" "1150000015" "$RESERVA_ID")
 # Menores: el tutor de Santino habilita las recomendaciones de alimentación y el de Bautista no
 SANTINO_ID=$(invite_minor "Santino" "Vega" "santino@protraining.com" "1150000016" "$RESERVA_ID" \
   "2010-05-10" "Claudia Vega" "1150000116" true)
-invite_minor "Bautista" "Ojeda" "bautista@protraining.com" "1150000017" "$RESERVA_ID" \
-  "2009-08-20" "Marcelo Ojeda" "1150000117" false >/dev/null
+BAUTISTA_ID=$(invite_minor "Bautista" "Ojeda" "bautista@protraining.com" "1150000017" "$RESERVA_ID" \
+  "2009-08-20" "Marcelo Ojeda" "1150000117" false)
 echo "  Lautaro, Santino (16) y Bautista (17) en Reserva; los menores, con el consentimiento de su tutor"
-invite_athlete "Florencia" "Navarro" "florencia@protraining.com" "1150000018" "$PARTICULARES_ID" >/dev/null
+FLORENCIA_ID=$(invite_athlete "Florencia" "Navarro" "florencia@protraining.com" "1150000018" "$PARTICULARES_ID")
 echo "  Florencia en Alumnos particulares"
-invite_athlete "Paula" "Romero" "paula@protraining.com" "1150000019" "$MUSCULACION_ID" >/dev/null
+PAULA_ID=$(invite_athlete "Paula" "Romero" "paula@protraining.com" "1150000019" "$MUSCULACION_ID")
 IGNACIO_ID=$(invite_athlete "Ignacio" "Luna" "ignacio@protraining.com" "1150000020" "$MUSCULACION_ID")
 echo "  Paula e Ignacio en Musculación (20 atletas en total)"
 
@@ -580,6 +603,72 @@ for pair in "atleta@protraining.com:$LUCAS_ID" "martin@protraining.com:$MARTIN_I
 done
 run_sql db-estructura "$link_sql"
 echo "  6 cuentas vinculadas"
+
+upload_athlete_photo() {
+  local athlete_id="$1" photo_url="$2" email="${3:-}"
+  local file_to_upload="$photo_url"
+  local temp_file=""
+  if [[ ! -f "$photo_url" ]]; then
+    temp_file=$(mktemp --suffix=.webp 2>/dev/null || echo "/tmp/athlete_${athlete_id}.webp")
+    if curl -sf -L "$photo_url" -o "$temp_file"; then
+      file_to_upload="$temp_file"
+    else
+      return 0
+    fi
+  fi
+
+  curl -sf -X PUT "$GATEWAY/estructura/api/v1/athletes/$athlete_id/photo" \
+    -H "Authorization: Bearer $PF_TOKEN" \
+    -F "photo=@$file_to_upload;type=image/webp" >/dev/null || true
+
+  if [[ -n "$email" ]]; then
+    local session token
+    session=$(curl -sf -X POST "$GATEWAY/identidad/api/v1/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"email\":\"$email\",\"password\":\"$PASSWORD\",\"deviceId\":\"seed\"}" 2>/dev/null || true)
+    token=$(jq -r '.accessToken // empty' <<<"$session" 2>/dev/null || true)
+    if [[ -n "$token" ]]; then
+      curl -sf -X PUT "$GATEWAY/identidad/api/v1/users/me/photo" \
+        -H "Authorization: Bearer $token" \
+        -F "photo=@$file_to_upload;type=image/webp" >/dev/null || true
+    fi
+  fi
+
+  [[ -n "$temp_file" ]] && rm -f "$temp_file"
+}
+
+load_athlete_photos() {
+  echo "Fotos de perfil de los atletas (WebP locales):"
+  local ath_dir="$ASSETS_DIR/athletes"
+
+  # Primera División
+  upload_athlete_photo "$LUCAS_ID" "${ath_dir}/lucas.webp" "atleta@protraining.com"
+  upload_athlete_photo "$MARTIN_ID" "${ath_dir}/martin.webp" "martin@protraining.com"
+  upload_athlete_photo "$JOAQUIN_ID" "${ath_dir}/joaquin.webp" "joaquin@protraining.com"
+  upload_athlete_photo "$FACUNDO_ID" "${ath_dir}/facundo.webp" "facundo@protraining.com"
+  upload_athlete_photo "$NICOLAS_ID" "${ath_dir}/nicolas.webp"
+  upload_athlete_photo "$SOFIA_ID" "${ath_dir}/sofia.webp" "sofia@protraining.com"
+  upload_athlete_photo "$BRUNO_ID" "${ath_dir}/bruno.webp" "bruno@protraining.com"
+  upload_athlete_photo "$DIEGO_ID" "${ath_dir}/diego.webp" "diego@protraining.com"
+  upload_athlete_photo "$MATEO_ID" "${ath_dir}/mateo.webp" "mateo@protraining.com"
+  upload_athlete_photo "$RAMIRO_ID" "${ath_dir}/ramiro.webp" "ramiro@protraining.com"
+
+  # Reserva
+  upload_athlete_photo "$SANTINO_ID" "${ath_dir}/santino.webp" "santino@protraining.com"
+  upload_athlete_photo "$BAUTISTA_ID" "${ath_dir}/bautista.webp" "bautista@protraining.com"
+  upload_athlete_photo "$LAUTARO_ID" "${ath_dir}/lautaro.webp" "lautaro@protraining.com"
+  upload_athlete_photo "$THIAGO_ID" "${ath_dir}/thiago.webp"
+  upload_athlete_photo "$AGUSTINA_ID" "${ath_dir}/agustina.webp"
+
+  # Personalizados & Gimnasio
+  upload_athlete_photo "$VALENTINA_ID" "${ath_dir}/valentina.webp" "valentina@protraining.com"
+  upload_athlete_photo "$CAMILA_ID" "${ath_dir}/camila.webp" "camila@protraining.com"
+  upload_athlete_photo "$FLORENCIA_ID" "${ath_dir}/florencia.webp" "florencia@protraining.com"
+  upload_athlete_photo "$PAULA_ID" "${ath_dir}/paula.webp" "paula@protraining.com"
+  upload_athlete_photo "$IGNACIO_ID" "${ath_dir}/ignacio.webp" "ignacio@protraining.com"
+  echo "  20 fotos de perfil cargadas con éxito"
+}
+load_athlete_photos
 
 # --- récords y planificación -----------------------------------------------
 
