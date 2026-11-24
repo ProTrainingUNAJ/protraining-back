@@ -34,5 +34,6 @@ public sealed record ReviewAlertResponseDto(
 public sealed record ApplyAlertAdjustmentResponseDto(
     string Message,
     Guid AlertId,
-    string Status);
+    string Status,
+    DateOnly? SessionDate = null);
 

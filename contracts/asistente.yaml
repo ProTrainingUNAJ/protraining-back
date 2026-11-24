@@ -187,6 +187,15 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: nextSession
+          in: query
+          required: false
+          description: >
+            Si es true, el ajuste se aplica a la próxima sesión del atleta (dentro de los 7 días
+            siguientes) en lugar de la de hoy. Sirve cuando el aviso llega un día que no entrena.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: Ajuste aplicado exitosamente en Entrenamiento y aviso marcado como aplicado.
@@ -204,6 +213,11 @@ paths:
                   status:
                     type: string
                     example: "Applied"
+                  sessionDate:
+                    type: string
+                    format: date
+                    nullable: true
+                    description: Fecha de la sesión a la que se aplicó el ajuste.
         "400":
           $ref: '#/components/responses/BadRequest'
         "404":

@@ -74,6 +74,7 @@ public sealed class AlertsController(
 
     /// <summary>
     /// Aplica el ajuste sugerido por un aviso preventivo en Entrenamiento con un solo clic (#183 · KAN-478).
+    /// Con <c>nextSession=true</c> lo aplica a la próxima sesión del atleta en lugar de la de hoy.
     /// </summary>
     [HttpPost("{alertId:guid}/apply")]
     [ProducesResponseType(typeof(ApplyAlertAdjustmentResponseDto), StatusCodes.Status200OK)]
@@ -83,9 +84,12 @@ public sealed class AlertsController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ApplyAlertAdjustmentResponseDto>> Apply(
         Guid alertId,
-        CancellationToken cancellationToken)
+        [FromQuery] bool nextSession = false,
+        CancellationToken cancellationToken = default)
     {
-        var result = await applyAlertHandler.HandleAsync(new ApplyAlertAdjustmentCommand(alertId), cancellationToken);
+        var result = await applyAlertHandler.HandleAsync(
+            new ApplyAlertAdjustmentCommand(alertId, nextSession),
+            cancellationToken);
         return Ok(result);
     }
 
