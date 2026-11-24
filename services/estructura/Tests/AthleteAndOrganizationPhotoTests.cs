@@ -283,4 +283,12 @@ public class AthleteAndOrganizationPhotoTests
         Assert.Null(organization.PhotoUpdatedAt);
         photoRepo.Verify(r => r.DeleteAsync(savedPhoto, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public void NewAthlete_DefaultState_HasNoPreloadedPhoto()
+    {
+        var athlete = Athlete.CreateAdult("Franco", "López", "franco@protraining.com", "1150000099");
+        Assert.False(athlete.HasPhoto);
+        Assert.Null(athlete.PhotoUpdatedAt);
+    }
 }

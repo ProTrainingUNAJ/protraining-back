@@ -125,5 +125,13 @@ public class UserPhotoTests
         mockPhotoRepo.Verify(r => r.DeleteAsync(existingPhoto, It.IsAny<CancellationToken>()), Times.Once);
         mockUnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public void NewUser_DefaultState_HasNoPreloadedPhoto()
+    {
+        var user = new User { Id = Guid.NewGuid(), UserName = "nuevo_pf@protraining.com" };
+        Assert.False(user.HasPhoto);
+        Assert.Null(user.PhotoUpdatedAt);
+    }
 }
 
