@@ -76,6 +76,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/athletes/{id}:
     get:
@@ -1825,6 +1827,14 @@ components:
       bearerFormat: JWT
 
   responses:
+    Conflict:
+      description: >
+        Ya existe un atleta del mismo PF con ese correo (sin distinguir mayúsculas ni espacios).
+        El título trae "Ya existe un usuario registrado con este correo electrónico."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     BadRequest:
       description: Solicitud con datos inválidos o formato erróneo.
       content:
