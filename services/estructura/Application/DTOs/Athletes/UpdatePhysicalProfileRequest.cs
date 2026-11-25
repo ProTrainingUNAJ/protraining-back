@@ -10,4 +10,5 @@ public sealed record UpdatePhysicalProfileRequest(
     decimal? WeightKg = null,
     string? AthleticGoal = null,
     DateOnly? BirthDate = null,
-    string? Gender = null);
+    string? Gender = null,
+    decimal? HeightCm = null);

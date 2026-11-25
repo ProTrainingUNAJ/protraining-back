@@ -49,7 +49,8 @@ public sealed record StructureCategoryAthleteDto(
 public sealed record StructureAthleteProfileDto(
     Guid Id,
     double? WeightKg,
-    string? AthleticGoal);
+    string? AthleticGoal,
+    double? HeightCm = null);
 
 /// <summary>
 /// Disponibilidad de la ficha médica para el flujo de recomendaciones.

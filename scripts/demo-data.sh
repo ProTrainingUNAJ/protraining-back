@@ -810,8 +810,13 @@ echo "  fases de Primera: Pretemporada (6 semanas) y Torneo Apertura (desde el $
 # si la ficha dice explícitamente que no hay condiciones; cualquier condición deriva a un profesional.
 echo "Perfil físico y ficha médica (alimentación):"
 physical_profile() {
-  api PATCH "/estructura/api/v1/athletes/$1/physical-profile" "$PF_TOKEN" \
-    "$(jq -nc --argjson w "$2" --arg g "$3" '{weightKg:$w,athleticGoal:$g}')" >/dev/null
+  if [ -n "$4" ]; then
+    api PATCH "/estructura/api/v1/athletes/$1/physical-profile" "$PF_TOKEN" \
+      "$(jq -nc --argjson w "$2" --argjson h "$3" --arg g "$4" '{weightKg:$w,heightCm:$h,athleticGoal:$g}')" >/dev/null
+  else
+    api PATCH "/estructura/api/v1/athletes/$1/physical-profile" "$PF_TOKEN" \
+      "$(jq -nc --argjson w "$2" --arg g "$3" '{weightKg:$w,athleticGoal:$g}')" >/dev/null
+  fi
 }
 medical_record() {  # medical_record <atleta> <antecedentes> <patologías>
   api PUT "/estructura/api/v1/athletes/$1/medical-record" "$PF_TOKEN" \
@@ -842,41 +847,41 @@ sign_consent florencia@protraining.com
 sign_consent paula@protraining.com
 sign_consent ignacio@protraining.com
 
-physical_profile "$MARTIN_ID" 78 "Ganar masa muscular"
+physical_profile "$MARTIN_ID" 78 180 "Ganar masa muscular"
 medical_record "$MARTIN_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$FACUNDO_ID" 82 "Rendimiento deportivo"
+physical_profile "$FACUNDO_ID" 82 184 "Rendimiento deportivo"
 medical_record "$FACUNDO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$JOAQUIN_ID" 70 "Ganar masa muscular"
+physical_profile "$JOAQUIN_ID" 70 172 "Ganar masa muscular"
 medical_record "$JOAQUIN_ID" "Sin alergias." "Asma leve, controlada con inhalador."
-physical_profile "$SANTINO_ID" 65 "Ganar masa muscular"
+physical_profile "$SANTINO_ID" 65 170 "Ganar masa muscular"
 medical_record "$SANTINO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 
 # Atletas adicionales con perfil físico y ficha médica para hábitos (KAN-664)
-physical_profile "$LUCAS_ID" 76 "Rendimiento deportivo"
+physical_profile "$LUCAS_ID" 76 178 "Rendimiento deportivo"
 medical_record "$LUCAS_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$RAMIRO_ID" 74 "Ganar masa muscular"
+physical_profile "$RAMIRO_ID" 74 175 "Ganar masa muscular"
 medical_record "$RAMIRO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$MATEO_ID" 80 "Rendimiento deportivo"
+physical_profile "$MATEO_ID" 80 182 "Rendimiento deportivo"
 medical_record "$MATEO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$DIEGO_ID" 83 "Mantener"
+physical_profile "$DIEGO_ID" 83 185 "Mantener"
 medical_record "$DIEGO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$BRUNO_ID" 85 "Ganar masa muscular"
+physical_profile "$BRUNO_ID" 85 181 "Ganar masa muscular"
 medical_record "$BRUNO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$SOFIA_ID" 62 "Rendimiento deportivo"
+physical_profile "$SOFIA_ID" 62 168 "Rendimiento deportivo"
 medical_record "$SOFIA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$LAUTARO_ID" 71 "Rendimiento deportivo"
+physical_profile "$LAUTARO_ID" 71 176 "Rendimiento deportivo"
 medical_record "$LAUTARO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$CAMILA_ID" 60 "Ganar masa muscular"
+physical_profile "$CAMILA_ID" 60 165 "Ganar masa muscular"
 medical_record "$CAMILA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$VALENTINA_ID" 58 "Rendimiento deportivo"
+physical_profile "$VALENTINA_ID" 58 167 "Rendimiento deportivo"
 medical_record "$VALENTINA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$FLORENCIA_ID" 64 "Mantener"
+physical_profile "$FLORENCIA_ID" 64 170 "Mantener"
 medical_record "$FLORENCIA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$PAULA_ID" 59 "Rendimiento deportivo"
+physical_profile "$PAULA_ID" 59 164 "Rendimiento deportivo"
 medical_record "$PAULA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-physical_profile "$IGNACIO_ID" 77 "Rendimiento deportivo"
+physical_profile "$IGNACIO_ID" 77 179 "Rendimiento deportivo"
 medical_record "$IGNACIO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-echo "  Perfil físico (peso/objetivo) y ficha médica cargados para todos los atletas del plantel"
+echo "  Perfil físico (peso/estatura/objetivo) y ficha médica cargados para todos los atletas del plantel"
 
 # WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
 # Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh

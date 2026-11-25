@@ -10,7 +10,8 @@ public sealed record UpdateAthletePhysicalProfileCommand(
     decimal? WeightKg,
     string? AthleticGoal,
     DateOnly? BirthDate = null,
-    string? Gender = null);
+    string? Gender = null,
+    decimal? HeightCm = null);
 
 /// <summary>
 /// Edición del perfil físico por el preparador físico. El tenant del PF se aplica
@@ -28,7 +29,7 @@ public sealed class UpdateAthletePhysicalProfileCommandHandler(
         if (athlete is null)
             throw new AthleteNotFoundException();
 
-        athlete.UpdatePhysicalProfile(command.WeightKg, command.AthleticGoal);
+        athlete.UpdatePhysicalProfile(command.WeightKg, command.HeightCm, command.AthleticGoal);
         if (command.BirthDate.HasValue || command.Gender is not null)
         {
             athlete.UpdatePersonalInfo(command.BirthDate, command.Gender);

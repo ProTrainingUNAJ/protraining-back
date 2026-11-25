@@ -38,6 +38,10 @@ public sealed class AthleteConfiguration : IEntityTypeConfiguration<Athlete>
             .HasColumnName("weight_kg")
             .HasPrecision(5, 2);
 
+        builder.Property(athlete => athlete.HeightCm)
+            .HasColumnName("height_cm")
+            .HasPrecision(5, 1);
+
         builder.Property(athlete => athlete.AthleticGoal)
             .HasColumnName("athletic_goal")
             .HasConversion<string>()

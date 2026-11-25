@@ -83,6 +83,11 @@ namespace Infrastructure.Data.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("has_photo");
 
+                    b.Property<decimal?>("HeightCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)")
+                        .HasColumnName("height_cm");
+
                     b.Property<bool>("IsMinor")
                         .HasColumnType("boolean")
                         .HasColumnName("is_minor");

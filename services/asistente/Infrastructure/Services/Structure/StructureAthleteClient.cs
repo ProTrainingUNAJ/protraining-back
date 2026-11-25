@@ -31,7 +31,8 @@ public sealed class StructureAthleteClient(
         [property: JsonPropertyName("categoryId")] Guid? CategoryId,
         [property: JsonPropertyName("categoryIds")] IReadOnlyList<Guid>? CategoryIds = null,
         [property: JsonPropertyName("weightKg")] double? WeightKg = null,
-        [property: JsonPropertyName("athleticGoal")] string? AthleticGoal = null);
+        [property: JsonPropertyName("athleticGoal")] string? AthleticGoal = null,
+        [property: JsonPropertyName("heightCm")] double? HeightCm = null);
 
     public async Task<bool> IsOwnAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default)
     {
@@ -307,7 +308,7 @@ public sealed class StructureAthleteClient(
 
             return athlete is null
                 ? null
-                : new StructureAthleteProfileDto(athlete.Id, athlete.WeightKg, athlete.AthleticGoal);
+                : new StructureAthleteProfileDto(athlete.Id, athlete.WeightKg, athlete.AthleticGoal, athlete.HeightCm);
         }
         catch (StructureServiceUnavailableException ex)
         {

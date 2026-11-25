@@ -37,7 +37,8 @@ public static class AthleteMappings
             Domain.Entities.AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
             athlete.PhysicalProfileUpdatedAt,
             athlete.BirthDate,
-            athlete.Gender);
+            athlete.Gender,
+            athlete.HeightCm);
 
     public static MedicalRecordDto ToMedicalRecordDto(Guid athleteId, MedicalRecord? record) =>
         record is null

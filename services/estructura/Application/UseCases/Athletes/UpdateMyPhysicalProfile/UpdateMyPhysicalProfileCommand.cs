@@ -9,14 +9,16 @@ public sealed record UpdateMyPhysicalProfileCommand(
     decimal? WeightKg,
     string? AthleticGoal,
     DateOnly? BirthDate = null,
-    string? Gender = null);
+    string? Gender = null,
+    decimal? HeightCm = null);
 
 public sealed record UpdateMyPhysicalProfileResponseDto(
     decimal? WeightKg,
     string AthleticGoal,
     DateTime? PhysicalProfileUpdatedAt,
     DateOnly? BirthDate = null,
-    string? Gender = null);
+    string? Gender = null,
+    decimal? HeightCm = null);
 
 /// <summary>
 /// Autoservicio del atleta autenticado: actualiza peso y objetivo desde el token, sin ids en la ruta.
@@ -36,7 +38,7 @@ public sealed class UpdateMyPhysicalProfileCommandHandler(
         if (athlete is null)
             throw new AthleteNotFoundException();
 
-        athlete.UpdatePhysicalProfile(command.WeightKg, command.AthleticGoal);
+        athlete.UpdatePhysicalProfile(command.WeightKg, command.HeightCm, command.AthleticGoal);
         if (command.BirthDate.HasValue || command.Gender is not null)
         {
             athlete.UpdatePersonalInfo(command.BirthDate, command.Gender);
@@ -48,6 +50,7 @@ public sealed class UpdateMyPhysicalProfileCommandHandler(
             AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
             athlete.PhysicalProfileUpdatedAt,
             athlete.BirthDate,
-            athlete.Gender);
+            athlete.Gender,
+            athlete.HeightCm);
     }
 }
