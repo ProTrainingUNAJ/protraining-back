@@ -443,6 +443,37 @@ load_recommendations() {
   done
 }
 
+# Hábitos ya aprobados para los atletas que se muestran en la demo (Lucas y Diego), así su Inicio
+# no queda vacío y se ve la tarjeta de calorías. La de Martín queda pendiente a propósito: Mile la
+# aprueba en vivo y después se ve en su celular. Si ya tienen una aprobada, no hace nada.
+load_approved_habits() {
+  echo "Hábitos aprobados (Inicio del atleta):"
+  local email athlete_id approved rec_id
+  approved=$(api GET "/asistente/api/v1/recommendations?status=Approved" "$PF_TOKEN" \
+    | jq -r '(if type == "array" then . else .items end) | [.[] | select(.type == "Habits") | .athleteId] | join(" ")')
+  for email in atleta@protraining.com diego@protraining.com; do
+    athlete_id=$(athlete_id_of "$email")
+    if [[ " $approved " == *" $athlete_id "* ]]; then
+      echo "  $email: ya tiene una aprobada"
+      continue
+    fi
+    # Devuelve la pendiente si ya existe o genera una nueva (IA o reglas, ~10 s)
+    rec_id=$(curl -sf -m 120 "$GATEWAY/asistente/api/v1/athletes/$athlete_id/habits-recommendation" \
+      -H "Authorization: Bearer $PF_TOKEN" | jq -r '.id // .recommendationId // empty')
+    if [[ -z "$rec_id" ]]; then
+      echo "  ⚠ no se pudo generar la de hábitos de $email (¿la IA no responde?)" >&2
+      continue
+    fi
+    # curl directo y no api(): si falla la aprobación, avisa y sigue con el resto del seed
+    if curl -sf -m 30 -X POST "$GATEWAY/asistente/api/v1/recommendations/$rec_id/approve" \
+      -H "Authorization: Bearer $PF_TOKEN" -H 'Content-Type: application/json' -d '{}' >/dev/null; then
+      echo "  $email: aprobada"
+    else
+      echo "  ⚠ no se pudo aprobar la de hábitos de $email" >&2
+    fi
+  done
+}
+
 # Resumen final: qué va a ver el PF en cada bloque de la demo. Si algo da 0, se ve antes de empezar.
 print_demo_summary() {
   local today categories traffic pending_alerts proposals sessions loads
@@ -459,6 +490,8 @@ print_demo_summary() {
   echo "  Propuestas de récord:       $proposals pendientes"
   echo "  Recomendaciones por aprobar: $(api GET "/asistente/api/v1/recommendations?status=Pending" "$PF_TOKEN" \
     | jq -r '(if type == "array" then . else .items end) | "\(length) (\([.[] | select(.type == "Habits")] | length) de hábitos)"')"
+  echo "  Hábitos aprobados:          $(api GET "/asistente/api/v1/recommendations?status=Approved" "$PF_TOKEN" \
+    | jq -r '(if type == "array" then . else .items end) | [.[] | select(.type == "Habits")] | length') (Lucas y Diego los ven en su Inicio)"
   loads=$(api GET "/seguimiento/api/v1/categories/$PRIMERA_ID/attendance-today" "$PF_TOKEN" \
     | jq -r '[.athletes[]? | select((.totalLoad // 0) > 0)] | sort_by(-.totalLoad) | "\(length) con carga · más alta: \(.[0].athleteName // "-") (\(.[0].totalLoad // 0) UA)"')
   echo "  Cargas de Primera:          $loads"
@@ -489,6 +522,7 @@ if [[ "$MODE" == "demo" ]]; then
   load_alerts
   load_daily_loads
   load_recommendations
+  load_approved_habits
   echo "Récords:"
   load_martin_proposal
   print_demo_summary
