@@ -881,15 +881,14 @@ physical_profile "$PAULA_ID" 59 164 "Rendimiento deportivo" "Femenino" "2002-09-
 medical_record "$PAULA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 physical_profile "$IGNACIO_ID" 77 179 "Rendimiento deportivo" "Masculino" "2001-08-27"
 medical_record "$IGNACIO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
+# Nicolás, Agustina y Thiago no tienen cuenta: no pueden firmar el consentimiento digital y,
+# sin él, Estructura rechaza la ficha médica (400) y el seed se corta. Solo llevan perfil físico.
 physical_profile "$NICOLAS_ID" 75 177 "Rendimiento deportivo" "Masculino" "2001-07-11"
-medical_record "$NICOLAS_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 physical_profile "$AGUSTINA_ID" 61 166 "Ganar masa muscular" "Femenino" "2002-04-16"
-medical_record "$AGUSTINA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 physical_profile "$THIAGO_ID" 73 174 "Ganar masa muscular" "Masculino" "2003-09-21"
-medical_record "$THIAGO_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
 physical_profile "$BAUTISTA_ID" 68 173 "Rendimiento deportivo" "Masculino" "2009-08-20"
 medical_record "$BAUTISTA_ID" "Sin alergias. Sin antecedentes." "Sin patologías."
-echo "  Perfil físico (peso/estatura/objetivo/sexo/nacimiento) y ficha médica cargados para todos los 20 atletas del plantel"
+echo "  Perfil físico (peso/estatura/objetivo/sexo/nacimiento) de los 20 atletas; ficha médica de los 17 con cuenta"
 
 # WhatsApp del PF (KAN-379/562): sin número, el atleta no ve el botón "Contactar a mi preparador".
 # Número ficticio; para que abra un WhatsApp real: DEMO_PF_PHONE=+549… ./scripts/demo-data.sh
