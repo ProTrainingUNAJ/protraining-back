@@ -19,12 +19,16 @@ public sealed class AthletePrivacyTests
         [
             "CheckInsController.Submit",
             "CheckInsController.List",
+            "CheckInsController.ListInjuries",
+            "CheckInsController.ListResolvedInjuries",
             "AthleteFitnessTestsController.List",
+            "AthleteFitnessTestsController.ListBestMarks",
             "DailyLoadsController.Register",
             "DailyLoadsController.Get",
             "DailyLoadsController.GetWeek",
             "GroupBenchmarkController.GetGroupBenchmark",
-            "AthleteEvolutionController.GetEvolution"
+            "AthleteEvolutionController.GetEvolution",
+            "TrendsController.GetAthleteTrends"
         ];
 
     [Fact]

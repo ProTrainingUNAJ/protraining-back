@@ -1,4 +1,4 @@
-﻿using Application.Interfaces.Services;
+using Application.Interfaces.Services;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Domain.Entities;
@@ -122,7 +122,7 @@ namespace Entrenamiento.Tests
                 // Los valores de la plantilla original DEBEN permanecer inalterados
                 Assert.True(originalTemplate.IsTemplate);
                 Assert.Equal(4, templateEx.Sets);
-                Assert.Equal(8, templateEx.Reps);
+                Assert.Equal("8", templateEx.Reps);
                 Assert.Equal(75.0m, templateEx.TargetPercentage);
                 // Verificamos que el plan clonado sí tenga los valores editados
                 var assignment = await assertContext.PlanAssignments.FindAsync(assignmentId);
@@ -134,7 +134,7 @@ namespace Entrenamiento.Tests
                 var modifiedEx = modifiedPlan.Weeks.First().Sessions.First().PrescribedExercises.First();
                 Assert.False(modifiedPlan.IsTemplate);
                 Assert.Equal(5, modifiedEx.Sets);
-                Assert.Equal(12, modifiedEx.Reps);
+                Assert.Equal("12", modifiedEx.Reps);
                 Assert.Equal(85.0m, modifiedEx.TargetPercentage);
             }
         }

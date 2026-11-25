@@ -42,11 +42,14 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(3)));
 
         services.AddScoped<IAthleteRepository, AthleteRepository>();
+        services.AddScoped<IAthletePhotoRepository, AthletePhotoRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IOrganizationPhotoRepository, OrganizationPhotoRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<ICategoryInvitationRepository, CategoryInvitationRepository>();
         services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
         services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+        services.AddScoped<IEstructuraPurgeRepository, EstructuraPurgeRepository>();
         services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
         services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
         services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();

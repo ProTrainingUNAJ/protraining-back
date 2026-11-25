@@ -1,13 +1,51 @@
-# Microservicio Asistente · Evaluación y Selección del Modelo de IA (Llama)
+# Microservicio Asistente · IA, Agente MCP y Progresión Semanal
 
-> **Tarea:** #079 (`KAN-374`) · **Épica:** E23 · Proveedores de IA: Ollama y Gemini  
-> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 1
+> **Servicio:** Asistente (`services/asistente`) · **Sprint:** 3 · **Arquitectura IA Oficial (KAN-600):**
+> 
+> La cadena oficial de IA es **Agente OpenAI (`gpt-4.1-mini` vía Azure Gateway) → Agente Gemini (OpenAI compat) → Reglas determinísticas locales**.
+> El agente resuelve la planificación ejecutando llamadas a herramientas (*tool calling*) contra el servidor MCP de Entrenamiento (`/entrenamiento/mcp`).
+> Ollama fue removido de la arquitectura activa y de `docker-compose.yml` siguiendo el feedback de la Demo 2 y la decisión de PM. Las mediciones históricas que se conservan abajo se mantienen como evidencia comparativa.
+
+## Decisión Sprint 3: caso de uso, proveedor y límites
+
+| Caso | Orden recomendado | Temperatura | Máximo de tokens | Tiempo recomendado |
+|---|---|---:|---:|---:|
+| Borrador de plan por bloques (1-2 semanas) | OpenAI mini → Gemini → reglas | 0,2 | 1.200 | 40 s por proveedor |
+| Ajuste del día / justificación | OpenAI mini → Gemini → reglas | 0,2 | 250 | 15 s por proveedor |
+| Recomendación de entrenamiento | OpenAI mini → Gemini → reglas | 0,3 | 500 | 20 s por proveedor |
+| Recomendación de alimentación | OpenAI mini → Gemini → reglas | 0,2 | 500 | 20 s por proveedor |
+
+### Justificación de hiperparámetros y presupuestos de tiempo
+
+* **Temperatura baja (0,2):** Aplicada en generación de borradores, ajustes y nutrición. Dado que estos casos requieren apego estricto a esquemas JSON forzados (Structured Outputs), índices del catálogo y reglas determinísticas, una temperatura baja previene alucinaciones y divergencias sintácticas.
+* **Temperatura moderada (0,3):** Aplicada en recomendaciones de entrenamiento para permitir variedad en la redacción pedagógica para el preparador físico sin apartarse de los números calculados por reglas.
+* **Presupuesto de tiempo:** El gateway YARP / Azure API Management tiene un límite máximo de 100 segundos y el frontend corta a los 120 segundos. La configuración de timeouts por proveedor (40 s en OpenAI + 40 s en Gemini = 80 s) garantiza que la cadena de fallback siempre active las reglas determinísticas antes de alcanzar el timeout del gateway, evitando errores 504 o 500 al preparador físico.
+
+### Directivas de optimización de prompts deportivos
+
+Para minimizar la necesidad de edición manual por parte del preparador físico, los prompts incorporan:
+1. **Especificidad muscular obligatoria:** Se analiza el objetivo deportivo (`ExtractMuscleGroups`) e instruye a la IA a concentrar los bloques en los grupos pertinentes (ej. en objetivos de tren superior se descartan sentadillas o dominantes de rodilla como fuerza principal).
+2. **Volúmenes e intensidades metodológicas:** Pautas claras por bloque funcional (`warmUp` sin %RM, `strengthA` multiarticular 3-5 series x 3-8 reps con 75-85%, `strengthB` complementario 3-4 series x 5-10 reps con 70-80%, y `accessories` analíticos 2-4 series x 8-15 reps).
+3. **Indicaciones de campo en notas:** Inclusión obligatoria de pausas recomendadas (2-3 min en básicos, 60-90 s en accesorios) y foco en la fase excéntrica.
+4. **Español rioplatense técnico:** Redacción sobria, concreta y sin frases genéricas de relleno.
+
+### Privacidad y herramientas
+
+- OpenAI y Gemini reciben únicamente el contexto anonimizado necesario: nunca nombre, email, teléfono,
+  texto libre de lesiones ni otros identificadores directos.
+- El agente debe consultar el catálogo mediante `BuscarEjercicios` y `ObtenerSustitutos`, con un máximo
+  de seis llamadas MCP por solicitud. La IA propone; los validadores y las reglas de dominio deciden.
+- La respuesta del borrador es JSON estructurado por bloques (`warmUp`, `strengthA`, `strengthB`,
+  `accessories`). C# traduce índices a GUIDs y calcula la progresión semanal, incluyendo descarga,
+  límites de intensidad y reglas D-1/D-2.
+- Las claves viven únicamente en el `.env` local (`OPENAI_API_KEY`, `GEMINI_API_KEY`); nunca deben
+  escribirse en el repositorio, Jira, Confluence o logs.
 
 ---
 
 ## 1. Contexto y Objetivos de la Evaluación
 
-El microservicio **Asistente** tiene como función generar borradores de planificaciones y sugerencias de entrenamiento para preparadores físicos. Para garantizar soberanía de datos, privacidad del atleta y funcionamiento sin conexión a internet ni costos por token en la nube, el sistema utiliza un modelo de lenguaje de código abierto ejecutado localmente mediante el contenedor de **Ollama**.
+El microservicio **Asistente** tiene como función generar borradores de planificaciones y sugerencias de entrenamiento para preparadores físicos. Para garantizar soberanía de datos, privacidad del atleta y funcionamiento sin conexión a internet ni costos por token en la nube, el sistema utilizaba un modelo de lenguaje de código abierto ejecutado localmente mediante el contenedor de **Ollama** *(sección histórica: Ollama ya no forma parte de la ejecución, ver el encabezado de este documento)*.
 
 ### Restricciones del Entorno del Proyecto
 1. **Máquinas de desarrollo del equipo:** Laptops y PCs de trabajo estándar con **8 GB a 16 GB de memoria RAM**, donde conviven en simultáneo los 5 microservicios .NET 8, las 5 bases PostgreSQL en Docker y el Gateway YARP. La mayoría no cuenta con GPU dedicada para inferencia.
@@ -220,53 +258,53 @@ Cada modelo fue sometido a solicitudes idénticas de planificación deportiva me
 
 ## 6. Configuración y Uso
 
-### Configuración por Defecto (Estándar del Equipo)
-En `.env` y `services/asistente/API/appsettings.json`, el modelo configurado es `llama3.2:1b`:
+### Configuración del Agente de IA (Estándar Sprint 3)
+En `.env` local y en `services/asistente/API/appsettings.json`, el agente se configura mediante la lista ordenada de proveedores:
 
 ```ini
-# .env
-OLLAMA_MODEL=llama3.2:1b
-OLLAMA_TIMEOUT_SECONDS=15
+# .env (local, nunca se commitea al repositorio)
+OPENAI_API_KEY=tu_clave_de_azure_openai_gateway
+OPENAI_BASE_URL=https://rs-ai-gateway-unaj.azure-api.net/unaj-llm/openai/deployments/gpt-4.1-mini/?api-version=2025-03-01-preview
+OPENAI_MODEL=gpt-4.1-mini
+
+GEMINI_API_KEY=tu_clave_de_google_aistudio
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-### Cómo levantarlo con Docker Compose
-Ollama se encuentra aislado bajo el perfil `ia` para no penalizar a quienes no trabajen con inteligencia artificial:
-
-```bash
-# Levantar el microservicio Asistente junto con Ollama y la descarga automática del modelo elegido
-docker compose --profile ia up -d asistente ollama ollama-model
-
-# Verificar que el modelo seleccionado esté cargado
-curl http://localhost:11434/api/tags
-```
-
-### Cambio a `llama3.2:3b` para desarrolladores con GPU dedicada
-Si tu equipo cuenta con GPU dedicada (NVIDIA RTX / Apple Silicon) y deseas utilizar `llama3.2:3b`:
-1. Modifica en tu `.env` local: `OLLAMA_MODEL=llama3.2:3b`.
-2. Reinicia el contenedor: `docker compose --profile ia up -d ollama-model`.
+### Protocolo de Invocación con MCP
+El agente opera en un bucle interactivo de toma de decisiones:
+1. Recibe el objetivo, semanas y días solicitados por el preparador físico.
+2. Consulta dinámicamente las herramientas del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerSustitutos`, `ObtenerRestricciones`).
+3. Respeta un tope máximo obligatorio de 6 llamadas a tools por solicitud.
+4. Genera el borrador en JSON estricto para las sesiones modelo de la semana 1.
+5. El motor determinístico en C# (`WeeklyProgressionEngine`) proyecta y calcula intensidades, descargas y semanas subsiguientes.
 
 ---
 
-## 7. Cadena Resiliente de Proveedores y Respaldo Determinístico (`#080 / KAN-375`)
+## 7. Cadena Resiliente de Proveedores y Respaldo Determinístico
 
 Para garantizar alta disponibilidad continua ante fallos locales o interrupciones de red, el microservicio implementa una conmutación jerárquica en `ResilientAiService`:
 
 ```mermaid
 graph TD
-    A["Petición de Rutina (POST /suggest-routine)"] --> B{"¿Hit en Caché SHA-256? (#073 / KAN-368)"}
+    A["Petición de Planificación / Rutina"] --> B{"¿Hit en Caché SHA-256? (#073 / KAN-368)"}
     B -- Sí --> C["Retornar respuesta desde memoria RAM (~1 ms)"]
-    B -- No --> D["Paso 1: Ollama (Modelo local Llama)"]
+    B -- No --> D["Paso 1: Agente OpenAI (gpt-4.1-mini vía Gateway UNAJ)"]
+    D -- "Tool Calls" --> MCP["MCP Entrenamiento (/entrenamiento/mcp)"]
+    MCP --> D
     D -- Éxito --> E["Validar Semántica y Guardar en Caché"]
-    D -- "Falla (HTTP 500, Timeout, Red caída)" --> F["Paso 2: Google Gemini (Nube)"]
+    D -- "Falla (Sin clave, 500, Timeout > 40s)" --> F["Paso 2: Agente Gemini (OpenAI compat)"]
+    F -- "Tool Calls" --> MCP
     F -- Éxito --> E
-    F -- "Falla (HTTP 500, Cuota 429, Timeout)" --> G["Paso 3: Motor de Reglas Determinísticas"]
+    F -- "Falla (Sin clave, 500, 429, Timeout > 40s)" --> G["Paso 3: Motor de Reglas Determinísticas"]
     G --> H["Retornar propuesta de respaldo (ProviderUsed: 'Reglas')"]
     E --> I["Retornar propuesta de IA al usuario"]
 ```
 
 ### Comportamiento ante Caídas
-1. **Ollama caído:** Si el contenedor de Ollama no responde, supera el tiempo límite configurado o devuelve error 500/JSON malformado, la solicitud conmuta automáticamente a **Google Gemini**.
-2. **Gemini caído / Cuota agotada:** Si la API de Google Gemini no está disponible o agota su cuota gratuita (HTTP 429), la solicitud degrada al **Motor Determinístico de Reglas**.
-3. **Ambos proveedores caídos:** El motor de reglas (`RuleBasedAiClient`) resuelve la solicitud en milisegundos con ejercicios anatómica y metodológicamente coherentes con el objetivo.
+1. **OpenAI caído o sin clave:** Si el gateway de OpenAI no responde, supera el tiempo límite configurado o carece de `OPENAI_API_KEY`, la solicitud conmuta automáticamente y sin error a **Agente Gemini**.
+2. **Gemini caído / Cuota agotada:** Si el endpoint de Gemini no está disponible o agota su cuota (HTTP 429), la solicitud degrada de inmediato al **Motor Determinístico de Reglas**.
+3. **Ambos proveedores de IA caídos:** El motor de reglas (`RuleBasedAiClient`) resuelve la solicitud en milisegundos con ejercicios anatómica y metodológicamente coherentes con el objetivo deportivo.
 4. **Propagación de cancelación:** Si el cliente cancela la petición HTTP (`CancellationToken`), la operación aborta inmediatamente con `OperationCanceledException` sin enmascararla como falla de proveedor.
 

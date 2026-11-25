@@ -9,6 +9,7 @@ using API.Services;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.DailyLoads.RegisterDailyLoad;
+using Application.UseCases.Dashboard.GetCategoryDashboardSummary;
 using Application.UseCases.Injuries.CreateAthleteInjury;
 using Application.UseCases.Injuries.ListAthleteInjuries;
 using Application.UseCases.Injuries.UpdateInjuryStatus;
@@ -25,6 +26,8 @@ using Application.UseCases.TrafficLight.GetCategoryTrafficLightToday;
 using Application.UseCases.Categories.GetCategoryAverages;
 using Application.UseCases.Benchmark;
 using Application.UseCases.Evolution.GetAthleteEvolution;
+using Application.UseCases.Trends.GetAthleteWeeklyTrends;
+using Application.UseCases.Trends.GetCategoryWeeklyTrends;
 using Application.Services;
 using Domain.Services;
 using Infrastructure.Data;
@@ -112,6 +115,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
 
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<ICheckInRepository, CheckInRepository>();
+                services.AddScoped<ICheckInInjuryPainRepository, CheckInInjuryPainRepository>();
                 services.AddScoped<IAthleteInjuryRepository, AthleteInjuryRepository>();
                 services.AddScoped<IDailyLoadRepository, DailyLoadRepository>();
                 services.AddScoped<IAttendanceRepository, AttendanceRepository>();
@@ -130,6 +134,7 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetCategoryTrafficLightTodayQueryHandler>();
                 services.AddScoped<GetCategoryAttendanceTodayQueryHandler>();
                 services.AddScoped<SetAttendanceCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 if (customTimeProvider != null)
                 {
@@ -147,8 +152,11 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 services.AddScoped<GetAthleteGroupBenchmarkQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.SubmitCheckIn.SubmitCheckInCommandHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.ListAthleteCheckIns.ListAthleteCheckInsQueryHandler>();
+                services.AddScoped<Application.UseCases.CheckIns.ListCheckInInjuries.ListCheckInInjuriesQueryHandler>();
+services.AddScoped<Application.UseCases.CheckIns.ListResolvedInjuries.ListResolvedInjuriesQueryHandler>();
                 services.AddScoped<Application.UseCases.CheckIns.GetTodayCheckIn.GetTodayCheckInQueryHandler>();
                 services.AddScoped<Application.UseCases.FitnessTests.ListAthleteFitnessTests.ListAthleteFitnessTestsQueryHandler>();
+                services.AddScoped<Application.UseCases.FitnessTests.ListAthleteBestMarks.ListAthleteBestMarksQueryHandler>();
                 services.AddScoped<ListFitnessTestsQueryHandler>();
 
                 // Lesiones de los atletas (KAN-419): mismos registros que en Program.cs.
@@ -176,6 +184,11 @@ public sealed class SeguimientoTestApplicationFactory : IAsyncDisposable, IDispo
                 // Carga del día (KAN-442): mismo registro que en Program.cs.
                 services.AddScoped<RegisterDailyLoadCommandHandler>();
                 services.AddScoped<GetAthleteEvolutionQueryHandler>();
+                services.AddScoped<GetAthleteWeeklyTrendsQueryHandler>();
+                services.AddScoped<GetCategoryWeeklyTrendsQueryHandler>();
+
+                // Dashboard consolidado por categoría (KAN-504): mismo registro que Program.cs.
+                services.AddScoped<GetCategoryDashboardSummaryQueryHandler>();
 
                 // Estructura por HTTP hacia el handler falso: misma cadena de producción
                 // (StructureClient + reenvío del token) y control total del comportamiento por test.

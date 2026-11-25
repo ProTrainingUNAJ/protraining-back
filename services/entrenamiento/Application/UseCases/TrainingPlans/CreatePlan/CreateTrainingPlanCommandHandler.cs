@@ -24,7 +24,9 @@ public class CreateTrainingPlanCommandHandler
         // Validar existencia de todos los exerciseIds
         var exerciseIds = request.Weeks?
             .SelectMany(w => w.Sessions ?? [])
-            .SelectMany(s => s.Exercises ?? [])
+            .SelectMany(s => (s.Blocks != null && s.Blocks.Count > 0
+                ? s.Blocks.SelectMany(b => b.Exercises ?? [])
+                : s.Exercises ?? []))
             .Select(e => e.ExerciseId)
             .Distinct()
             .ToList() ?? [];
@@ -57,20 +59,61 @@ public class CreateTrainingPlanCommandHandler
                             sessionReq.StartTime
                         );
 
-                        if (sessionReq.Exercises != null)
+                        if (sessionReq.Blocks != null && sessionReq.Blocks.Count > 0)
                         {
+                            foreach (var blockReq in sessionReq.Blocks)
+                            {
+                                var block = TrainingBlock.Create(session.Id, blockReq.Title, blockReq.Order);
+                                if (blockReq.Exercises != null)
+                                {
+                                    foreach (var exReq in blockReq.Exercises)
+                                    {
+                                        var intensityType = ParseIntensityType(exReq.IntensityType);
+                                        var exercise = PrescribedExercise.Create(
+                                            exReq.Order,
+                                            exReq.Sets,
+                                            exReq.Reps,
+                                            exReq.TargetPercentage,
+                                            block.Id,
+                                            exReq.ExerciseId,
+                                            intensityType,
+                                            exReq.TargetRpe,
+                                            exReq.TargetRir,
+                                            exReq.Notes,
+                                            session.Id,
+                                            exReq.TargetDistanceMeters,
+                                            exReq.TargetTimeSeconds
+                                        );
+                                        block.AddPrescribedExercise(exercise);
+                                    }
+                                }
+                                session.AddBlock(block);
+                            }
+                        }
+                        else if (sessionReq.Exercises != null && sessionReq.Exercises.Count > 0)
+                        {
+                            var defaultBlock = TrainingBlock.Create(session.Id, "Principal", 1);
                             foreach (var exReq in sessionReq.Exercises)
                             {
+                                var intensityType = ParseIntensityType(exReq.IntensityType);
                                 var exercise = PrescribedExercise.Create(
                                     exReq.Order,
                                     exReq.Sets,
                                     exReq.Reps,
                                     exReq.TargetPercentage,
+                                    defaultBlock.Id,
+                                    exReq.ExerciseId,
+                                    intensityType,
+                                    exReq.TargetRpe,
+                                    exReq.TargetRir,
+                                    exReq.Notes,
                                     session.Id,
-                                    exReq.ExerciseId
+                                    exReq.TargetDistanceMeters,
+                                    exReq.TargetTimeSeconds
                                 );
-                                session.AddPrescribedExercise(exercise);
+                                defaultBlock.AddPrescribedExercise(exercise);
                             }
+                            session.AddBlock(defaultBlock);
                         }
 
                         week.AddSession(session);
@@ -87,5 +130,19 @@ public class CreateTrainingPlanCommandHandler
         var exerciseNames = await _planRepository.GetExerciseNamesAsync(TrainingPlanMapper.GetExerciseIds(plan), cancellationToken);
 
         return TrainingPlanMapper.ToDetailDto(plan, exerciseNames);
+    }
+
+    private static IntensityType? ParseIntensityType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim().ToUpperInvariant();
+        if (Enum.TryParse<IntensityType>(normalized, true, out var result) && result != IntensityType.None)
+        {
+            return result;
+        }
+
+        throw new DomainException("La métrica de intensidad debe ser 'RPE' o 'RIR'.");
     }
 }

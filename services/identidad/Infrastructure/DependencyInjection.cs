@@ -5,6 +5,7 @@ using Application.UseCases.Auth.ResetPasswordWithToken;
 using Domain.Entities;
 using Infrastructure.Data;
 using Infrastructure.Options;
+using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -84,6 +85,8 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IUserPhotoRepository, UserPhotoRepository>();
+        services.AddScoped<IIdentidadPurgeRepository, IdentidadPurgeRepository>();
 
         return services;
     }

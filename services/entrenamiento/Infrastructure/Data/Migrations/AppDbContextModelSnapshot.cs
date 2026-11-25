@@ -107,6 +107,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("items");
 
+                    b.Property<int?>("LoadReductionPercentage")
+                        .HasColumnType("integer")
+                        .HasColumnName("load_reduction_percentage");
+
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -115,6 +119,19 @@ namespace Infrastructure.Data.Migrations
                     b.Property<Guid>("PfId")
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Approved")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TrainingPlanId")
                         .HasColumnType("uuid")
@@ -136,9 +153,72 @@ namespace Infrastructure.Data.Migrations
                         .HasDatabaseName("IX_athlete_session_adjustments_plan_athlete");
 
                     b.HasIndex("TrainingSessionId", "AthleteId", "Date")
-                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date");
+                        .IsUnique()
+                        .HasDatabaseName("IX_athlete_session_adjustments_session_athlete_date")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("athlete_session_adjustments", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.AthleteVariant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AthleteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("athlete_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_approved");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OriginalExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_exercise_id");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<Guid>("SubstituteExerciseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("substitute_exercise_id");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("AthleteId", "OriginalExerciseId", "IsApproved", "IsActive")
+                        .HasDatabaseName("IX_athlete_variants_athlete_original_status");
+
+                    b.ToTable("athlete_variants", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Exercise", b =>
@@ -474,6 +554,16 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("exercise_id");
 
+                    b.Property<string>("IntensityType")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("intensity_type");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
                     b.Property<int>("Order")
                         .HasColumnType("integer")
                         .HasColumnName("order_index");
@@ -482,8 +572,10 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pf_id");
 
-                    b.Property<int>("Reps")
-                        .HasColumnType("integer")
+                    b.Property<string>("Reps")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("reps");
 
                     b.Property<int>("Sets")
@@ -499,12 +591,25 @@ namespace Infrastructure.Data.Migrations
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("target_percentage");
 
+                    b.Property<int?>("TargetRir")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_rir");
+
+                    b.Property<decimal?>("TargetRpe")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("target_rpe");
+
                     b.Property<decimal?>("TargetTimeSeconds")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
                         .HasColumnName("target_time_seconds");
 
-                    b.Property<Guid>("TrainingSessionId")
+                    b.Property<Guid>("TrainingBlockId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_block_id");
+
+                    b.Property<Guid?>("TrainingSessionId")
                         .HasColumnType("uuid")
                         .HasColumnName("training_session_id");
 
@@ -515,6 +620,10 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("PfId");
 
                     b.HasIndex("TrainingSessionId");
+
+                    b.HasIndex("TrainingBlockId", "Order")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("prescribed_exercises", (string)null);
                 });
@@ -532,6 +641,10 @@ namespace Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CurrentRecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_record_id");
 
                     b.Property<decimal>("CurrentWeight")
                         .HasPrecision(6, 2)
@@ -579,6 +692,49 @@ namespace Infrastructure.Data.Migrations
                     b.HasIndex("AthleteId", "ExerciseId", "Status");
 
                     b.ToTable("record_proposals", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid>("PfId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pf_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PfId");
+
+                    b.HasIndex("TrainingSessionId", "Order")
+                        .IsUnique()
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("training_blocks", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
@@ -803,13 +959,20 @@ namespace Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Domain.Entities.TrainingSession", "TrainingSession")
+                    b.HasOne("Domain.Entities.TrainingBlock", "TrainingBlock")
                         .WithMany("PrescribedExercises")
-                        .HasForeignKey("TrainingSessionId")
+                        .HasForeignKey("TrainingBlockId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Domain.Entities.TrainingSession", "TrainingSession")
+                        .WithMany("PrescribedExercises")
+                        .HasForeignKey("TrainingSessionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("Exercise");
+
+                    b.Navigation("TrainingBlock");
 
                     b.Navigation("TrainingSession");
                 });
@@ -823,6 +986,17 @@ namespace Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Exercise");
+                });
+
+            modelBuilder.Entity("Domain.Entities.TrainingBlock", b =>
+                {
+                    b.HasOne("Domain.Entities.TrainingSession", "TrainingSession")
+                        .WithMany("Blocks")
+                        .HasForeignKey("TrainingSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainingSession");
                 });
 
             modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
@@ -852,6 +1026,11 @@ namespace Infrastructure.Data.Migrations
                     b.Navigation("Substitutes");
                 });
 
+            modelBuilder.Entity("Domain.Entities.TrainingBlock", b =>
+                {
+                    b.Navigation("PrescribedExercises");
+                });
+
             modelBuilder.Entity("Domain.Entities.TrainingPlan", b =>
                 {
                     b.Navigation("Assignments");
@@ -861,6 +1040,8 @@ namespace Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Domain.Entities.TrainingSession", b =>
                 {
+                    b.Navigation("Blocks");
+
                     b.Navigation("PrescribedExercises");
                 });
 

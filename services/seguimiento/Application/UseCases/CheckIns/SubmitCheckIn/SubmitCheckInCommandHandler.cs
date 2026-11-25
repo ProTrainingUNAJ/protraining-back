@@ -8,20 +8,27 @@ using Domain.Services;
 
 namespace Application.UseCases.CheckIns.SubmitCheckIn;
 
-// Respuesta del caso de uso: el wrapper CheckInResponse del contrato + si se creó el registro del día.
 public sealed record SubmitCheckInResult(CheckInResponseDto Response, bool Created);
 
-// Registra el check-in del día (upsert por atleta y fecha, estructura base de KAN-329) y calcula
-// el semáforo con el motor puro del Dominio: toda la evaluación usa solo datos locales de esta
-// base, sin llamadas a otros servicios aunque el Asistente esté caído (KAN-364).
 public sealed class SubmitCheckInCommandHandler(
     ICheckInRepository repository,
+    ICheckInInjuryPainRepository injuryPainRepository,
+    IAthleteInjuryRepository injuryRepository,
     IUnitOfWork unitOfWork,
     TrafficLightEngine trafficLightEngine)
 {
     public async Task<SubmitCheckInResult> HandleAsync(SubmitCheckInCommand command, CancellationToken cancellationToken = default)
     {
         Validate(command);
+
+        var activeInjuries = await injuryRepository.ListNotClearedByAthleteAsync(command.AthleteId, cancellationToken);
+
+        var pains = ValidateInjuryPains(command.Injuries, activeInjuries);
+
+        // las zonas clínicas activas también son zonas con dolor del día. Se reutiliza
+        // el formato "zona:nivel" que ya consumen el motor y Entrenamiento, y el marcador 6
+        // ("Lesión") de la escala del check-in. No se convierte el 0-10 clínico a la escala 1-5.
+        var painZones = BuildPainZones(command.PainZones, activeInjuries);
 
         // Normalización de sueño (KAN-560): el front ofrece hasta 12 h y "Más de 12";
         // cualquier valor > 12 se guarda como 13 (marca de "más de 12"). De 0 a 12 se guarda tal cual.
@@ -41,6 +48,17 @@ public sealed class SubmitCheckInCommandHandler(
 
         var created = checkIn is null;
 
+        // KAN-644 / KAN-590: si el atleta tiene lesiones clínicas registradas (Active o InRecovery),
+        // el front envía hasActiveInjury=true siempre que activeInjuries.length > 0.
+        // Por eso HasActiveInjury es true si:
+        // 1) hay al menos una lesión en estado Active en la ficha, O
+        // 2) el atleta pintó con nivel 6 ("Lesión") en command.PainZones una zona que NO pertenece a sus lesiones registradas, O
+        // 3) no tiene lesiones registradas en la ficha y envió command.HasActiveInjury=true.
+        var hasUnregisteredInjuryZone = HasUnregisteredInjuryZone(command.PainZones, activeInjuries);
+        var hasStrictlyActiveInjury = activeInjuries.Count > 0
+            ? activeInjuries.Any(i => i.Status == InjuryStatus.Active) || hasUnregisteredInjuryZone
+            : command.HasActiveInjury || hasUnregisteredInjuryZone;
+
         if (created)
         {
             checkIn = new CheckIn
@@ -55,8 +73,8 @@ public sealed class SubmitCheckInCommandHandler(
                 StressLevel = command.StressLevel,
                 IsSick = command.IsSick,
                 EffortRate = command.EffortRate,
-                PainZones = command.PainZones?.Trim(),
-                HasActiveInjury = command.HasActiveInjury
+                PainZones = painZones,
+                HasActiveInjury = hasStrictlyActiveInjury
             };
 
             await repository.AddAsync(checkIn, cancellationToken);
@@ -71,9 +89,11 @@ public sealed class SubmitCheckInCommandHandler(
             checkIn.StressLevel = command.StressLevel;
             checkIn.IsSick = command.IsSick;
             checkIn.EffortRate = command.EffortRate;
-            checkIn.PainZones = command.PainZones?.Trim();
-            checkIn.HasActiveInjury = command.HasActiveInjury;
+            checkIn.PainZones = painZones;
+            checkIn.HasActiveInjury = hasStrictlyActiveInjury;
         }
+
+        await injuryPainRepository.SetForCheckInAsync(checkIn.Id, pains, cancellationToken);
 
         // Ventana de 7 días de sueño (KAN-560): anclada a la fecha del check-in (no a "hoy"),
         // para que también funcione con sincronizaciones offline con fechas pasadas. Los días
@@ -89,8 +109,75 @@ public sealed class SubmitCheckInCommandHandler(
             .ToList();
         sleepWindow.Add(new SleepWindowEntry { SleepHours = checkIn.SleepHours, IsSick = checkIn.IsSick });
 
+        // Lesiones "En recuperación" (InRecovery, KAN-644 / KAN-590): se pasa al motor el dolor máximo
+        // de hoy (de injury_pains) y el del check-in anterior para evaluar si está en 0–5 o si empeoró.
+        int? recoveryMaxPainToday = null;
+        int? recoveryPreviousPain = null;
+        var recoveryInjuryIds = activeInjuries
+            .Where(i => i.Status == InjuryStatus.InRecovery)
+            .Select(i => i.Id)
+            .ToHashSet();
+
+        if (recoveryInjuryIds.Count > 0)
+        {
+            var todayRecoveryPains = pains
+                .Where(p => recoveryInjuryIds.Contains(p.InjuryId))
+                .Select(p => p.Level)
+                .ToList();
+
+            if (todayRecoveryPains.Count > 0)
+                recoveryMaxPainToday = todayRecoveryPains.Max();
+
+            var lastPreviousCheckIn = previousCheckIns
+                .OrderByDescending(c => c.Date)
+                .FirstOrDefault();
+
+            // Si el atleta no entrenó en los últimos 6 días (fuera de la ventana de sueño),
+            // buscamos su último check-in anterior en el historial para comparar el dolor.
+            if (lastPreviousCheckIn is null)
+            {
+                var olderCheckIns = await repository.GetByAthleteAndDateRangeAsync(
+                    command.AthleteId, startDate: null, endDate: date.AddDays(-1), limit: 1, cancellationToken);
+                lastPreviousCheckIn = olderCheckIns.LastOrDefault();
+            }
+
+            if (lastPreviousCheckIn is not null)
+            {
+                var previousPainsByCheckIn = await injuryPainRepository.ListByCheckInIdsAsync(
+                    [lastPreviousCheckIn.Id], cancellationToken);
+
+                if (previousPainsByCheckIn.TryGetValue(lastPreviousCheckIn.Id, out var prevPainList))
+                {
+                    var prevByInjury = prevPainList.ToDictionary(p => p.InjuryId, p => p.Level);
+                    var prevRecoveryLevels = new List<int>();
+
+                    // Si alguna lesión en recuperación subió de dolor respecto a su propio valor anterior,
+                    // forzamos que recoveryPreviousPain refleje ese empeoramiento individual además del máximo.
+                    foreach (var (injuryId, todayLevel) in pains)
+                    {
+                        if (!recoveryInjuryIds.Contains(injuryId))
+                            continue;
+
+                        if (prevByInjury.TryGetValue(injuryId, out var prevLevel))
+                        {
+                            prevRecoveryLevels.Add(prevLevel);
+                            if (todayLevel > prevLevel && recoveryMaxPainToday.HasValue)
+                            {
+                                // Garantiza que recoveryMaxPainToday > recoveryPreviousPain cuando una lesión individual empeoró.
+                                recoveryPreviousPain = Math.Min(recoveryPreviousPain ?? prevLevel, recoveryMaxPainToday.Value - 1);
+                            }
+                        }
+                    }
+
+                    if (!recoveryPreviousPain.HasValue && prevRecoveryLevels.Count > 0)
+                        recoveryPreviousPain = prevRecoveryLevels.Max();
+                }
+            }
+        }
+
         // Semáforo: motor puro con los datos recién cargados, sin ninguna llamada externa.
-        // has_active_injury o muy poco sueño (< 4 h) obligan Rojo; el resto de señales → Amarillo.
+        // has_active_injury, lesión en recuperación con más dolor o muy poco sueño (< 4 h) obligan Rojo;
+        // el resto de señales → Amarillo.
         var evaluation = trafficLightEngine.Evaluate(
             new CheckInData
             {
@@ -98,7 +185,10 @@ public sealed class SubmitCheckInCommandHandler(
                 IsSick = checkIn.IsSick,
                 EffortRate = checkIn.EffortRate,
                 PainZones = checkIn.PainZones,
-                HasActiveInjury = checkIn.HasActiveInjury
+                HasActiveInjury = checkIn.HasActiveInjury,
+                RecoveryInjuryMaxPainToday = recoveryMaxPainToday,
+                RecoveryInjuryPreviousPain = recoveryPreviousPain,
+                RegisteredInjuryZones = activeInjuries.Select(i => i.Zone.Trim()).ToList()
             },
             new ContextData { SleepWindow = sleepWindow });
 
@@ -107,20 +197,151 @@ public sealed class SubmitCheckInCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var responsePains = pains
+            .Select(p => new CheckInInjuryPainDto(p.InjuryId, activeInjuries.First(i => i.Id == p.InjuryId).Zone, p.Level))
+            .ToList();
+
         var response = new CheckInResponseDto(
             "Check-in completado exitosamente.",
             evaluation.TriggeredLight.ToString(),
             evaluation.Reason,
-            CheckInMappings.ToDto(checkIn));
+            CheckInMappings.ToDto(checkIn, responsePains));
 
         return new SubmitCheckInResult(response, created);
     }
 
-    // Normalización de sueño (KAN-560): constantes nombradas para validarlas con el PF.
+    // Marcador "Lesión" de la escala del check-in (PAIN_LEVELS del front y parsePainZones del PF).
+    private const string ClinicalInjuryPainLevel = "6";
+
+    // Detecta si en command.PainZones hay alguna zona pintada con nivel 6 ("Lesión") que NO corresponda
+    // a una lesión ya registrada en la ficha del atleta (ej. tiene rodilla en recuperación y hoy se lesiona el hombro).
+    private static bool HasUnregisteredInjuryZone(string? provided, IReadOnlyList<AthleteInjury> activeInjuries)
+    {
+        if (string.IsNullOrWhiteSpace(provided))
+            return false;
+
+        var registeredZones = activeInjuries
+            .Select(i => i.Zone.Trim())
+            .Where(z => z.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in provided.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (entry is "[]" or "{}")
+                continue;
+
+            var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && parts[0].Length > 0 && parts[1] == ClinicalInjuryPainLevel)
+            {
+                if (!registeredZones.Contains(parts[0]))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    // una sola representación de las zonas con dolor. Parte de lo que marcó el atleta
+    // en la silueta y agrega las zonas de las lesiones clínicas activas, sin duplicarlas.
+    // Si una zona aparece en ambas fuentes, prevalece el marcador clínico: es un dato de la
+    // ficha médica, no un puntaje nuevo. El dolor 0-10 sigue viviendo en check_in_injury_pains.
+    private static string? BuildPainZones(string? provided, IReadOnlyList<AthleteInjury> activeInjuries)
+    {
+        var tokens = new List<string>();
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        void AddClinical(string zone)
+        {
+            var normalized = zone.Trim();
+            if (normalized.Length == 0) return;
+
+            if (positions.TryGetValue(normalized, out var position))
+            {
+                tokens[position] = $"{normalized}:{ClinicalInjuryPainLevel}";
+                return;
+            }
+
+            positions[normalized] = tokens.Count;
+            tokens.Add($"{normalized}:{ClinicalInjuryPainLevel}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(provided))
+        {
+            foreach (var entry in provided.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // "[]" y "{}" son listas vacías serializadas: el motor ya las ignora.
+                if (entry is "[]" or "{}") continue;
+
+                var parts = entry.Split(':', StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && parts[0].Length > 0)
+                {
+                    var zone = parts[0];
+                    if (positions.ContainsKey(zone)) continue;
+                    positions[zone] = tokens.Count;
+                    tokens.Add($"{zone}:{parts[1]}");
+                }
+                else
+                {
+                    // Conserva texto libre heredado del contrato que no siga el formato zona:nivel.
+                    tokens.Add(entry);
+                }
+            }
+        }
+
+        foreach (var injury in activeInjuries)
+            AddClinical(injury.Zone);
+
+        return tokens.Count == 0 ? null : string.Join(',', tokens);
+    }
+
+    private static IReadOnlyList<(Guid InjuryId, int Level)> ValidateInjuryPains(
+        IReadOnlyList<SubmitInjuryPain>? provided,
+        IReadOnlyList<AthleteInjury> activeInjuries)
+    {
+        var providedList = provided ?? Array.Empty<SubmitInjuryPain>();
+
+        // Sin molestias activas: no se acepta ningún puntaje (no hay nada que puntuar).
+        if (activeInjuries.Count == 0)
+        {
+            if (providedList.Count > 0)
+                throw new DomainException("El atleta no tiene molestias activas para puntuar.");
+            return Array.Empty<(Guid, int)>();
+        }
+
+        // Cada molestia activa debe tener exactamente un puntaje.
+        var byInjury = new Dictionary<Guid, int>();
+        foreach (var item in providedList)
+        {
+            if (item.InjuryId == Guid.Empty)
+                throw new DomainException("El identificador de la molestia es inválido.");
+
+            if (!activeInjuries.Any(i => i.Id == item.InjuryId))
+                throw new DomainException("La molestia indicada no pertenece al atleta.");
+
+            if (item.Level is null)
+                throw new DomainException("Falta puntuar el dolor de la molestia.");
+
+            if (item.Level is < 0 or > 10)
+                throw new DomainException("El dolor de cada molestia debe estar entre 0 y 10.");
+
+            if (byInjury.ContainsKey(item.InjuryId))
+                throw new DomainException("Hay molestias repetidas en el check-in.");
+
+            byInjury[item.InjuryId] = item.Level.Value;
+        }
+
+        foreach (var injury in activeInjuries)
+        {
+            if (!byInjury.ContainsKey(injury.Id))
+                throw new DomainException($"Falta puntuar el dolor de la molestia en {injury.Zone}.");
+        }
+
+        return byInjury.Select(kvp => (kvp.Key, kvp.Value)).ToList();
+    }
+
     private const double MaxSelectableSleepHours = 12.0;
     private const double OverLimitSleepHours = 13.0;
 
-    // Validación de rangos según el contrato: DomainException → 400 con ProblemDetails (ExceptionMiddleware).
     private static void Validate(SubmitCheckInCommand command)
     {
         if (command.AthleteId == Guid.Empty)

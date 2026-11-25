@@ -30,6 +30,8 @@ tags:
     description: Monitoreo de disponibilidad del servicio y base de datos
   - name: PushSubscriptions
     description: Gestión de suscripciones Web Push y claves públicas VAPID para notificaciones del navegador
+  - name: Internal
+    description: Endpoints internos entre microservicios (rol Servicio). Bloqueados en el gateway; no accesibles desde el frontend
 
 paths:
   /api/v1/athletes:
@@ -74,6 +76,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/athletes/{id}:
     get:
@@ -149,6 +153,82 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/athletes/{id}/photo:
+    put:
+      tags:
+        - Athletes
+      summary: Cargar o actualizar foto de perfil del atleta
+      description: Sube una foto en formato WebP (máx. 200 KB) para el atleta. Para menores, requiere autorización en el consentimiento digital.
+      operationId: uploadAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Archivo de imagen en formato WebP.
+              required:
+                - photo
+      responses:
+        "204":
+          description: Foto actualizada correctamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags:
+        - Athletes
+      summary: Obtener foto de perfil del atleta
+      description: Retorna la imagen WebP de perfil del atleta con encabezados de caché del navegador.
+      operationId: getAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Athletes
+      summary: Eliminar foto de perfil del atleta
+      description: Elimina la foto de perfil del atleta.
+      operationId: deleteAthletePhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Foto eliminada correctamente.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/athletes/{id}/habits-permission:
     patch:
       tags:
@@ -172,6 +252,42 @@ paths:
       responses:
         "200":
           description: Permiso actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/athletes/{id}/physical-profile:
+    patch:
+      tags:
+        - Athletes
+      summary: Actualizar peso corporal y objetivo deportivo del atleta
+      description: >-
+        Fuente canónica de peso corporal y objetivo deportivo para recomendaciones de hábitos (KAN-494).
+        Solo PreparadorFisico. `weightKg: null` significa "sin dato" (nunca se inventa un valor);
+        `athleticGoal` acepta solo el vocabulario cerrado documentado. No es información médica:
+        no requiere justificación ni se registra en la auditoría de la ficha médica.
+      operationId: updateAthletePhysicalProfile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhysicalProfileRequest'
+      responses:
+        "200":
+          description: Perfil físico actualizado.
           content:
             application/json:
               schema:
@@ -537,6 +653,76 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/me/telegram:
+    put:
+      tags:
+        - Me
+      summary: Actualizar usuario de Telegram del atleta logueado
+      description: >-
+        Solo para el rol Atleta. Actualiza exclusivamente el usuario de Telegram del atleta asociado al sub del JWT.
+      operationId: updateMyTelegram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMyTelegramRequest'
+      responses:
+        "200":
+          description: Usuario de Telegram actualizado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMyTelegramResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/me/physical-profile:
+    patch:
+      tags:
+        - Me
+      summary: Actualizar mi peso corporal y objetivo deportivo
+      description: >-
+        Autoservicio del atleta (KAN-494). Actualiza el perfil físico del atleta vinculado al token,
+        sin recibir ids en la ruta. Acepta el mismo vocabulario cerrado que el endpoint del PF.
+        `weightKg: null` significa "sin dato"; nunca se calcula un peso por defecto.
+      operationId: updateMyPhysicalProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhysicalProfileRequest'
+      responses:
+        "200":
+          description: Perfil físico actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMyPhysicalProfileResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: El token no es de un atleta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/organizations:
     get:
       tags:
@@ -654,6 +840,82 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/organizations/{id}/photo:
+    put:
+      tags:
+        - Organizations
+      summary: Cargar o actualizar logo de la organización
+      description: Sube una foto o logo en formato WebP (máx. 200 KB) para la organización.
+      operationId: uploadOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Archivo de imagen en formato WebP.
+              required:
+                - photo
+      responses:
+        "204":
+          description: Logo actualizado correctamente.
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags:
+        - Organizations
+      summary: Obtener logo de la organización
+      description: Retorna la imagen WebP del logo de la organización con encabezados de caché del navegador.
+      operationId: getOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Imagen en formato WebP.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Organizations
+      summary: Eliminar logo de la organización
+      description: Elimina el logo de la organización.
+      operationId: deleteOrganizationPhoto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Logo eliminado correctamente.
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/categories:
     get:
       tags:
@@ -664,11 +926,11 @@ paths:
       parameters:
         - name: organizationId
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: uuid
-          description: Identificador de la organización para filtrar.
+          description: Identificador opcional de la organización para filtrar. Si no se especifica, lista todas las categorías del preparador físico.
       responses:
         "200":
           description: Lista de categorías obtenida.
@@ -1440,6 +1702,123 @@ paths:
         "401":
           $ref: '#/components/responses/Unauthorized'
 
+  # Endpoints internos entre microservicios (KAN-581): requieren JWT con rol Servicio y están
+  # bloqueados en el Gateway (PerimeterSecurityMiddleware). Nota sobre SDK del frontend:
+  # @hey-api/openapi-ts en protraining-front procesa los YAML completos sin filtro de exclusión
+  # (igual que con /api/v1/internal/... de identidad.yaml, entrenamiento.yaml y seguimiento.yaml);
+  # estos endpoints quedan agrupados bajo el tag Internal, no se importan en el cliente público y
+  # cualquier llamada desde el navegador es rechazada por el Gateway.
+  /api/v1/internal/athletes:
+    get:
+      tags:
+        - Internal
+      summary: Listar atletas activos con su PF y categorías (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el worker de recordatorios y el
+        microservicio de Asistente (KAN-472) para obtener los atletas activos junto con su PF y
+        categorías asignadas. Está bloqueado en el gateway y no es invocable desde el frontend.
+      operationId: listActiveAthletesInternal
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista de atletas activos obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InternalAthleteSummaryDto'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/internal/categories/{categoryId}/events:
+    get:
+      tags:
+        - Internal
+      summary: Listar partidos de una categoría en un rango de fechas (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el microservicio de Asistente para el
+        borrador con IA y el worker de análisis de sobrecarga precompetitiva (KAN-473). Está
+        bloqueado en el gateway y no es invocable desde el frontend.
+      operationId: listCategoryEventsInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          description: Identificador único de la categoría deportiva.
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          description: Fecha inicial del rango a consultar (formato YYYY-MM-DD, inclusive).
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+        - name: to
+          in: query
+          required: false
+          description: Fecha final del rango a consultar (formato YYYY-MM-DD, inclusive).
+          schema:
+            type: string
+            format: date
+            example: "2026-11-30"
+      responses:
+        "200":
+          description: Lista de partidos de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompetitiveEvent'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/internal/categories/{categoryId}/athletes:
+    get:
+      tags:
+        - Internal
+      summary: Listar id y nombre de los atletas de una categoría (uso interno)
+      description: >
+        Endpoint interno inter-servicio (rol Servicio). Lo usa el microservicio de Seguimiento para
+        la comparación del atleta con su grupo (KAN-578), devolviendo únicamente identificador y
+        nombre completo sin datos de contacto ni médicos. Está bloqueado en el gateway y no es
+        invocable desde el frontend.
+      operationId: listCategoryAthletesInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          description: Identificador único de la categoría deportiva.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista resumida de atletas de la categoría obtenida exitosamente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InternalCategoryAthleteDto'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1448,6 +1827,14 @@ components:
       bearerFormat: JWT
 
   responses:
+    Conflict:
+      description: >
+        Ya existe un atleta del mismo PF con ese correo (sin distinguir mayúsculas ni espacios).
+        El título trae "Ya existe un usuario registrado con este correo electrónico."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
     BadRequest:
       description: Solicitud con datos inválidos o formato erróneo.
       content:
@@ -1644,6 +2031,35 @@ components:
         phone:
           type: string
           example: "+54 11 5555-1234"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (sin @, entre 5 y 32 caracteres).
+          example: "lucas_fernandez"
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            Peso corporal canónico en kilogramos (KAN-494). null = sin dato; nunca se infiere de
+            1RM, carga de entrenamiento ni objetivos de plan.
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          description: Objetivo deportivo canónico del atleta (vocabulario cerrado, KAN-494).
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Última actualización de peso/objetivo.
         isMinor:
           type: boolean
           example: false
@@ -1700,6 +2116,11 @@ components:
         phone:
           type: string
           example: "+54 11 5555-1234"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (sin @, entre 5 y 32 caracteres).
+          example: "lucas_fernandez"
         isMinor:
           type: boolean
           example: false
@@ -1736,6 +2157,11 @@ components:
         emergencyContact:
           type: string
           example: "Padre: +54 11 2222-3333"
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Username de Telegram del atleta (opcional, enviar cadena vacía para limpiar).
+          example: "lucas_fernandez"
 
     MedicalRecord:
       type: object
@@ -1906,6 +2332,19 @@ components:
           type: string
           nullable: true
           example: "Sede central de entrenamiento deportivo"
+        categoriesCount:
+          type: integer
+          example: 3
+        athletesCount:
+          type: integer
+          example: 25
+        hasPhoto:
+          type: boolean
+          example: false
+        photoUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     CreateOrganizationRequest:
       type: object
@@ -1974,6 +2413,90 @@ components:
           type: boolean
           description: Indica si el atleta es menor de edad.
           example: false
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          description: Peso corporal canónico del atleta (KAN-494). null = sin dato.
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          description: Objetivo deportivo canónico del atleta (vocabulario cerrado, KAN-494).
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Última actualización de peso/objetivo.
+
+    UpdatePhysicalProfileRequest:
+      type: object
+      description: >-
+        Perfil físico del atleta (KAN-494). `weightKg: null` borra el dato; no se calcula un peso por defecto.
+        `athleticGoal` sólo acepta el vocabulario cerrado; null/vacío se normaliza a "Objetivo no informado".
+      properties:
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          maximum: 400
+          example: 70
+        athleticGoal:
+          type: string
+          nullable: true
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+            - ""
+          description: Objetivo deportivo; vacío/null = "Objetivo no informado".
+          example: "Ganar masa muscular"
+
+    UpdateMyPhysicalProfileResponse:
+      type: object
+      properties:
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          example: 70
+        athleticGoal:
+          type: string
+          enum:
+            - Ganar masa muscular
+            - Mantener
+            - Rendimiento deportivo
+            - Objetivo no informado
+          example: "Ganar masa muscular"
+        physicalProfileUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    UpdateMyTelegramRequest:
+      type: object
+      properties:
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "lucas_atleta"
+
+    UpdateMyTelegramResponse:
+      type: object
+      properties:
+        telegramUsername:
+          type: string
+          nullable: true
+          example: "lucas_atleta"
 
     AthleteConsentStatus:
       type: object
@@ -2422,3 +2945,63 @@ components:
           type: string
           format: date
           example: "2026-02-28"
+
+    InternalAthleteSummaryDto:
+      type: object
+      description: Resumen interno de un atleta activo para comunicación entre microservicios (KAN-472).
+      required:
+        - id
+        - pfId
+        - active
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        pfId:
+          type: string
+          format: uuid
+          example: "7b2a11c0-9d34-4f21-a889-1234567890ab"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Categoría activa principal del atleta.
+          example: "9a1c3f02-6c1b-4c22-8f11-9876543210cd"
+        active:
+          type: boolean
+          example: true
+        categoryIds:
+          type: array
+          nullable: true
+          description: Lista de todas las categorías activas en las que está asignado el atleta.
+          items:
+            type: string
+            format: uuid
+        firstName:
+          type: string
+          nullable: true
+          example: "Mateo"
+        lastName:
+          type: string
+          nullable: true
+          example: "Fernández"
+        fullName:
+          type: string
+          nullable: true
+          example: "Mateo Fernández"
+
+    InternalCategoryAthleteDto:
+      type: object
+      description: Resumen mínimo de un atleta de una categoría para comparación grupal en Seguimiento (KAN-578).
+      required:
+        - id
+        - fullName
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        fullName:
+          type: string
+          example: "Mateo Fernández"

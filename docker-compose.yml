@@ -95,7 +95,8 @@ services:
       Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-false}
       Smtp__FromEmail: ${SMTP_FROM_EMAIL:-soporte@protraining.app}
       Smtp__FromName: ${SMTP_FROM_NAME:-ProTraining}
-      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://localhost:5173}
+      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://127.0.0.1:5173/}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
     ports: ["8081:8080"]
     depends_on:
       db-identidad: { condition: service_healthy }
@@ -151,41 +152,27 @@ services:
       Services__Entrenamiento__BaseUrl: http://entrenamiento:8080
       Services__Estructura__BaseUrl: http://estructura:8080
       Services__Seguimiento__BaseUrl: http://seguimiento:8080
-      Ollama__BaseUrl: http://ollama:11434
-      Ollama__Model: ${OLLAMA_MODEL:-llama3.2:1b}
-      Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-15}
-      Gemini__ApiKey: ${GEMINI_API_KEY:-}
-      Gemini__TimeoutSeconds: ${GEMINI_TIMEOUT_SECONDS:-10}
+      Services__Identidad__BaseUrl: http://identidad:8080
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Tope de llamadas a herramientas del agente por pedido (KAN-600: 6)
+      Ai__Agent__MaxToolCalls: ${AI_AGENT_MAX_TOOL_CALLS:-6}
+      # Límite diario de pedidos a la IA por preparador físico (KAN-510: configurable para subirlo en la demo)
+      AiQuota__DailyLimitPerPf: ${AiQuota__DailyLimitPerPf:-20}
+      Ai__Agent__Providers__0__Name: OpenAI
+      Ai__Agent__Providers__0__BaseUrl: ${OPENAI_BASE_URL:-https://rs-ai-gateway-unaj.azure-api.net/unaj-llm/openai/deployments/gpt-4.1-mini/?api-version=2025-03-01-preview}
+      Ai__Agent__Providers__0__Model: ${OPENAI_MODEL:-gpt-4.1-mini}
+      Ai__Agent__Providers__0__ApiKey: ${OPENAI_API_KEY:-}
+      Ai__Agent__Providers__0__TimeoutSeconds: ${OPENAI_TIMEOUT_SECONDS:-40}
+      Ai__Agent__Providers__1__Name: Gemini
+      Ai__Agent__Providers__1__BaseUrl: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
+      Ai__Agent__Providers__1__Model: ${GEMINI_MODEL:-gemini-3.8-flash}
+      Ai__Agent__Providers__1__ApiKey: ${GEMINI_API_KEY:-}
+      Ai__Agent__Providers__1__TimeoutSeconds: ${GEMINI_TIMEOUT_SECONDS:-40}
       Worker__DailyOverloadAnalysis__Hour: 0
     ports: ["8085:8080"]
     depends_on:
       db-asistente: { condition: service_healthy }
-
-  # ---------- Modelo local de IA (opcional: docker compose --profile ia up) ----------
-  # Sólo lo levanta quien trabaja con IA. El Asistente no depende de Ollama para arrancar,
-  # y el CI no lo levanta (así no descarga la imagen ni el modelo en cada PR).
-  ollama:
-    profiles: [ia]
-    image: ollama/ollama:0.40.3
-    restart: unless-stopped
-    ports: ["11434:11434"]
-    volumes: [ollama:/root/.ollama]
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
-  ollama-model:
-    profiles: [ia]
-    image: ollama/ollama:0.40.3
-    depends_on:
-      ollama: { condition: service_healthy }
-    environment:
-      - OLLAMA_HOST=ollama:11434
-    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.2:1b}"]
-    restart: "no"
 
   # ---------- Correo de desarrollo y demo (Mailpit) ----------
   mailpit:
@@ -213,6 +200,30 @@ services:
       Services__Identidad__BaseUrl: http://identidad:8080
     ports: ["8000:8080"]
 
+  # ---------- Datos de la demo (opcional, KAN-479) ----------
+  # Igual en Windows, Mac y Linux, con el compose ya levantado:
+  #   docker compose --profile seed run --rm seed             todo, con la base de cero
+  #   docker compose --profile seed run --rm seed checkins    solo los check-ins de hoy
+  #   docker compose --profile seed run --rm seed completo    todo + lo que en la demo se hace en vivo
+  seed:
+    profiles: [seed]
+    build: scripts/seed
+    depends_on:
+      gateway: { condition: service_healthy }
+      identidad: { condition: service_healthy }
+      estructura: { condition: service_healthy }
+      entrenamiento: { condition: service_healthy }
+      seguimiento: { condition: service_healthy }
+      db-estructura: { condition: service_healthy }
+      db-seguimiento: { condition: service_healthy }
+    environment:
+      SEED_IN_CONTAINER: "1"
+      GATEWAY: http://gateway:8080
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEMO_PF_PHONE: ${DEMO_PF_PHONE:-+5491150000000}
+    volumes: ["./scripts:/scripts:ro"]
+
   # ---------- Front (opcional: docker compose --profile front up) ----------
   front:
     profiles: [front]
@@ -226,4 +237,3 @@ volumes:
   db-entrenamiento:
   db-seguimiento:
   db-asistente:
-  ollama:

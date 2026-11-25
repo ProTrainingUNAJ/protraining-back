@@ -22,6 +22,8 @@ public sealed class UpdateCategoryCommandHandler(
         category.Rename(command.Name);
         category.UpdateDescription(command.Description);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return CategoryMappings.ToDto(category);
+
+        var withCounts = await repository.GetWithAthletesCountByIdAsync(command.Id, cancellationToken);
+        return CategoryMappings.ToDto(category, withCounts?.AthletesCount ?? 0);
     }
 }

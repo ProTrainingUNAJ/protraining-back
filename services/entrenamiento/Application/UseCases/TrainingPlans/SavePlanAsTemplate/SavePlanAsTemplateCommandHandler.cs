@@ -1,4 +1,4 @@
-﻿using Application.DTOs.TrainingPlans;
+using Application.DTOs.TrainingPlans;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Domain.Entities;
@@ -25,7 +25,8 @@ namespace Application.UseCases.TrainingPlans.SavePlanAsTemplate
                 throw new NotFoundException($"No se encontró la planificación con ID '{request.PlanId}'.");
             }
             
-            var template = await _trainingPlanRepository.GetWithDetailsByIdAsync(request.PlanId, cancellationToken);
+            var template = await _trainingPlanRepository.GetWithDetailsByIdAsync(request.PlanId, cancellationToken)
+                ?? throw new NotFoundException($"No se encontró la planificación con ID '{request.PlanId}'.");
 
             var planTemplate = template.CloneAs(request.Name, true);
 

@@ -36,6 +36,31 @@ public class LoadCalculatorEngineTests
     }
 
     [Fact]
+    public void CalculateLoad_ConPorcentajeConservadorConfigurado_DeberiaUsarValorConfigurado()
+    {
+        var customEngine = new LoadCalculatorEngine(estimatedRecordConservativePercent: 85m);
+
+        var result = customEngine.CalculateLoad(100m, RecordSource.Estimated, 80m);
+
+        Assert.False(result.IsReference);
+        Assert.Equal(67.5m, result.WeightKg); // (100 * 0.80) * 0.85 = 68.0 -> redondeado a discos de 2.5 kg = 67.5
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    [InlineData(120)]
+    public void CalculateLoad_ConPorcentajeConservadorFueraDeRango_DeberiaUsar90PorDefecto(decimal invalidPercent)
+    {
+        var fallbackEngine = new LoadCalculatorEngine(invalidPercent);
+
+        var result = fallbackEngine.CalculateLoad(100m, RecordSource.Estimated, 80m);
+
+        Assert.False(result.IsReference);
+        Assert.Equal(72.5m, result.WeightKg);
+    }
+
+    [Fact]
     public void CalculateLoad_SinRecord_DeberiaDevolverSerieDeReferencia()
     {
         var result = _engine.CalculateLoad(null, null, 80m);
@@ -95,10 +120,17 @@ public class LoadCalculatorEngineTests
         Assert.Equal(15.6m, target);
     }
 
-    [Fact]
-    public void CalculateTimeTarget_SinTest_DeberiaDevolverNullParaMostrarSerieSinMeta()
+    [Theory]
+    [InlineData(null, 90.0)]
+    [InlineData(14.0, null)]
+    [InlineData(14.0, 0.0)]
+    [InlineData(14.0, -10.0)]
+    public void CalculateTimeTarget_SinTestOConPorcentajeInvalido_DeberiaDevolverNull(
+        double? bestTime, double? percentage)
     {
-        var target = _engine.CalculateTimeTarget(null, 90m);
+        var target = _engine.CalculateTimeTarget(
+            bestTime.HasValue ? (decimal)bestTime.Value : null,
+            percentage.HasValue ? (decimal)percentage.Value : null);
         Assert.Null(target);
     }
 
@@ -106,11 +138,25 @@ public class LoadCalculatorEngineTests
     [InlineData(14.0, 90.0, 15.6)]
     [InlineData(14.0, 100.0, 14.0)]
     [InlineData(14.0, 80.0, 17.5)]
+    [InlineData(14.0, 75.0, 18.7)]
     [InlineData(12.0, 90.0, 13.3)]
+    [InlineData(10.5, 85.0, 12.4)]
+    [InlineData(25.0, 80.0, 31.3)]
+    [InlineData(10.0, 95.0, 10.5)]
     public void CalculateTimeTarget_DiferentesMarcasEIntensidades_CalculaYRedondeaAUnDecimal(
         decimal bestTime, decimal percentage, decimal expectedTarget)
     {
         var target = _engine.CalculateTimeTarget(bestTime, percentage);
         Assert.Equal(expectedTarget, target);
+    }
+
+    [Fact]
+    public void CalculateLoad_ConPorcentajeMayorAl100_CalculaYRedondeaCorrectamente()
+    {
+        // DADO un récord testeado de 100 kg y una serie al 105 %
+        var result = _engine.CalculateLoad(100m, RecordSource.Tested, 105m);
+
+        Assert.Equal(105.0m, result.WeightKg);
+        Assert.False(result.IsReference);
     }
 }

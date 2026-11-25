@@ -4,6 +4,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Entities;
+using Domain.Exceptions;
 
 namespace Application.UseCases.PlanDrafts.ApprovePlanDraft;
 
@@ -45,7 +46,8 @@ public sealed class ApprovePlanDraftCommandHandler(
             );
         }
 
-        var savePlanRequest = PlanDraftMapper.ToSaveTrainingPlanRequest(draft);
+        var content = await ResolveReferenceExercisesAsync(draft, cancellationToken);
+        var savePlanRequest = PlanDraftMapper.ToSaveTrainingPlanRequest(content, draft.Goal);
 
         Guid createdPlanId;
         try
@@ -98,6 +100,60 @@ public sealed class ApprovePlanDraftCommandHandler(
             AssignmentId: assignResult.AssignmentId,
             Warning: warning,
             Warnings: warnings
-        );
+        ); 
+    }
+    private async Task<PlanDraftContentDto> ResolveReferenceExercisesAsync(
+        PlanDraft draft,
+        CancellationToken cancellationToken)
+    {
+        var content = PlanDraftMapper.DeserializeContent(draft.Content);
+        var createdByName = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var anyResolved = false;
+
+        foreach (var week in content.Weeks ?? [])
+        {
+            foreach (var session in week.Sessions ?? [])
+            {
+                for (var i = 0; i < session.Exercises.Count; i++)
+                {
+                    var exercise = session.Exercises[i];
+                    var needsCreation = exercise.IsReference || !exercise.ExerciseId.HasValue || exercise.ExerciseId.Value == Guid.Empty;
+                    if (!needsCreation)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(exercise.ExerciseName))
+                        throw new DomainException("Un ejercicio de referencia no tiene nombre para poder crearlo en la biblioteca.");
+
+                    var trimmedName = exercise.ExerciseName.Trim();
+                    if (!createdByName.TryGetValue(trimmedName, out var resolvedId))
+                    {
+                        var muscleGroup = string.IsNullOrWhiteSpace(exercise.MuscleGroup)
+                            ? "General"
+                            : exercise.MuscleGroup.Trim();
+
+                        resolvedId = await trainingPlanServiceClient.EnsureExerciseCreatedAsync(
+                            new CreateExerciseRemoteRequestDto(Name: trimmedName, MuscleGroup: muscleGroup),
+                            cancellationToken);
+
+                        createdByName[trimmedName] = resolvedId;
+                    }
+
+                    session.Exercises[i] = exercise with
+                    {
+                        ExerciseId = resolvedId,
+                        IsReference = false
+                    };
+                    anyResolved = true;
+                }
+            }
+        }
+
+        if (anyResolved)
+        {
+            draft.UpdateContent(PlanDraftMapper.SerializeContent(content));
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        return content;
     }
 }

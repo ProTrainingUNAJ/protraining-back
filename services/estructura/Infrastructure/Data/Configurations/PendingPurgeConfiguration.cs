@@ -14,6 +14,9 @@ public sealed class PendingPurgeConfiguration : IEntityTypeConfiguration<Pending
             .HasColumnName("athlete_id")
             .IsRequired();
 
+        builder.Property(p => p.AccountId)
+            .HasColumnName("account_id");
+
         builder.Property(p => p.EntityType)
             .HasColumnName("entity_type")
             .HasMaxLength(50)
@@ -26,6 +29,15 @@ public sealed class PendingPurgeConfiguration : IEntityTypeConfiguration<Pending
 
         builder.Property(p => p.ProcessedAt)
             .HasColumnName("processed_at");
+
+        builder.Property(p => p.Attempts)
+            .HasColumnName("attempts")
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(p => p.LastError)
+            .HasColumnName("last_error")
+            .HasMaxLength(500);
 
         builder.HasIndex(p => p.AthleteId);
         builder.HasIndex(p => p.Status);

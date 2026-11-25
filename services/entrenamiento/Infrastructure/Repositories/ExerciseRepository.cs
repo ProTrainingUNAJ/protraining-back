@@ -230,15 +230,110 @@ namespace Infrastructure.Repositories
             return exercises.Skip((pag - 1) * pagSize).Take(pagSize);
         }
 
+        // Mapeo exhaustivo de equivalencias para búsqueda por submúsculo / músculo puntual (KAN-633).
+        // Las claves están normalizadas (sin tildes, minúsculas). Los valores contienen los identificadores
+        // técnicos en inglés (almacenados en Postgres por free-exercise-db) y sus variantes en español.
         private static readonly Dictionary<string, string[]> MuscleEquivalences = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["dorsales"] = ["dorsales", "dorsal", "lats"],
-            ["dorsal"] = ["dorsales", "dorsal", "lats"],
-            ["lats"] = ["dorsales", "dorsal", "lats"],
-            ["cuadriceps"] = ["cuadríceps", "cuádriceps", "cuadriceps"],
-            ["gluteos"] = ["glúteos", "gluteos"],
-            ["biceps"] = ["bíceps", "biceps"],
-            ["triceps"] = ["tríceps", "triceps"],
+            // Pecho
+            ["pecho"] = ["chest", "pecho", "pectoral", "pectorales"],
+            ["pechos"] = ["chest", "pecho", "pectoral", "pectorales"],
+            ["pectoral"] = ["chest", "pecho", "pectoral", "pectorales"],
+            ["pectorales"] = ["chest", "pecho", "pectoral", "pectorales"],
+            ["chest"] = ["chest", "pecho", "pectoral", "pectorales"],
+
+            // Core / Abdomen
+            ["abdominales"] = ["abdominals", "abdominales", "abdominal", "abdomen", "core"],
+            ["abdominal"] = ["abdominals", "abdominales", "abdominal", "abdomen", "core"],
+            ["abdomen"] = ["abdominals", "abdominales", "abdominal", "abdomen", "core"],
+            ["core"] = ["abdominals", "abdominales", "abdominal", "abdomen", "core"],
+            ["abdominals"] = ["abdominals", "abdominales", "abdominal", "abdomen", "core"],
+
+            // Hombros
+            ["hombros"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+            ["hombro"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+            ["deltoides"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+            ["deltoide"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+            ["shoulders"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+            ["shoulder"] = ["shoulders", "shoulder", "hombros", "hombro", "deltoides", "deltoide"],
+
+            // Cuello
+            ["cuello"] = ["neck", "cuello", "cuellos"],
+            ["cuellos"] = ["neck", "cuello", "cuellos"],
+            ["neck"] = ["neck", "cuello", "cuellos"],
+
+            // Espalda - Dorsales
+            ["dorsales"] = ["lats", "dorsales", "dorsal"],
+            ["dorsal"] = ["lats", "dorsales", "dorsal"],
+            ["lats"] = ["lats", "dorsales", "dorsal"],
+
+            // Espalda - Espalda media
+            ["espalda media"] = ["middle back", "espalda media"],
+            ["middle back"] = ["middle back", "espalda media"],
+
+            // Espalda - Espalda baja / Lumbar
+            ["espalda baja"] = ["lower back", "espalda baja", "lumbar", "lumbares"],
+            ["lower back"] = ["lower back", "espalda baja", "lumbar", "lumbares"],
+            ["lumbar"] = ["lower back", "espalda baja", "lumbar", "lumbares"],
+            ["lumbares"] = ["lower back", "espalda baja", "lumbar", "lumbares"],
+
+            // Espalda - Trapecios
+            ["trapecios"] = ["traps", "trapecios", "trapecio"],
+            ["trapecio"] = ["traps", "trapecios", "trapecio"],
+            ["traps"] = ["traps", "trapecios", "trapecio"],
+
+            // Brazos - Bíceps
+            ["biceps"] = ["biceps", "bíceps", "bicep"],
+            ["bicep"] = ["biceps", "bíceps", "bicep"],
+
+            // Brazos - Tríceps
+            ["triceps"] = ["triceps", "tríceps", "tricep"],
+            ["tricep"] = ["triceps", "tríceps", "tricep"],
+
+            // Brazos - Antebrazos
+            ["antebrazos"] = ["forearms", "forearm", "antebrazos", "antebrazo"],
+            ["antebrazo"] = ["forearms", "forearm", "antebrazos", "antebrazo"],
+            ["forearms"] = ["forearms", "forearm", "antebrazos", "antebrazo"],
+            ["forearm"] = ["forearms", "forearm", "antebrazos", "antebrazo"],
+
+            // Piernas - Cuádriceps
+            ["cuadriceps"] = ["quadriceps", "quadricep", "cuadríceps", "cuadriceps", "cuadricep", "cuádriceps"],
+            ["cuadricep"] = ["quadriceps", "quadricep", "cuadríceps", "cuadriceps", "cuadricep", "cuádriceps"],
+            ["quadriceps"] = ["quadriceps", "quadricep", "cuadríceps", "cuadriceps", "cuadricep", "cuádriceps"],
+            ["quadricep"] = ["quadriceps", "quadricep", "cuadríceps", "cuadriceps", "cuadricep", "cuádriceps"],
+
+            // Piernas - Isquiotibiales
+            ["isquiotibiales"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+            ["isquiotibial"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+            ["isquios"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+            ["isquio"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+            ["hamstrings"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+            ["hamstring"] = ["hamstrings", "hamstring", "isquiotibiales", "isquiotibial", "isquios", "isquio"],
+
+            // Piernas - Gemelos / Pantorrillas
+            ["gemelos"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+            ["gemelo"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+            ["pantorrillas"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+            ["pantorrilla"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+            ["calves"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+            ["calf"] = ["calves", "calf", "gemelos", "gemelo", "pantorrillas", "pantorrilla"],
+
+            // Piernas - Glúteos
+            ["gluteos"] = ["glutes", "glute", "glúteos", "gluteos", "glúteo", "gluteo"],
+            ["gluteo"] = ["glutes", "glute", "glúteos", "gluteos", "glúteo", "gluteo"],
+            ["glutes"] = ["glutes", "glute", "glúteos", "gluteos", "glúteo", "gluteo"],
+            ["glute"] = ["glutes", "glute", "glúteos", "gluteos", "glúteo", "gluteo"],
+
+            // Piernas - Aductores
+            ["aductores"] = ["adductors", "adductor", "aductores", "aductor"],
+            ["aductor"] = ["adductors", "adductor", "aductores", "aductor"],
+            ["adductors"] = ["adductors", "adductor", "aductores", "aductor"],
+            ["adductor"] = ["adductors", "adductor", "aductores", "aductor"],
+
+            // Piernas - Abductores
+            ["abductores"] = ["abductors", "abductor", "abductores", "abductor"],
+            ["abductor"] = ["abductors", "abductor", "abductores", "abductor"],
+            ["abductors"] = ["abductors", "abductor", "abductores", "abductor"],
         };
 
         private static string Normalize(string value)

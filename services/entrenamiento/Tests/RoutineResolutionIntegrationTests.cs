@@ -106,14 +106,14 @@ public class RoutineResolutionIntegrationTests
 
             // Consulta Atleta 1
             var routineAthlete1 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete1Id });
-            var exercise1 = Assert.Single(routineAthlete1.Exercises);
+            var exercise1 = Assert.Single(routineAthlete1.Blocks![0].Exercises);
             Assert.Equal(100.0, exercise1.Current1RmKg);
             Assert.Equal(75.0, exercise1.WeightKg);
             Assert.False(exercise1.IsReference);
 
             // Consulta Atleta 2
             var routineAthlete2 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete2Id });
-            var exercise2 = Assert.Single(routineAthlete2.Exercises);
+            var exercise2 = Assert.Single(routineAthlete2.Blocks![0].Exercises);
             Assert.Equal(80.0, exercise2.Current1RmKg);
             Assert.Equal(60.0, exercise2.WeightKg);
             Assert.False(exercise2.IsReference);
@@ -256,12 +256,292 @@ public class RoutineResolutionIntegrationTests
             Assert.Equal("Martín Pérez", routine.AthleteName);
             Assert.Equal("Cuidado con la postura", routine.CoachNotes);
 
-            var ex = Assert.Single(routine.Exercises);
+            var ex = Assert.Single(routine.Blocks![0].Exercises);
             Assert.Equal("Press Militar", ex.Name);
             Assert.Equal(60.0, ex.Current1RmKg);
             // 60 kg * 80% = 48 kg -> redondeado a 2.5 kg = 47.5 kg
             Assert.Equal(47.5, ex.WeightKg);
             Assert.False(ex.IsReference);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task AthleteVariant_DoesNotAffectTeammatesInSameSquad()
+    {
+        // CUANDO se analizan los payloads devueltos ENTONCES la variante de Atleta 1 no afectó la rutina de Atleta 2
+        var pfId = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+        var squadCategoryId = Guid.NewGuid();
+
+        var athlete1Id = Guid.NewGuid();
+        var athlete2Id = Guid.NewGuid();
+
+        var baseExercise = Exercise.Create("Sentadilla", "Piernas");
+        var substituteExercise = Exercise.Create("Prensa de piernas", "Piernas");
+
+        var plan = TrainingPlan.Create("Plan Plantel", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día Piernas", 1, ArgentinaTime.DayOfWeek, "Controlar profundidad");
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session.Id, baseExercise.Id));
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var assignment = PlanAssignment.Create(plan.Id, ArgentinaTime.Today, categoryId: squadCategoryId);
+
+        // Solo Atleta 1 tiene variante activa aprobada (Sentadilla -> Prensa de piernas)
+        var variantAthlete1 = AthleteVariant.Create(
+            athlete1Id,
+            baseExercise.Id,
+            substituteExercise.Id,
+            isApproved: true,
+            isActive: true,
+            validFrom: ArgentinaTime.Today.AddDays(-5),
+            note: "Variante aprobada por molestia de rodilla");
+
+        // Récords: Atleta 1 (150 kg en Prensa -> 80% = 120 kg), Atleta 2 (100 kg en Sentadilla -> 80% = 80 kg)
+        var recordAthlete1 = AthleteRecord.Create(athlete1Id, substituteExercise.Id, 150m, RecordSource.Tested, DateTime.UtcNow);
+        var recordAthlete2 = AthleteRecord.Create(athlete2Id, baseExercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            await context.Exercises.AddRangeAsync(baseExercise, substituteExercise);
+            await context.TrainingPlans.AddAsync(plan);
+            await context.PlanAssignments.AddAsync(assignment);
+            await context.AthleteVariants.AddAsync(variantAthlete1);
+            await context.AthleteRecords.AddRangeAsync(recordAthlete1, recordAthlete2);
+            await context.SaveChangesAsync();
+        }
+
+        var structureClientMock = new Mock<IStructureClient>();
+        structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(squadCategoryId, Guid.NewGuid(), "Plantel Superior", null)]);
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athlete1Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athlete1Id, "Lucas"));
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athlete2Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athlete2Id, "Mateo"));
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            var handler = new GetTodayRoutineQueryHandler(
+                new AthleteRecordRepository(context),
+                new TrainingSessionRepository(context),
+                new LoadCalculatorEngine(),
+                structureClientMock.Object,
+                new ExerciseVideoRepository(context),
+                new PerformedSetRepository(context),
+                adjustmentRepository: new AthleteSessionAdjustmentRepository(context),
+                exerciseRepository: new ExerciseRepository(context),
+                athleteVariantRepository: new AthleteVariantRepository(context));
+
+            var payloadAthlete1 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete1Id });
+            var payloadAthlete2 = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athlete2Id });
+
+            // Atleta 1 ve su sustituto y su carga calculada
+            Assert.True(payloadAthlete1.RoutineAdapted);
+            Assert.False(payloadAthlete1.AdjustedByCoach);
+            var ex1 = Assert.Single(payloadAthlete1.Exercises);
+            Assert.Equal(substituteExercise.Id, ex1.ExerciseId);
+            Assert.Equal("Prensa de piernas", ex1.Name);
+            Assert.Equal(150.0, ex1.Current1RmKg);
+            Assert.Equal(120.0, ex1.WeightKg);
+            Assert.True(ex1.IsAdapted);
+            Assert.Equal("Sentadilla", ex1.OriginalExerciseName);
+            Assert.Equal("Variante aprobada por molestia de rodilla", ex1.AdaptationReason);
+
+            // Atleta 2 ve intacta la rutina base del plantel
+            Assert.False(payloadAthlete2.RoutineAdapted);
+            Assert.False(payloadAthlete2.AdjustedByCoach);
+            var ex2 = Assert.Single(payloadAthlete2.Exercises);
+            Assert.Equal(baseExercise.Id, ex2.ExerciseId);
+            Assert.Equal("Sentadilla", ex2.Name);
+            Assert.Equal(100.0, ex2.Current1RmKg);
+            Assert.Equal(80.0, ex2.WeightKg);
+            Assert.False(ex2.IsAdapted);
+            Assert.Null(ex2.OriginalExerciseName);
+            Assert.Null(ex2.AdaptationReason);
+        }
+    }
+
+    [Fact]
+    public async Task Given_VariantePorAtletaEnPlanPorBloques_When_ConsultaRutinaEnSemana2_Then_AplicaSustitutoDentroDeSuBloque()
+    {
+        var pfId = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+        var categoryId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+
+        var startDate = new DateOnly(2026, 11, 2); // Lunes -> Semana 1
+        var week2Date = startDate.AddDays(7);     // Lunes -> Semana 2
+
+        var warmup = Exercise.Create("Movilidad de Cadera", "Piernas");
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+
+        var plan = TrainingPlan.Create("Plan Por Bloques", "Fuerza");
+
+        var week1 = TrainingWeek.Create(1, plan.Id);
+        var sessionW1 = TrainingSession.Create(week1.Id, "Día 1 S1", 1, week2Date.DayOfWeek);
+        var blockW1 = TrainingBlock.Create(sessionW1.Id, "Bloque S1", 1);
+        blockW1.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 10, 65m, blockW1.Id, squat.Id, trainingSessionId: sessionW1.Id));
+        sessionW1.AddBlock(blockW1);
+        week1.AddSession(sessionW1);
+        plan.AddWeek(week1);
+
+        var week2 = TrainingWeek.Create(2, plan.Id);
+        var sessionW2 = TrainingSession.Create(week2.Id, "Día 1 S2", 1, week2Date.DayOfWeek);
+        var block1W2 = TrainingBlock.Create(sessionW2.Id, "Entrada en calor", 1);
+        block1W2.AddPrescribedExercise(PrescribedExercise.Create(1, 2, 12, null, block1W2.Id, warmup.Id, trainingSessionId: sessionW2.Id));
+        var block2W2 = TrainingBlock.Create(sessionW2.Id, "Fuerza Principal", 2);
+        block2W2.AddPrescribedExercise(PrescribedExercise.Create(1, 4, "6-8", 80m, block2W2.Id, squat.Id, trainingSessionId: sessionW2.Id));
+        sessionW2.AddBlock(block1W2);
+        sessionW2.AddBlock(block2W2);
+        week2.AddSession(sessionW2);
+        plan.AddWeek(week2);
+
+        var assignment = PlanAssignment.Create(plan.Id, startDate, categoryId: categoryId);
+        var variant = AthleteVariant.Create(
+            athleteId,
+            squat.Id,
+            legPress.Id,
+            isApproved: true,
+            isActive: true,
+            validFrom: startDate,
+            note: "Variante aprobada por molestia de rodilla");
+
+        // 1RM 135 kg * 80% = 108 kg -> redondeado a múltiplo de 2.5 kg = 107.5 kg
+        var substituteRecord = AthleteRecord.Create(athleteId, legPress.Id, 135m, RecordSource.Tested, DateTime.UtcNow);
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            await context.Exercises.AddRangeAsync(warmup, squat, legPress);
+            await context.TrainingPlans.AddAsync(plan);
+            await context.PlanAssignments.AddAsync(assignment);
+            await context.AthleteVariants.AddAsync(variant);
+            await context.AthleteRecords.AddAsync(substituteRecord);
+            await context.SaveChangesAsync();
+        }
+
+        var structureClientMock = new Mock<IStructureClient>();
+        structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Plantel Superior", null)]);
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Fernández"));
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            var handler = new GetTodayRoutineQueryHandler(
+                new AthleteRecordRepository(context),
+                new TrainingSessionRepository(context),
+                new LoadCalculatorEngine(),
+                structureClientMock.Object,
+                new ExerciseVideoRepository(context),
+                new PerformedSetRepository(context),
+                adjustmentRepository: new AthleteSessionAdjustmentRepository(context),
+                exerciseRepository: new ExerciseRepository(context),
+                athleteVariantRepository: new AthleteVariantRepository(context));
+
+            var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = week2Date });
+
+            Assert.True(result.RoutineAdapted);
+            Assert.False(result.AdjustedByCoach);
+            Assert.Equal(2, result.Blocks.Count);
+
+            Assert.Equal("Entrada en calor", result.Blocks[0].Title);
+            var b1Ex = Assert.Single(result.Blocks[0].Exercises);
+            Assert.Equal(warmup.Id, b1Ex.ExerciseId);
+            Assert.False(b1Ex.IsAdapted);
+
+            Assert.Equal("Fuerza Principal", result.Blocks[1].Title);
+            var b2Ex = Assert.Single(result.Blocks[1].Exercises);
+            Assert.Equal(legPress.Id, b2Ex.ExerciseId);
+            Assert.Equal("Prensa de piernas", b2Ex.Name);
+            Assert.True(b2Ex.IsAdapted);
+            Assert.Equal("Sentadilla", b2Ex.OriginalExerciseName);
+            Assert.Equal("Variante aprobada por molestia de rodilla", b2Ex.AdaptationReason);
+            Assert.Equal(135.0, b2Ex.Current1RmKg);
+            Assert.Equal(107.5, b2Ex.WeightKg);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task AthleteVariant_FromAnotherPf_IsNotApplied()
+    {
+        var pfA = Guid.NewGuid();
+        var pfB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+        var categoryId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+
+        var plan = TrainingPlan.Create("Plan PF A", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día Piernas", 1, ArgentinaTime.DayOfWeek);
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session.Id, squat.Id));
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var assignment = PlanAssignment.Create(plan.Id, ArgentinaTime.Today, categoryId: categoryId);
+        var squatRecord = AthleteRecord.Create(athleteId, squat.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+
+        await using (var contextA = CreateInMemoryDbContext(pfA, dbName))
+        {
+            await contextA.Exercises.AddRangeAsync(squat, legPress);
+            await contextA.TrainingPlans.AddAsync(plan);
+            await contextA.PlanAssignments.AddAsync(assignment);
+            await contextA.AthleteRecords.AddAsync(squatRecord);
+            await contextA.SaveChangesAsync();
+        }
+
+        await using (var contextB = CreateInMemoryDbContext(pfB, dbName))
+        {
+            var foreignVariant = AthleteVariant.Create(
+                athleteId,
+                squat.Id,
+                legPress.Id,
+                isApproved: true,
+                isActive: true,
+                validFrom: ArgentinaTime.Today.AddDays(-1));
+            await contextB.AthleteVariants.AddAsync(foreignVariant);
+            await contextB.SaveChangesAsync();
+        }
+
+        var structureClientMock = new Mock<IStructureClient>();
+        structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Primera", null)]);
+        structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas"));
+
+        await using (var contextA = CreateInMemoryDbContext(pfA, dbName))
+        {
+            var handler = new GetTodayRoutineQueryHandler(
+                new AthleteRecordRepository(contextA),
+                new TrainingSessionRepository(contextA),
+                new LoadCalculatorEngine(),
+                structureClientMock.Object,
+                new ExerciseVideoRepository(contextA),
+                new PerformedSetRepository(contextA),
+                adjustmentRepository: new AthleteSessionAdjustmentRepository(contextA),
+                exerciseRepository: new ExerciseRepository(contextA),
+                athleteVariantRepository: new AthleteVariantRepository(contextA));
+
+            var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId });
+
+            Assert.False(result.RoutineAdapted);
+            var ex = Assert.Single(result.Exercises);
+            Assert.Equal(squat.Id, ex.ExerciseId);
+            Assert.Equal("Sentadilla", ex.Name);
+            Assert.Equal(80.0, ex.WeightKg);
         }
     }
 }

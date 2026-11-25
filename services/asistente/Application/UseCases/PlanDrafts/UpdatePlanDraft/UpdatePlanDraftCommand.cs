@@ -4,6 +4,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Application.UseCases.PlanDrafts.UpdatePlanDraft;
 
@@ -15,7 +16,8 @@ public sealed class UpdatePlanDraftCommandHandler(
     IExerciseCatalogService catalogService,
     IMatchDayLoadValidator matchDayLoadValidator,
     IStructureCalendarClient calendarClient,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    ILogger<UpdatePlanDraftCommandHandler>? logger = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
         UpdatePlanDraftCommand command,
@@ -42,17 +44,34 @@ public sealed class UpdatePlanDraftCommandHandler(
             catalogService,
             cancellationToken);
 
-        // 2. Validador de partidos KAN-408: consultar calendario de la categoría y ajustar topes si corresponde
+        // 2. Validador de partidos KAN-408 / KAN-486: consultar calendario de la categoría y ajustar topes con resiliencia
         IReadOnlyList<DateOnly> matchDates = [];
+        var calendarReadFailed = false;
         if (draft.CategoryId.HasValue && draft.CategoryId.Value != Guid.Empty && requestedContent.Weeks.Count > 0)
         {
-            var maxWeek = requestedContent.Weeks.Max(w => w.WeekNumber);
-            var endDate = draft.StartDate.AddDays(maxWeek * 7);
-            matchDates = await calendarClient.GetMatchDatesAsync(
-                draft.CategoryId.Value,
-                draft.StartDate,
-                endDate,
-                cancellationToken);
+            try
+            {
+                var maxWeek = requestedContent.Weeks.Max(w => w.WeekNumber);
+                var endDate = draft.StartDate.AddDays(maxWeek * 7);
+                matchDates = await calendarClient.GetMatchDatesAsync(
+                    draft.CategoryId.Value,
+                    draft.StartDate,
+                    endDate,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(
+                    ex,
+                    "No se pudo sincronizar el fixture de la categoría {CategoryId} durante la actualización del borrador. Se continuará sin restricciones pre-partido.",
+                    draft.CategoryId.Value);
+                matchDates = [];
+                calendarReadFailed = true;
+            }
         }
 
         var matchValidation = matchDayLoadValidator.ValidateAndAdjust(
@@ -81,6 +100,12 @@ public sealed class UpdatePlanDraftCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return PlanDraftMapper.ToResponseDto(draft, finalContent, matchValidation.Corrections);
+        var warnings = new List<string>(matchValidation.Corrections);
+        if (calendarReadFailed)
+        {
+            warnings.Add("No se pudo sincronizar el fixture (calendario de partidos). El borrador se actualizó sin restricciones de calendario pre-partido.");
+        }
+
+        return PlanDraftMapper.ToResponseDto(draft, finalContent, warnings);
     }
 }

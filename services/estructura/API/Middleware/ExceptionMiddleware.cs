@@ -23,6 +23,7 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
             var (status, title, detail) = exception switch
             {
                 DomainException domain => (400, domain.Message, (string?)null),
+                PhotoNotFoundException photo => (404, photo.Message, null),
                 AthleteNotFoundException => (404, "Atleta no encontrado.", null),
                 OrganizationNotFoundException => (404, "Organización no encontrada.", null),
                 CategoryNotFoundException => (404, "Categoría no encontrada.", null),

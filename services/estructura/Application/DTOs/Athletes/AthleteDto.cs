@@ -12,4 +12,13 @@ public sealed record AthleteDto(
     string? EmergencyContact,
     bool Active,
     bool AllowsHabitsRecommendations,
-    GuardianConsentDto? GuardianConsent);
+    GuardianConsentDto? GuardianConsent,
+    bool HasPhoto = false,
+    DateTime? PhotoUpdatedAt = null,
+    string? TelegramUsername = null,
+    decimal? WeightKg = null,
+    string? AthleticGoal = null,
+    DateTime? PhysicalProfileUpdatedAt = null,
+    DateOnly? BirthDate = null,
+    string? Gender = null,
+    decimal? HeightCm = null);

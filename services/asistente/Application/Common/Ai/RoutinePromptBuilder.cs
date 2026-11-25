@@ -2,6 +2,7 @@ namespace Application.Common.Ai;
 
 using System.Text;
 using Application.Common.Helpers;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
 using Application.DTOs.PlanDrafts;
 using Domain.Common;
@@ -27,51 +28,12 @@ public static class RoutinePromptBuilder
         sb.AppendLine($"Énfasis muscular solicitado: {muscles}");
         sb.AppendLine();
 
-        if (request.AdaptationContext is not null)
-        {
-            var context = request.AdaptationContext;
-            sb.AppendLine("CONTEXTO MÉDICO-DEPORTIVO DEL ATLETA:");
-            if (context.ActiveInjuries.Count == 0)
-                sb.AppendLine("- No hay lesiones activas informadas.");
-            else
-                foreach (var injury in context.ActiveInjuries)
-                {
-                    var zone = string.IsNullOrWhiteSpace(injury.Zone) ? "zona no informada" : injury.Zone.Trim();
-                    var status = string.IsNullOrWhiteSpace(injury.Status) ? "estado no informado" : injury.Status.Trim();
-                    sb.AppendLine($"- Lesión activa en {zone} (estado: {status}; severidad: no informada).");
-                }
+        AppendAdaptationContext(sb, request.AdaptationContext);
 
-            if (context.CurrentRecords.Count == 0)
-            {
-                sb.AppendLine("- No hay récords vigentes: no inventes cargas ni porcentajes basados en 1RM.");
-            }
-            else
-            {
-                foreach (var record in context.CurrentRecords)
-                    sb.AppendLine($"- Récord vigente: {record.ExerciseName}, 1RM {record.WeightOneRepMaxKg:0.##} kg ({record.Origin}).");
-            }
-
-            if (context.Restrictions.Count > 0)
-            {
-                sb.AppendLine("RESTRICCIONES Y SUSTITUTOS AUTORIZADOS:");
-                foreach (var restriction in context.Restrictions)
-                {
-                    var substitutes = restriction.Substitutes.Count == 0
-                        ? "sin sustituto autorizado"
-                        : string.Join(", ", restriction.Substitutes.Select(s => $"{s.Name} [{s.ExerciseId}]"));
-                    sb.AppendLine($"- No usar ejercicio {restriction.ExerciseId} por {restriction.Zone}: {substitutes}.");
-                }
-            }
-
-            sb.AppendLine("REGLAS DE ADAPTACIÓN:");
-            sb.AppendLine("1. No propongas ejercicios restringidos.");
-            sb.AppendLine("2. Si debes reemplazar un ejercicio restringido, usa únicamente el sustituto autorizado indicado.");
-            sb.AppendLine("3. Explica la sustitución y avisa al preparador físico en el resumen.");
-            sb.AppendLine("4. Distingue los récords estimados de los testeados y no inventes datos faltantes.");
-            sb.AppendLine();
-        }
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
 
         var exercises = availableExercises ?? request.AvailableExercises;
+        var maxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
         if (exercises is { Count: > 0 })
         {
             sb.AppendLine("EJERCICIOS DISPONIBLES EN LA BIBLIOTECA OFICIAL DEL CLUB:");
@@ -86,11 +48,19 @@ public static class RoutinePromptBuilder
             sb.AppendLine("1. Utiliza preferentemente los ejercicios disponibles listados arriba.");
             sb.AppendLine("2. Para cada ejercicio que elijas del catálogo, debes incluir su 'ejercicioId' exacto y su 'ejercicioNombre' tal como aparece en la lista.");
             sb.AppendLine("3. Si consideras indispensable sugerir una variante fuera de catálogo, indícala con 'ejercicioId': null y su 'ejercicioNombre'.");
+            if (maxExercises.HasValue)
+            {
+                sb.AppendLine($"4. RESTRICCIÓN OBLIGATORIA DEL PF: Incluye como máximo {maxExercises.Value} ejercicios en total.");
+            }
         }
         else
         {
             sb.AppendLine("DIRECTIVAS:");
             sb.AppendLine("1. Propón ejercicios metodológicamente coherentes con el objetivo y el grupo muscular solicitado.");
+            if (maxExercises.HasValue)
+            {
+                sb.AppendLine($"2. RESTRICCIÓN OBLIGATORIA DEL PF: Incluye como máximo {maxExercises.Value} ejercicios en total.");
+            }
         }
 
         sb.AppendLine();
@@ -114,6 +84,56 @@ public static class RoutinePromptBuilder
             """);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Agrega al prompt las lesiones activas, los récords vigentes y las restricciones con sus sustitutos autorizados.
+    /// Solo viajan zonas, ejercicios y porcentajes: nunca texto libre de lesiones ni datos personales (KAN-600).
+    /// </summary>
+    public static void AppendAdaptationContext(StringBuilder sb, AthleteAdaptationContextDto? context)
+    {
+        if (context is null)
+            return;
+
+        sb.AppendLine("CONTEXTO MÉDICO-DEPORTIVO DEL ATLETA:");
+        if (context.ActiveInjuries.Count == 0)
+            sb.AppendLine("- No hay lesiones activas informadas.");
+        else
+            foreach (var injury in context.ActiveInjuries)
+            {
+                var zone = string.IsNullOrWhiteSpace(injury.Zone) ? "zona no informada" : injury.Zone.Trim();
+                var status = string.IsNullOrWhiteSpace(injury.Status) ? "estado no informado" : injury.Status.Trim();
+                sb.AppendLine($"- Lesión activa en {zone} (estado: {status}; severidad: no informada).");
+            }
+
+        if (context.CurrentRecords.Count == 0)
+        {
+            sb.AppendLine("- No hay récords vigentes: no inventes cargas ni porcentajes basados en 1RM.");
+        }
+        else
+        {
+            foreach (var record in context.CurrentRecords)
+                sb.AppendLine($"- Récord vigente: {record.ExerciseName}, 1RM {record.WeightOneRepMaxKg:0.##} kg ({record.Origin}).");
+        }
+
+        if (context.Restrictions.Count > 0)
+        {
+            sb.AppendLine("RESTRICCIONES Y SUSTITUTOS AUTORIZADOS:");
+            foreach (var restriction in context.Restrictions)
+            {
+                var substitutes = restriction.Substitutes.Count == 0
+                    ? "sin sustituto autorizado"
+                    : string.Join(", ", restriction.Substitutes.Select(s => $"{s.Name} [{s.ExerciseId}]"));
+                sb.AppendLine($"- No usar ejercicio {restriction.ExerciseId} por {restriction.Zone}: {substitutes}.");
+            }
+        }
+
+        sb.AppendLine("REGLAS DE ADAPTACIÓN:");
+        sb.AppendLine("1. No propongas ejercicios restringidos.");
+        sb.AppendLine("2. Si debes reemplazar un ejercicio restringido, usa únicamente el sustituto autorizado indicado.");
+        sb.AppendLine("3. Explica la sustitución y avisa al preparador físico en el resumen.");
+        sb.AppendLine("4. Distingue los récords estimados de los testeados y no inventes datos faltantes.");
+        sb.AppendLine();
     }
 
     /// <summary>
@@ -141,6 +161,8 @@ public static class RoutinePromptBuilder
             sb.AppendLine($"Start date: {request.StartDate.Value:yyyy-MM-dd}");
         }
         sb.AppendLine();
+
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
 
         // KAN-407: Periodización competitiva pre-partido
         if (request.StartDate.HasValue && matchDates is { Count: > 0 })
@@ -190,7 +212,15 @@ public static class RoutinePromptBuilder
         // El PF lee el nombre, el objetivo, la justificación y las notas: van en español (KAN-578)
         sb.AppendLine("7. Write every text value the coach reads ('name', 'objective', 'justificationSummary', session 'name' and 'coachNotes') in Spanish from Argentina, using 'vos' (e.g. 'Fuerza de piernas', 'Activá glúteos antes de sentadilla'). Never write those values in English.");
         // Sin esta regla los modelos chicos copian el ejemplo (un ejercicio) y arman sesiones de 1 o 2 ejercicios
-        sb.AppendLine("8. Every session MUST include between 5 and 6 different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+        if (requestedMaxExercises.HasValue)
+        {
+            sb.AppendLine($"8. Every session MUST include exactly {requestedMaxExercises.Value} different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        }
+        else
+        {
+            sb.AppendLine("8. Every session MUST include between 5 and 6 different exercises from the list above (fewer only if the list has fewer): main compound lifts first, then accessory work. Number them with 'order' starting at 1.");
+        }
         // El catálogo no tiene ejercicios de entrada en calor: va como texto al principio de la nota de la sesión
         sb.AppendLine("9. Start every session's 'coachNotes' with a concrete warm-up of about 10 minutes, in Spanish ('Entrada en calor (10 min): ...'): joint mobility for the muscles of the day and ramp-up sets at 40-60% before the first heavy lift. Then add the technical note for the session.");
         // El ejemplo de abajo tiene una sola semana y los modelos chicos lo copian: hay que pedir la cantidad exacta
@@ -228,79 +258,132 @@ public static class RoutinePromptBuilder
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563).
-    /// </summary>
-    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal)
+    public static string BuildBlockPlanDraftPrompt(
+        CreatePlanDraftRequestDto request,
+        IReadOnlyList<CatalogExerciseDto> availableExercises,
+        IReadOnlyList<DateOnly>? matchDates = null)
     {
-        if (string.IsNullOrWhiteSpace(goal))
-            return [];
+        var sb = new StringBuilder();
+        sb.AppendLine("Sos un preparador físico experto para ProTraining.");
+        sb.AppendLine("Diseñá una sesión modelo de una semana dividida en bloques. La aplicación calcula la progresión de las semanas siguientes.");
+        sb.AppendLine($"Objetivo: {request.Goal}");
+        sb.AppendLine($"Días por semana: {request.DaysPerWeek}");
+        sb.AppendLine("La respuesta debe contener exactamente una sesión por día solicitado, priorizando los índices del catálogo oficial.");
+        sb.AppendLine();
 
-        var text = TextNormalizer.Normalize(goal);
-        var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AppendPfDecisionContext(sb, request.PreviousPfDecisions);
+        AppendAdaptationContext(sb, request.AdaptationContext);
 
-        // Piernas / Tren Inferior
-        if (text.Contains("pierna") || text.Contains("cuadriceps") ||
-            text.Contains("isquio") || text.Contains("gluteo") ||
-            text.Contains("gemelo") || text.Contains("pantorrilla") ||
-            text.Contains("tren inferior") || text.Contains("lower body") ||
-            text.Contains("sentadilla") || text.Contains("peso muerto") ||
-            text.Contains("prensa") || text.Contains("estocada") || text.Contains("zancada") ||
-            text.Contains("hip thrust") || text.Contains("empuje de cadera"))
+        var targetGroups = ExtractMuscleGroups(request.Goal);
+        if (targetGroups.Count > 0)
         {
-            groups.Add("Piernas");
+            sb.AppendLine($"ENFOQUE MUSCULAR DEL OBJETIVO: {string.Join(", ", targetGroups)}.");
+            sb.AppendLine("DIRECTIVAS DE ESPECIFICIDAD DEPORTIVA:");
+            sb.AppendLine("1. Los bloques principales (strengthA y strengthB) y accesorios DEBEN priorizar ejercicios de estos grupos musculares compatibles.");
+            sb.AppendLine("2. No mezcles patrones incongruentes (por ejemplo, en objetivos de tren superior no utilices sentadillas ni prensa en los bloques principales).");
+            sb.AppendLine();
         }
 
-        // Pecho / Empuje
-        if (text.Contains("pecho") || text.Contains("pectoral") ||
-            text.Contains("empuje") || text.Contains("push") ||
-            text.Contains("press de banca") || text.Contains("press banca") ||
-            text.Contains("fondo"))
+        var protectedZones = GoalConstraintExtractor.ExtractProtectedZones(request.Goal);
+        if (protectedZones.Count > 0)
         {
-            groups.Add("Pecho");
+            var zonesLabel = string.Join(", ", protectedZones);
+            sb.AppendLine($"FOCO ARTICULAR / PREVENTIVO EN EL OBJETIVO ({zonesLabel}):");
+            sb.AppendLine($"- El preparador físico indicó foco o cuidado específico en {zonesLabel}. Priorizá ejercicios biomecánicamente seguros y estables para {zonesLabel}, evitando sobrecarga articular directa o ejercicios restringidos para esa zona.");
+            sb.AppendLine();
         }
 
-        // Espalda / Tracción
-        if (text.Contains("espalda") || text.Contains("dorsal") ||
-            text.Contains("traccion") || text.Contains("pull") ||
-            text.Contains("remo") || text.Contains("dominada") ||
-            text.Contains("lumbar") || text.Contains("trapecio") ||
-            text.Contains("jalon"))
+        var maxExercisesPerSession = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+
+        sb.AppendLine("BLOQUES OBLIGATORIOS Y PAUTAS DE CARGA:");
+        sb.AppendLine("1. warmUp: 1-2 ejercicios de entrada en calor, movilidad articular o activación neuromuscular. Sin porcentaje de RM.");
+        sb.AppendLine("2. strengthA: ejercicio principal multiarticular, 3-5 series de 3-8 repeticiones (intensidad objetivo 75-85% RM).");
+        sb.AppendLine("3. strengthB: segundo patrón de fuerza complementario o unilateral, 3-4 series de 5-10 repeticiones (intensidad objetivo 70-80% RM).");
+        sb.AppendLine("4. accessories: 1-3 ejercicios analíticos, de aislamiento o zona media/core, 2-4 series de 8-15 repeticiones (sin RM o moderado).");
+        if (maxExercisesPerSession.HasValue)
         {
-            groups.Add("Espalda");
+            var (warmUpCount, strengthACount, strengthBCount, accessoriesCount) = CalculateBlockDistribution(maxExercisesPerSession.Value);
+            sb.AppendLine($"RESTRICCIÓN PRIORITARIA DEL PREPARADOR FÍSICO: El objetivo exige exactamente {maxExercisesPerSession.Value} ejercicios por día/sesión (exactly {maxExercisesPerSession.Value} exercises per session).");
+            sb.AppendLine($"Usá exactamente {maxExercisesPerSession.Value} ejercicios por sesión en total sumando todos los bloques (warmUp + strengthA + strengthB + accessories = {maxExercisesPerSession.Value}; repartidos en {warmUpCount} en warmUp, {strengthACount} en strengthA, {strengthBCount} en strengthB y {accessoriesCount} en accessories), sin repetir un ejercicio dentro de la sesión.");
+        }
+        else
+        {
+            sb.AppendLine("Usá entre 5 y 6 ejercicios por sesión cuando el catálogo lo permita, sin repetir un ejercicio dentro de la sesión.");
+        }
+        sb.AppendLine("DIRECTIVA DE CUMPLIMIENTO DEL OBJETIVO: Toda condición específica pedida por el preparador físico en el objetivo (cantidad máxima de ejercicios por día, foco articular, equipamiento o ejercicios puntuales) es OBLIGATORIA y tiene prioridad sobre las pautas generales.");
+        sb.AppendLine("Escribí name, objective, justificationSummary y coachNotes en español de Argentina, de forma concreta y técnica.");
+        sb.AppendLine("En coachNotes indicá descansos recomendados (ej. 2-3 min en básicos, 60-90 s en accesorios) y foco técnico en fase excéntrica.");
+        sb.AppendLine("No calcules progresiones semanales: eso lo hará una regla determinística en C#.");
+
+        if (matchDates is { Count: > 0 })
+        {
+            sb.AppendLine("Hay partidos oficiales en el calendario. No armes fuerza el día del partido y respetá D-1 <= 60% y D-2 <= 75%.");
         }
 
-        // Hombros
-        if (text.Contains("hombro") || text.Contains("deltoides") || text.Contains("press militar"))
+        sb.AppendLine();
+        sb.AppendLine("CATÁLOGO OFICIAL. El índice empieza en 1:");
+        for (var index = 0; index < availableExercises.Count; index++)
         {
-            groups.Add("Hombros");
+            var exercise = availableExercises[index];
+            sb.AppendLine($"{index + 1}. {exercise.Name} | grupo: {exercise.MuscleGroup ?? "no informado"} | id: {exercise.Id}");
         }
-
-        // Brazos
-        if (text.Contains("brazo") || text.Contains("biceps") || text.Contains("triceps"))
-        {
-            groups.Add("Brazos");
-        }
-
-        // Tren superior: sin esto "fuerza de tren superior" no matcheaba ningún grupo y se mandaba la mezcla
-        // general, con mayoría de ejercicios de piernas
-        if (text.Contains("tren superior") || text.Contains("upper body") || text.Contains("torso"))
-        {
-            groups.Add("Pecho");
-            groups.Add("Espalda");
-            groups.Add("Hombros");
-            groups.Add("Brazos");
-        }
-
-        // Core / Abdomen
-        if (text.Contains("core") || text.Contains("abdominal") ||
-            text.Contains("abdomen") || text.Contains("zona media") || text.Contains("plancha"))
-        {
-            groups.Add("Core");
-        }
-
-        return groups.ToList();
+        sb.AppendLine("Si necesitás proponer un ejercicio que NO está en el catálogo oficial, devolvé \"exerciseIndex\": null junto con \"exerciseName\" y \"muscleGroup\" (usando los mismos nombres de grupo muscular del catálogo). Si el ejercicio SÍ está en el catálogo, usá obligatoriamente su \"exerciseIndex\" y no inventes uno nuevo.");
+        sb.AppendLine();
+        sb.AppendLine("Respondé únicamente JSON válido con este esquema:");
+        sb.AppendLine(BlockPromptSchema.SchemaJson);
+        return sb.ToString();
     }
+
+    public static void AppendPfDecisionContext(
+        StringBuilder sb,
+        IReadOnlyList<PfDecisionContextDto>? decisions)
+    {
+        if (decisions is not { Count: > 0 })
+            return;
+
+        sb.AppendLine("DECISIONES PREVIAS DEL PREPARADOR FÍSICO:");
+        sb.AppendLine("Usá estas decisiones como evidencia del criterio del PF. No las trates como reglas absolutas si contradicen las restricciones actuales.");
+        foreach (var decision in decisions)
+        {
+            var zone = string.IsNullOrWhiteSpace(decision.Zone) ? "zona no informada" : decision.Zone;
+            var finalExercise = decision.FinalExerciseId.HasValue
+                ? decision.FinalExerciseId.Value.ToString()
+                : "sin ejercicio final";
+            var percentage = decision.FinalPercentage.HasValue
+                ? $"{decision.FinalPercentage.Value:0.##}%"
+                : "sin porcentaje final";
+
+            sb.AppendLine(
+                $"- {decision.Date:yyyy-MM-dd} | origen: {decision.Source} | zona: {zone} | " +
+                $"decisión: {decision.Decision} | sugerido: {decision.SuggestedExerciseId} | " +
+                $"final: {finalExercise} | porcentaje final: {percentage}.");
+        }
+        sb.AppendLine("Priorizá los patrones repetidos del PF y explicá cuando una restricción actual obligue a apartarse de ellos.");
+        sb.AppendLine();
+    }
+
+    private static (int WarmUp, int StrengthA, int StrengthB, int Accessories) CalculateBlockDistribution(int totalExercises)
+    {
+        return totalExercises switch
+        {
+            <= 1 => (0, 1, 0, 0),
+            2 => (0, 1, 1, 0),
+            3 => (1, 1, 1, 0),
+            4 => (1, 1, 1, 1),
+            5 => (1, 1, 1, 2),
+            6 => (2, 1, 1, 2),
+            7 => (2, 1, 1, 3),
+            8 => (2, 1, 2, 3),
+            _ => (2, 2, 2, Math.Max(0, totalExercises - 6))
+        };
+    }
+
+    /// <summary>
+    /// Extrae los grupos musculares clave del texto del objetivo de entrenamiento (#158 · KAN-563 / KAN-605).
+    /// Delega en <see cref="GoalMuscleFocusMapper"/> para mantenerse sincronizado con el motor de reglas.
+    /// </summary>
+    public static IReadOnlyList<string> ExtractMuscleGroups(string? goal) =>
+        GoalMuscleFocusMapper.ExtractMuscleGroups(goal);
 
     /// <summary>
     /// Filtra y prioriza los ejercicios del catálogo oficial según el objetivo deportivo solicitado (#158 · KAN-563).

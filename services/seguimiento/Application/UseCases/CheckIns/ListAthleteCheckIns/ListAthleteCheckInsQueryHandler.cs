@@ -4,7 +4,9 @@ using Application.Mappings;
 
 namespace Application.UseCases.CheckIns.ListAthleteCheckIns;
 
-public sealed class ListAthleteCheckInsQueryHandler(ICheckInRepository repository)
+public sealed class ListAthleteCheckInsQueryHandler(
+    ICheckInRepository repository,
+    ICheckInInjuryPainRepository injuryPainRepository)
 {
     public async Task<IReadOnlyList<CheckInDto>> HandleAsync(
         ListAthleteCheckInsQuery query,
@@ -22,9 +24,19 @@ public sealed class ListAthleteCheckInsQueryHandler(ICheckInRepository repositor
             limit,
             cancellationToken);
 
+        if (checkIns.Count == 0)
+            return Array.Empty<CheckInDto>();
+
+        var painsByCheckIn = await injuryPainRepository.ListByCheckInIdsAsync(
+            checkIns.Select(c => c.Id).ToList(),
+            cancellationToken);
+
         return checkIns
-            .Select(CheckInMappings.ToDto)
+            .Select(checkIn => CheckInMappings.ToDto(
+                checkIn,
+                painsByCheckIn.TryGetValue(checkIn.Id, out var pains)
+                    ? pains
+                    : Array.Empty<CheckInInjuryPainDto>()))
             .ToList();
     }
 }
-

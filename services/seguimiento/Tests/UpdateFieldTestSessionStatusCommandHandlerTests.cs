@@ -20,8 +20,8 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
     {
         CategoryId = Guid.NewGuid(),
         Date = new DateTime(2026, 11, 9),
-        Name = "Evaluación de pretemporada",
-        Status = FieldTestSessionStatus.Planned
+        Name = "Evaluación de pretemporada"
+        // Estado Planned por defecto: setter privado (KAN-580), solo TransitionTo.
     };
 
     public UpdateFieldTestSessionStatusCommandHandlerTests()
@@ -54,7 +54,7 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
     [Fact]
     public async Task HandleAsync_FromInProgressToClosed_UpdatesStatusOnce()
     {
-        _session.Status = FieldTestSessionStatus.InProgress;
+        _session.TransitionTo(FieldTestSessionStatus.InProgress);
 
         var dto = await CreateHandler().HandleAsync(
             new UpdateFieldTestSessionStatusCommand(SessionId, FieldTestSessionStatus.Closed));
@@ -84,7 +84,8 @@ public class UpdateFieldTestSessionStatusCommandHandlerTests
     [Fact]
     public async Task HandleAsync_FromClosedToInProgress_ThrowsDomainExceptionWithoutSaving()
     {
-        _session.Status = FieldTestSessionStatus.Closed;
+        _session.TransitionTo(FieldTestSessionStatus.InProgress);
+        _session.TransitionTo(FieldTestSessionStatus.Closed);
 
         var exception = await Assert.ThrowsAsync<DomainException>(
             () => CreateHandler().HandleAsync(

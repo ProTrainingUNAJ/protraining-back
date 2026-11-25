@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Domain.Entities;
 
 namespace Application.DTOs.TrainingPlans;
@@ -8,20 +9,72 @@ public record PrescribedExerciseDto(
     string ExerciseName,
     int Order,
     int Sets,
-    int Reps,
+    string Reps,
     decimal? TargetPercentage,
-    ExerciseType ExerciseType = ExerciseType.Weight
+    ExerciseType ExerciseType = ExerciseType.Weight,
+    List<string>? Images = null,
+    List<string>? PrimaryMuscles = null,
+    List<string>? SecondaryMuscles = null,
+    string? MuscleGroup = null,
+    string? IntensityType = null,
+    decimal? TargetRpe = null,
+    int? TargetRir = null,
+    string? Notes = null,
+    decimal? TargetDistanceMeters = null,
+    decimal? TargetTimeSeconds = null
 );
 
-public record TrainingPlanSessionDto(
+public record TrainingBlockDto(
     Guid Id,
-    string Name,
+    string Title,
     int Order,
-    DayOfWeek DayOfWeek,
-    string? CoachNotes,
-    List<PrescribedExerciseDto> Exercises,
-    TimeOnly? StartTime = null
+    List<PrescribedExerciseDto> Exercises
 );
+
+public record TrainingPlanSessionDto
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; }
+    public int Order { get; init; }
+    public DayOfWeek DayOfWeek { get; init; }
+    public string? CoachNotes { get; init; }
+    public List<TrainingBlockDto> Blocks { get; init; } = [];
+    public List<PrescribedExerciseDto> Exercises { get; init; } = [];
+    public TimeOnly? StartTime { get; init; }
+
+    [JsonConstructor]
+    public TrainingPlanSessionDto(
+        Guid id,
+        string name,
+        int order,
+        DayOfWeek dayOfWeek,
+        string? coachNotes,
+        List<TrainingBlockDto>? blocks,
+        List<PrescribedExerciseDto>? exercises,
+        TimeOnly? startTime = null)
+    {
+        Id = id;
+        Name = name;
+        Order = order;
+        DayOfWeek = dayOfWeek;
+        CoachNotes = coachNotes;
+        Blocks = blocks ?? [];
+        Exercises = exercises ?? [];
+        StartTime = startTime;
+    }
+
+    public TrainingPlanSessionDto(
+        Guid id,
+        string name,
+        int order,
+        DayOfWeek dayOfWeek,
+        string? coachNotes,
+        List<PrescribedExerciseDto> exercises,
+        TimeOnly? startTime = null)
+        : this(id, name, order, dayOfWeek, coachNotes, [], exercises, startTime)
+    {
+    }
+}
 
 public record TrainingPlanWeekDto(
     Guid Id,
@@ -39,5 +92,8 @@ public record TrainingPlanDetailDto(
 public record TrainingPlanSummaryDto(
     Guid Id,
     string Name,
-    string? Objective
+    string? Objective,
+    List<string>? PrimaryMuscles = null,
+    List<string>? SecondaryMuscles = null,
+    List<string>? TargetMuscles = null
 );

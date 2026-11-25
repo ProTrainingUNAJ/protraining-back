@@ -1,10 +1,11 @@
-﻿using System.Net.Http.Headers;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using API.Controllers;
 using API.Extensions;
 using API.Middleware;
 using API.Services;
+using Application.Common;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.Services;
@@ -29,7 +30,10 @@ using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
+using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetPlanPdf;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -55,6 +59,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace Entrenamiento.Tests.Infrastructure;
@@ -102,6 +107,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
                 services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
                 services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+                services.AddSingleton<ITrainingPlanPdfGenerator, TrainingPlanPdfGenerator>();
                 services.AddSingleton<IExerciseMediaCatalog>(ExerciseMediaCatalog.Empty);
 
                 services.AddHttpContextAccessor();
@@ -111,9 +117,12 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<ListExercisesQueryHandler>();
                 services.AddScoped<AssignPlanCommandHandler>();
+                services.AddScoped<DeletePlanAssignmentCommandHandler>();
+                services.AddScoped<DeleteTrainingPlanCommandHandler>();
                 services.AddScoped<CreateTrainingPlanCommandHandler>();
                 services.AddScoped<UpdateTrainingPlanCommandHandler>();
                 services.AddScoped<GetTrainingPlanQueryHandler>();
+                services.AddScoped<GetTrainingPlanPdfQueryHandler>();
                 services.AddScoped<ListTrainingPlansQueryHandler>();
                 services.AddScoped<GetPlanScheduleQueryHandler>();
                 services.AddScoped<ListPlanAssignmentsQueryHandler>();
@@ -121,7 +130,13 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<UpdateCoachNotesCommandHandler>();
                 services.AddScoped<GetTrainingSessionQueryHandler>();
                 services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
-                services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+                services.Configure<AdaptationOptions>(
+                    configuration.GetSection(AdaptationOptions.SectionName));
+                services.AddScoped<ILoadCalculatorEngine>(sp =>
+                {
+                    var options = sp.GetRequiredService<IOptions<AdaptationOptions>>().Value;
+                    return new LoadCalculatorEngine(options.GetEffectiveEstimatedRecordConservativePercent());
+                });
                 services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionChecker>();
                 services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
                 services.AddScoped<GetExerciseSubstitutesQueryHandler>();
@@ -142,6 +157,7 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
                 services.AddScoped<ApplyPlanTemplateCommandHandler>();
                 services.AddScoped<UpdateExerciseVideoCommandHandler>();
                 services.AddScoped<ResolveActiveMembershipsQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 services.AddTransient<ForwardAuthorizationHandler>();
                 services.AddHttpClient<IStructureClient, StructureClient>(client =>
@@ -151,8 +167,6 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
 
                 services.AddJwtAuthentication(configuration);
                 services.AddControllers()
-                    .AddJsonOptions(options =>
-                        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
                     .AddApplicationPart(typeof(TrainingPlanController).Assembly);
             })
             .Configure(app =>
@@ -251,8 +265,9 @@ public sealed class EntrenamientoTestApplicationFactory : IAsyncDisposable, IDis
             sets: 3,
             reps: 10,
             targetPercentage: 75m,
-            trainingSessionId: session.Id,
-            exerciseId: catalogExercise.Id);
+            trainingBlockId: session.Id,
+            exerciseId: catalogExercise.Id,
+            trainingSessionId: session.Id);
 
         session.AddPrescribedExercise(prescribed);
         week.AddSession(session);

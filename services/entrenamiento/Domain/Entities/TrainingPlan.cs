@@ -76,17 +76,31 @@ public class TrainingPlan : BaseEntity
                     session.DayOfWeek,
                     session.CoachNotes,
                     session.StartTime);
-                foreach (var ex in session.PrescribedExercises)
+
+                foreach (var block in session.Blocks)
                 {
-                    var newEx = PrescribedExercise.Create(
-                        ex.Order,
-                        ex.Sets,
-                        ex.Reps,
-                        ex.TargetPercentage,
-                        newSession.Id,
-                        ex.ExerciseId);
-                    newSession.AddPrescribedExercise(newEx);
+                    var newBlock = TrainingBlock.Create(newSession.Id, block.Title, block.Order);
+                    foreach (var ex in block.PrescribedExercises)
+                    {
+                        var newEx = PrescribedExercise.Create(
+                            ex.Order,
+                            ex.Sets,
+                            ex.Reps,
+                            ex.TargetPercentage,
+                            newBlock.Id,
+                            ex.ExerciseId,
+                            ex.IntensityType,
+                            ex.TargetRpe,
+                            ex.TargetRir,
+                            ex.Notes,
+                            newSession.Id,
+                            ex.TargetDistanceMeters,
+                            ex.TargetTimeSeconds);
+                        newBlock.AddPrescribedExercise(newEx);
+                    }
+                    newSession.AddBlock(newBlock);
                 }
+
                 newWeek.AddSession(newSession);
             }
             clone.AddWeek(newWeek);

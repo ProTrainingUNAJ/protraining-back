@@ -28,7 +28,7 @@ public sealed class CategoriesController(
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CategoryDto>>> List(
-        [FromQuery] Guid organizationId,
+        [FromQuery] Guid? organizationId,
         CancellationToken cancellationToken) =>
         Ok(await listHandler.HandleAsync(new ListCategoriesQuery(organizationId), cancellationToken));
 

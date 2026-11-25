@@ -3,7 +3,9 @@ using API.HealthChecks;
 using API.Mcp;
 using API.Middleware;
 using API.Services;
+using Application.Common;
 using Application.Interfaces.Services;
+using Microsoft.Extensions.Options;
 using Application.Services;
 using Application.UseCases.AthleteRecord.CompleteOnboarding;
 using Application.UseCases.AthleteRecord.ConfirmRecordsImport;
@@ -13,6 +15,7 @@ using Application.UseCases.AthleteRecord.PreviewRecordsImport;
 using Application.UseCases.AthleteRecord.RegisterAthleteRecord;
 using Application.UseCases.Exercise.AddExercise;
 using Application.UseCases.Exercise.CheckRestrictions;
+using Application.UseCases.Exercise.GetRestrictionsByZone;
 using Application.UseCases.Exercise.GetSubstitutes;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Application.UseCases.Exercise.ListExercises;
@@ -28,7 +31,10 @@ using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingPlans.ApplyTemplate;
 using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
+using Application.UseCases.TrainingPlans.DeleteAssignment;
+using Application.UseCases.TrainingPlans.DeletePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
+using Application.UseCases.TrainingPlans.GetPlanPdf;
 using Application.UseCases.TrainingPlans.GetSchedule;
 using Application.UseCases.TrainingPlans.ListAssignments;
 using Application.UseCases.TrainingPlans.ListPlans;
@@ -37,6 +43,7 @@ using Application.UseCases.TrainingPlans.SavePlanAsTemplate;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Application.UseCases.TrainingSessions.GetAthletesWithScheduledSession;
 using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.RejectAthleteAdjustment;
 using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
 using Application.UseCases.TrainingSessions.UpdateCoachNotes;
 using Domain.Services;
@@ -47,6 +54,7 @@ using ModelContextProtocol.AspNetCore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Text.Json;
+using Infrastructure.Services.Tracking;
 
 var builder = WebApplication.CreateBuilder(args);
 var serviceName = builder.Configuration["Service"] ?? "API";
@@ -89,9 +97,12 @@ builder.Services.AddScoped<IAthleteAccessGuard, AthleteAccessGuard>();
 builder.Services.AddScoped<ListExercisesQueryHandler>();
 builder.Services.AddScoped<SearchCatalogExercisesQueryHandler>();
 builder.Services.AddScoped<AssignPlanCommandHandler>();
+builder.Services.AddScoped<DeletePlanAssignmentCommandHandler>();
+builder.Services.AddScoped<DeleteTrainingPlanCommandHandler>();
 builder.Services.AddScoped<CreateTrainingPlanCommandHandler>();
 builder.Services.AddScoped<UpdateTrainingPlanCommandHandler>();
 builder.Services.AddScoped<GetTrainingPlanQueryHandler>();
+builder.Services.AddScoped<GetTrainingPlanPdfQueryHandler>();
 builder.Services.AddScoped<ListTrainingPlansQueryHandler>();
 builder.Services.AddScoped<GetPlanScheduleQueryHandler>();
 builder.Services.AddScoped<ListPlanAssignmentsQueryHandler>();
@@ -99,7 +110,14 @@ builder.Services.AddScoped<GetAthletesWithScheduledSessionQueryHandler>();
 builder.Services.AddScoped<UpdateCoachNotesCommandHandler>();
 builder.Services.AddScoped<GetTrainingSessionQueryHandler>();
 builder.Services.AddScoped<ApplyAthleteSessionAdjustmentCommandHandler>();
-builder.Services.AddScoped<ILoadCalculatorEngine, LoadCalculatorEngine>();
+builder.Services.AddScoped<RejectAthleteSessionAdjustmentCommandHandler>();
+builder.Services.Configure<AdaptationOptions>(
+    builder.Configuration.GetSection(AdaptationOptions.SectionName));
+builder.Services.AddScoped<ILoadCalculatorEngine>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AdaptationOptions>>().Value;
+    return new LoadCalculatorEngine(options.GetEffectiveEstimatedRecordConservativePercent());
+});
 builder.Services.AddScoped<IExerciseRestrictionChecker, ExerciseRestrictionChecker>();
 builder.Services.AddScoped<CheckExerciseRestrictionsQueryHandler>();
 builder.Services.AddScoped<GetExerciseSubstitutesQueryHandler>();
@@ -120,6 +138,8 @@ builder.Services.AddScoped<ListPlanTemplatesQueryHandler>();
 builder.Services.AddScoped<ApplyPlanTemplateCommandHandler>();
 builder.Services.AddScoped<UpdateExerciseVideoCommandHandler>();
 builder.Services.AddScoped<GetSubstitutesByZoneQueryHandler>();
+builder.Services.AddScoped<GetRestrictionsByZoneQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Athletes.PurgeAthlete.PurgeAthleteCommandHandler>();
 
 // E51: servidor MCP (Streamable HTTP, sin estado) para la biblioteca de ejercicios.
 // Se expone en /mcp y el gateway ya lo publica como /entrenamiento/mcp.
@@ -134,6 +154,14 @@ if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 builder.Services.AddTransient<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client => client.BaseAddress = structureUri)
     .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
+// Seguimiento por HTTP, con el token del usuario
+var trackingBaseUrl = builder.Configuration["Services:Seguimiento:BaseUrl"];
+if (!Uri.TryCreate(trackingBaseUrl, UriKind.Absolute, out var trackingUri))
+    throw new InvalidOperationException("Falta la variable de configuración Services__Seguimiento__BaseUrl (URL absoluta).");
+builder.Services.AddHttpClient<ITrackingClient, TrackingClient>(client => client.BaseAddress = trackingUri)
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+
 builder.Services.AddScoped<ResolveActiveMembershipsQueryHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 

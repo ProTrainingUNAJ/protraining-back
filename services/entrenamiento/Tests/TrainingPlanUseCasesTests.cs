@@ -7,6 +7,7 @@ using Application.UseCases.TrainingPlans.AssignPlan;
 using Application.UseCases.TrainingPlans.CreatePlan;
 using Application.UseCases.TrainingPlans.GetPlan;
 using Application.UseCases.TrainingPlans.ListPlans;
+using Application.UseCases.TrainingPlans.ListTemplates;
 using Application.UseCases.TrainingPlans.UpdatePlan;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -94,7 +95,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal("Controlar técnica en descenso", session1.CoachNotes);
         Assert.Single(session1.Exercises);
         Assert.Equal(4, session1.Exercises[0].Sets);
-        Assert.Equal(5, session1.Exercises[0].Reps);
+        Assert.Equal("5", session1.Exercises[0].Reps);
 
         var session2 = week.Sessions[1];
         Assert.Equal("Viernes", session2.Name);
@@ -103,7 +104,7 @@ public class TrainingPlanUseCasesTests
         Assert.Null(session2.CoachNotes);
         Assert.Single(session2.Exercises);
         Assert.Equal(3, session2.Exercises[0].Sets);
-        Assert.Equal(8, session2.Exercises[0].Reps);
+        Assert.Equal("8", session2.Exercises[0].Reps);
 
         _planRepoMock.Verify(r => r.AddAsync(It.IsAny<TrainingPlan>(), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -205,7 +206,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(DayOfWeek.Monday, updatedResult.Weeks[0].Sessions[0].DayOfWeek);
         Assert.Equal("Controlar tempo", updatedResult.Weeks[0].Sessions[0].CoachNotes);
         Assert.Single(updatedResult.Weeks[0].Sessions[0].Exercises);
-        Assert.Equal(10, updatedResult.Weeks[0].Sessions[0].Exercises[0].Reps);
+        Assert.Equal("10", updatedResult.Weeks[0].Sessions[0].Exercises[0].Reps);
 
         Assert.Equal("Fuerza Hipertrofia", getResult.Name);
         Assert.Equal("Fase 2", getResult.Objective);
@@ -295,7 +296,7 @@ public class TrainingPlanUseCasesTests
         Assert.Single(session1.Exercises);
         Assert.Equal(originalExerciseId, session1.Exercises[0].Id);
         Assert.Equal(5, session1.Exercises[0].Sets);
-        Assert.Equal(8, session1.Exercises[0].Reps);
+        Assert.Equal("8", session1.Exercises[0].Reps);
 
         // Sesión 2: Es nueva, tiene un ID nuevo diferente a la sesión 1
         var session2 = result.Weeks[0].Sessions[1];
@@ -356,7 +357,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(initialWeek.Id, result.Weeks[0].Id);
         Assert.Equal(initialSession.Id, result.Weeks[0].Sessions[0].Id);
         Assert.Equal(initialExercise.Id, result.Weeks[0].Sessions[0].Exercises[0].Id);
-        Assert.Equal(12, result.Weeks[0].Sessions[0].Exercises[0].Reps);
+        Assert.Equal("12", result.Weeks[0].Sessions[0].Exercises[0].Reps);
     }
 
     [Fact]
@@ -402,6 +403,9 @@ public class TrainingPlanUseCasesTests
         var exercises = result.Weeks[0].Sessions[0].Exercises;
         Assert.Equal("Sentadilla trasera con barra", exercises[0].ExerciseName);
         Assert.Equal("Press de banca plano", exercises[1].ExerciseName);
+        Assert.NotNull(exercises[0].Images);
+        Assert.NotNull(exercises[0].PrimaryMuscles);
+        Assert.NotNull(exercises[0].SecondaryMuscles);
         _planRepoMock.Verify(r => r.GetExerciseNamesAsync(
             It.Is<IEnumerable<Guid>>(ids => ids.Count() == 2 && ids.Contains(squatId) && ids.Contains(benchId)),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -439,6 +443,7 @@ public class TrainingPlanUseCasesTests
         Assert.Equal(2, result.Count);
         Assert.Equal("Plan 1", result[0].Name);
         Assert.Equal("Plan 2", result[1].Name);
+        Assert.NotNull(result[0].TargetMuscles);
     }
 
     [Fact]
@@ -495,5 +500,77 @@ public class TrainingPlanUseCasesTests
 
         // Verifica que toda la operación se ejecutó dentro de ExecuteInTransactionAsync
         _unitOfWorkMock.Verify(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListPlans_DeberiaSepararMusculosPrimariosYSecundariosDeduplicando()
+    {
+        var plan = TrainingPlan.Create("Plan Hipertrofia", "Enfoque brazos");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día A", 1, DayOfWeek.Monday);
+
+        var ex1 = Exercise.Create("Curl con barra", "Bíceps", primaryMuscles: new List<string> { "biceps", "antebrazos" }, secondaryMuscles: new List<string> { "hombros" });
+        var pe1 = PrescribedExercise.Create(1, 3, 10, null, session.Id, ex1.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe1, ex1);
+
+        var ex2 = Exercise.Create("Remo con barra", "Espalda", primaryMuscles: new List<string> { "espalda" }, secondaryMuscles: new List<string> { "biceps", "trapecios" });
+        var pe2 = PrescribedExercise.Create(2, 4, 8, null, session.Id, ex2.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe2, ex2);
+
+        session.AddPrescribedExercise(pe1);
+        session.AddPrescribedExercise(pe2);
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        _planRepoMock.Setup(r => r.ListAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TrainingPlan> { plan });
+
+        var handler = new ListTrainingPlansQueryHandler(_planRepoMock.Object);
+
+        var result = await handler.Handle(new ListTrainingPlansQuery());
+
+        Assert.Single(result);
+        var summary = result[0];
+        Assert.NotNull(summary.PrimaryMuscles);
+        Assert.NotNull(summary.SecondaryMuscles);
+        Assert.Contains("biceps", summary.PrimaryMuscles);
+        Assert.Contains("antebrazos", summary.PrimaryMuscles);
+        Assert.Contains("espalda", summary.PrimaryMuscles);
+        Assert.Contains("hombros", summary.SecondaryMuscles);
+        Assert.Contains("trapecios", summary.SecondaryMuscles);
+        // Bíceps es secundario en remo, pero primario en curl: no debe aparecer en SecondaryMuscles
+        Assert.DoesNotContain("biceps", summary.SecondaryMuscles);
+        Assert.Equal(summary.PrimaryMuscles, summary.TargetMuscles);
+    }
+
+    [Fact]
+    public async Task ListPlanTemplates_DeberiaSepararMusculosPrimariosYSecundarios()
+    {
+        var template = TrainingPlan.Create("Plantilla Fuerza", "Pretemporada", isTemplate: true);
+        var week = TrainingWeek.Create(1, template.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1", 1, DayOfWeek.Monday);
+
+        var ex1 = Exercise.Create("Press Banca", "Pecho", primaryMuscles: new List<string> { "pecho" }, secondaryMuscles: new List<string> { "triceps", "hombros" });
+        var pe1 = PrescribedExercise.Create(1, 4, 6, 80m, session.Id, ex1.Id);
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!.SetValue(pe1, ex1);
+
+        session.AddPrescribedExercise(pe1);
+        week.AddSession(session);
+        template.AddWeek(week);
+
+        _planRepoMock.Setup(r => r.ListTemplatesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TrainingPlan> { template });
+
+        var handler = new ListPlanTemplatesQueryHandler(_planRepoMock.Object);
+
+        var result = await handler.Handle(new ListPlanTemplatesQuery());
+
+        Assert.Single(result);
+        var summary = result[0];
+        Assert.NotNull(summary.PrimaryMuscles);
+        Assert.NotNull(summary.SecondaryMuscles);
+        Assert.Contains("pecho", summary.PrimaryMuscles);
+        Assert.Contains("triceps", summary.SecondaryMuscles);
+        Assert.Contains("hombros", summary.SecondaryMuscles);
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using API.Extensions;
 using API.Middleware;
 using API.Services;
@@ -15,6 +16,8 @@ using Application.UseCases.Auth.RegisterByInvitation;
 using Application.UseCases.Auth.ResetAthletePassword;
 using Application.UseCases.Auth.ResetPasswordWithToken;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Users.UpdateHabitsRecommendations;
+using Application.UseCases.Users.GetPfHabitsRecommendations;
 using Application.UseCases.Health.GetHealth;
 using Domain.Entities;
 using Infrastructure.Data;
@@ -22,8 +25,10 @@ using Infrastructure.Services;
 using Infrastructure.Services.Structure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -35,16 +40,26 @@ namespace Identidad.Tests.Infrastructure;
 public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposable
 {
     private readonly SqliteConnection _sqliteConnection;
+    private readonly string _sqliteConnectionString;
     private readonly TestServer _server;
 
     public FakeStructureHandler Structure { get; }
     public FakeEmailSender EmailSender { get; } = new();
     public FakeGoogleTokenValidator GoogleTokenValidator { get; } = new();
 
-    public IdentidadTestApplicationFactory()
+    public IdentidadTestApplicationFactory() : this(null)
+    {
+    }
+
+    internal IdentidadTestApplicationFactory(TimeProvider? timeProvider)
     {
         Structure = new FakeStructureHandler();
-        _sqliteConnection = new SqliteConnection("DataSource=:memory:");
+        // Base en memoria con nombre y caché compartida: cada DbContext abre su propia conexión,
+        // así los pedidos simultáneos (rate limiting de forgot-password) no comparten una sola
+        // conexión SQLite, que no es thread-safe y hacía fallar el test de concurrencia de a ratos.
+        // Esta conexión queda abierta solo para que la base viva mientras dure la factory.
+        _sqliteConnectionString = $"DataSource=file:identidad-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+        _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
         _sqliteConnection.Open();
 
         var configuration = new ConfigurationBuilder()
@@ -67,7 +82,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
 
                 // SQLite en memoria para aislar los tests de la base real
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseSqlite(_sqliteConnection));
+                    options.UseSqlite(_sqliteConnectionString));
 
                 // Identity Core
                 services.AddIdentityCore<User>(options =>
@@ -90,6 +105,7 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.Configure<DataProtectionTokenProviderOptions>(options =>
                     options.TokenLifespan = TimeSpan.FromMinutes(30));
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+                services.AddScoped<IUserPhotoRepository, UserPhotoRepository>();
                 services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
@@ -107,18 +123,71 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
                 services.AddScoped<GetHealthQueryHandler>();
                 services.AddScoped<LoginUseCase>();
                 services.AddScoped<GoogleLoginUseCase>();
+                services.AddScoped<LinkGoogleAccountUseCase>();
+                services.AddScoped<UnlinkGoogleAccountUseCase>();
+                services.AddScoped<GetGoogleLinkStatusUseCase>();
                 services.AddScoped<RefreshUseCase>();
                 services.AddScoped<UpdateWhatsAppPhoneUseCase>();
                 services.AddScoped<GetPfContactUseCase>();
+                services.AddScoped<UpdateHabitsRecommendationsUseCase>();
+                services.AddScoped<GetPfHabitsRecommendationsUseCase>();
                 services.AddScoped<RegisterByInvitationUseCase>();
+                services.AddScoped<Application.UseCases.Auth.RegisterPf.RegisterPfUseCase>();
+                services.AddScoped<Application.UseCases.Auth.ConfirmEmail.ConfirmEmailUseCase>();
+                services.AddScoped<Application.UseCases.Auth.ResendConfirmation.ResendConfirmationUseCase>();
                 services.AddScoped<ChangePasswordUseCase>();
                 services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
                 services.AddScoped<ResetAthletePasswordUseCase>();
                 services.AddScoped<ForgotPasswordUseCase>();
                 services.AddScoped<ResetPasswordWithTokenUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase>();
+                services.AddScoped<Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase>();
+                services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler>();
+                services.AddSingleton(timeProvider ?? TimeProvider.System);
+                services.AddSingleton<IForgotPasswordRateLimiter, global::Infrastructure.Services.ForgotPasswordRateLimiter>();
+                services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
+                services.AddScoped<Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase>();
+                services.AddScoped<Application.UseCases.Users.PurgeAthlete.PurgeAthleteCommandHandler>();
 
                 services.AddFrontendCors(configuration);
                 services.AddJwtAuthentication(configuration);
+
+                // Rate Limiting para protección contra abuso en endpoints de autenticación y registro (#KAN-601)
+                services.AddRateLimiter(options =>
+                {
+                    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                    options.OnRejected = async (context, _) =>
+                    {
+                        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                        await Results.Problem(
+                            statusCode: StatusCodes.Status429TooManyRequests,
+                            title: "Demasiadas solicitudes.",
+                            detail: "Has superado el límite de intentos permitidos. Por favor, intentá nuevamente en 15 minutos."
+                        ).ExecuteAsync(context.HttpContext);
+                    };
+
+                    options.AddPolicy("AuthRateLimit", httpContext =>
+                    {
+                        var clientIp = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                            ?? "anonymous";
+
+                        return RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: clientIp,
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 5,
+                                Window = TimeSpan.FromMinutes(15),
+                                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                                QueueLimit = 0
+                            });
+                    });
+                });
 
                 services.AddControllers()
                     .AddApplicationPart(typeof(API.Controllers.AuthController).Assembly)
@@ -144,11 +213,27 @@ public sealed class IdentidadTestApplicationFactory : IAsyncDisposable, IDisposa
             })
             .Configure(app =>
             {
+                app.Use(async (context, next) =>
+                {
+                    if (context.Request.Headers.TryGetValue("X-Remote-Ip", out var remoteIpHeader)
+                        && System.Net.IPAddress.TryParse(remoteIpHeader.FirstOrDefault(), out var parsedIp))
+                    {
+                        context.Connection.RemoteIpAddress = parsedIp;
+                    }
+                    else if (context.Connection.RemoteIpAddress is null)
+                    {
+                        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.1");
+                    }
+
+                    await next();
+                });
+                app.UseProTrainingForwardedHeaders();
                 app.UseMiddleware<CorrelationIdMiddleware>();
                 app.UseMiddleware<ExceptionMiddleware>();
 
                 app.UseRouting();
                 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
+                app.UseRateLimiter();
                 app.UseAuthentication();
                 app.UseAuthorization();
                 app.UseMiddleware<MustChangePasswordMiddleware>();

@@ -10,6 +10,14 @@ namespace Seguimiento.Tests;
 public class ListAthleteCheckInsQueryHandlerTests
 {
     private readonly Mock<ICheckInRepository> _repository = new();
+    private readonly Mock<ICheckInInjuryPainRepository> _injuryPains = new();
+
+    public ListAthleteCheckInsQueryHandlerTests()
+    {
+        _injuryPains
+            .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>());
+    }
 
     [Fact]
     public async Task Handle_ConRangoFechas_LlamaRepoConFechasUtc()
@@ -27,7 +35,7 @@ public class ListAthleteCheckInsQueryHandlerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn>());
 
-        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object);
+        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object, _injuryPains.Object);
         var result = await handler.HandleAsync(new ListAthleteCheckInsQuery(athleteId, from, to));
 
         Assert.Empty(result);
@@ -48,7 +56,7 @@ public class ListAthleteCheckInsQueryHandlerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn>());
 
-        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object);
+        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object, _injuryPains.Object);
         var result = await handler.HandleAsync(new ListAthleteCheckInsQuery(athleteId));
 
         Assert.Empty(result);
@@ -83,7 +91,7 @@ public class ListAthleteCheckInsQueryHandlerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CheckIn> { checkIn });
 
-        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object);
+        var handler = new ListAthleteCheckInsQueryHandler(_repository.Object, _injuryPains.Object);
         var result = await handler.HandleAsync(new ListAthleteCheckInsQuery(athleteId));
 
         var item = Assert.Single(result);

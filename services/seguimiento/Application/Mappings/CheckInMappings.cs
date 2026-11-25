@@ -6,7 +6,7 @@ namespace Application.Mappings;
 
 public static class CheckInMappings
 {
-    public static CheckInDto ToDto(CheckIn checkIn) =>
+    public static CheckInDto ToDto(CheckIn checkIn, IReadOnlyList<CheckInInjuryPainDto> injuries) =>
         new(
             checkIn.Id,
             checkIn.AthleteId,
@@ -22,7 +22,8 @@ public static class CheckInMappings
             checkIn.EffortRate,
             checkIn.IsSick,
             checkIn.PainZones,
-            checkIn.HasActiveInjury);
+            checkIn.HasActiveInjury,
+            injuries);
 
     // Desglose del check-in para los indicadores de la card del semáforo (KAN-365).
     public static TrafficLightIndicatorsDto ToIndicatorsDto(CheckIn checkIn) =>

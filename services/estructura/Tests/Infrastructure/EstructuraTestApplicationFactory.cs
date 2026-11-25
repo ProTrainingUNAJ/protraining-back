@@ -56,6 +56,7 @@ using Microsoft.Extensions.Configuration;
 using Infrastructure.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Application.UseCases.Categories.Invitations.AcceptCategoryInvitation;
+using Moq;
 
 namespace Estructura.Tests.Infrastructure;
 
@@ -65,13 +66,19 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
     private readonly TestServer _server;
     private readonly IWebPushClientWrapper? _customWebPushClient;
     private readonly TimeProvider _timeProvider;
+    private readonly IAthletePurgeDispatcher? _customPurgeDispatcher;
+    private readonly IExternalServicePurgeClient? _customExternalPurgeClient;
 
     public EstructuraTestApplicationFactory(
         IWebPushClientWrapper? customWebPushClient = null,
-        TimeProvider? customTimeProvider = null)
+        TimeProvider? customTimeProvider = null,
+        IAthletePurgeDispatcher? customPurgeDispatcher = null,
+        IExternalServicePurgeClient? customExternalPurgeClient = null)
     {
         _customWebPushClient = customWebPushClient;
         _timeProvider = customTimeProvider ?? TimeProvider.System;
+        _customPurgeDispatcher = customPurgeDispatcher;
+        _customExternalPurgeClient = customExternalPurgeClient;
         _sqliteConnection = new SqliteConnection("DataSource=:memory:");
         _sqliteConnection.Open();
 
@@ -99,10 +106,13 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
 
                 // Scoped repositories and unit of work
                 services.AddScoped<IAthleteRepository, AthleteRepository>();
+                services.AddScoped<IAthletePhotoRepository, AthletePhotoRepository>();
                 services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+                services.AddScoped<IOrganizationPhotoRepository, OrganizationPhotoRepository>();
                 services.AddScoped<ICategoryRepository, CategoryRepository>();
                 services.AddScoped<IAthleteCategoryRepository, AthleteCategoryRepository>();
                 services.AddScoped<IPendingPurgeRepository, PendingPurgeRepository>();
+                services.AddScoped<IEstructuraPurgeRepository, EstructuraPurgeRepository>();
                 services.AddScoped<IMedicalRecordAuditLogRepository, MedicalRecordAuditLogRepository>();
                 services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
                 services.AddScoped<ICompetitiveEventRepository, CompetitiveEventRepository>();
@@ -132,11 +142,33 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 }
                 services.AddScoped<IPushNotificationService, PushNotificationService>();
 
+                if (_customPurgeDispatcher is not null)
+                {
+                    services.AddScoped<IAthletePurgeDispatcher>(_ => _customPurgeDispatcher);
+                }
+                else if (_customExternalPurgeClient is not null)
+                {
+                    services.AddScoped<IExternalServicePurgeClient>(_ => _customExternalPurgeClient);
+                    services.AddScoped<IAthletePurgeDispatcher, AthletePurgeDispatcher>();
+                }
+                else
+                {
+                    var mockDispatcher = new Moq.Mock<IAthletePurgeDispatcher>();
+                    mockDispatcher
+                        .Setup(d => d.DispatchPurgeToExternalServicesAsync(Moq.It.IsAny<Guid>(), Moq.It.IsAny<Guid?>(), Moq.It.IsAny<CancellationToken>()))
+                        .ReturnsAsync(new AthletePurgeDispatchResult(true));
+                    services.AddScoped<IAthletePurgeDispatcher>(_ => mockDispatcher.Object);
+                }
+
                 // Handlers
                 services.AddScoped<ListAthletesQueryHandler>();
                 services.AddScoped<GetAthleteQueryHandler>();
                 services.AddScoped<CreateAthleteCommandHandler>();
                 services.AddScoped<UpdateAthleteCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthleteStatus.UpdateAthleteStatusCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthleteEmail.UpdateAthleteEmailCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhone.UpdateAthletePhoneCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateAthletePhysicalProfile.UpdateAthletePhysicalProfileCommandHandler>();
                 services.AddScoped<UpdateHabitsPermissionCommandHandler>();
                 services.AddScoped<DeleteAthleteCommandHandler>();
                 services.AddScoped<AssignAthleteCategoryCommandHandler>();
@@ -149,6 +181,14 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<ListMyCategoriesQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.GetMyConsent.GetMyConsentQueryHandler>();
                 services.AddScoped<Application.UseCases.Athletes.RegisterMyConsent.RegisterMyConsentCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateMyTelegram.UpdateMyTelegramCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UpdateMyPhysicalProfile.UpdateMyPhysicalProfileCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.UploadAthletePhoto.UploadAthletePhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.GetAthletePhoto.GetAthletePhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Athletes.DeleteAthletePhoto.DeleteAthletePhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Organizations.UploadOrganizationPhoto.UploadOrganizationPhotoCommandHandler>();
+                services.AddScoped<Application.UseCases.Organizations.GetOrganizationPhoto.GetOrganizationPhotoQueryHandler>();
+                services.AddScoped<Application.UseCases.Organizations.DeleteOrganizationPhoto.DeleteOrganizationPhotoCommandHandler>();
                 services.AddScoped<ListOrganizationsQueryHandler>();
                 services.AddScoped<GetOrganizationQueryHandler>();
                 services.AddScoped<CreateOrganizationCommandHandler>();
@@ -175,6 +215,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
                 services.AddScoped<GenerateCategoryInvitationTokenCommandHandler>();
                 services.AddScoped<ValidateCategoryInvitationTokenQueryHandler>();
                 services.AddScoped<AcceptCategoryInvitationCommandHandler>();
+                services.AddScoped<Application.UseCases.Athletes.PurgePendingAthletes.ProcessPendingPurgesCommandHandler>();
 
                 services.AddHttpContextAccessor();
                 services.AddScoped<ICurrentUser, CurrentUser>();
@@ -230,6 +271,7 @@ public sealed class EstructuraTestApplicationFactory : IAsyncDisposable, IDispos
         context.Database.EnsureCreated();
     }
 
+    public IServiceProvider Services => _server.Services;
     public HttpClient CreateClient() => _server.CreateClient();
 
     public HttpClient CreateAuthenticatedClient(Guid pfId, string role = "PreparadorFisico", Guid? userId = null)

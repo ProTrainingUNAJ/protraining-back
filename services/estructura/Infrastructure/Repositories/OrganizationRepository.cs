@@ -14,6 +14,50 @@ public sealed class OrganizationRepository(AppDbContext context) : IOrganization
                 .OrderBy(o => o.Name)
                 .ToListAsync(cancellationToken));
 
+    public async Task<IReadOnlyList<(Organization Organization, int CategoriesCount, int AthletesCount)>> ListWithCountsAsync(CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            var results = await context.Organizations
+                .AsNoTracking()
+                .OrderBy(o => o.Name)
+                .Select(o => new
+                {
+                    Organization = o,
+                    CategoriesCount = context.Categories.Count(c => c.OrganizationId == o.Id),
+                    AthletesCount = context.AthleteCategories
+                        .Where(ac => context.Categories.Any(c => c.Id == ac.CategoryId && c.OrganizationId == o.Id))
+                        .Select(ac => ac.AthleteId)
+                        .Distinct()
+                        .Count()
+                })
+                .ToListAsync(cancellationToken);
+
+            return (IReadOnlyList<(Organization Organization, int CategoriesCount, int AthletesCount)>)results
+                .Select(r => (r.Organization, r.CategoriesCount, r.AthletesCount))
+                .ToList();
+        });
+
+    public async Task<(Organization Organization, int CategoriesCount, int AthletesCount)?> GetWithCountsByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync<(Organization Organization, int CategoriesCount, int AthletesCount)?>(async () =>
+        {
+            var result = await context.Organizations
+                .AsNoTracking()
+                .Where(o => o.Id == id)
+                .Select(o => new
+                {
+                    Organization = o,
+                    CategoriesCount = context.Categories.Count(c => c.OrganizationId == o.Id),
+                    AthletesCount = context.AthleteCategories
+                        .Where(ac => context.Categories.Any(c => c.Id == ac.CategoryId && c.OrganizationId == o.Id))
+                        .Select(ac => ac.AthleteId)
+                        .Distinct()
+                        .Count()
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return result is null ? null : (result.Organization, result.CategoriesCount, result.AthletesCount);
+        });
+
     public async Task<Organization?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await PersistenceErrors.ExecuteAsync(async () =>
             await context.Organizations

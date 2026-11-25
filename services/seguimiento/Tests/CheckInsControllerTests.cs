@@ -8,9 +8,12 @@ using Application.Interfaces.Services;
 using Application.Services;
 using Application.UseCases.CheckIns.GetTodayCheckIn;
 using Application.UseCases.CheckIns.ListAthleteCheckIns;
+using Application.UseCases.CheckIns.ListCheckInInjuries;
+using Application.UseCases.CheckIns.ListResolvedInjuries;
 using Application.UseCases.CheckIns.SubmitCheckIn;
 using Domain.Common;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +25,8 @@ namespace Seguimiento.Tests;
 public class CheckInsControllerTests
 {
     private readonly Mock<ICheckInRepository> _checkIns = new();
+    private readonly Mock<ICheckInInjuryPainRepository> _injuryPains = new();
+    private readonly Mock<IAthleteInjuryRepository> _injuries = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IStructureClient> _estructura = new();
     private readonly TrafficLightEngine _engine = new();
@@ -35,6 +40,22 @@ public class CheckInsControllerTests
                 It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<CheckIn>());
+
+        _injuries
+            .Setup(r => r.ListNotClearedByAthleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AthleteInjury>());
+
+        _injuries
+            .Setup(r => r.ListByAthleteAsync(It.IsAny<Guid>(), It.IsAny<InjuryStatus?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AthleteInjury>());
+
+        _injuryPains
+            .Setup(r => r.GetPeakPainByInjuryIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, int>());
+
+        _injuryPains
+            .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>());
     }
 
     private CheckInsController CreateController(string? role = null)
@@ -45,9 +66,11 @@ public class CheckInsControllerTests
         var guard = new AthleteAccessGuard(currentUserMock.Object, _estructura.Object);
 
         var controller = new CheckInsController(
-            new SubmitCheckInCommandHandler(_checkIns.Object, _unitOfWork.Object, _engine),
-            new ListAthleteCheckInsQueryHandler(_checkIns.Object),
-            new GetTodayCheckInQueryHandler(_checkIns.Object),
+            new SubmitCheckInCommandHandler(_checkIns.Object, _injuryPains.Object, _injuries.Object, _unitOfWork.Object, _engine),
+            new ListAthleteCheckInsQueryHandler(_checkIns.Object, _injuryPains.Object),
+            new GetTodayCheckInQueryHandler(_checkIns.Object, _injuryPains.Object),
+            new ListCheckInInjuriesQueryHandler(_injuries.Object),
+            new ListResolvedInjuriesQueryHandler(_injuries.Object, _injuryPains.Object),
             _estructura.Object,
             guard);
 
@@ -106,6 +129,35 @@ public class CheckInsControllerTests
 
         var created = Assert.IsType<CreatedResult>(result.Result);
         Assert.Equal(201, created.StatusCode);
+    }
+
+    // KAN-487: el middleware traduce esta DomainException a 400 ("sin puntaje → 400").
+    [Fact]
+    public async Task Submit_WithActiveInjuryWithoutScore_ThrowsDomainException_MappedToBadRequest()
+    {
+        var athleteId = Guid.NewGuid();
+        ResponderMe(athleteId);
+        var injury = new AthleteInjury
+        {
+            AthleteId = athleteId,
+            Zone = "isquiotibiales",
+            Status = InjuryStatus.Active
+        };
+        _injuries
+            .Setup(r => r.ListNotClearedByAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([injury]);
+
+        var request = RequestValida() with
+        {
+            Injuries = [new SubmitCheckInInjuryPainRequest { InjuryId = injury.Id, Level = null }]
+        };
+
+        var exception = await Assert.ThrowsAsync<DomainException>(
+            () => CreateController().Submit(athleteId, request, CancellationToken.None));
+
+        Assert.Equal("Falta puntuar el dolor de la molestia.", exception.Message);
+        _checkIns.Verify(r => r.AddAsync(It.IsAny<CheckIn>(), It.IsAny<CancellationToken>()), Times.Never);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -273,6 +325,44 @@ public class CheckInsControllerTests
         var dto = Assert.IsType<CheckInDto>(ok.Value);
         Assert.Equal(athleteId, dto.AthleteId);
         Assert.Equal("cuadriceps:2", dto.PainZones);
+    }
+
+    // la consulta devuelve la misma verdad clínica que se persistió (zona + dolor).
+    [Fact]
+    public async Task Given_ClinicalInjuryToday_When_GetToday_Then_ReturnsZoneAndPainScore()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today.ToDateTime(TimeOnly.MinValue);
+        var injuryId = Guid.NewGuid();
+        var checkIn = new CheckIn
+        {
+            AthleteId = athleteId,
+            Date = today,
+            TrafficLight = TrafficLight.Red,
+            HasActiveInjury = true,
+            PainZones = "isquiotibiales:6"
+        };
+        _checkIns
+            .Setup(r => r.GetNoTrackingByAthleteAndDateAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(checkIn);
+        _injuryPains
+            .Setup(r => r.ListByCheckInIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, IReadOnlyList<CheckInInjuryPainDto>>
+            {
+                [checkIn.Id] = [new CheckInInjuryPainDto(injuryId, "isquiotibiales", 10)]
+            });
+
+        var result = await CreateController().GetToday(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<CheckInDto>(ok.Value);
+        Assert.True(dto.HasActiveInjury);
+        Assert.Equal("isquiotibiales:6", dto.PainZones);
+        Assert.Equal("Red", dto.TrafficLight);
+        var pain = Assert.Single(dto.Injuries);
+        Assert.Equal(injuryId, pain.InjuryId);
+        Assert.Equal("isquiotibiales", pain.Zone);
+        Assert.Equal(10, pain.Level);
     }
 
     [Fact]

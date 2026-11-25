@@ -32,8 +32,8 @@ public class PerformedSet : BaseEntity
 
         if (!timeSeconds.HasValue)
         {
-            if (weight <= 0)
-                throw new DomainException("El peso debe ser mayor a 0 kg.");
+            if (weight < 0)
+                throw new DomainException("El peso no puede ser negativo.");
 
             if (reps <= 0)
                 throw new DomainException("Las repeticiones deben ser mayores a 0.");
@@ -55,6 +55,14 @@ public class PerformedSet : BaseEntity
             TimeSeconds = timeSeconds,
             SetNumber = setNumber
         };
+    }
+
+    public void UpdateTime(decimal timeSeconds)
+    {
+        if (timeSeconds <= 0)
+            throw new DomainException("El tiempo debe ser mayor a 0 segundos.");
+
+        TimeSeconds = timeSeconds;
     }
 }
 

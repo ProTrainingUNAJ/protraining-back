@@ -14,6 +14,7 @@ public sealed class DigitalConsent : BaseEntity
     public string? GuardianPhone { get; private set; }
     public bool AllowsPhysicalTraining { get; private set; }
     public bool AllowsHabitsRecommendations { get; private set; }
+    public bool AllowsProfilePhoto { get; private set; } = false;
 
     private DigitalConsent() { }
 
@@ -23,7 +24,8 @@ public sealed class DigitalConsent : BaseEntity
         string? guardianEmail,
         string? guardianPhone,
         bool allowsPhysicalTraining,
-        bool allowsHabitsRecommendations)
+        bool allowsHabitsRecommendations,
+        bool allowsProfilePhoto = false)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -59,14 +61,16 @@ public sealed class DigitalConsent : BaseEntity
             GuardianEmail = email,
             GuardianPhone = phone,
             AllowsPhysicalTraining = true,
-            AllowsHabitsRecommendations = allowsHabitsRecommendations
+            AllowsHabitsRecommendations = allowsHabitsRecommendations,
+            AllowsProfilePhoto = allowsProfilePhoto
         };
     }
 
     public static DigitalConsent RegisterForAdult(
         Guid athleteId,
         bool allowsPhysicalTraining = true,
-        bool allowsHabitsRecommendations = false)
+        bool allowsHabitsRecommendations = false,
+        bool allowsProfilePhoto = true)
     {
         if (athleteId == Guid.Empty)
             throw new DomainException("El identificador del atleta es inválido.");
@@ -81,7 +85,8 @@ public sealed class DigitalConsent : BaseEntity
             ConsentDate = DateTime.UtcNow,
             IsMinor = false,
             AllowsPhysicalTraining = true,
-            AllowsHabitsRecommendations = allowsHabitsRecommendations
+            AllowsHabitsRecommendations = allowsHabitsRecommendations,
+            AllowsProfilePhoto = allowsProfilePhoto
         };
     }
 
@@ -89,6 +94,11 @@ public sealed class DigitalConsent : BaseEntity
     {
         // La fecha original de firma (ConsentDate) y los datos del firmante son inmutables.
         AllowsHabitsRecommendations = allowsHabitsRecommendations;
+    }
+
+    public void UpdateProfilePhotoPermission(bool allowsProfilePhoto)
+    {
+        AllowsProfilePhoto = allowsProfilePhoto;
     }
 
     // Verifica que el consentimiento esté firmado y cumpla con la regla de tutor para menores

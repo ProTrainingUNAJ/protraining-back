@@ -19,7 +19,10 @@ public sealed class TenantFilterGuardTests
     };
 
     // Archivos que pueden usar IgnoreQueryFilters(), con el motivo.
-    private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new();
+    private static readonly Dictionary<string, string> FilesAllowedToIgnoreFilters = new()
+    {
+        ["AsistentePurgeRepository.cs"] = "Endpoint interno de purga (rol Servicio): elimina físicamente registros históricos del atleta sin un PF en sesión.",
+    };
 
     // Toda entidad del modelo tiene el filtro global por PF (hereda de BaseEntity), salvo las de la lista.
     [Fact]

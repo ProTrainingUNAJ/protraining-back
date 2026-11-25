@@ -12,4 +12,10 @@ public sealed record MeDto(
     bool Active,
     IReadOnlyList<CategoryDto> Categories,
     bool HasSignedConsent = false,
-    bool IsMinor = false);
+    bool IsMinor = false,
+    decimal? WeightKg = null,
+    string? AthleticGoal = null,
+    DateTime? PhysicalProfileUpdatedAt = null,
+    DateOnly? BirthDate = null,
+    string? Gender = null,
+    decimal? HeightCm = null);

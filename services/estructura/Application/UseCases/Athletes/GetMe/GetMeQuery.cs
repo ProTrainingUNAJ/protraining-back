@@ -37,6 +37,12 @@ public sealed class GetMeQueryHandler(
             athlete.Active,
             categories.Select(CategoryMappings.ToDto).ToList(),
             hasSignedConsent,
-            athlete.IsMinor);
+            athlete.IsMinor,
+            athlete.WeightKg,
+            Domain.Entities.AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
+            athlete.PhysicalProfileUpdatedAt,
+            athlete.BirthDate,
+            athlete.Gender,
+            athlete.HeightCm);
     }
 }

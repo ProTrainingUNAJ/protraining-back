@@ -29,6 +29,22 @@ public sealed class PfDecisionRepository(AppDbContext dbContext) : IPfDecisionRe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PfDecision>> GetRecentAsync(
+        Guid? athleteId = null,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.PfDecisions.AsNoTracking();
+        if (athleteId.HasValue)
+            query = query.Where(d => d.AthleteId == athleteId);
+
+        return await query
+            .OrderByDescending(d => d.Date)
+            .ThenByDescending(d => d.CreatedAt)
+            .Take(limit > 0 ? limit : 50)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PfDecision>> GetRecentByAthleteAsync(
         Guid athleteId,
         string? zone = null,

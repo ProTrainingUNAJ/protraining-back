@@ -29,6 +29,12 @@ public interface ITrainingPlanServiceClient
         Guid athleteId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Rutina del atleta para una fecha puntual (para aplicar un ajuste a su próxima sesión).</summary>
+    Task<TodayRoutineRemoteDto?> GetRoutineForDateAsync(
+        Guid athleteId,
+        DateOnly date,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ExerciseRestrictionCheckResultRemoteDto>> CheckExerciseRestrictionsAsync(
         string painZones,
         IReadOnlyList<Guid> exerciseIds,
@@ -42,4 +48,8 @@ public interface ITrainingPlanServiceClient
         Guid sessionId,
         ApplyAthleteAdjustmentRequestRemoteDto request,
         CancellationToken cancellationToken = default);
+
+    Task<Guid> EnsureExerciseCreatedAsync(
+        CreateExerciseRemoteRequestDto request,
+        CancellationToken cancellationToken);
 }

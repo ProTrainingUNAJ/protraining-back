@@ -835,6 +835,36 @@ paths:
         "404":
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/training-plans/{id}/pdf:
+    get:
+      tags:
+        - Routines and Templates
+      summary: Descargar o imprimir rutina en PDF
+      description: Genera y devuelve un archivo PDF formateado e imprimible con la estructura de la planificacion para uso en cancha o pizarra. Requiere rol PreparadorFisico.
+      operationId: getTrainingPlanPdf
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la planificacion.
+      responses:
+        "200":
+          description: Archivo PDF generado exitosamente.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/training-plans/schedule:
     get:
       tags:
@@ -1178,6 +1208,51 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/training-sessions/{sessionId}/athlete-adjustments/reject:
+    post:
+      tags:
+        - Routines and Templates
+      summary: Rechazar propuesta de adaptación de sesión por atleta y fecha
+      description: >
+        Registra el rechazo del preparador físico sobre la propuesta de adaptación para un atleta,
+        sesión y fecha, desactiva únicamente las variantes activas creadas por el ajuste previo de esa
+        sesión y fecha, preserva el registro de lo que se había aprobado y mantiene la rutina base del
+        grupo (KAN-636). Requiere rol PreparadorFisico.
+      operationId: rejectAthleteSessionAdjustment
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador de la sesión de entrenamiento.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectAthleteSessionAdjustmentRequest'
+      responses:
+        "200":
+          description: Rechazo registrado exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/internal/training-sessions/athletes-with-session:
     get:
@@ -1212,6 +1287,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledSessionTargetsResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/internal/athletes/{athleteId}/purge:
+    delete:
+      tags:
+        - Internal
+      summary: Purga física de datos de un atleta
+      description: Endpoint interno inter-servicio (rol Servicio) para el job de purga de datos. Elimina de forma atómica series ejecutadas, récords, propuestas, ajustes, asignaciones de plan y variantes.
+      operationId: purgeAthleteInternal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: athleteId
+          in: path
+          required: true
+          description: Identificador único del atleta a purgar.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumen de registros físicos eliminados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  athleteId:
+                    type: string
+                    format: uuid
+                  totalRecordsPurged:
+                    type: integer
         "401":
           $ref: '#/components/responses/Unauthorized'
         "403":
@@ -2061,46 +2171,6 @@ components:
           items:
             $ref: '#/components/schemas/RoutineItemRequest'
 
-    RoutineTemplate:
-      type: object
-      required:
-        - id
-        - name
-        - goal
-        - exercisesCount
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "a8b7c6d5-e4f3-2a1b-0c9d-8e7f6a5b4c3d"
-        name:
-          type: string
-          example: "Pretemporada Bloque Fuerza Semana 1-4"
-        goal:
-          type: string
-          example: "Fuerza Máxima e Hipertrofia Funcional"
-        exercisesCount:
-          type: integer
-          example: 6
-
-    CreateRoutineTemplateRequest:
-      type: object
-      required:
-        - name
-        - goal
-        - items
-      properties:
-        name:
-          type: string
-          example: "Pretemporada Bloque Fuerza Semana 1-4"
-        goal:
-          type: string
-          example: "Fuerza Máxima"
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/RoutineItemRequest'
-
     TodayRoutineExercise:
       type: object
       required:
@@ -2156,6 +2226,11 @@ components:
         reps:
           type: integer
           example: 6
+        repsRange:
+          type: string
+          nullable: true
+          description: Rango o descripción flexible de repeticiones prescritas (ej. "6-8", "10-12", "Fallo") introducido en KAN-585.
+          example: "6-8"
         percentage:
           type: number
           format: double
@@ -2188,6 +2263,12 @@ components:
           type: boolean
           description: True si el ejercicio no tiene récord previo y la serie se prescribe como de referencia para probar y registrar.
           example: false
+        targetDistanceMeters:
+          type: number
+          format: double
+          nullable: true
+          description: Meta de distancia prescripta por el preparador físico en metros.
+          example: 400.0
         targetTimeSeconds:
           type: number
           format: double
@@ -2199,6 +2280,70 @@ components:
           description: Series o pasadas ya registradas hoy para este ejercicio (KAN-457).
           items:
             $ref: '#/components/schemas/TodayRoutinePerformedSet'
+        isAdapted:
+          type: boolean
+          description: Indica si el ejercicio fue adaptado con una variante personalizada o ajuste (KAN-471).
+          example: true
+        originalExerciseName:
+          type: string
+          nullable: true
+          description: Nombre del ejercicio original prescrito antes de aplicar la variante.
+          example: "Sentadilla"
+        adaptationReason:
+          type: string
+          nullable: true
+          description: Motivo o nota de la adaptación aplicada al ejercicio.
+          example: "Variante aprobada por molestia de rodilla"
+        intensityType:
+          type: string
+          nullable: true
+          enum: [RPE, RIR]
+          description: Métrica de intensidad activa del ejercicio.
+        targetRpe:
+          type: number
+          format: double
+          nullable: true
+          description: RPE objetivo (1-10) cuando intensityType es RPE.
+        targetRir:
+          type: integer
+          nullable: true
+          description: RIR objetivo (0-5) cuando intensityType es RIR.
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas del ejercicio para la semana.
+        weekNumber:
+          type: integer
+          nullable: true
+          description: Número de semana resuelta para este ejercicio.
+        blockId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del bloque al que pertenece el ejercicio.
+
+    TodayRoutineBlock:
+      type: object
+      required:
+        - id
+        - title
+        - order
+        - exercises
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Fuerza Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodayRoutineExercise'
 
     TodayRoutineResponse:
       type: object
@@ -2238,6 +2383,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TodayRoutineExercise'
+        weekNumber:
+          type: integer
+          nullable: true
+          description: Número de semana resuelta para la rutina.
+        blocks:
+          type: array
+          nullable: true
+          description: Bloques de la sesión del día ordenados con los valores de la semana en curso.
+          items:
+            $ref: '#/components/schemas/TodayRoutineBlock'
+        sessionName:
+          type: string
+          nullable: true
+          description: Nombre de la sesión del plan.
 
         sessionId:
           type: string
@@ -2553,7 +2712,6 @@ components:
       required:
         - athleteId
         - date
-        - items
       properties:
         athleteId:
           type: string
@@ -2573,11 +2731,46 @@ components:
           type: string
           nullable: true
           example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        loadReductionPercentage:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          description: Porcentaje de reducción de carga sugerido por aviso preventivo (ej. 20%).
+          example: 20
         items:
           type: array
-          minItems: 1
+          nullable: true
           items:
             $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
+
+    RejectAthleteSessionAdjustmentRequest:
+      type: object
+      required:
+        - athleteId
+      properties:
+        athleteId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        trainingPlanId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador de la planificación vigente vinculada (opcional).
+          example: "11111111-2222-3333-4444-555555555555"
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de la sesión (YYYY-MM-DD). Si se omite, toma hoy en hora Argentina.
+          example: "2026-11-22"
+        note:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Motivo opcional del rechazo indicado por el PF.
+          example: "Molestia leve superada, mantiene la rutina base del grupo."
 
     ApplyAthleteSessionAdjustmentResponse:
       type: object
@@ -2614,12 +2807,31 @@ components:
         adjustedByCoach:
           type: boolean
           example: true
+        status:
+          type: string
+          enum:
+            - Approved
+            - Rejected
+          description: Estado de la decisión del PF sobre la adaptación (KAN-636).
+          example: "Approved"
+        loadReductionPercentage:
+          type: integer
+          nullable: true
+          example: 20
         note:
           type: string
           nullable: true
+          description: Nota del ajuste aprobado (se preserva como historial aunque el ajuste luego se rechace).
           example: "Se cambia Salto al cajón por Prensa de piernas por molestia en el cuádriceps (nivel 2) reportada hoy."
+        rejectionReason:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Motivo del rechazo registrado por el PF cuando status es Rejected (KAN-636).
+          example: "Molestia leve superada, mantiene la rutina base del grupo."
         items:
           type: array
+          description: Sustituciones de ejercicios aprobadas (se preservan como historial si el ajuste luego se rechaza; no se aplican a la rutina cuando status es Rejected).
           items:
             $ref: '#/components/schemas/ApplyAthleteSessionAdjustmentItem'
 
@@ -2656,13 +2868,71 @@ components:
           type: integer
           example: 4
         reps:
-          type: integer
-          example: 5
+          type: string
+          description: Número o rango de repeticiones (ej. "10", "6-8", "8-10").
+          example: "6-8"
         targetPercentage:
           type: number
           format: decimal
           nullable: true
           example: 80.0
+        intensityType:
+          type: string
+          enum: [RPE, RIR]
+          nullable: true
+          description: Métrica de esfuerzo subjetivo elegida por el PF para este ejercicio.
+          example: "RPE"
+        targetRpe:
+          type: number
+          format: decimal
+          nullable: true
+          description: Escala de percepción del esfuerzo RPE (1 a 10).
+          example: 8.5
+        targetRir:
+          type: integer
+          nullable: true
+          description: Repeticiones en reserva RIR (0 a 5).
+          example: 2
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas o indicaciones específicas para la semana.
+          example: "Pausa de 2 seg en la concéntrica"
+        targetDistanceMeters:
+          type: number
+          format: decimal
+          nullable: true
+          description: Distancia objetivo prescripta en metros.
+          example: 400
+        targetTimeSeconds:
+          type: number
+          format: decimal
+          nullable: true
+          description: Tiempo objetivo prescripto en segundos.
+          example: 60.5
+
+    TrainingBlockRequest:
+      type: object
+      required:
+        - title
+        - order
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador del bloque existente (opcional). Si no se envía, se empareja por orden.
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseRequest'
 
     TrainingSessionRequest:
       type: object
@@ -2696,6 +2966,10 @@ components:
           nullable: true
           description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
           example: "18:00:00"
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingBlockRequest'
         exercises:
           type: array
           items:
@@ -2732,6 +3006,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2766,13 +3055,96 @@ components:
           type: integer
           example: 4
         reps:
-          type: integer
-          example: 5
+          type: string
+          description: Número o rango de repeticiones (ej. "10", "6-8", "8-10").
+          example: "6-8"
         targetPercentage:
           type: number
           format: decimal
           nullable: true
           example: 80.0
+        intensityType:
+          type: string
+          enum: [RPE, RIR]
+          nullable: true
+          description: Métrica de esfuerzo subjetivo elegida por el PF para este ejercicio.
+          example: "RPE"
+        targetRpe:
+          type: number
+          format: decimal
+          nullable: true
+          description: Escala de percepción del esfuerzo RPE (1 a 10).
+          example: 8.5
+        targetRir:
+          type: integer
+          nullable: true
+          description: Repeticiones en reserva RIR (0 a 5).
+          example: 2
+        notes:
+          type: string
+          nullable: true
+          description: Notas técnicas o indicaciones específicas para la semana.
+          example: "Pausa de 2 seg en la concéntrica"
+        targetDistanceMeters:
+          type: number
+          format: decimal
+          nullable: true
+          description: Distancia objetivo prescripta en metros.
+          example: 400
+        targetTimeSeconds:
+          type: number
+          format: decimal
+          nullable: true
+          description: Tiempo objetivo prescripto en segundos.
+          example: 60.5
+        exerciseType:
+          type: string
+          enum: [Weight, Time, Distance, Reps]
+          description: Modalidad o tipo de ejercicio (con carga, tiempo, distancia, repeticiones).
+          example: "Weight"
+        images:
+          type: array
+          items:
+            type: string
+          description: Fotos del ejercicio (inicio y fin del movimiento).
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Grupos musculares principales involucrados en la ejecución.
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          description: Músculos secundarios o estabilizadores involucrados.
+        muscleGroup:
+          type: string
+          nullable: true
+          description: Grupo muscular principal del ejercicio.
+          example: "Piernas"
+
+    TrainingBlockDetail:
+      type: object
+      required:
+        - id
+        - title
+        - order
+        - exercises
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        title:
+          type: string
+          example: "Principal"
+        order:
+          type: integer
+          example: 1
+        exercises:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescribedExerciseDetail'
 
     TrainingSessionDetail:
       type: object
@@ -2781,6 +3153,7 @@ components:
         - name
         - order
         - dayOfWeek
+        - blocks
         - exercises
       properties:
         id:
@@ -2805,6 +3178,10 @@ components:
           nullable: true
           description: Hora de inicio de la sesión en hora Argentina (UTC-3). Sin hora, la sesión vale para todo el día.
           example: "18:00:00"
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingBlockDetail'
         exercises:
           type: array
           items:
@@ -2847,6 +3224,21 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
         weeks:
           type: array
           items:
@@ -2926,3 +3318,18 @@ components:
           type: string
           nullable: true
           example: "Pretemporada"
+        primaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]
+        secondaryMuscles:
+          type: array
+          items:
+            type: string
+          example: ["hamstrings", "calves"]
+        targetMuscles:
+          type: array
+          items:
+            type: string
+          example: ["quadriceps", "glutes"]

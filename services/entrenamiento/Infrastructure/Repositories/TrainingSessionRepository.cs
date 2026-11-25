@@ -17,7 +17,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
     public async Task<TrainingSession?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.TrainingSessions
-            .Include(s => s.PrescribedExercises)
+            .Include(s => s.Blocks)
+                .ThenInclude(b => b.PrescribedExercises)
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
@@ -33,15 +34,18 @@ public class TrainingSessionRepository : ITrainingSessionRepository
     {
         // 1. Obtenemos las asignaciones del atleta o sus categorías, incluyendo el plan completo con semanas y sesiones
         var assignments = await _context.PlanAssignments
+            .AsNoTracking()
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-                        .ThenInclude(s => s.PrescribedExercises.OrderBy(pe => pe.Order))
-                            .ThenInclude(pe => pe.Exercise)
+                        .ThenInclude(s => s.Blocks.OrderBy(b => b.Order))
+                            .ThenInclude(b => b.PrescribedExercises.OrderBy(pe => pe.Order))
+                                .ThenInclude(pe => pe.Exercise)
             .Where(a => a.AthleteId == athleteId ||
                         (a.CategoryId.HasValue && categoryIds.Contains(a.CategoryId.Value)))
             .OrderByDescending(a => a.AthleteId.HasValue) // Prioridad: plan asignado directo al atleta
             .ThenByDescending(a => a.StartDate)          // Luego el más reciente
+            .ThenByDescending(a => a.CreatedAt)          // En caso de empate de fecha, la asignación creada más recientemente
             .ToListAsync(cancellationToken);
 
         // 2. La primera asignación (en ese orden) que tenga sesión en la fecha pedida
@@ -58,7 +62,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
-                        .ThenInclude(s => s.PrescribedExercises)
+                        .ThenInclude(s => s.Blocks)
+                            .ThenInclude(b => b.PrescribedExercises)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);
     }
@@ -78,6 +83,8 @@ public class TrainingSessionRepository : ITrainingSessionRepository
             .Include(a => a.Plan)
                 .ThenInclude(p => p.Weeks)
                     .ThenInclude(w => w.Sessions)
+                        .ThenInclude(s => s.Blocks)
+                            .ThenInclude(b => b.PrescribedExercises)
             .Where(a => a.PfId == pfId && a.DeletedAt == null && a.Plan.DeletedAt == null)
             .OrderBy(a => a.StartDate)
             .ToListAsync(cancellationToken);

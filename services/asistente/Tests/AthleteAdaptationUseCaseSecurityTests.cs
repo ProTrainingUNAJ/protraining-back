@@ -1,7 +1,10 @@
 namespace Asistente.Tests;
 
 using System.Reflection;
+using Application.Common.Adaptation;
+using Application.DTOs.Adaptation;
 using Application.DTOs.Ai;
+using Application.DTOs.DayConflicts;
 using Application.Interfaces.Services;
 using Application.UseCases.Ai.SuggestRoutine;
 using Microsoft.AspNetCore.Http;
@@ -52,5 +55,313 @@ public sealed class AthleteAdaptationUseCaseSecurityTests
         Assert.Contains(
             method.GetCustomAttributes<ProducesResponseTypeAttribute>(),
             attribute => attribute.StatusCode == StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task Given_LucasWithKneeInjuryAndBaseRoutine_When_AdaptationIsGenerated_Then_ReturnsBaseVsAdaptedDiffWithLegPressAndMedicalReason()
+    {
+        var lucasId = Guid.NewGuid();
+        var squatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+        var legPressId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure
+            .Setup(client => client.IsOwnAthleteAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService
+            .Setup(service => service.GetAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                lucasId,
+                [
+                    new ActiveInjuryRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        "rodilla",
+                        "Dolor en tendón rotuliano",
+                        DateTime.UtcNow.AddDays(-3),
+                        DateTime.UtcNow.AddDays(7),
+                        "Active",
+                        null,
+                        DateTime.UtcNow.AddDays(-3))
+                ],
+                [],
+                [
+                    new ExerciseRestrictionContextDto(
+                        squatId,
+                        "rodilla",
+                        "Reduce estrés en tendón rotuliano",
+                        [new AuthorizedSubstituteDto(legPressId, "Prensa de piernas")])
+                ]));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object);
+
+        var baseExercises = new List<SuggestedExerciseDto>
+        {
+            new("Sentadilla con barra", 4, 5, 75m, squatId),
+            new("Press de banca con barra - Agarre medio", 4, 6, 70m, benchId)
+        };
+
+        var result = await useCase.ExecuteAdaptationAsync(
+            new RoutineSuggestionRequestDto(
+                AthleteId: lucasId,
+                Goal: "Base de fuerza para la pretemporada",
+                BaseExercises: baseExercises));
+
+        Assert.True(result.WasAdapted);
+        Assert.NotNull(result.BaseExercises);
+        Assert.Equal(2, result.BaseExercises!.Count);
+        Assert.Equal("Sentadilla con barra", result.BaseExercises[0].ExerciseName);
+        Assert.Equal("Press de banca con barra - Agarre medio", result.BaseExercises[1].ExerciseName);
+
+        Assert.Equal(2, result.Exercises.Count);
+        Assert.Equal(legPressId, result.Exercises[0].ExerciseId);
+        Assert.Equal("Prensa de piernas", result.Exercises[0].ExerciseName);
+        Assert.Equal(benchId, result.Exercises[1].ExerciseId);
+        Assert.Equal("Press de banca con barra - Agarre medio", result.Exercises[1].ExerciseName);
+
+        var change = Assert.Single(result.AdaptationChanges!);
+        Assert.Equal(squatId, change.OriginalExerciseId);
+        Assert.Equal("Sentadilla con barra", change.OriginalExerciseName);
+        Assert.Equal(legPressId, change.FinalExerciseId);
+        Assert.Equal("Prensa de piernas", change.FinalExerciseName);
+        Assert.Equal("rodilla", change.Zone);
+        Assert.Equal(
+            "Sustitución biomecánica por lesión de rodilla para reducir estrés en tendón rotuliano. Sustituto autorizado: Prensa de piernas.",
+            change.Reason);
+        Assert.NotNull(change.AvailableSubstitutes);
+        Assert.Single(change.AvailableSubstitutes!);
+    }
+
+    [Fact]
+    public async Task Given_LucasWithoutSquatRecordAndWithActiveInjury_When_BaseRoutineAdaptationIsRequested_Then_ChecksRestrictionsForBaseExercises()
+    {
+        var lucasId = Guid.NewGuid();
+        var squatId = Guid.NewGuid();
+        var legPressId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure
+            .Setup(client => client.IsOwnAthleteAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService
+            .Setup(service => service.GetAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                lucasId,
+                [
+                    new ActiveInjuryRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        "rodilla",
+                        "Molestia rotuliana",
+                        DateTime.UtcNow.AddDays(-2),
+                        DateTime.UtcNow.AddDays(10),
+                        "Active",
+                        null,
+                        DateTime.UtcNow.AddDays(-2))
+                ],
+                [],
+                []));
+
+        var trainingClient = new Mock<ITrainingPlanServiceClient>();
+        trainingClient
+            .Setup(client => client.CheckExerciseRestrictionsAsync(
+                It.Is<string>(z => z.Contains("cuadriceps:3") && z.Contains("rodilla:3")),
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(squatId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new ExerciseRestrictionCheckResultRemoteDto(
+                    squatId,
+                    true,
+                    "cuadriceps",
+                    3,
+                    "Alta compresión femororrotuliana y tensión en el tendón rotuliano",
+                    [new DayConflictSubstituteDto(legPressId, "Prensa de piernas")])
+            ]);
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object,
+            trainingPlanServiceClient: trainingClient.Object);
+
+        var result = await useCase.ExecuteAdaptationAsync(
+            new RoutineSuggestionRequestDto(
+                AthleteId: lucasId,
+                Goal: "Fuerza base",
+                BaseExercises: [new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 75m, squatId)]));
+
+        Assert.True(result.WasAdapted);
+        Assert.Equal("Sentadilla con barra", Assert.Single(result.BaseExercises!).ExerciseName);
+        Assert.Equal("Prensa de piernas", Assert.Single(result.Exercises).ExerciseName);
+        var change = Assert.Single(result.AdaptationChanges!);
+        Assert.Equal("rodilla", change.Zone);
+        Assert.Equal("Prensa de piernas", change.FinalExerciseName);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWithEstimatedRecord_When_BaseRoutineAdaptationIsGenerated_Then_IncludesEstimatedRecordAlertWarning()
+    {
+        var lucasId = Guid.NewGuid();
+        var squatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+        var legPressId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure
+            .Setup(client => client.IsOwnAthleteAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService
+            .Setup(service => service.GetAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                lucasId,
+                [
+                    new ActiveInjuryRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        "rodilla",
+                        "Dolor en tendón rotuliano",
+                        DateTime.UtcNow.AddDays(-3),
+                        DateTime.UtcNow.AddDays(7),
+                        "Active",
+                        null,
+                        DateTime.UtcNow.AddDays(-3))
+                ],
+                [
+                    new AthleteRecordRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        squatId,
+                        "Sentadilla con barra",
+                        110m,
+                        "EstimatedEpley",
+                        DateTime.UtcNow.AddDays(-5),
+                        true),
+                    new AthleteRecordRemoteDto(
+                        Guid.NewGuid(),
+                        lucasId,
+                        benchId,
+                        "Press de banca con barra - Agarre medio",
+                        85m,
+                        "Estimated",
+                        DateTime.UtcNow.AddDays(-5),
+                        true)
+                ],
+                [
+                    new ExerciseRestrictionContextDto(
+                        squatId,
+                        "rodilla",
+                        "Reduce estrés en tendón rotuliano",
+                        [new AuthorizedSubstituteDto(legPressId, "Prensa de piernas")])
+                ]));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object);
+
+        var result = await useCase.ExecuteAdaptationAsync(
+            new RoutineSuggestionRequestDto(
+                AthleteId: lucasId,
+                Goal: "Fuerza base",
+                BaseExercises:
+                [
+                    new SuggestedExerciseDto("Sentadilla con barra", 4, 5, 75m, squatId),
+                    new SuggestedExerciseDto("Press de banca con barra - Agarre medio", 4, 6, 70m, benchId)
+                ]));
+
+        Assert.True(result.WasAdapted);
+        Assert.NotNull(result.AdaptationWarnings);
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            warning => warning.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("Sentadilla con barra", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("110 kg", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            warning => warning.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("Press de banca con barra - Agarre medio", StringComparison.OrdinalIgnoreCase) &&
+                       warning.Contains("85 kg", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAdaptationAsync_WhenEstimatedRecordIsNotInSession_DoesNotWarnAboutUnrelatedExercise()
+    {
+        var athleteId = Guid.NewGuid();
+        var unrelatedSquatId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService.Setup(c => c.GetAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                athleteId,
+                [],
+                [
+                    // Récord estimado de Sentadilla, pero la sesión solo tiene Press de banca (testeado)
+                    new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, unrelatedSquatId, "Sentadilla con barra", 120m, "Estimated", DateTime.UtcNow.AddDays(-3), true),
+                    new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, benchId, "Press de banca plano", 90m, "Tested", DateTime.UtcNow.AddDays(-3), true)
+                ],
+                []));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object);
+
+        var result = await useCase.ExecuteAdaptationAsync(new RoutineSuggestionRequestDto(
+            AthleteId: athleteId,
+            Goal: "Fuerza de tren superior",
+            BaseExercises: [new SuggestedExerciseDto("Press de banca plano", 4, 6, 75m, benchId)]));
+
+        Assert.NotNull(result.AdaptationWarnings);
+        Assert.DoesNotContain(
+            result.AdaptationWarnings!,
+            w => w.Contains("Alerta de dato estimado", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAdaptationAsync_GivenConfiguredAdaptationOptions_UsesConfiguredConservativePercent()
+    {
+        var athleteId = Guid.NewGuid();
+        var benchId = Guid.NewGuid();
+
+        var structure = new Mock<IStructureAthleteClient>();
+        structure.Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var contextService = new Mock<IAthleteAdaptationContextService>();
+        contextService.Setup(c => c.GetAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteAdaptationContextDto(
+                athleteId,
+                [],
+                [new AthleteRecordRemoteDto(Guid.NewGuid(), athleteId, benchId, "Press de banca plano", 90m, "Estimated", DateTime.UtcNow.AddDays(-2), true)],
+                []));
+
+        var useCase = new SuggestRoutineUseCase(
+            Mock.Of<IAiService>(),
+            contextService.Object,
+            structure.Object,
+            adaptationOptions: new AdaptationOptions { EstimatedRecordConservativePercent = 85m });
+
+        var result = await useCase.ExecuteAdaptationAsync(new RoutineSuggestionRequestDto(
+            AthleteId: athleteId,
+            Goal: "Fuerza",
+            BaseExercises: [new SuggestedExerciseDto("Press de banca plano", 4, 6, 75m, benchId)]));
+
+        Assert.Contains(
+            result.AdaptationWarnings!,
+            w => w.Contains("85%", StringComparison.OrdinalIgnoreCase) &&
+                 !w.Contains("90%", StringComparison.OrdinalIgnoreCase));
     }
 }

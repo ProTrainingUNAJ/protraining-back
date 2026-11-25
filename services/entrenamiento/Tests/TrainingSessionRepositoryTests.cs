@@ -238,4 +238,65 @@ public class TrainingSessionRepositoryTests
             Assert.Null(saturdayResult);
         }
     }
+
+    [Fact]
+    public async Task GetByAthleteIdAsync_DadoPlanConMultiplesBloquesMismoDia_ConsolidaTodosLosEjerciciosPrescritos()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        var plan = TrainingPlan.Create("Plan Con Bloques", "Fuerza y movilidad");
+        var week = TrainingWeek.Create(1, plan.Id);
+
+        // Bloque 1: Entrada en calor (1 ejercicio)
+        var block1 = TrainingSession.Create(week.Id, "Entrada en calor", 1, DayOfWeek.Tuesday);
+        var ex1 = Exercise.Create("Movilidad de cadera", "General", "Core");
+        var pe1 = PrescribedExercise.Create(1, 3, 10, null, block1.Id, ex1.Id);
+        block1.AddPrescribedExercise(pe1);
+
+        // Bloque 2: Fuerza A (2 ejercicios)
+        var block2 = TrainingSession.Create(week.Id, "Fuerza A", 2, DayOfWeek.Tuesday);
+        var ex2 = Exercise.Create("Sentadilla trasera", "General", "Piernas");
+        var pe2 = PrescribedExercise.Create(1, 4, 8, 80m, block2.Id, ex2.Id);
+        var ex3 = Exercise.Create("Press de banca", "General", "Pecho");
+        var pe3 = PrescribedExercise.Create(2, 4, 8, 75m, block2.Id, ex3.Id);
+        block2.AddPrescribedExercise(pe2);
+        block2.AddPrescribedExercise(pe3);
+
+        week.AddSession(block1);
+        week.AddSession(block2);
+        plan.AddWeek(week);
+
+        // Martes 17/11/2026
+        var tuesdayDate = new DateOnly(2026, 11, 17);
+        var assignment = PlanAssignment.Create(plan.Id, tuesdayDate, athleteId: athleteId);
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            await context.Exercises.AddRangeAsync(ex1, ex2, ex3);
+            await context.TrainingPlans.AddAsync(plan);
+            await context.PlanAssignments.AddAsync(assignment);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateInMemoryDbContext(pfId, dbName))
+        {
+            var repository = new TrainingSessionRepository(context);
+            var result = await repository.GetByAthleteIdAsync(athleteId, [], tuesdayDate);
+
+            Assert.NotNull(result);
+            Assert.Equal(3, result.PrescribedExercises.Count);
+
+            var exercisesList = result.PrescribedExercises.OrderBy(pe => pe.Order).ToList();
+            Assert.Equal(1, exercisesList[0].Order);
+            Assert.Equal(ex1.Id, exercisesList[0].ExerciseId);
+
+            Assert.Equal(2, exercisesList[1].Order);
+            Assert.Equal(ex2.Id, exercisesList[1].ExerciseId);
+
+            Assert.Equal(3, exercisesList[2].Order);
+            Assert.Equal(ex3.Id, exercisesList[2].ExerciseId);
+        }
+    }
 }

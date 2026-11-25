@@ -1,14 +1,19 @@
 using System.Text.Json.Serialization;
 using Application.Common.PlanDrafts;
+using Application.DTOs.Adaptation;
+using Application.DTOs.Ai;
 
 namespace Application.DTOs.PlanDrafts;
 
 public sealed record PlanDraftExerciseDto(
-    [property: JsonPropertyName("exerciseId")] Guid ExerciseId,
+    [property: JsonPropertyName("exerciseId")] Guid? ExerciseId,
     [property: JsonPropertyName("order")] int Order,
     [property: JsonPropertyName("sets")] int Sets,
     [property: JsonPropertyName("reps")] int Reps,
-    [property: JsonPropertyName("targetPercentage")] decimal? TargetPercentage = null
+    [property: JsonPropertyName("targetPercentage")] decimal? TargetPercentage = null,
+    [property: JsonPropertyName("exerciseName")] string? ExerciseName = null,
+    [property: JsonPropertyName("muscleGroup")] string? MuscleGroup = null,
+    [property: JsonPropertyName("isReference")] bool IsReference = false
 );
 
 public sealed record PlanDraftSessionDto(
@@ -38,7 +43,9 @@ public sealed record CreatePlanDraftRequestDto(
     [property: JsonPropertyName("weeks")] int Weeks = 4,
     [property: JsonPropertyName("daysPerWeek")] int DaysPerWeek = 3,
     [property: JsonPropertyName("trainingDays")] List<string>? TrainingDays = null,
-    [property: JsonPropertyName("startDate")] DateOnly? StartDate = null
+    [property: JsonPropertyName("startDate")] DateOnly? StartDate = null,
+    [property: JsonIgnore] IReadOnlyList<PfDecisionContextDto>? PreviousPfDecisions = null,
+    [property: JsonIgnore] AthleteAdaptationContextDto? AdaptationContext = null
 );
 
 public sealed record UpdatePlanDraftRequestDto(
@@ -107,4 +114,11 @@ public sealed record ApprovePlanDraftResponseDto(
     [property: JsonPropertyName("assignmentId")] Guid? AssignmentId = null,
     [property: JsonPropertyName("warning")] string? Warning = null,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string>? Warnings = null
+);
+
+public sealed record CreateExerciseRemoteRequestDto(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("muscleGroup")] string MuscleGroup,
+    [property: JsonPropertyName("equipment")] string? Equipment = null,
+    [property: JsonPropertyName("instructions")] string? Instructions = null
 );

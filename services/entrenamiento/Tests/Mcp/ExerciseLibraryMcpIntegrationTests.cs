@@ -3,6 +3,7 @@ using System.Text.Json;
 using API.Mcp;
 using Application.DTOs.Mcp;
 using Application.Interfaces.Persistence;
+using Application.UseCases.Exercise.GetRestrictionsByZone;
 using Application.UseCases.Exercise.GetSubstitutesByZone;
 using Domain.Entities;
 using Infrastructure.Data;
@@ -43,6 +44,7 @@ public sealed class ExerciseLibraryMcpIntegrationTests
         // Apretón de manos (handshake): el servidor expone las tools registradas.
         var tools = await mcpClient.ListToolsAsync();
         Assert.Contains("ObtenerSustitutos", tools.Select(t => t.Name));
+        Assert.Contains("ObtenerRestricciones", tools.Select(t => t.Name));
 
         // Llamada directa al proveedor (handler/tool logic) para contrastar ejecución.
         var restriction = BuildRodillaRestriction();
@@ -107,6 +109,59 @@ public sealed class ExerciseLibraryMcpIntegrationTests
         Assert.NotEmpty(response.Substitutes);
     }
 
+    [Fact]
+    public async Task Given_McpClient_When_HandshakeAndCallObtenerRestriccionesForRodilla_Then_ReturnsRestrictionsWithoutDeserializationErrors()
+    {
+        await using var factory = new EntrenamientoMcpWebApplicationFactory();
+        var httpClient = factory.CreateClient();
+        var transport = new HttpClientTransport(new HttpClientTransportOptions
+        {
+            Endpoint = new Uri(httpClient.BaseAddress!, "/mcp"),
+            Name = "entrenamiento-mcp-restrictions-test"
+        }, httpClient);
+
+        await using var mcpClient = await McpClient.CreateAsync(transport);
+
+        // Apretón de manos (handshake): el servidor expone las tools registradas.
+        var tools = await mcpClient.ListToolsAsync();
+        Assert.Contains("ObtenerRestricciones", tools.Select(t => t.Name));
+
+        // Llamada directa al handler para contrastar ejecución.
+        var restriction = BuildRodillaRestriction();
+        var directHandler = new GetRestrictionsByZoneQueryHandler(new FakeRestrictionRepository([restriction]));
+        var directResult = await directHandler.Handle(new GetRestrictionsByZoneQuery("rodilla"));
+        Assert.NotEmpty(directResult.Restrictions);
+
+        // Ejecución de la tool vía MCP (JSON-RPC) contra el servidor.
+        var callResult = await mcpClient.CallToolAsync(
+            "ObtenerRestricciones",
+            new Dictionary<string, object?> { ["zona"] = "rodilla" });
+
+        Assert.True(callResult.IsError != true);
+
+        ZoneRestrictionsResultDto? response = null;
+        if (callResult.StructuredContent is { } structured)
+        {
+            var structuredJson = JsonSerializer.Serialize(structured, JsonOptions);
+            response = JsonSerializer.Deserialize<ZoneRestrictionsResultDto>(structuredJson, JsonOptions);
+        }
+        else
+        {
+            var contentJson = JsonSerializer.Serialize(callResult.Content, JsonOptions);
+            response = JsonSerializer.Deserialize<ZoneRestrictionsResultDto>(contentJson, JsonOptions);
+        }
+
+        Assert.NotNull(response);
+        Assert.Equal("rodilla", response!.Zone);
+        Assert.NotEmpty(response.Restrictions);
+        var item = Assert.Single(response.Restrictions);
+        Assert.Equal("Sentadilla con barra", item.ExerciseName);
+        Assert.Equal("cuadriceps", item.Zone);
+        Assert.Equal("Molestia en rodilla", item.Reason);
+        Assert.Single(item.Substitutes);
+        Assert.Equal("Prensa de piernas", item.Substitutes[0].Name);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static ExerciseRestriction BuildRodillaRestriction()
@@ -120,6 +175,8 @@ public sealed class ExerciseLibraryMcpIntegrationTests
             .SetValue(sub, substitute);
         typeof(ExerciseRestriction).GetField("_substitutes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(restriction, new List<ExerciseSubstitute> { sub });
+        typeof(ExerciseRestriction).GetProperty(nameof(ExerciseRestriction.Exercise))!
+            .SetValue(restriction, restrictedExercise);
         return restriction;
     }
 

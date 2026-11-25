@@ -1,3 +1,4 @@
+using Application.DTOs.Injuries;
 using Domain.Entities;
 
 namespace Application.Interfaces.Persistence;
@@ -9,8 +10,23 @@ public interface IAthleteInjuryRepository
     // Lesiones de un atleta, con filtro opcional por estado actual (listado del historial).
     Task<IReadOnlyList<AthleteInjury>> ListByAthleteAsync(Guid athleteId, InjuryStatus? status, CancellationToken cancellationToken = default);
 
+    // Lesiones que siguen activas (Active o InRecovery): las que el atleta debe puntuar en su check-in.
+    Task<IReadOnlyList<AthleteInjury>> ListNotClearedByAthleteAsync(Guid athleteId, CancellationToken cancellationToken = default);
+
+    // Conteo batch de lesiones en estado Active agrupado por atleta para evitar N+1 (KAN-464).
+    Task<IReadOnlyDictionary<Guid, int>> CountActiveByAthleteIdsAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        CancellationToken cancellationToken = default);
+
+    // Conteos agregados por estado en un período, sin exponer datos individuales (KAN-504).
+    Task<InjuryPeriodAggregateDto> GetPeriodAggregateByAthleteIdsAsync(
+        IReadOnlyCollection<Guid> athleteIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(AthleteInjury injury, CancellationToken cancellationToken = default);
 
-    // Fila del historial clínico: cada cambio de estado deja su registro (KAN-420).
+    // Fila del historial clínico: cada cambio de estado deja su registro.
     Task AddStatusChangeAsync(AthleteInjuryStatusChange statusChange, CancellationToken cancellationToken = default);
 }

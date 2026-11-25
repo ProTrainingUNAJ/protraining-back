@@ -495,4 +495,120 @@ public class TrafficLightEngineTests
         Assert.Equal(TrafficLight.Green, result.TriggeredLight);
         Assert.Equal("Estado óptimo", result.Reason);
     }
+
+    // ---------- Regla de lesiones "En recuperación" (InRecovery, KAN-644 / KAN-590) ----------
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(5)]
+    public void Evaluate_WithRecoveryInjuryPainUpTo5_ReturnsYellowWithRecoveryPainReason(int painToday)
+    {
+        // Dolor 0–5 y sin empeorar → Amarillo, y el marcador clínico ":6" en PainZones no dispara "Dolor nuevo".
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = painToday,
+                PainZones = "rodilla:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal($"Lesión en recuperación (dolor {painToday}/10)", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Theory]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(10)]
+    public void Evaluate_WithRecoveryInjuryPainAbove5_ReturnsRedWithWorsenedReason(int painToday)
+    {
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = painToday,
+                PainZones = "rodilla:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal("Lesión en recuperación con más dolor", result.Reason);
+        Assert.Equal(20, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithRecoveryInjuryPainHigherThanYesterday_EvenWithin0To5_ReturnsRed()
+    {
+        // Dolor 4 cuando ayer era 2 → empeoró de un día a otro → Rojo.
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = 4,
+                RecoveryInjuryPreviousPain = 2,
+                PainZones = "rodilla:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Equal("Lesión en recuperación con más dolor", result.Reason);
+        Assert.Equal(20, result.ResultValue);
+    }
+
+    [Theory]
+    [InlineData(3, 3)] // igual que ayer
+    [InlineData(2, 4)] // mejoró respecto a ayer
+    public void Evaluate_WithRecoveryInjuryPainNotHigherThanYesterdayAndUpTo5_ReturnsYellow(int painToday, int painYesterday)
+    {
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = painToday,
+                RecoveryInjuryPreviousPain = painYesterday,
+                PainZones = "rodilla:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Yellow, result.TriggeredLight);
+        Assert.Equal($"Lesión en recuperación (dolor {painToday}/10)", result.Reason);
+        Assert.Equal(50, result.ResultValue);
+    }
+
+    [Fact]
+    public void Evaluate_WithRecoveryInjuryPain2AndUnregisteredShoulderAtLevel6_ReturnsRedWithActiveInjury()
+    {
+        // Rodilla en recuperación con dolor 2 + hombro pintado con nivel 6 (no perteneciente a las zonas registradas) -> Rojo ("Lesión activa").
+        var result = _engine.Evaluate(
+            new CheckInData
+            {
+                HasActiveInjury = false,
+                RecoveryInjuryMaxPainToday = 2,
+                RegisteredInjuryZones = ["rodilla"],
+                PainZones = "rodilla:6,hombros:6",
+                SleepHours = 8,
+                EffortRate = 4,
+                IsSick = false
+            },
+            context: null);
+
+        Assert.Equal(TrafficLight.Red, result.TriggeredLight);
+        Assert.Contains("Lesión activa", result.Reason, StringComparison.Ordinal);
+        Assert.Equal(20, result.ResultValue);
+    }
 }

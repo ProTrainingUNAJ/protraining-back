@@ -38,6 +38,11 @@ public class TrainingSessionConfiguration : IEntityTypeConfiguration<TrainingSes
             .IsUnique()
             .HasFilter("deleted_at IS NULL");
 
+        builder.HasMany(ts => ts.Blocks)
+            .WithOne(tb => tb.TrainingSession)
+            .HasForeignKey(tb => tb.TrainingSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(ts => ts.PrescribedExercises)
             .WithOne(pe => pe.TrainingSession)
             .HasForeignKey(pe => pe.TrainingSessionId)

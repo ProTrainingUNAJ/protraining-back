@@ -54,6 +54,9 @@ public static class DependencyInjection
         services.AddScoped<IRecordProposalRepository, RecordProposalRepository>();
         services.AddScoped<IExerciseVideoRepository, ExerciseVideoRepository>();
         services.AddScoped<IAthleteSessionAdjustmentRepository, AthleteSessionAdjustmentRepository>();
+        services.AddScoped<IEntrenamientoPurgeRepository, EntrenamientoPurgeRepository>();
+        services.AddScoped<IAthleteVariantRepository, AthleteVariantRepository>();
+        services.AddSingleton<ITrainingPlanPdfGenerator, TrainingPlanPdfGenerator>();
 
         // Ilustraciones de los ejercicios del catálogo (KAN-549): tabla fija, se lee una vez.
         services.AddSingleton<IExerciseMediaCatalog>(_ =>
@@ -81,6 +84,7 @@ public static class DependencyInjection
             await ExerciseVariantSeeder.SeedAsync(context, dataDirectory, logger);
             await EnduranceExerciseSeeder.SeedAsync(context, logger);
             await ExerciseTypeClassificationSeeder.SeedAsync(context, dataDirectory, logger);
+            await MobilityAndBasicExerciseSeeder.SeedAsync(context, logger);
         }
         else
         {

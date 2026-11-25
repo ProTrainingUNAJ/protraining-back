@@ -13,7 +13,8 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
     IAthleteSessionAdjustmentRepository adjustmentRepository,
     IExerciseRepository exerciseRepository,
     IStructureClient structureClient,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    IAthleteVariantRepository? variantRepository = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,10 +37,11 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
         if (request.Date == default)
             throw new DomainException("La fecha del ajuste es obligatoria.");
 
-        if (request.Items is null || request.Items.Count == 0)
-            throw new DomainException("Debe incluir al menos un cambio de ejercicio para la sesión.");
+        var items = request.Items ?? [];
+        if (items.Count == 0 && !request.LoadReductionPercentage.HasValue && string.IsNullOrWhiteSpace(request.Note))
+            throw new DomainException("Debe incluir al menos un cambio de ejercicio o una reducción de carga para la sesión.");
 
-        foreach (var item in request.Items)
+        foreach (var item in items)
         {
             if (item.OriginalExerciseId == Guid.Empty || item.SubstituteExerciseId == Guid.Empty)
                 throw new DomainException("Los identificadores del ejercicio original y del sustituto son obligatorios.");
@@ -54,14 +56,17 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             ?? throw new NotFoundException("El atleta no existe o no es tuyo.");
 
         // 3. Verificar que los ejercicios sustitutos existan en el catálogo.
-        var substituteIds = request.Items
+        var substituteIds = items
             .Select(i => i.SubstituteExerciseId)
             .Distinct()
             .ToList();
 
-        var foundExercises = await exerciseRepository.ListByIdsAsync(substituteIds, cancellationToken);
-        if (foundExercises.Count != substituteIds.Count)
-            throw new DomainException("Uno o más ejercicios sustitutos no existen en el catálogo.");
+        if (substituteIds.Count > 0)
+        {
+            var foundExercises = await exerciseRepository.ListByIdsAsync(substituteIds, cancellationToken);
+            if (foundExercises.Count != substituteIds.Count)
+                throw new DomainException("Uno o más ejercicios sustitutos no existen en el catálogo.");
+        }
 
         // 4. Resolver y vincular al plan vigente (#168 · KAN-463).
         var planIdFromSession = await trainingSessionRepository.GetPlanIdBySessionIdAsync(session.Id, cancellationToken);
@@ -76,7 +81,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             throw new DomainException("La sesión indicada no pertenece al plan de entrenamiento especificado.");
         }
 
-        var itemsJson = JsonSerializer.Serialize(request.Items, JsonOptions);
+        var itemsJson = JsonSerializer.Serialize(items, JsonOptions);
 
         var existing = await adjustmentRepository.GetBySessionAthleteAndDateAsync(
             session.Id,
@@ -87,7 +92,7 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
         AthleteSessionAdjustment adjustment;
         if (existing is not null)
         {
-            existing.Update(itemsJson, request.Note, trainingPlanId);
+            existing.Update(itemsJson, request.Note, trainingPlanId, request.LoadReductionPercentage);
             adjustment = existing;
         }
         else
@@ -98,12 +103,62 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
                 date: request.Date,
                 itemsJson: itemsJson,
                 note: request.Note,
-                trainingPlanId: trainingPlanId);
+                trainingPlanId: trainingPlanId,
+                loadReductionPercentage: request.LoadReductionPercentage);
 
             await adjustmentRepository.AddAsync(adjustment, cancellationToken);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (variantRepository is not null)
+        {
+            foreach (var item in items)
+            {
+                if (item.OriginalExerciseId == Guid.Empty ||
+                    item.SubstituteExerciseId == Guid.Empty ||
+                    item.OriginalExerciseId == item.SubstituteExerciseId)
+                {
+                    continue;
+                }
+
+                var existingVariant = await variantRepository.GetActiveByAthleteAndOriginalExerciseAsync(
+                    athlete.Id,
+                    item.OriginalExerciseId,
+                    request.Date,
+                    cancellationToken);
+
+                if (existingVariant is not null)
+                {
+                    if (existingVariant.SubstituteExerciseId == item.SubstituteExerciseId)
+                        continue;
+
+                    var endDate = request.Date > existingVariant.ValidFrom
+                        ? request.Date.AddDays(-1)
+                        : existingVariant.ValidFrom;
+                    existingVariant.Deactivate(endDate);
+                }
+
+                var variant = AthleteVariant.Create(
+                    athleteId: athlete.Id,
+                    originalExerciseId: item.OriginalExerciseId,
+                    substituteExerciseId: item.SubstituteExerciseId,
+                    isApproved: true,
+                    isActive: true,
+                    validFrom: request.Date,
+                    note: request.Note);
+
+                await variantRepository.AddAsync(variant, cancellationToken);
+            }
+        }
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            throw new ConflictException(
+                "Ya existe una decisión registrada simultáneamente para esta sesión, atleta y fecha. Recargá e intentá de nuevo.");
+        }
 
         return new AthleteSessionAdjustmentResponseDto(
             Id: adjustment.Id,
@@ -111,7 +166,10 @@ public sealed class ApplyAthleteSessionAdjustmentCommandHandler(
             AthleteId: adjustment.AthleteId,
             Date: adjustment.Date,
             Note: adjustment.Note,
-            Items: request.Items,
-            TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null);
+            Items: items,
+            TrainingPlanId: adjustment.TrainingPlanId != Guid.Empty ? adjustment.TrainingPlanId : null,
+            LoadReductionPercentage: adjustment.LoadReductionPercentage,
+            Status: adjustment.Status,
+            RejectionReason: adjustment.RejectionReason);
     }
 }

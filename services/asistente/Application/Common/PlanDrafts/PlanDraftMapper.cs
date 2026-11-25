@@ -34,6 +34,22 @@ public static class PlanDraftMapper
     {
         var content = parsedContent ?? DeserializeContent(draft.Content);
 
+        // Asegurar que cualquier ejercicio sin ID oficial se marque como referencia (KAN-467)
+        var normalizedWeeks = (content.Weeks ?? []).Select(w => new PlanDraftWeekDto(
+            w.WeekNumber,
+            (w.Sessions ?? []).Select(s => new PlanDraftSessionDto(
+                s.Name,
+                s.DayOfWeek,
+                s.Order,
+                s.CoachNotes,
+                (s.Exercises ?? []).Select(e =>
+                    (!e.ExerciseId.HasValue || e.ExerciseId.Value == Guid.Empty)
+                        ? e with { IsReference = true }
+                        : e
+                ).ToList()
+            )).ToList()
+        )).ToList();
+
         return new PlanDraftResponseDto(
             Id: draft.Id,
             CategoryId: draft.CategoryId,
@@ -46,22 +62,26 @@ public static class PlanDraftMapper
             Name: content.Name,
             Objective: content.Objective,
             JustificationSummary: content.JustificationSummary,
-            Weeks: content.Weeks,
+            Weeks: normalizedWeeks,
             Warnings: [.. ProviderWarnings(draft.Provider), .. warnings ?? []]
         );
     }
 
-    // El PF tiene que saber por qué el borrador no lo armó el modelo local. Se arma a partir del proveedor
+    // El PF tiene que saber qué proveedor armó el borrador. Se arma a partir del proveedor
     // guardado, así el aviso aparece también al volver a abrir el borrador (los demás avisos no se guardan).
     public static IReadOnlyList<string> ProviderWarnings(string? provider) => provider switch
     {
-        "Gemini" =>
+        "Gemini" or "Agente (Gemini)" =>
         [
-            "El modelo local (Ollama) no devolvió un borrador válido a tiempo, así que lo armó el respaldo externo (Gemini), sin nombres ni datos personales de los atletas."
+            "El borrador lo armó el respaldo externo (Gemini), sin nombres ni datos personales de los atletas."
         ],
         "Reglas" =>
         [
-            "Ni el modelo local (Ollama) ni el respaldo externo (Gemini) devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
+            "Los proveedores de IA no devolvieron un borrador válido a tiempo, así que lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
+        ],
+        "Reglas (Límite diario alcanzado)" =>
+        [
+            "Llegaste al límite de pedidos a la IA por hoy, así que el borrador lo armaron las reglas fijas de ProTraining. Revisalo y ajustalo antes de aprobarlo."
         ],
         _ => []
     };
@@ -93,7 +113,9 @@ public static class PlanDraftMapper
                         CoachNotes: s.CoachNotes,
                         Exercises: (s.Exercises ?? [])
                             .Select(e => new SaveTrainingPlanExerciseRequestDto(
-                                ExerciseId: e.ExerciseId,
+                                ExerciseId: e.ExerciseId is { } exerciseId && exerciseId != Guid.Empty
+                                    ? exerciseId
+                                    : throw new DomainException($"El ejercicio '{e.ExerciseName ?? "sin nombre"}' todavía no tiene un exerciseId válido para guardar el plan."),
                                 Order: e.Order,
                                 Sets: e.Sets,
                                 Reps: e.Reps,

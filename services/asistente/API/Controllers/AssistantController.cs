@@ -8,6 +8,7 @@ using Application.UseCases.Adaptation.GetAthleteAdaptationContext;
 using Application.UseCases.DayAdjustments.ApproveDayAdjustment;
 using Application.UseCases.DayAdjustments.CreateDayAdjustment;
 using Application.UseCases.DayAdjustments.RejectDayAdjustment;
+using Application.UseCases.DayConflicts.GetCategoryDayConflicts;
 using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.PfDecisions.GetAthleteDecisions;
 using Microsoft.AspNetCore.Authorization;
@@ -25,7 +26,8 @@ public sealed class AssistantController(
     CreateDayAdjustmentCommandHandler? createDayAdjustmentHandler = null,
     ApproveDayAdjustmentCommandHandler? approveDayAdjustmentHandler = null,
     RejectDayAdjustmentCommandHandler? rejectDayAdjustmentHandler = null,
-    GetAthleteAdaptationContextQueryHandler? getAthleteAdaptationContextHandler = null) : ControllerBase
+    GetAthleteAdaptationContextQueryHandler? getAthleteAdaptationContextHandler = null,
+    GetCategoryDayConflictsQueryHandler? getCategoryDayConflictsHandler = null) : ControllerBase
 {
     /// <summary>
     /// Genera una propuesta estructurada de rutina consultando directamente al módulo de IA (#086 · KAN-381).
@@ -99,6 +101,30 @@ public sealed class AssistantController(
     {
         var result = await getDayConflictsHandler.HandleAsync(
             new GetDayConflictsQuery(athleteId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Detecta en una sola llamada qué atletas de una categoría tienen conflictos entre el dolor
+    /// reportado en el check-in de hoy y los ejercicios de su rutina de hoy (KAN-574).
+    /// Responde 404 si la categoría no existe o pertenece a otro PF, y 503 si Seguimiento o Entrenamiento no están disponibles.
+    /// </summary>
+    [HttpGet("categories/{categoryId:guid}/day-conflicts")]
+    [ProducesResponseType(typeof(CategoryDayConflictsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<CategoryDayConflictsResponseDto>> GetCategoryDayConflicts(
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(getCategoryDayConflictsHandler);
+
+        var result = await getCategoryDayConflictsHandler.HandleAsync(
+            new GetCategoryDayConflictsQuery(categoryId),
             cancellationToken);
 
         return Ok(result);

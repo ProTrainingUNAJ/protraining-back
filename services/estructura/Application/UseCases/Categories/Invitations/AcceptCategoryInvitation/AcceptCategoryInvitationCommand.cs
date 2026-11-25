@@ -20,7 +20,8 @@ public sealed record AcceptCategoryInvitationCommand(
     string? GuardianPhone = null,
     bool AllowsPhysicalTraining = true,
     bool AllowsHabitsRecommendations = false,
-    string? EmergencyContact = null);
+    string? EmergencyContact = null,
+    bool AllowsProfilePhoto = false);
 
 public sealed class AcceptCategoryInvitationCommandHandler(
     ICurrentUser currentUser,
@@ -91,7 +92,8 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                     command.GuardianPhone,
                     command.AllowsPhysicalTraining,
                     command.AllowsHabitsRecommendations,
-                    command.EmergencyContact);
+                    command.EmergencyContact,
+                    command.AllowsProfilePhoto);
             }
             else
             {
@@ -105,6 +107,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                     command.EmergencyContact);
             }
 
+            athlete.SetBirthDate(command.BirthDate, today);
             athlete.LinkAccount(accountId);
             await athleteRepository.AddAsync(athlete, cancellationToken);
         }

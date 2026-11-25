@@ -1,15 +1,19 @@
 using Application.DTOs.Auth;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.ChangePassword;
+using Application.UseCases.Auth.ConfirmEmail;
 using Application.UseCases.Auth.ForgotPassword;
 using Application.UseCases.Auth.GoogleLogin;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.RegisterByInvitation;
+using Application.UseCases.Auth.RegisterPf;
+using Application.UseCases.Auth.ResendConfirmation;
 using Application.UseCases.Auth.ResetAthletePassword;
 using Application.UseCases.Auth.ResetPasswordWithToken;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace API.Controllers;
 
@@ -21,12 +25,19 @@ namespace API.Controllers;
 public class AuthController(
     LoginUseCase loginUseCase,
     GoogleLoginUseCase googleLoginUseCase,
+    LinkGoogleAccountUseCase linkGoogleAccountUseCase,
+    UnlinkGoogleAccountUseCase unlinkGoogleAccountUseCase,
+    GetGoogleLinkStatusUseCase getGoogleLinkStatusUseCase,
     RefreshUseCase refreshTokenUseCase,
     RegisterByInvitationUseCase registerByInvitationUseCase,
+    RegisterPfUseCase registerPfUseCase,
+    ConfirmEmailUseCase confirmEmailUseCase,
+    ResendConfirmationUseCase resendConfirmationUseCase,
     ChangePasswordUseCase changePasswordUseCase,
     ResetAthletePasswordUseCase resetAthletePasswordUseCase,
     ForgotPasswordUseCase forgotPasswordUseCase,
     ResetPasswordWithTokenUseCase resetPasswordWithTokenUseCase,
+    IForgotPasswordRateLimiter forgotPasswordRateLimiter,
     ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>
@@ -46,6 +57,71 @@ public class AuthController(
         CancellationToken cancellationToken)
     {
         var response = await googleLoginUseCase.ExecuteAsync(request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Consulta si el usuario autenticado tiene una cuenta de Google vinculada (KAN-541).
+    /// </summary>
+    [HttpGet("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetGoogleLinkStatus()
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await getGoogleLinkStatusUseCase.ExecuteAsync(currentUser.UserId.Value);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Vincula explícitamente una cuenta de Google a la cuenta ProTraining autenticada,
+    /// exigiendo reautenticación mediante contraseña actual (KAN-541).
+    /// </summary>
+    [HttpPost("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> LinkGoogleAccount(
+        [FromBody] LinkGoogleAccountRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await linkGoogleAccountUseCase.ExecuteAsync(
+            currentUser.UserId.Value,
+            request,
+            cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Desvincula la cuenta de Google del usuario autenticado exigiendo contraseña actual (KAN-541).
+    /// </summary>
+    [HttpDelete("google/link")]
+    [Authorize]
+    [ProducesResponseType(typeof(GoogleLinkStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UnlinkGoogleAccount([FromBody] UnlinkGoogleAccountRequestDto request)
+    {
+        if (currentUser.UserId is null)
+        {
+            return Unauthorized();
+        }
+
+        var response = await unlinkGoogleAccountUseCase.ExecuteAsync(currentUser.UserId.Value, request);
         return Ok(response);
     }
 
@@ -159,10 +235,27 @@ public class AuthController(
     [AllowAnonymous]
     [ProducesResponseType(typeof(ForgotPasswordResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] ForgotPasswordRequestDto request,
         CancellationToken cancellationToken)
     {
+        // Usar exclusivamente Connection.RemoteIpAddress (resuelta por ForwardedHeaders solo para proxies confiables)
+        // para impedir evasión del límite mediante cabeceras X-Forwarded-For arbitrarias.
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = forgotPasswordRateLimiter.TryAcquire(clientIp, request.Email);
+        if (!decision.IsAllowed)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((decision.RetryAfter ?? TimeSpan.FromMinutes(15)).TotalSeconds));
+            Response.Headers.RetryAfter = retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return StatusCode(StatusCodes.Status429TooManyRequests, new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Demasiadas solicitudes.",
+                Detail = "Realizaste demasiadas solicitudes. Esperá unos minutos antes de volver a intentarlo."
+            });
+        }
+
         var response = await forgotPasswordUseCase.ExecuteAsync(request, cancellationToken);
         return Accepted(response);
     }
@@ -183,5 +276,65 @@ public class AuthController(
     {
         var response = await resetPasswordWithTokenUseCase.ExecuteAsync(request, cancellationToken);
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Registra un nuevo Preparador Físico de forma independiente y envía email de confirmación (KAN-601).
+    /// </summary>
+    /// <param name="request">Datos del PF (Nombre, Email, Contraseña, Teléfono opcional).</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 201 Created con mensaje de confirmación de email o error correspondiente.</returns>
+    [HttpPost("register-pf")]
+    [AllowAnonymous]
+    [EnableRateLimiting("AuthRateLimit")]
+    [ProducesResponseType(typeof(RegisterPfResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RegisterPf(
+        [FromBody] RegisterPfRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await registerPfUseCase.ExecuteAsync(request, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    /// <summary>
+    /// Confirma el correo electrónico de la cuenta mediante el token recibido (KAN-601).
+    /// </summary>
+    /// <param name="request">Identificador de usuario y token de confirmación.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 200 OK si la confirmación es exitosa o HTTP 400 si el token es inválido o expiró.</returns>
+    [HttpPost("confirm-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ConfirmEmailResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ConfirmEmail(
+        [FromBody] ConfirmEmailRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await confirmEmailUseCase.ExecuteAsync(request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Reenvía el correo de confirmación de cuenta para activación de usuario (KAN-601).
+    /// Responde HTTP 202 Accepted de forma genérica anti-enumeración.
+    /// </summary>
+    /// <param name="request">Correo electrónico de la cuenta.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>HTTP 202 Accepted con mensaje informativo.</returns>
+    [HttpPost("resend-confirmation")]
+    [AllowAnonymous]
+    [EnableRateLimiting("AuthRateLimit")]
+    [ProducesResponseType(typeof(ResendConfirmationResponseDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ResendConfirmation(
+        [FromBody] ResendConfirmationRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var response = await resendConfirmationUseCase.ExecuteAsync(request, cancellationToken);
+        return Accepted(response);
     }
 }

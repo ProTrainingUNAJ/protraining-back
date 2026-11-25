@@ -26,7 +26,12 @@ public class PerformedSetRepository : IPerformedSetRepository
 
     public async Task<List<PerformedSet>> GetByAthleteAndDateAsync(Guid athleteId, DateOnly date, CancellationToken cancellationToken = default)
     {
-        return await _context.PerformedSets.Where(p => p.AthleteId == athleteId && p.Date == date).ToListAsync();
+        return await _context.PerformedSets.Where(p => p.AthleteId == athleteId && p.Date == date).ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<PerformedSet>> GetByAthleteAndDateAsNoTrackingAsync(Guid athleteId, DateOnly date, CancellationToken cancellationToken = default)
+    {
+        return await _context.PerformedSets.AsNoTracking().Where(p => p.AthleteId == athleteId && p.Date == date).ToListAsync(cancellationToken);
     }
 }
 

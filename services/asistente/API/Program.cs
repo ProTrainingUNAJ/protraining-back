@@ -4,15 +4,20 @@ using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
 using API.Services;
+using Application.Common.Adaptation;
+using Application.Common.Recommendations;
 using Application.Interfaces.Services;
+using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
 using Application.UseCases.Alerts.GetAlertById;
 using Application.UseCases.Alerts.GetAlerts;
 using Application.UseCases.Alerts.ProcessDailyOverloadAnalysis;
 using Application.UseCases.Alerts.ReviewAlert;
+using Application.UseCases.Athletes.PurgeAthlete;
 using Application.UseCases.DayAdjustments.ApproveDayAdjustment;
 using Application.UseCases.DayAdjustments.CreateDayAdjustment;
 using Application.UseCases.DayAdjustments.RejectDayAdjustment;
+using Application.UseCases.DayConflicts.GetCategoryDayConflicts;
 using Application.UseCases.DayConflicts.GetDayConflicts;
 using Application.UseCases.Adaptation.GetAthleteAdaptationContext;
 using Application.UseCases.Health.GetHealth;
@@ -23,7 +28,19 @@ using Application.UseCases.PlanDrafts.CreatePlanDraft;
 using Application.UseCases.PlanDrafts.DiscardPlanDraft;
 using Application.UseCases.PlanDrafts.GetPlanDraft;
 using Application.UseCases.PlanDrafts.UpdatePlanDraft;
+using Application.UseCases.Recommendations.ApproveHabitsRecommendation;
+using Application.UseCases.Recommendations.ApproveRecommendation;
+using Application.UseCases.Recommendations.DiscardRecommendation;
+using Application.UseCases.Recommendations.GenerateAthleteRecommendations;
+using Application.UseCases.Recommendations.GenerateCategoryRecommendations;
+using Application.UseCases.Recommendations.GenerateHabitsRecommendation;
+using Application.UseCases.Recommendations.GetHabitsRecommendation;
+using Application.UseCases.Recommendations.GetMyRecommendations;
+using Application.UseCases.Recommendations.GetRecommendationById;
+using Application.UseCases.Recommendations.GetRecommendations;
+using Application.UseCases.Recommendations.UpdateRecommendation;
 using Infrastructure;
+using Infrastructure.Services.Recommendations;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -92,6 +109,15 @@ builder.Services.AddHttpClient<ITrainingPlanServiceClient, Infrastructure.Servic
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+builder.Services.AddHttpClient<IExerciseLibraryMcpClient, Infrastructure.Services.Mcp.ExerciseLibraryMcpClient>(client =>
+{
+    var uriString = trainingUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"];
 if (!Uri.TryCreate(structureBaseUrl, UriKind.Absolute, out var structureUri))
 {
@@ -132,6 +158,21 @@ builder.Services.AddHttpClient<ISeguimientoClient, Infrastructure.Services.Segui
 .AddHttpMessageHandler<ForwardAuthorizationHandler>()
 .AddProTrainingResilience();
 
+var identityBaseUrl = builder.Configuration["Services:Identidad:BaseUrl"];
+if (!Uri.TryCreate(identityBaseUrl, UriKind.Absolute, out var identityUri))
+{
+    identityUri = new Uri("http://localhost:8081/");
+}
+
+builder.Services.AddHttpClient<IIdentityHabitsRecommendationsClient, Infrastructure.Services.Identity.IdentityHabitsRecommendationsClient>(client =>
+{
+    var uriString = identityUri.ToString().TrimEnd('/') + "/";
+    client.BaseAddress = new Uri(uriString);
+    // Timeout manejado por Polly (KAN-433)
+})
+.AddHttpMessageHandler<ForwardAuthorizationHandler>()
+.AddProTrainingResilience();
+
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<Application.UseCases.Ai.SuggestRoutine.SuggestRoutineUseCase>();
 builder.Services.AddScoped<CreatePlanDraftCommandHandler>();
@@ -141,6 +182,7 @@ builder.Services.AddScoped<ApprovePlanDraftCommandHandler>();
 builder.Services.AddScoped<DiscardPlanDraftCommandHandler>();
 builder.Services.AddScoped<GetAthleteDecisionsQueryHandler>();
 builder.Services.AddScoped<GetDayConflictsQueryHandler>();
+builder.Services.AddScoped<GetCategoryDayConflictsQueryHandler>();
 builder.Services.AddScoped<GetAthleteAdaptationContextQueryHandler>();
 builder.Services.AddScoped<CreateDayAdjustmentCommandHandler>();
 builder.Services.AddScoped<ApproveDayAdjustmentCommandHandler>();
@@ -149,8 +191,33 @@ builder.Services.AddScoped<RecordDayAdjustmentDecisionCommandHandler>();
 builder.Services.AddScoped<GetAlertsQueryHandler>();
 builder.Services.AddScoped<GetAlertByIdQueryHandler>();
 builder.Services.AddScoped<ReviewAlertCommandHandler>();
+builder.Services.AddScoped<ApplyAlertAdjustmentCommandHandler>();
 builder.Services.AddScoped<CreatePreventiveAlertCommandHandler>();
 builder.Services.AddScoped<ProcessDailyOverloadAnalysisCommandHandler>();
+var adaptationOptions = builder.Configuration
+    .GetSection(AdaptationOptions.SectionName)
+    .Get<AdaptationOptions>() ?? new AdaptationOptions();
+builder.Services.AddSingleton(adaptationOptions);
+
+var recommendationsOptions = builder.Configuration
+    .GetSection(RecommendationsOptions.SectionName)
+    .Get<RecommendationsOptions>() ?? new RecommendationsOptions();
+builder.Services.AddSingleton(recommendationsOptions);
+
+builder.Services.AddScoped<GenerateAthleteRecommendationsCommandHandler>();
+builder.Services.AddScoped<GenerateCategoryRecommendationsCommandHandler>();
+builder.Services.AddScoped<IHabitsAthleteContextProvider, StructureHabitsAthleteContextProvider>();
+builder.Services.AddScoped<IHabitsTrainingDayContextProvider, NoSourceHabitsTrainingDayContextProvider>();
+builder.Services.AddScoped<GenerateHabitsRecommendationCommandHandler>();
+builder.Services.AddScoped<GetHabitsRecommendationForAthleteQueryHandler>();
+builder.Services.AddScoped<GetRecommendationsQueryHandler>();
+builder.Services.AddScoped<GetRecommendationByIdQueryHandler>();
+builder.Services.AddScoped<UpdateRecommendationCommandHandler>();
+builder.Services.AddScoped<ApproveRecommendationCommandHandler>();
+builder.Services.AddScoped<ApproveHabitsRecommendationCommandHandler>();
+builder.Services.AddScoped<DiscardRecommendationCommandHandler>();
+builder.Services.AddScoped<GetMyRecommendationsQueryHandler>();
+builder.Services.AddScoped<PurgeAthleteCommandHandler>();
 builder.Services.AddHostedService<DailyOverloadAnalysisWorker>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();

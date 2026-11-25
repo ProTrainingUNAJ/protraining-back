@@ -26,6 +26,54 @@ Cada servicio tiene la misma estructura en capas (`Domain`, `Application`, `Infr
 
 El CRUD de atletas (`/api/athletes`) es solo un ejemplo y está únicamente en Estructura.
 
+## Arquitectura
+
+```mermaid
+flowchart LR
+    front["PWA (React)<br/>PF y atleta"] -->|"/api/..."| gw["Gateway (YARP)<br/>:8000"]
+
+    gw --> idn["Identidad<br/>login, JWT, Google, tutor"]
+    gw --> est["Estructura<br/>organizaciones, categorías,<br/>atletas, calendario"]
+    gw --> ent["Entrenamiento<br/>ejercicios, planes por bloques,<br/>rutina de hoy, récords"]
+    gw --> seg["Seguimiento<br/>check-in, semáforo,<br/>lesiones, tests"]
+    gw --> asi["Asistente<br/>borradores con IA, avisos,<br/>recomendaciones"]
+
+    idn --- dbi[("identidad")]
+    est --- dbe[("estructura")]
+    ent --- dbn[("entrenamiento")]
+    seg --- dbs[("seguimiento")]
+    asi --- dba[("asistente")]
+
+    asi -->|HTTP| est
+    asi -->|HTTP| seg
+    asi -->|"MCP: busca ejercicios,<br/>restricciones y sustitutos"| ent
+    seg -->|HTTP| est
+
+    asi -->|"1º"| openai["OpenAI"]
+    asi -->|"2º, si falla"| gemini["Gemini"]
+    asi -.->|"3º, sin IA"| reglas["Reglas en C#"]
+
+    idn -->|mails| mail["Mailpit (local)"]
+```
+
+- **Cada servicio tiene su propia base** y ninguno lee la base de otro: se hablan por HTTP. Si uno se cae, los demás siguen andando. Por ejemplo, sin el Asistente siguen funcionando el check-in, el semáforo y "Mi rutina".
+- **Cada PF ve solo sus datos:** todas las entidades tienen `pf_id`, y cada consulta se filtra por el PF del token.
+- **La IA propone y el PF decide.** El Asistente arma los borradores con un **agente** que consulta la biblioteca de ejercicios por **MCP** (una forma estándar de que la IA use herramientas) y prueba los proveedores en orden: OpenAI, después Gemini, y si fallan los dos, **reglas fijas en C#**. A la IA nunca le llega el nombre de un atleta. Los kilos, el semáforo y los avisos los calculan siempre reglas en C#, no la IA.
+
+## Demo de cero, en 3 comandos
+
+Para levantar todo con los datos de la demo (igual en Windows, Mac y Linux; solo hace falta Docker):
+
+```bash
+cp .env.example .env                                 # en Windows (PowerShell): copy .env.example .env
+docker compose up -d --build                         # gateway, 5 servicios, 5 bases y Mailpit
+docker compose --profile seed run --rm seed completo # datos de la demo (ver "Usuarios y datos de prueba")
+```
+
+Con el front clonado al lado (`../protraining-front`), sumá `docker compose --profile front up -d --build` y entrá a `http://localhost:3000`. Los mails (por ejemplo, la confirmación del registro de un PF) se ven en Mailpit: `http://localhost:8025`.
+
+**Claves de IA:** van **solo en tu `.env`**, nunca en el repo (`OPENAI_API_KEY` y `GEMINI_API_KEY`; se piden por privado). Sin claves, la app anda igual: los borradores salen de las reglas.
+
 ## Levantar todo con Docker
 
 ```bash
@@ -68,16 +116,21 @@ En Development, Identidad crea estas cuentas al arrancar. **Las contraseñas est
 | `atleta@protraining.com` | Atleta (Lucas Gómez) | El atleta de la demo: ve su rutina, hace el check-in y queda en rojo |
 | `martin@protraining.com` | Atleta (Martín Pérez) | El segundo atleta de la demo: check-in bien, queda en verde |
 | `joaquin@`, `facundo@`, `valentina@`, `camila@protraining.com` | Atletas | Llenan el semáforo con check-ins ya cargados |
-| `sofia@`, `bruno@`, `diego@protraining.com` | Atletas (Demo 2) | No los crea Identidad: se registran por **invitación** al correr `demo-data.sh`, con la misma contraseña |
+| `sofia@`, `bruno@`, `diego@`, `mateo@`, `ramiro@`, `lautaro@`, `florencia@`, `paula@`, `ignacio@protraining.com` | Atletas | No los crea Identidad: se registran por **invitación** al correr el seed, con la misma contraseña |
+| `santino@` (16) y `bautista@protraining.com` (17) | Atletas **menores** | Se registran por invitación con el consentimiento de su tutor. El tutor de Santino habilita la alimentación y el de Bautista no |
 
-Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh` (necesita `curl` y `jq`), con la API y el token del PF:
+Las cuentas solas no alcanzan: el atleta tiene que existir en Estructura y estar vinculado a su cuenta (eso lo va a hacer la invitación por QR). Para la demo, lo carga el script `scripts/demo-data.sh`, con la API y el token del PF.
+
+**Se corre con Docker, igual en Windows, Mac y Linux.** No hace falta instalar bash, curl ni jq: el script corre adentro del contenedor `seed` (perfil `seed` del compose, KAN-479).
 
 ```bash
 docker compose down -v && docker compose up -d --build   # base de cero
-./scripts/demo-data.sh             # organizaciones, categorías, 8 atletas vinculados, récords, plan "Fuerza base" y check-ins de hoy
-./scripts/demo-data.sh checkins    # solo los check-ins de hoy (la mañana del ensayo y de la demo)
-./scripts/demo-data.sh completo    # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
+docker compose --profile seed run --rm seed              # Club Quilmes, Personalizados y Gimnasio, 20 atletas (2 menores), récords, plan "Fuerza base" y check-ins de hoy
+docker compose --profile seed run --rm seed checkins     # solo los check-ins de hoy (la mañana del ensayo y de la demo)
+docker compose --profile seed run --rm seed completo     # además, lo que en la demo se hace en vivo: récord de Lucas, asignación del plan y sus check-ins
 ```
+
+La primera vez construye la imagen del contenedor (unos segundos). Espera a que los servicios estén sanos antes de empezar. Si en Mac o Linux preferís correrlo directo, sigue andando `./scripts/demo-data.sh [checkins|completo]` (necesita bash, docker, curl y jq).
 
 El script sin argumentos deja la demo lista para mostrar en vivo: falta a propósito el récord de sentadilla de Lucas, la asignación de "Fuerza base" a Primera División y los check-ins de Lucas y Martín. El plan tiene sesiones el miércoles, el jueves y el viernes. También carga los videos de YouTube del PF (sentadilla y press de banca; el peso muerto rumano queda sin video a propósito) y el partido del sábado de Primera División. Además deja el WhatsApp del PF (para que el atleta vea "Contactar a mi preparador"; con `DEMO_PF_PHONE=+549…` se usa un número real), las lesiones activas de Lucas y Camila y una sesión de tests de campo en curso ("Evaluación de pretemporada", con el salto CMJ y los 30 m cargados y la sentadilla 1RM para cargar en vivo). Para que la evolución muestre curvas, carga historia: tres récords anteriores (hace 12, 8 y 4 semanas) de Martín, Facundo, Joaquín, Lucas y Diego, y tres evaluaciones de campo cerradas (hace 10, 6 y 2 semanas) con salto CMJ, 30 m y Test de Cooper. La API registra cada marca de campo con la hora del momento, así que el script les pone la fecha de su sesión directo en la base de Seguimiento (solo para la demo). Con `completo`, Martín registra 115 kg × 5 en sentadilla y queda una propuesta de récord para aprobar en el inicio del PF (solo los días con sesión: miércoles a viernes).
 
@@ -94,41 +147,32 @@ Semáforo de la Demo 2 (reglas de sueño de la KAN-560), con `completo`:
 | 🟢 | Martín, Facundo | 8 h o más, sin otras señales |
 | ⚪ | Nicolás, Agustina | Sin cuenta: "Sin check-in" |
 
-### Modelo local de IA (Ollama) y Elección del Modelo (Llama)
+### IA del Asistente: agente con herramientas y cadena de respaldo
 
-El compose incluye el contenedor oficial de **Ollama** en el puerto `11434` con el volumen persistente `ollama` para almacenar los modelos. **Está en el perfil `ia`**: el `docker compose up` común y el CI no lo levantan. Quien trabaja con IA lo levanta con:
+Ollama ya no forma parte del compose ni de la ejecución. El Asistente arma los borradores de planificación y la justificación del ajuste del día con un **agente** compatible con la API de OpenAI que consulta la biblioteca de ejercicios, las restricciones y los sustitutos a través del servidor MCP de Entrenamiento (`BuscarEjercicios`, `ObtenerRestricciones`, `ObtenerSustitutos`) y está limitado a **6 llamadas a herramientas por pedido** (`AI_AGENT_MAX_TOOL_CALLS`).
 
-```bash
-docker compose --profile ia up -d
-curl http://localhost:11434/api/tags      # modelos instalados
-```
+El cliente es **uno solo y genérico**, compatible con la API de OpenAI (Gemini tiene un endpoint compatible). Sumar o cambiar un proveedor es configuración, no código (ver `Ai__Agent__Providers__N__*` en "Variables de entorno"). Prueba los proveedores **en orden**:
 
-#### Elección oficial del modelo: `llama3.2:1b` (#079 / KAN-374)
-Tras evaluar comparativamente tres versiones de Meta Llama (`llama3.2:1b`, `llama3.2:3b` y `llama3.1:8b`) con pedidos reales de planificación deportiva, se seleccionó **`llama3.2:1b`** como el modelo estándar y obligatorio por defecto:
+| Orden | Proveedor | Variables del `.env` | Cuándo se usa |
+|---|---|---|---|
+| 1 | OpenAI (Azure Gateway UNAJ, `gpt-4.1-mini`) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` | Proveedor principal |
+| 2 | Google Gemini (`gemini-3.8-flash`) | `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL` | Respaldo de IA (si OpenAI falla, tarda o no tiene clave) |
+| 3 | Reglas determinísticas locales | — | Si fallan los dos o no hay claves. La app anda igual sin internet |
 
-| Modelo | RAM en Inferencia | Latencia CPU (sin GPU) | Cumplimiento JSON | Veredicto |
-|---|:---:|:---:|:---:|:---:|
-| **`llama3.2:1b`** | **~1.5 GB** | **1.8 s - 2.6 s** | **98 %** | ✅ **Elegido por defecto (demo y laptops del equipo)** |
-| `llama3.2:3b` | ~3.2 GB | 5.2 s - 7.5 s | 99 % | ⚙️ Alternativa soportada en `.env` (si hay GPU) |
-| `llama3.1:8b` | ~6.0 GB | 19.0 s - 38.0 s | 99 % | ❌ Descartado (alto riesgo de OOM y timeout en CPU) |
+Lo que no cambia, con cualquier proveedor:
+- **La IA propone y el PF decide:** el borrador queda como borrador hasta que el PF lo aprueba.
+- **Sin datos personales:** a cualquier proveedor externo viaja todo anonimizado, nunca el nombre, y del objetivo en texto libre se quitan emails y teléfonos.
+- **Los cálculos no son IA:** kilos, %RM, redondeo a 2,5 kg, semáforo y elección del sustituto son reglas determinísticas en C#.
+- **Ante un HTTP 429** (límite del proveedor) el agente **no espera ni reintenta**: pasa de inmediato al siguiente proveedor.
+- **Timeouts por proveedor:** 40 s + 40 s = 80 s, por debajo de los 100 s del gateway (`OPENAI_TIMEOUT_SECONDS`, `GEMINI_TIMEOUT_SECONDS`).
+- **Prompt contextualizado:** el prompt del agente incluye la categoría o el atleta destino (por identificador anónimo), las restricciones por lesión, las decisiones previas del PF, las directivas deportivas y el formato por bloques con el catálogo numerado.
+- Cada pedido a la IA queda auditado en `ai_logs`, con el proveedor, los tokens y la latencia.
+- El Asistente no depende de ningún proveedor de IA para arrancar: si la IA se cae, el resto del sistema sigue andando.
+- Detalle técnico, hiperparámetros y mediciones históricas de Llama: [services/asistente/README.md](services/asistente/README.md).
 
-> 📖 **Informe técnico completo:** Consulta [services/asistente/README.md](services/asistente/README.md) para ver la matriz de evaluación detallada, consumo de memoria y comandos de prueba.
+**Claves:** `OPENAI_API_KEY` y `GEMINI_API_KEY` van **solo en tu `.env`**. Se piden por privado y nunca se suben al repo, a Jira ni al grupo. Después de cambiarlas: `docker compose up -d asistente` (el `restart` no relee el `.env`).
 
-El Asistente opera con una arquitectura resiliente de 3 niveles:
-1. **Nivel 1 (Local):** Ollama con `llama3.2:1b`.
-2. **Nivel 2 (Nube - Respaldo):** Google Gemini (`gemini-flash-lite-latest`), activado si Ollama no responde o está apagado. Requiere `GEMINI_API_KEY` configurada. Cumple anonimización estricta (no envía nombres de atletas).
-3. **Nivel 3 (Local determinístico):** Motor de reglas locales por objetivo y grupos musculares, activado si Ollama está caído y Gemini no tiene clave o agota su cuota gratuita (HTTP 429).
-
-El Asistente no depende de Ollama ni de Gemini para arrancar: si la IA se cae, el resto del sistema sigue andando.
-
-- **Imagen:** `ollama/ollama:0.40.3` (versión fijada para garantizar reproducibilidad en todo el equipo).
-- **Modelo:** Configurable mediante la variable `OLLAMA_MODEL` (por defecto `llama3.2:1b`, descargado automáticamente por `ollama-model`).
-- **Espacio en disco:** ~1.3 GB en el volumen `ollama`.
-- **Memoria RAM requerida:**
-  - En reposo (inactivo): ~200 MB.
-  - En inferencia/ejecución: ~1.5 GB a 1.8 GB de RAM.
-  - *(Como referencia, `llama3.2:3b` requiere ~3.2 GB y `llama3.1:8b` ~6 GB).*
-
+**Para probar:** en el front, "Generar con IA". El borrador dice quién lo armó: "Agente (OpenAI)", "Agente (Gemini)" o "Reglas".
 
 ## Gateway
 
@@ -174,7 +218,10 @@ La herramienta se llama **`BuscarEjercicios`** y recibe estos parámetros:
 
 Sin al menos un filtro, la herramienta responde un error MCP explicativo. Devuelve un resumen compacto (`total` + `items`) con id, nombre, grupo muscular, equipamiento, músculos y datos de variante; no incluye descripciones, imágenes ni videos para no inflar el contexto del modelo.
 
-También se expone la herramienta MCP de solo lectura **`ObtenerSustitutos`**, que recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
+También se exponen dos herramientas MCP de solo lectura más, que usa el agente del Asistente:
+
+- **`ObtenerRestricciones`**: recibe `zona` y devuelve los ejercicios contraindicados para esa zona, con sus sustitutos.
+- **`ObtenerSustitutos`**: recibe `zona` y devuelve los sustitutos autorizados para esa zona. `rodilla` y `knee` se resuelven internamente contra las zonas musculares configuradas para la articulación (`cuadriceps`, `isquiotibiales` y `gemelos`). Las zonas desconocidas devuelven un error MCP explícito.
 
 Esta ampliación es exclusiva de la superficie MCP: no modifica endpoints REST, esquemas OpenAPI ni contratos que consuma el frontend.
 
@@ -225,9 +272,18 @@ En el `.env` (las usa el compose):
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | Usuario y contraseña de las 5 bases |
 | `JWT_KEY` | Clave para firmar y validar tokens (mínimo 32 caracteres) |
 | `JWT_ISSUER`, `JWT_AUDIENCE` | Quién emite el token y para quién es |
-| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger |
-| `OLLAMA_MODEL` | Modelo de Ollama a descargar para el perfil `ia` (opcional, por defecto `llama3.2:1b`) |
-| `GEMINI_API_KEY` | Clave de API de Google AI Studio para el respaldo del Asistente (opcional) |
+| `ASPNETCORE_ENVIRONMENT` | `Development` habilita Swagger y crea las cuentas de demo |
+| `OPENAI_API_KEY` | Clave del agente con OpenAI (la del gateway de IA de la UNAJ). **Solo en tu `.env`**, se pide por privado. Sin clave, se saltea |
+| `OPENAI_BASE_URL`, `OPENAI_MODEL` | URL y modelo de OpenAI. Por defecto, el gateway de la UNAJ con `gpt-4.1-mini` (ver `.env.example`) |
+| `GEMINI_API_KEY` | Clave de Gemini, el segundo proveedor (de aistudio.google.com). **Solo en tu `.env`**. Sin clave, se saltea |
+| `GEMINI_BASE_URL`, `GEMINI_MODEL` | URL compatible con OpenAI y modelo de Gemini |
+| `AI_AGENT_MAX_TOOL_CALLS` | Tope de llamadas a herramientas del agente por pedido (opcional, por defecto 6) |
+| `AiQuota__DailyLimitPerPf` | Límite diario de pedidos a la IA por PF (opcional, por defecto 20; subir en demo si hace falta) |
+| `GOOGLE_CLIENT_ID` | Client ID del login con Google. No es secreto: va en el botón del front y tiene que coincidir con `VITE_GOOGLE_CLIENT_ID` |
+| `FRONTEND_BASE_URL` | URL del front para los links de los mails (confirmación del registro, recuperar contraseña) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_ENABLE_SSL`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Servidor de mails. En local, los mails se ven en **Mailpit** (`http://localhost:8025`). La contraseña real, si se usa, va **solo en tu `.env`** |
+| `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Claves de las notificaciones push (se generan con `npx web-push generate-vapid-keys`) |
+| `DEMO_PF_PHONE` | WhatsApp del PF de la demo (opcional; para el seed) |
 
 Lo que recibe cada servicio (el compose las arma solo):
 
@@ -238,8 +294,10 @@ Lo que recibe cada servicio (el compose las arma solo):
 | `Jwt__Key`, `Jwt__Issuer`, `Jwt__Audience` | Validación de tokens |
 | `Cors__AllowedOrigins__0`, `__1`, … | Orígenes permitidos del front |
 | `Serilog__MinimumLevel__Default` | Nivel de log (opcional) |
-| `Ollama__BaseUrl`, `Ollama__Model` | URL y modelo para el Asistente |
-| `Gemini__ApiKey`, `Gemini__Model` | Clave de API y modelo para el respaldo en la nube del Asistente |
+| `Ai__Agent__Providers__N__Name`, `__BaseUrl`, `__Model`, `__ApiKey`, `__TimeoutSeconds` | Asistente: la lista ordenada de proveedores de IA (0 = OpenAI, 1 = Gemini). El orden es el de la cadena; un proveedor sin clave se saltea |
+| `Ai__Agent__MaxToolCalls` | Asistente: tope de llamadas a herramientas del agente por pedido (por defecto 6) |
+| `Smtp__*` | Identidad: el servidor de mails (sale de las `SMTP_*`) |
+| `Google__ClientId` | Identidad: para validar el login con Google |
 
 Si falta una variable obligatoria, el servicio no arranca y avisa cuál falta. Nunca subas secretos al repo: el `.env` no se commitea.
 
@@ -379,14 +437,15 @@ Cada caso de uso es un **Command** (escribe) o una **Query** (lee), con su handl
 
 ## Comandos de IA para el equipo
 
-En `.agents/` hay tres comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
+En `.agents/` hay cuatro comandos que funcionan con el asistente de IA que uses (Antigravity u otro compatible con *skills*):
 
 - **`/convenciones`**: revisa los cambios de tu rama contra `develop` y te dice qué no sigue las convenciones de este README (idioma, carpetas, entidad base, migraciones, contratos, secretos, ramas), con cómo corregirlo. No revisa la lógica. Usalo **antes de commitear o abrir el PR**.
+- **`/revisar-tarea`**: revisa tu tarea **antes de abrir el PR**, como la va a revisar el PM: si cumple el ticket de Jira y cada criterio de aceptación, las reglas del proyecto (la IA propone y el PF decide, nada de datos personales a modelos externos, aislamiento entre PFs), las convenciones, la calidad del código, los tests y la integración con el resto. Corre build y tests, te da un veredicto, qué corregir y las preguntas que te pueden hacer. Lo guarda en `notas/revision-<rama>.md`. Si no tenés Jira conectado al asistente, te pide que pegues la descripción de la tarea.
 - **`/documentar`**: escribe en español qué hiciste en tu rama, cómo funciona paso a paso, los conceptos que usaste, cómo probarlo y las preguntas que te pueden hacer en la defensa. Lo guarda en `notas/<rama>.md`, que no se sube a GitHub.
 - **`/informe-po <servicio>`** (por ejemplo `/informe-po seguimiento`): arma el resumen del sprint de ese servicio para el PO, en palabras de negocio y sin detalles técnicos: qué se puede mostrar, qué está listo por dentro, qué está en camino y qué viene. Cuenta lo mergeado en `develop` del servicio y sus pantallas del front (`../protraining-front`), y lo publica en Notion, en **Documentación PO** > sprint > página del servicio. Necesita el MCP de Notion conectado; si no está, lo deja en `notas/` para pegarlo a mano.
 
 Cómo se usan:
-- **Antigravity**: escribí `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
+- **Antigravity**: escribí `/revisar-tarea`, `/convenciones`, `/documentar` o `/informe-po` en el chat del agente (son *workflows*, en `.agents/workflows/`).
 - **Otro asistente**: pedile "seguí las instrucciones de `.agents/skills/convenciones/SKILL.md`".
 
 Las instrucciones están en un solo lugar: `.agents/skills/<comando>/SKILL.md`. Si cambian las convenciones, se actualizan este README y ese archivo.

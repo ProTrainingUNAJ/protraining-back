@@ -6,6 +6,7 @@ using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.Services;
+using Application.UseCases.FitnessTests.ListAthleteBestMarks;
 using Application.UseCases.FitnessTests.ListAthleteFitnessTests;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,7 @@ public class AthleteFitnessTestsControllerTests
 
         var controller = new AthleteFitnessTestsController(
             new ListAthleteFitnessTestsQueryHandler(_repository.Object),
+            new ListAthleteBestMarksQueryHandler(_repository.Object),
             guard);
 
         var claims = new List<Claim>();
@@ -113,6 +115,57 @@ public class AthleteFitnessTestsControllerTests
 
         await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
             CreateController("PreparadorFisico").List(athleteId, cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ListBestMarks_AtletaPropio_DevuelveOk()
+    {
+        var athleteId = Guid.NewGuid();
+        var expected = new List<AthleteBestMarkDto>
+        {
+            new(Guid.NewGuid(), "Carrera 100 m", "Pasadas", 14m, "s")
+        };
+        _estructura
+            .Setup(s => s.GetMeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AthleteMeDto { AthleteId = athleteId });
+        _repository
+            .Setup(r => r.ListBestMarksByAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var result = await CreateController().ListBestMarks(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(200, ok.StatusCode);
+        Assert.Equal(expected, ok.Value);
+    }
+
+    [Fact]
+    public async Task ListBestMarks_PfAtletaPropio_DevuelveOk()
+    {
+        var athleteId = Guid.NewGuid();
+        _estructura
+            .Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _repository
+            .Setup(r => r.ListBestMarksByAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AthleteBestMarkDto>());
+
+        var result = await CreateController("PreparadorFisico").ListBestMarks(athleteId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(200, ok.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListBestMarks_PfAtletaAjeno_LanzaAthleteNotFoundException()
+    {
+        var athleteId = Guid.NewGuid();
+        _estructura
+            .Setup(s => s.IsOwnAthleteAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        await Assert.ThrowsAsync<AthleteNotFoundException>(() =>
+            CreateController("PreparadorFisico").ListBestMarks(athleteId, CancellationToken.None));
     }
 }
 

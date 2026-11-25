@@ -1,7 +1,9 @@
 using Application.Common.PlanDrafts;
 using Application.Common.DayAdjustments;
+using Application.Common.Recommendations;
 using Application.DTOs.DayAdjustments;
 using Application.DTOs.PlanDrafts;
+using Application.DTOs.Recommendations;
 using Application.Exceptions;
 using Domain.Exceptions;
 using System.Diagnostics;
@@ -10,7 +12,6 @@ using Application.DTOs.Ai;
 using Application.Interfaces.Services;
 using Domain.Entities;
 using Infrastructure.Services.Ai.Gemini;
-using Infrastructure.Services.Ai.Ollama;
 using Infrastructure.Services.Ai.Rules;
 using Microsoft.Extensions.Logging;
 
@@ -18,8 +19,8 @@ namespace Infrastructure.Services.Ai;
 
 /// <summary>
 /// Orquesta la cadena resiliente de proveedores de IA para el Asistente:
-/// 1. Ollama (modelo local en Docker)
-/// 2. Google Gemini (respaldo en la nube)
+/// 1. Agente de IA con OpenAI (Azure Gateway gpt-4.1-mini)
+/// 2. Agente de IA con Google Gemini (respaldo en la nube)
 /// 3. Motor de reglas determinísticas locales (respaldo final garantizado)
 /// Asegura alta disponibilidad, tiempos límites independientes por proveedor, validación semántica de ejercicios y registro del origen.
 /// </summary>
@@ -31,93 +32,129 @@ public sealed class ResilientAiService : IAiService
     private readonly ICurrentUser? _currentUser;
     private readonly IAiAuditService? _auditService;
     private readonly IExerciseCatalogService? _catalogService;
+    private readonly IAiQuotaService? _quotaService;
+    private readonly IStructureAthleteClient? _structureAthleteClient;
+    private readonly IIdentityHabitsRecommendationsClient? _identityHabitsClient;
     private readonly ILogger<ResilientAiService> _logger;
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, null, null, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, null, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
-        RuleBasedAiClient ruleBasedClient,
-        IExerciseSemanticValidator? semanticValidator,
-        ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, null, null, null, null, logger)
-    {
-    }
-
-    public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
-        IAiResponseCache? responseCache,
         ILogger<ResilientAiService> logger)
-        : this(ollamaClient, geminiClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, null, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
-        ICurrentUser? currentUser,
-        IAiAuditService? auditService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, logger)
+        : this(primaryClient, secondaryClient, ruleBasedClient, semanticValidator, responseCache, null, null, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        OllamaClient ollamaClient,
-        GeminiClient geminiClient,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
         RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
-        IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
-        : this([ollamaClient, geminiClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, null, null, logger)
     {
     }
 
     public ResilientAiService(
-        IReadOnlyList<IAiClient> providers,
-        IExerciseSemanticValidator? semanticValidator,
-        IAiResponseCache? responseCache,
-        ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, null, null, null, logger)
-    {
-    }
-
-    public ResilientAiService(
-        IReadOnlyList<IAiClient> providers,
-        IExerciseSemanticValidator? semanticValidator,
-        IAiResponseCache? responseCache,
-        ICurrentUser? currentUser,
-        IAiAuditService? auditService,
-        ILogger<ResilientAiService> logger)
-        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, logger)
-    {
-    }
-
-    public ResilientAiService(
-        IReadOnlyList<IAiClient> providers,
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
+        RuleBasedAiClient ruleBasedClient,
         IExerciseSemanticValidator? semanticValidator,
         IAiResponseCache? responseCache,
         ICurrentUser? currentUser,
         IAiAuditService? auditService,
         IExerciseCatalogService? catalogService,
         ILogger<ResilientAiService> logger)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IAiClient primaryClient,
+        IAiClient secondaryClient,
+        RuleBasedAiClient ruleBasedClient,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        IAiQuotaService? quotaService,
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null,
+        IIdentityHabitsRecommendationsClient? identityHabitsClient = null)
+        : this([primaryClient, secondaryClient, ruleBasedClient], semanticValidator, responseCache, currentUser, auditService, catalogService, quotaService, logger, structureAthleteClient, identityHabitsClient)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ILogger<ResilientAiService> logger)
+        : this(providers, semanticValidator, responseCache, null, null, null, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        ILogger<ResilientAiService> logger)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, null, null, logger)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null)
+        : this(providers, semanticValidator, responseCache, currentUser, auditService, catalogService, null, logger, structureAthleteClient)
+    {
+    }
+
+    public ResilientAiService(
+        IReadOnlyList<IAiClient> providers,
+        IExerciseSemanticValidator? semanticValidator,
+        IAiResponseCache? responseCache,
+        ICurrentUser? currentUser,
+        IAiAuditService? auditService,
+        IExerciseCatalogService? catalogService,
+        IAiQuotaService? quotaService,
+        ILogger<ResilientAiService> logger,
+        IStructureAthleteClient? structureAthleteClient = null,
+        IIdentityHabitsRecommendationsClient? identityHabitsClient = null)
     {
         _providers = providers;
         _semanticValidator = semanticValidator;
@@ -125,6 +162,9 @@ public sealed class ResilientAiService : IAiService
         _currentUser = currentUser;
         _auditService = auditService;
         _catalogService = catalogService;
+        _quotaService = quotaService;
+        _structureAthleteClient = structureAthleteClient;
+        _identityHabitsClient = identityHabitsClient;
         _logger = logger;
     }
 
@@ -134,12 +174,14 @@ public sealed class ResilientAiService : IAiService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var totalStopwatch = Stopwatch.StartNew();
+        var pfId = _currentUser?.PfId;
 
         // 1. Verificación de caché en memoria de IA por hash de las instrucciones aislado por PF (KAN-368)
         string? promptHash = null;
-        if (_responseCache != null && request.AdaptationContext is null)
+        if (_responseCache != null &&
+            request.AdaptationContext is null &&
+            request.PreviousPfDecisions is not { Count: > 0 })
         {
-            var pfId = _currentUser?.PfId;
             promptHash = _responseCache.ComputePromptHash(request.Goal, request.MuscleGroupEmphasis, pfId);
             if (_responseCache.TryGet(promptHash, out var cachedResponse) && cachedResponse != null)
             {
@@ -212,6 +254,57 @@ public sealed class ResilientAiService : IAiService
             }
         }
 
+        // 3. Verificación de cuota diaria en memoria por PF (KAN-510)
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de pedidos a la IA. Derivando a reglas determinísticas.",
+                pfId);
+
+            var ruleClient = _providers.OfType<RuleBasedAiClient>().FirstOrDefault() ?? _providers.Last();
+            var fallbackTierStopwatch = Stopwatch.StartNew();
+            var fallbackResponse = await ruleClient.TrySuggestRoutineAsync(request, cancellationToken);
+            fallbackTierStopwatch.Stop();
+            totalStopwatch.Stop();
+
+            if (fallbackResponse != null)
+            {
+                const string quotaNotice = "Llegaste al límite de pedidos a la IA por hoy. Se generó una propuesta basada en reglas determinísticas.";
+                var warnings = fallbackResponse.AdaptationWarnings?.ToList() ?? new List<string>();
+                if (!warnings.Contains(quotaNotice))
+                {
+                    warnings.Insert(0, quotaNotice);
+                }
+
+                if (_auditService != null)
+                {
+                    try
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider: "Reglas",
+                            prompt: $"Goal: {request.Goal} (Límite de IA alcanzado)",
+                            latencyMs: fallbackTierStopwatch.ElapsedMilliseconds,
+                            isValid: true,
+                            validationResult: "QuotaExceededFallback",
+                            response: fallbackResponse.JustificationSummary,
+                            pfId: pfId,
+                            athleteId: request.AthleteId), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error al auditar fallback por cuota de IA.");
+                    }
+                }
+
+                return fallbackResponse with
+                {
+                    ProviderUsed = "Reglas (Límite diario alcanzado)",
+                    AdaptationWarnings = warnings
+                };
+            }
+        }
+
         _logger.LogInformation("Iniciando cadena de proveedores de IA para el atleta '{AthleteId}'.", request.AthleteId);
 
         for (var i = 0; i < _providers.Count; i++)
@@ -273,7 +366,7 @@ public sealed class ResilientAiService : IAiService
                 }
 
                 // 2. Almacenar la propuesta validada en caché en memoria (KAN-368)
-                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (Ollama o Gemini),
+                // Se guardan ÚNICAMENTE respuestas generadas por modelos de IA reales (OpenAI o Gemini),
                 // excluyendo deliberadamente las reglas determinísticas para no degradar el servicio si la IA se recupera.
                 if (_responseCache != null &&
                     request.AdaptationContext is null &&
@@ -282,6 +375,13 @@ public sealed class ResilientAiService : IAiService
                     !response.ProviderUsed.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
                 {
                     _responseCache.Set(promptHash, response);
+                }
+
+                // 3. Registrar consumo de cuota diaria de IA si la respuesta provino de un proveedor de IA real (KAN-510)
+                if (provider is not RuleBasedAiClient &&
+                    !response.ProviderUsed.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                {
+                    _quotaService?.RecordUsage(pfId);
                 }
 
                 totalStopwatch.Stop();
@@ -317,6 +417,44 @@ public sealed class ResilientAiService : IAiService
 
         var totalStopwatch = Stopwatch.StartNew();
 
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para generación de planes. Derivando a reglas determinísticas.",
+                pfId);
+
+            var ruleClient = _providers.OfType<RuleBasedAiClient>().FirstOrDefault() ?? _providers.Last();
+            var fallbackContent = await ruleClient.TryGeneratePlanDraftAsync(request, matchDates, cancellationToken);
+            totalStopwatch.Stop();
+
+            if (fallbackContent != null)
+            {
+                if (_auditService != null)
+                {
+                    try
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider: "Reglas",
+                            prompt: $"PlanDraft: {request.Goal} (Límite de IA alcanzado)",
+                            latencyMs: 0,
+                            isValid: true,
+                            validationResult: "QuotaExceededFallback",
+                            athleteId: request.AthleteId,
+                            pfId: pfId), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error al auditar fallback de plan por cuota de IA.");
+                    }
+                }
+
+                return (fallbackContent, "Reglas (Límite diario alcanzado)");
+            }
+        }
+
         for (var i = 0; i < _providers.Count; i++)
         {
             var provider = _providers[i];
@@ -337,6 +475,53 @@ public sealed class ResilientAiService : IAiService
                             tierStopwatch.ElapsedMilliseconds);
                     }
                     continue;
+                }
+
+                // Registrar consumo de cuota diaria apenas respondió un modelo de IA real (aunque luego falle validación, gastó tokens - KAN-510)
+                if (provider is not RuleBasedAiClient &&
+                    !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                {
+                    _quotaService?.RecordUsage(pfId);
+                }
+
+                var rawRequestedExercises = GoalConstraintExtractor.ExtractRawRequestedExercisesPerSession(request.Goal);
+                var requestedMaxExercises = GoalConstraintExtractor.ExtractMaxExercisesPerSession(request.Goal);
+                if (requestedMaxExercises is > 0)
+                {
+                    IReadOnlyList<CatalogExerciseDto> catalogForAdjustment = [];
+                    if (_catalogService != null)
+                    {
+                        try
+                        {
+                            var goalCatalog = await _catalogService.GetExercisesForGoalAsync(request.Goal, 25, cancellationToken);
+                            if (goalCatalog is not { Count: > 0 })
+                            {
+                                goalCatalog = await _catalogService.GetAllAsync(cancellationToken);
+                            }
+                            if (goalCatalog is { Count: > 0 })
+                            {
+                                catalogForAdjustment = goalCatalog;
+                            }
+                        }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "No se pudo consultar el catálogo filtrado para ajustar la cantidad de ejercicios por sesión.");
+                        }
+                    }
+
+                    content = PlanDraftBlockParser.EnforceExactExercisesPerSession(
+                        content,
+                        requestedMaxExercises.Value,
+                        rawRequestedExercises,
+                        catalogForAdjustment,
+                        request.Goal,
+                        request.StartDate,
+                        matchDates,
+                        request.AdaptationContext);
                 }
 
                 if (_catalogService != null)
@@ -401,6 +586,17 @@ public sealed class ResilientAiService : IAiService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para redacción de justificaciones. Derivando a reglas determinísticas.",
+                pfId);
+            return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas (Límite diario alcanzado)");
+        }
+
         for (var i = 0; i < _providers.Count; i++)
         {
             var provider = _providers[i];
@@ -414,6 +610,12 @@ public sealed class ResilientAiService : IAiService
 
                 if (!string.IsNullOrWhiteSpace(justification))
                 {
+                    if (provider is not RuleBasedAiClient &&
+                        !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _quotaService?.RecordUsage(pfId);
+                    }
+
                     return (justification.Trim(), provider.ProviderName);
                 }
 
@@ -437,5 +639,285 @@ public sealed class ResilientAiService : IAiService
         }
 
         return (DayAdjustmentMapper.BuildDeterministicJustification(items), "Reglas");
+    }
+
+    public async Task<TrainingRecommendationResponseDto> GenerateTrainingRecommendationAsync(
+        TrainingRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para recomendaciones de entrenamiento. Derivando a reglas determinísticas.",
+                pfId);
+            var quotaFallback = RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, "Reglas (Límite diario alcanzado)");
+            return quotaFallback;
+        }
+
+        var prompt = RecommendationPromptBuilder.BuildTrainingRecommendationPrompt(request);
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var candidate = await provider.TryGenerateTrainingRecommendationAsync(request, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (candidate != null)
+                {
+                    var validation = RecommendationOutputValidator.ValidateTrainingDto(candidate, request);
+                    if (validation.IsValid && validation.Value != null)
+                    {
+                        if (provider is not RuleBasedAiClient &&
+                            !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _quotaService?.RecordUsage(pfId);
+                        }
+
+                        return validation.Value with { ProviderUsed = provider.ProviderName };
+                    }
+
+                    _logger.LogWarning(
+                        "La recomendación de entrenamiento de '{Provider}' fue descartada por validación ({ValidationCode}): {Error}. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        validation.ValidationCode,
+                        validation.ErrorMessage);
+
+                    if (_auditService != null)
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider.ProviderName,
+                            prompt,
+                            tierStopwatch.ElapsedMilliseconds,
+                            isValid: false,
+                            validationResult: validation.ValidationCode,
+                            response: candidate.RecommendationText,
+                            pfId: _currentUser?.PfId,
+                            athleteId: request.AthleteId,
+                            errorMessage: validation.ErrorMessage), cancellationToken);
+                    }
+
+                    continue;
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la recomendación de entrenamiento tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(
+                    ex,
+                    "Excepción en proveedor '{Provider}' al redactar recomendación de entrenamiento. Pasando al siguiente respaldo.",
+                    provider.ProviderName);
+            }
+        }
+
+        var fallback = RecommendationPromptBuilder.BuildDeterministicTrainingRecommendation(request, "Reglas");
+        var fallbackValidation = RecommendationOutputValidator.ValidateTrainingDto(fallback, request);
+        if (!fallbackValidation.IsValid || fallbackValidation.Value is null)
+        {
+            throw new DomainException(fallbackValidation.ErrorMessage ?? "No se pudo validar la recomendación de entrenamiento.");
+        }
+
+        return fallbackValidation.Value;
+    }
+
+    public async Task<NutritionRecommendationResponseDto> GenerateNutritionRecommendationAsync(
+        NutritionRecommendationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Objetivo orientado a bajar de peso => no se bloquea la generación; se debe producir
+        // una recomendación segura sin cantidades ni estrategias para perder peso y con derivación.
+        // La seguridad se refuerza en prompt, generación determinística y validación.
+        if (RecommendationOutputValidator.TryFindForbiddenWeightLoss(request.AthleticGoal, out _))
+        {
+            request = request with
+            {
+                IncludeQuantities = false,
+                MinProteinGrams = null,
+                MaxProteinGrams = null,
+                DailyProteinRequirementGrams = null,
+                RecommendationMode = HabitsRecommendationRules.ModeReferral,
+                RequiresProfessionalReferral = true,
+                ReferralReasons = (request.ReferralReasons ?? [])
+                    .Concat(["Objetivo orientado a bajar de peso: no se brindan cantidades ni estrategias para perder peso; se sugiere derivación profesional."])
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+            };
+        }
+
+        if (request.ApprovedFoods is { Count: 0 })
+        {
+            throw new DomainException("La lista de alimentos aprobados debe contener al menos un alimento.");
+        }
+
+        // Requiere atleta identificado para toda recomendación de alimentación (#201 · KAN-496):
+        // sin atleta no se puede verificar el permiso del tutor, así que no se genera nada (fail-closed).
+        if (!request.AthleteId.HasValue)
+        {
+            _logger.LogWarning(
+                "No se indicó AthleteId para la recomendación de alimentación. No se generará recomendación (fail-closed, KAN-496).");
+            throw new DomainException(
+                "Se requiere el identificador del atleta para generar una recomendación de alimentación.");
+        }
+
+        // KAN-493: la preferencia del PF se verifica antes de consultar a cualquier proveedor de IA.
+        // Si Identidad no responde o devuelve false, no se genera nada (fail-closed).
+        var pfEnabled = _identityHabitsClient is not null
+            ? await _identityHabitsClient.GetMyHabitsRecommendationsEnabledAsync(cancellationToken)
+            : null;
+
+        if (pfEnabled is not true)
+        {
+            _logger.LogWarning(
+                "La preferencia de recomendaciones del PF está desactivada o no se pudo consultar. No se generará recomendación de alimentación (fail-closed).");
+            throw new DomainException("Las recomendaciones de hábitos y alimentación están deshabilitadas para este preparador físico.");
+        }
+
+        // Verificación del permiso del tutor en atletas menores (#201 · KAN-496):
+        // si no se puede verificar o el tutor no autorizó, no se genera ninguna recomendación (fail-closed).
+        var permission = _structureAthleteClient is not null
+            ? await _structureAthleteClient.GetHabitsPermissionAsync(request.AthleteId.Value, cancellationToken)
+            : null;
+
+        if (permission is null)
+        {
+            _logger.LogWarning(
+                "No se pudo verificar el permiso del tutor del atleta {AthleteId}. No se generará recomendación de alimentación (fail-closed).",
+                request.AthleteId.Value);
+            throw new DomainException(
+                $"No se pudo verificar el permiso del tutor del atleta {request.AthleteId.Value}; no se generará recomendación de alimentación.");
+        }
+
+        if (!HabitsRecommendationsPolicy.IsEnabled(pfEnabled, permission))
+        {
+            _logger.LogWarning(
+                "El atleta {AthleteId} no tiene habilitadas las recomendaciones (permiso del tutor no verificado o no autorizado). No se generará recomendación de alimentación (KAN-493 / KAN-496).",
+                request.AthleteId.Value);
+            throw new DomainException("El atleta no tiene autorizadas las recomendaciones de hábitos y alimentación.");
+        }
+
+        // Menores de edad: aunque el tutor autorice, nunca se incluyen cantidades (KAN-378 / KAN-496).
+        // Se fuerza el modo cualitativo antes de armar el prompt, validar y generar el respaldo por reglas.
+        if (permission.IsMinor)
+        {
+            request = request with { IncludeQuantities = false };
+        }
+
+        // Verificación de cuota diaria en memoria por PF (KAN-510)
+        var pfId = _currentUser?.PfId;
+        var hasQuota = _quotaService?.HasQuota(pfId) ?? true;
+        if (!hasQuota)
+        {
+            _logger.LogWarning(
+                "El preparador físico {PfId} ha alcanzado el límite diario de IA para recomendaciones de nutrición. Derivando a reglas determinísticas.",
+                pfId);
+            var quotaFallback = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, "Reglas (Límite diario alcanzado)");
+            return quotaFallback;
+        }
+
+        var prompt = RecommendationPromptBuilder.BuildNutritionRecommendationPrompt(request);
+
+        for (var i = 0; i < _providers.Count; i++)
+        {
+            var provider = _providers[i];
+            var isLast = i == _providers.Count - 1;
+            var tierStopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                var candidate = await provider.TryGenerateNutritionRecommendationAsync(request, cancellationToken);
+                tierStopwatch.Stop();
+
+                if (candidate != null)
+                {
+                    var validation = RecommendationOutputValidator.ValidateNutritionDto(candidate, request);
+                    if (validation.IsValid && validation.Value != null)
+                    {
+                        if (provider is not RuleBasedAiClient &&
+                            !provider.ProviderName.StartsWith("Reglas", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _quotaService?.RecordUsage(pfId);
+                        }
+
+                        return validation.Value with { ProviderUsed = provider.ProviderName };
+                    }
+
+                    _logger.LogWarning(
+                        "La recomendación de alimentación de '{Provider}' fue descartada por validación ({ValidationCode}): {Error}. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        validation.ValidationCode,
+                        validation.ErrorMessage);
+
+                    if (_auditService != null)
+                    {
+                        await _auditService.LogAsync(AiLog.Create(
+                            provider.ProviderName,
+                            prompt,
+                            tierStopwatch.ElapsedMilliseconds,
+                            isValid: false,
+                            validationResult: validation.ValidationCode,
+                            response: candidate.SuggestedPlateComposition,
+                            pfId: _currentUser?.PfId,
+                            athleteId: request.AthleteId,
+                            errorMessage: validation.ErrorMessage), cancellationToken);
+                    }
+
+                    continue;
+                }
+
+                if (!isLast)
+                {
+                    _logger.LogWarning(
+                        "El proveedor '{Provider}' no pudo redactar la recomendación de alimentación tras {ElapsedMs} ms. Pasando al siguiente respaldo.",
+                        provider.ProviderName,
+                        tierStopwatch.ElapsedMilliseconds);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tierStopwatch.Stop();
+                _logger.LogWarning(
+                    ex,
+                    "Excepción en proveedor '{Provider}' al redactar recomendación de alimentación. Pasando al siguiente respaldo.",
+                    provider.ProviderName);
+            }
+        }
+
+        var fallback = RecommendationPromptBuilder.BuildDeterministicNutritionRecommendation(request, "Reglas");
+        var fallbackValidation = RecommendationOutputValidator.ValidateNutritionDto(fallback, request);
+        if (!fallbackValidation.IsValid || fallbackValidation.Value is null)
+        {
+            throw new DomainException(fallbackValidation.ErrorMessage ?? "No se pudo validar la recomendación de alimentación.");
+        }
+
+        return fallbackValidation.Value;
     }
 }

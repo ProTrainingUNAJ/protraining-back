@@ -66,12 +66,36 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
                 .Union(todaysCorrections.Select(c => c.AthleteId))
                 .ToList();
 
+            var degradedLoadByAthlete = todaysLoads.ToDictionary(l => l.AthleteId);
             var degradedSummaries = degradedIds.Select(id =>
             {
                 var isPresent = correctionByAthlete.TryGetValue(id, out var correction)
                     ? correction.IsPresent
                     : automaticPresent.Contains(id);
-                return new AthleteAttendanceSummaryDto(id, string.Empty, isPresent ? "Present" : "NoRecord");
+                degradedLoadByAthlete.TryGetValue(id, out var load);
+
+                var activities = new List<AttendanceActivityDetailDto>();
+                if (load is not null)
+                {
+                    if (load.GymMinutes > 0)
+                        activities.Add(new AttendanceActivityDetailDto("Gym", "Gimnasio", load.GymMinutes, load.GymRpe));
+                    if (load.SportTrainingMinutes > 0)
+                        activities.Add(new AttendanceActivityDetailDto("SportTraining", "Entrenamiento", load.SportTrainingMinutes, load.SportTrainingRpe));
+                    if (load.Match1Minutes > 0)
+                        activities.Add(new AttendanceActivityDetailDto("Match1", "Partido 1", load.Match1Minutes, load.Match1Rpe));
+                    if (load.Match2Minutes > 0)
+                        activities.Add(new AttendanceActivityDetailDto("Match2", "Partido 2", load.Match2Minutes, load.Match2Rpe));
+                    if (load.IndividualWorkMinutes > 0)
+                        activities.Add(new AttendanceActivityDetailDto("IndividualWork", "Trabajo Individual", load.IndividualWorkMinutes, load.IndividualWorkRpe));
+                }
+
+                return new AthleteAttendanceSummaryDto(
+                    id,
+                    string.Empty,
+                    isPresent ? "Present" : "NoRecord",
+                    load?.TotalMinutes ?? 0,
+                    load?.TotalLoad ?? 0,
+                    activities);
             }).ToList();
 
             var presentCount = degradedSummaries.Count(s => s.Status == "Present");
@@ -85,18 +109,38 @@ public sealed class GetCategoryAttendanceTodayQueryHandler
                 degradedSummaries);
         }
 
-        var loadIds = loads.Select(load => load.AthleteId).ToHashSet();
+        var loadByAthlete = loads.ToDictionary(l => l.AthleteId);
 
         var athleteSummaries = athletes.Select(athlete =>
         {
             var correction = corrections.FirstOrDefault(c => c.AthleteId == athlete.Id);
+            loadByAthlete.TryGetValue(athlete.Id, out var load);
             var isPresent = correction is not null
                 ? correction.IsPresent
-                : loadIds.Contains(athlete.Id);
+                : load is not null;
+
+            var activities = new List<AttendanceActivityDetailDto>();
+            if (load is not null)
+            {
+                if (load.GymMinutes > 0)
+                    activities.Add(new AttendanceActivityDetailDto("Gym", "Gimnasio", load.GymMinutes, load.GymRpe));
+                if (load.SportTrainingMinutes > 0)
+                    activities.Add(new AttendanceActivityDetailDto("SportTraining", "Entrenamiento", load.SportTrainingMinutes, load.SportTrainingRpe));
+                if (load.Match1Minutes > 0)
+                    activities.Add(new AttendanceActivityDetailDto("Match1", "Partido 1", load.Match1Minutes, load.Match1Rpe));
+                if (load.Match2Minutes > 0)
+                    activities.Add(new AttendanceActivityDetailDto("Match2", "Partido 2", load.Match2Minutes, load.Match2Rpe));
+                if (load.IndividualWorkMinutes > 0)
+                    activities.Add(new AttendanceActivityDetailDto("IndividualWork", "Trabajo Individual", load.IndividualWorkMinutes, load.IndividualWorkRpe));
+            }
+
             return new AthleteAttendanceSummaryDto(
                 athlete.Id,
                 athlete.FullName,
-                isPresent ? "Present" : "NoRecord");
+                isPresent ? "Present" : "NoRecord",
+                load?.TotalMinutes ?? 0,
+                load?.TotalLoad ?? 0,
+                activities);
         }).ToList();
 
         var present = athleteSummaries.Count(a => a.Status == "Present");

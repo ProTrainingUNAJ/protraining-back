@@ -1,11 +1,12 @@
 using Application.DTOs.Alerts;
 using Application.DTOs.Adaptation;
 using Application.DTOs.DayConflicts;
+using Application.DTOs.Recommendations;
 
 namespace Application.Interfaces.Services;
 
 /// <summary>
-/// Contrato de comunicación HTTP hacia el microservicio de Seguimiento (#177 · KAN-472 / #156 · KAN-451).
+/// Contrato de comunicación HTTP hacia el microservicio de Seguimiento (#177 · KAN-472 / #156 · KAN-451 / #196 · KAN-491).
 /// </summary>
 public interface ISeguimientoClient
 {
@@ -29,5 +30,35 @@ public interface ISeguimientoClient
 
     Task<IReadOnlyList<ActiveInjuryRemoteDto>> GetActiveInjuriesAsync(
         Guid athleteId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene el historial de tests físicos de un atleta (#196 · KAN-491).
+    /// </summary>
+    Task<IReadOnlyList<AthleteFitnessTestRemoteDto>> GetAthleteFitnessTestsAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene los promedios de tests y wellness de una categoría (#196 · KAN-491 / KAN-447).
+    /// </summary>
+    Task<CategoryAveragesRemoteDto?> GetCategoryAveragesAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene las tendencias semanales de wellness y carga de un atleta (#196 · KAN-491 / KAN-489).
+    /// </summary>
+    Task<AthleteWeeklyTrendsRemoteDto?> GetAthleteWeeklyTrendsAsync(
+        Guid athleteId,
+        int weeks = 4,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene el resumen del semáforo de hoy de todos los atletas de una categoría para evaluar
+    /// conflictos de dolor en lote (KAN-574). Lanza NotFoundException si la categoría no existe o no pertenece al PF.
+    /// </summary>
+    Task<IReadOnlyList<CategoryTrafficLightAthleteRemoteDto>> GetCategoryTrafficLightTodayAsync(
+        Guid categoryId,
         CancellationToken cancellationToken = default);
 }

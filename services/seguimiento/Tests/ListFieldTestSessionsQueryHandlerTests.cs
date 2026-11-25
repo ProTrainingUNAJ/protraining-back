@@ -24,16 +24,10 @@ public class ListFieldTestSessionsQueryHandlerTests
             {
                 CategoryId = CategoryId,
                 Date = new DateTime(2026, 11, 9),
-                Name = "Evaluación de pretemporada",
-                Status = FieldTestSessionStatus.Planned
+                Name = "Evaluación de pretemporada"
+                // Planned por defecto (setter privado, KAN-580).
             },
-            new()
-            {
-                CategoryId = CategoryId,
-                Date = new DateTime(2026, 10, 1),
-                Name = "Test de arranque",
-                Status = FieldTestSessionStatus.Closed
-            }
+            Cerrada(CategoryId, new DateTime(2026, 10, 1), "Test de arranque")
         };
 
         _fieldTests
@@ -63,5 +57,21 @@ public class ListFieldTestSessionsQueryHandlerTests
         var summaries = await CreateHandler().HandleAsync(new ListFieldTestSessionsQuery(CategoryId));
 
         Assert.Empty(summaries);
+    }
+
+    // KAN-580: Status tiene setter privado, así que la sesión cerrada se alcanza
+    // recorriendo las transiciones permitidas.
+    private static FieldTestSession Cerrada(Guid categoryId, DateTime date, string name)
+    {
+        var session = new FieldTestSession
+        {
+            CategoryId = categoryId,
+            Date = date,
+            Name = name
+        };
+
+        session.TransitionTo(FieldTestSessionStatus.InProgress);
+        session.TransitionTo(FieldTestSessionStatus.Closed);
+        return session;
     }
 }

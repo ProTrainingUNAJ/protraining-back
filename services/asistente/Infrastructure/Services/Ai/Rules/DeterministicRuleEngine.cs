@@ -1,3 +1,4 @@
+using Application.Common.Helpers;
 using Application.DTOs.Ai;
 
 namespace Infrastructure.Services.Ai.Rules;
@@ -24,14 +25,16 @@ public static class DeterministicRuleEngine
 
     private static GoalCategory ClassifyGoal(string goal)
     {
-        var normalized = goal.ToLowerInvariant();
+        var normalized = TextNormalizer.Normalize(goal);
 
         if (normalized.Contains("descarga") ||
             normalized.Contains("recuperac") ||
             normalized.Contains("movilidad") ||
             normalized.Contains("molestia") ||
             normalized.Contains("dolor") ||
-            normalized.Contains("fatiga"))
+            normalized.Contains("fatiga") ||
+            normalized.Contains("deload") ||
+            normalized.Contains("recovery"))
         {
             return GoalCategory.DeloadAndRecovery;
         }
@@ -39,7 +42,10 @@ public static class DeterministicRuleEngine
         if (normalized.Contains("potencia") ||
             normalized.Contains("explosiv") ||
             normalized.Contains("salto") ||
-            normalized.Contains("velocidad"))
+            normalized.Contains("velocidad") ||
+            normalized.Contains("power") ||
+            normalized.Contains("speed") ||
+            normalized.Contains("jump"))
         {
             return GoalCategory.Power;
         }
@@ -47,7 +53,10 @@ public static class DeterministicRuleEngine
         if (normalized.Contains("hipertrofia") ||
             normalized.Contains("masa") ||
             normalized.Contains("volumen") ||
-            normalized.Contains("muscular"))
+            normalized.Contains("muscular") ||
+            normalized.Contains("hypertrophy") ||
+            normalized.Contains("muscle") ||
+            normalized.Contains("volume"))
         {
             return GoalCategory.Hypertrophy;
         }
@@ -55,12 +64,18 @@ public static class DeterministicRuleEngine
         if (normalized.Contains("resistencia") ||
             normalized.Contains("condicionamiento") ||
             normalized.Contains("metabolic") ||
-            normalized.Contains("cardio"))
+            normalized.Contains("cardio") ||
+            normalized.Contains("aerobic") ||
+            normalized.Contains("tonific") ||
+            normalized.Contains("endurance") ||
+            normalized.Contains("stamina"))
         {
             return GoalCategory.Endurance;
         }
 
-        if (normalized.Contains("fuerza"))
+        if (normalized.Contains("fuerza") ||
+            normalized.Contains("maxima") ||
+            normalized.Contains("strength"))
         {
             return GoalCategory.MaxStrength;
         }
@@ -73,7 +88,7 @@ public static class DeterministicRuleEngine
         if (emphasis == null || emphasis.Count == 0)
             return TargetArea.FullBody;
 
-        var text = string.Join(" ", emphasis).ToLowerInvariant();
+        var text = TextNormalizer.Normalize(string.Join(" ", emphasis));
 
         var hasLegs = text.Contains("pierna") || text.Contains("cuadriceps") ||
                       text.Contains("isquio") || text.Contains("gluteo") ||
@@ -145,7 +160,7 @@ public static class DeterministicRuleEngine
                 "Se aplicó una plantilla balanceada de acondicionamiento físico funcional con cargas submáximas seguras (60-70%)."
         };
 
-        return $"Propuesta generada mediante motor de reglas determinísticas (plantilla basada en objetivo: '{rawGoal}'). {rationale} Criterio activado como respaldo ante indisponibilidad de proveedores de IA.";
+        return $"Propuesta generada mediante motor de reglas determinísticas (plantilla basada en objetivo: '{rawGoal}'). {rationale}";
     }
 
     private static List<SuggestedExerciseDto> BuildExercises(GoalCategory category, TargetArea targetArea)

@@ -4,6 +4,9 @@ using Application.UseCases.Organizations.DeleteOrganization;
 using Application.UseCases.Organizations.GetOrganization;
 using Application.UseCases.Organizations.ListOrganizations;
 using Application.UseCases.Organizations.UpdateOrganization;
+using Application.UseCases.Organizations.UploadOrganizationPhoto;
+using Application.UseCases.Organizations.GetOrganizationPhoto;
+using Application.UseCases.Organizations.DeleteOrganizationPhoto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +20,10 @@ public sealed class OrganizationsController(
     GetOrganizationQueryHandler getHandler,
     CreateOrganizationCommandHandler createHandler,
     UpdateOrganizationCommandHandler updateHandler,
-    DeleteOrganizationCommandHandler deleteHandler) : ControllerBase
+    DeleteOrganizationCommandHandler deleteHandler,
+    UploadOrganizationPhotoCommandHandler uploadPhotoHandler,
+    GetOrganizationPhotoQueryHandler getPhotoHandler,
+    DeleteOrganizationPhotoCommandHandler deletePhotoHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<OrganizationDto>>> List(CancellationToken cancellationToken) =>
@@ -52,6 +58,47 @@ public sealed class OrganizationsController(
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         await deleteHandler.HandleAsync(new DeleteOrganizationCommand(id), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{id:guid}/photo")]
+    [RequestSizeLimit(256_000)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadPhoto(Guid id, IFormFile photo, CancellationToken cancellationToken)
+    {
+        if (photo is null || photo.Length == 0)
+        {
+            throw new Domain.Exceptions.DomainException("El archivo de imagen no puede estar vacío.");
+        }
+
+        if (photo.Length > Application.Common.WebpImageValidator.MaxSizeBytes)
+        {
+            throw new Domain.Exceptions.DomainException("La foto no puede superar los 200 KB.");
+        }
+
+        using var memoryStream = new MemoryStream();
+        await photo.CopyToAsync(memoryStream, cancellationToken);
+        var bytes = memoryStream.ToArray();
+
+        await uploadPhotoHandler.HandleAsync(
+            new UploadOrganizationPhotoCommand(id, bytes, photo.ContentType, photo.Length),
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    [HttpGet("{id:guid}/photo")]
+    public async Task<IActionResult> GetPhoto(Guid id, CancellationToken cancellationToken)
+    {
+        var photo = await getPhotoHandler.HandleAsync(new GetOrganizationPhotoQuery(id), cancellationToken);
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        return File(photo.Data, photo.ContentType);
+    }
+
+    [HttpDelete("{id:guid}/photo")]
+    public async Task<IActionResult> DeletePhoto(Guid id, CancellationToken cancellationToken)
+    {
+        await deletePhotoHandler.HandleAsync(new DeleteOrganizationPhotoCommand(id), cancellationToken);
         return NoContent();
     }
 }

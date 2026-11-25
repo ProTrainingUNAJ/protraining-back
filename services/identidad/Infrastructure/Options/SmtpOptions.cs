@@ -1,7 +1,8 @@
 namespace Infrastructure.Options;
 
 /// <summary>
-/// Opciones de configuración para el servidor SMTP (#KAN-540).
+/// Opciones de configuración para el servidor SMTP (#KAN-540, KAN-601).
+/// En desarrollo local se utiliza Mailpit por defecto sin credenciales.
 /// </summary>
 public sealed class SmtpOptions
 {

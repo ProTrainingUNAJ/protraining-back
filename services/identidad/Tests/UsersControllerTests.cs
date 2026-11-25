@@ -1,10 +1,13 @@
-﻿using System.Reflection;
+using System.Reflection;
 using API.Controllers;
 using Application.DTOs.Auth;
 using Application.DTOs.Users;
+using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Auth.GetPfContact;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Users.UpdateHabitsRecommendations;
+using Application.UseCases.Users.GetPfHabitsRecommendations;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -18,6 +21,9 @@ public class UsersControllerTests
 {
     private readonly Mock<UserManager<User>> _mockUserManager;
     private readonly Mock<ICurrentUser> _mockCurrentUser = new();
+    private readonly Mock<IUserPhotoRepository> _mockPhotoRepo = new();
+    private readonly Mock<IRefreshTokenRepository> _mockRefreshTokenRepo = new();
+    private readonly Mock<IUnitOfWork> _mockUnitOfWork = new();
     private readonly UsersController _controller;
 
     public UsersControllerTests()
@@ -26,10 +32,41 @@ public class UsersControllerTests
         _mockUserManager = new Mock<UserManager<User>>(
             userStoreMock.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
+        var uploadPhotoHandler = new Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler(
+            _mockUserManager.Object, _mockPhotoRepo.Object, _mockUnitOfWork.Object);
+        var getPhotoHandler = new Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler(_mockPhotoRepo.Object);
+        var getPfPhotoHandler = new Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler(_mockPhotoRepo.Object);
+        var deletePhotoHandler = new Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler(
+            _mockUserManager.Object, _mockPhotoRepo.Object, _mockUnitOfWork.Object);
+        var updateStatusUseCase = new Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase(
+            _mockUserManager.Object, _mockRefreshTokenRepo.Object, _mockCurrentUser.Object);
+        var updateEmailUseCase = new Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase(
+            _mockUserManager.Object, _mockCurrentUser.Object);
+        var updatePhoneUseCase = new Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase(
+            _mockUserManager.Object, _mockCurrentUser.Object);
+
+        var updateProfileUseCase = new Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase(_mockUserManager.Object);
+        var updateMyTelegramUseCase = new Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase(
+            _mockUserManager.Object, new Mock<IStructureClient>().Object);
+        var deactivateAccountUseCase = new Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase(_mockUserManager.Object, _mockRefreshTokenRepo.Object);
+
         _controller = new UsersController(
             new UpdateWhatsAppPhoneUseCase(_mockUserManager.Object),
             new GetPfContactUseCase(_mockUserManager.Object),
-            _mockCurrentUser.Object);
+            new UpdateHabitsRecommendationsUseCase(_mockUserManager.Object),
+            new GetPfHabitsRecommendationsUseCase(_mockUserManager.Object),
+            _mockCurrentUser.Object,
+            uploadPhotoHandler,
+            getPhotoHandler,
+            getPfPhotoHandler,
+            deletePhotoHandler,
+            updateStatusUseCase,
+            updateEmailUseCase,
+            updatePhoneUseCase,
+            updateProfileUseCase,
+            updateMyTelegramUseCase,
+            deactivateAccountUseCase,
+            _mockUserManager.Object);
     }
 
     // Roles que exige el atributo [Authorize] puesto en el método del controller.
@@ -104,12 +141,28 @@ public class UsersControllerTests
     {
         var pfId = Guid.NewGuid();
         _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
-        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null };
+        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null, TelegramUsername = null };
         _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
 
         var result = await _controller.GetPfContact();
 
         Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_AthleteWhosePfHasTelegramOnly_When_GetPfContact_Then_ReturnsTelegram()
+    {
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
+        var pf = new User { Id = pfId, FullName = "Profesor Test", PhoneNumber = null, TelegramUsername = "profe_juan" };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetPfContact();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<PfContactDto>(ok.Value);
+        Assert.Null(dto.PhoneNumber);
+        Assert.Equal("profe_juan", dto.TelegramUsername);
     }
 
     [Fact]
@@ -120,5 +173,174 @@ public class UsersControllerTests
         var result = await _controller.GetPfContact();
 
         Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public void Given_UpdateAthleteStatusEndpoint_When_CheckingAuthorization_Then_OnlyPreparadorFisicoCanCallIt()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateAthleteStatus)));
+    }
+
+    [Fact]
+    public void Given_UpdateAthleteEmailEndpoint_When_CheckingAuthorization_Then_OnlyPreparadorFisicoCanCallIt()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateAthleteEmail)));
+    }
+
+    [Fact]
+    public void Given_UpdateProfileAndTelegramEndpoints_When_CheckingAuthorization_Then_RolesAreEnforced()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateProfile)));
+        Assert.Equal("PreparadorFisico,Atleta", RolesOf(nameof(UsersController.UpdateMyTelegram)));
+    }
+
+    // KAN-493: los 3 endpoints de preferencia de recomendaciones de hábitos.
+
+    [Fact]
+    public void Given_HabitsRecommendationsEndpoints_When_CheckingAuthorization_Then_RolesAreEnforced()
+    {
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.UpdateHabitsRecommendations)));
+        Assert.Equal("PreparadorFisico", RolesOf(nameof(UsersController.GetHabitsRecommendations)));
+        Assert.Equal("Atleta", RolesOf(nameof(UsersController.GetPfHabitsRecommendations)));
+    }
+
+    [Fact]
+    public async Task Given_PfToken_When_UpdatingHabitsRecommendations_Then_PreferenceIsSavedAndReturned()
+    {
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = true };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+        _mockUserManager.Setup(m => m.UpdateAsync(pf)).ReturnsAsync(IdentityResult.Success);
+
+        var result = await _controller.UpdateHabitsRecommendations(new UpdateHabitsRecommendationsRequestDto(false));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value);
+        Assert.False(dto.Enabled);
+        Assert.False(pf.HabitsRecommendationsEnabled);
+        _mockUserManager.Verify(m => m.UpdateAsync(pf), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_MissingPf_When_UpdatingHabitsRecommendations_Then_Returns404WithoutSaving()
+    {
+        _mockCurrentUser.Setup(c => c.UserId).Returns(Guid.NewGuid());
+
+        var result = await _controller.UpdateHabitsRecommendations(new UpdateHabitsRecommendationsRequestDto(false));
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        _mockUserManager.Verify(m => m.UpdateAsync(It.IsAny<User>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_PfToken_When_GettingOwnHabitsRecommendations_Then_UsesUserIdAndReturnsPreference()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+        _mockCurrentUser.Setup(c => c.PfId).Returns(athleteId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = false };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetHabitsRecommendations();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.False(Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value).Enabled);
+        _mockUserManager.Verify(m => m.FindByIdAsync(athleteId.ToString()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_MissingPf_When_GettingOwnHabitsRecommendations_Then_Returns404()
+    {
+        _mockCurrentUser.Setup(c => c.UserId).Returns(Guid.NewGuid());
+
+        var result = await _controller.GetHabitsRecommendations();
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_AthleteToken_When_GettingPfHabitsRecommendations_Then_UsesPfIdFromToken()
+    {
+        var athleteId = Guid.NewGuid();
+        var pfId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(athleteId);
+        _mockCurrentUser.Setup(c => c.PfId).Returns(pfId);
+        var pf = new User { Id = pfId, HabitsRecommendationsEnabled = true };
+        _mockUserManager.Setup(m => m.FindByIdAsync(pfId.ToString())).ReturnsAsync(pf);
+
+        var result = await _controller.GetPfHabitsRecommendations();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.True(Assert.IsType<PfHabitsRecommendationsStatusDto>(ok.Value).Enabled);
+        _mockUserManager.Verify(m => m.FindByIdAsync(pfId.ToString()), Times.Once);
+        _mockUserManager.Verify(m => m.FindByIdAsync(athleteId.ToString()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_TokenWithoutPfId_When_GettingPfHabitsRecommendations_Then_ReturnsUnauthorized()
+    {
+        _mockCurrentUser.Setup(c => c.PfId).Returns((Guid?)null);
+
+        var result = await _controller.GetPfHabitsRecommendations();
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public async Task Given_OwnUserId_When_GettingUserPhoto_Then_ReturnsFileResult()
+    {
+        var myId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(myId);
+        var photoBytes = new byte[] { 0x52, 0x49, 0x46, 0x46 };
+        var photo = UserPhoto.Create(myId, photoBytes, "image/webp", photoBytes.Length);
+        _mockPhotoRepo.Setup(r => r.GetByUserIdAsync(myId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(photo);
+
+        var result = await _controller.GetUserPhoto(myId, CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/webp", fileResult.ContentType);
+        Assert.Equal(photoBytes, fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Given_PfUser_When_GettingAssignedAthletePhoto_Then_ReturnsFileResult()
+    {
+        var pfId = Guid.NewGuid();
+        var athleteId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(pfId);
+
+        var athleteUser = new User { Id = athleteId, PfId = pfId };
+        _mockUserManager.Setup(m => m.FindByIdAsync(athleteId.ToString())).ReturnsAsync(athleteUser);
+
+        var photoBytes = new byte[] { 0x52, 0x49, 0x46, 0x46 };
+        var photo = UserPhoto.Create(athleteId, photoBytes, "image/webp", photoBytes.Length);
+        _mockPhotoRepo.Setup(r => r.GetByUserIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(photo);
+
+        var result = await _controller.GetUserPhoto(athleteId, CancellationToken.None);
+
+        var fileResult = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("image/webp", fileResult.ContentType);
+        Assert.Equal(photoBytes, fileResult.FileContents);
+    }
+
+    [Fact]
+    public async Task Given_User_When_GettingOtherUserPhotoWhoIsNotTheirAthlete_Then_ReturnsNotFound()
+    {
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        _mockCurrentUser.Setup(c => c.UserId).Returns(userId);
+
+        var otherUser = new User { Id = otherUserId, PfId = Guid.NewGuid() /* different PF */ };
+        _mockUserManager.Setup(m => m.FindByIdAsync(otherUserId.ToString())).ReturnsAsync(otherUser);
+
+        var result = await _controller.GetUserPhoto(otherUserId, CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal(404, problem.Status);
     }
 }

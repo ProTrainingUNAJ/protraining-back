@@ -1,20 +1,31 @@
 using System.Reflection;
 using System.Text.Json;
+using API.Controllers;
+using API.Middleware;
 using Application.DTOs.Memberships;
 using Application.DTOs.Routines;
 using Application.DTOs.TrainingSessions;
+using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
 using Application.UseCases.Routines.GetTodayRoutine;
 using Application.UseCases.Routines.RecordPerformedSets;
 using Application.UseCases.TrainingSessions.ApplyAthleteAdjustment;
+using Application.UseCases.TrainingSessions.GetTrainingSession;
+using Application.UseCases.TrainingSessions.RejectAthleteAdjustment;
+using Application.UseCases.TrainingSessions.UpdateCoachNotes;
 using Domain.Common;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Services;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace Entrenamiento.Tests;
@@ -190,7 +201,7 @@ public sealed class AthleteSessionAdjustmentsTests
             new LoadCalculatorEngine(),
             structureMock.Object,
             videoRepoMock.Object,
-            Mock.Of<IPerformedSetRepository>(),
+            CreateEmptyPerformedSetRepo(),
             adjustmentRepoMock.Object,
             exerciseRepoMock.Object);
 
@@ -470,5 +481,1045 @@ public sealed class AthleteSessionAdjustmentsTests
         Assert.Equal(planId, response.TrainingPlanId);
         Assert.Equal(note, response.Note);
         Assert.Single(response.Items);
+    }
+
+    // =========================================================================
+    // 7. Ajuste preventivo con reducción de carga por fatiga en un clic (#183 · KAN-478)
+    // =========================================================================
+    [Fact]
+    public async Task Given_PreventiveAlertWithLoadReduction_When_ApplyAdjustment_Then_PersistsWithoutSubstitutesAndAppliesReducedLoadInTodayRoutine()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla trasera", "Piernas", equipment: "Barra");
+        db.Exercises.Add(squat);
+
+        // Prescripción al 80% (1RM de 100 kg -> 80 kg)
+        var session = CreateSessionWithExercise(squat, targetPercentage: 80m, coachNotes: "Sesión habitual");
+        db.TrainingSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        var mateoId = Guid.NewGuid();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(mateoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(mateoId, "Mateo"));
+
+        var handler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow);
+
+        var today = ArgentinaTime.Today;
+        var note = "Reducción de carga del 20% por fatiga acumulada detectada.";
+
+        // Act 1: Aplicar el ajuste de aviso preventivo (reducción de carga del 20% sin sustitutos)
+        var result = await handler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                AthleteId: mateoId,
+                Date: today,
+                Note: note,
+                Items: [],
+                LoadReductionPercentage: 20)));
+
+        Assert.NotNull(result);
+        Assert.Equal(20, result.LoadReductionPercentage);
+        Assert.Equal(note, result.Note);
+        Assert.Empty(result.Items);
+
+        // Act 2: Mateo consulta su rutina del día en GetTodayRoutine
+        var recordRepoMock = new Mock<IAthleteRecordRepository>();
+        var squatRecord = AthleteRecord.Create(mateoId, squat.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+        recordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(mateoId, squat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(squatRecord);
+
+        var sessionRepoMock = new Mock<ITrainingSessionRepository>();
+        sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(mateoId, It.IsAny<IReadOnlyList<Guid>>(), today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var videoRepoMock = new Mock<IExerciseVideoRepository>();
+        videoRepoMock
+            .Setup(v => v.GetVideosByExerciseIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            recordRepoMock.Object,
+            sessionRepoMock.Object,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            videoRepoMock.Object,
+            CreateEmptyPerformedSetRepo(),
+            adjustmentRepo,
+            exerciseRepo);
+
+        var routineResponse = await queryHandler.Handle(new GetTodayRoutineQuery { AthleteId = mateoId, Date = today });
+
+        Assert.True(routineResponse.RoutineAdapted);
+        Assert.True(routineResponse.AdjustedByCoach);
+        Assert.Equal(note, routineResponse.AdjustmentNote);
+        Assert.Single(routineResponse.Exercises);
+
+        var exerciseResult = routineResponse.Exercises[0];
+        // 80% con 20% de reducción = 80 * 0.8 = 64%
+        // Con 1RM de 100 kg -> 64 kg redondeado a barra/discos más cercana (65 o 62.5 kg)
+        Assert.Equal(64, exerciseResult.Percentage);
+        Assert.NotNull(exerciseResult.WeightKg);
+        Assert.True(exerciseResult.WeightKg < 80);
+    }
+
+    [Fact]
+    public async Task ApproveAdaptation_PersistsAndAppliesAthleteVariant()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var today = ArgentinaTime.Today;
+        var nextWeekDate = today.AddDays(7);
+        var athleteId = Guid.NewGuid();
+
+        var plan = TrainingPlan.Create("Plan Fuerza", "Fuerza");
+        var week1 = TrainingWeek.Create(1, plan.Id);
+        var session1 = TrainingSession.Create(week1.Id, "Semana 1", 1, today.DayOfWeek);
+        session1.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session1.Id, squat.Id));
+        week1.AddSession(session1);
+
+        var week2 = TrainingWeek.Create(2, plan.Id);
+        var session2 = TrainingSession.Create(week2.Id, "Semana 2", 1, nextWeekDate.DayOfWeek);
+        session2.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 80m, session2.Id, squat.Id));
+        week2.AddSession(session2);
+
+        plan.AddWeek(week1);
+        plan.AddWeek(week2);
+
+        var assignment = PlanAssignment.Create(plan.Id, today, athleteId: athleteId);
+        var legPressRecord = AthleteRecord.Create(athleteId, legPress.Id, 150m, RecordSource.Tested, DateTime.UtcNow);
+
+        db.TrainingPlans.Add(plan);
+        db.PlanAssignments.Add(assignment);
+        db.AthleteRecords.Add(legPressRecord);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas"));
+        structureMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session1.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Variante aprobada por molestia de rodilla",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)])));
+
+        var savedVariant = await db.AthleteVariants.FirstOrDefaultAsync(v => v.AthleteId == athleteId);
+        Assert.NotNull(savedVariant);
+        Assert.Equal(squat.Id, savedVariant.OriginalExerciseId);
+        Assert.Equal(legPress.Id, savedVariant.SubstituteExerciseId);
+        Assert.True(savedVariant.IsApproved);
+        Assert.True(savedVariant.IsActive);
+
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            new AthleteRecordRepository(db),
+            sessionRepo,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            new ExerciseVideoRepository(db),
+            CreateEmptyPerformedSetRepo(),
+            adjustmentRepository: adjustmentRepo,
+            exerciseRepository: exerciseRepo,
+            athleteVariantRepository: variantRepo);
+
+        var routine = await queryHandler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = nextWeekDate });
+
+        Assert.True(routine.RoutineAdapted);
+        Assert.False(routine.AdjustedByCoach);
+        var ex = Assert.Single(routine.Exercises);
+        Assert.Equal(legPress.Id, ex.ExerciseId);
+        Assert.Equal("Prensa de piernas", ex.Name);
+        Assert.Equal(120.0, ex.WeightKg);
+    }
+
+    // =========================================================================
+    // RejectAthleteSessionAdjustmentCommandHandler (KAN-636)
+    // =========================================================================
+    [Fact]
+    public async Task Given_PreviouslyApprovedAdjustmentAndVariant_When_RejectAdjustment_Then_PersistsRejectedStatusDeactivatesVariantAndRestoresBaseRoutine()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var plan = TrainingPlan.Create("Fuerza base", "Objetivo");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1", 1, today.DayOfWeek, "Notas base");
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, session.Id, squat.Id));
+        week.AddSession(session);
+        plan.AddWeek(week);
+
+        var assignment = PlanAssignment.Create(plan.Id, today, athleteId: athleteId);
+
+        db.TrainingPlans.Add(plan);
+        db.PlanAssignments.Add(assignment);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+        structureMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        var approved = await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Sustitución inicial por molestia.",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id,
+                15)));
+
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Approved, approved.Status);
+        Assert.Single(approved.Items);
+        Assert.True(await db.AthleteVariants.AnyAsync(v => v.AthleteId == athleteId && v.IsActive));
+
+        // Ahora el PF rechaza la adaptación
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        var rejected = await rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+            session.Id,
+            new RejectAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Molestia leve superada, vuelve a la rutina base.",
+                plan.Id)));
+
+        Assert.Equal(approved.Id, rejected.Id);
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, rejected.Status);
+        // Preserva los ítems, nota y reducción de carga aprobados previamente para auditoría (KAN-636)
+        var preservedItem = Assert.Single(rejected.Items);
+        Assert.Equal(squat.Id, preservedItem.OriginalExerciseId);
+        Assert.Equal(legPress.Id, preservedItem.SubstituteExerciseId);
+        Assert.Equal(15, rejected.LoadReductionPercentage);
+        Assert.Equal("Sustitución inicial por molestia.", rejected.Note);
+        Assert.Equal("Molestia leve superada, vuelve a la rutina base.", rejected.RejectionReason);
+        Assert.Equal(1, await db.AthleteSessionAdjustments.CountAsync());
+        Assert.False(await db.AthleteVariants.AnyAsync(v => v.AthleteId == athleteId && v.IsActive));
+
+        // Al consultar la rutina de hoy del atleta, vuelve a tener la rutina base sin adaptación
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            new AthleteRecordRepository(db),
+            sessionRepo,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            new ExerciseVideoRepository(db),
+            CreateEmptyPerformedSetRepo(),
+            adjustmentRepository: adjustmentRepo,
+            exerciseRepository: exerciseRepo,
+            athleteVariantRepository: variantRepo);
+
+        var routine = await queryHandler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = today });
+
+        Assert.False(routine.RoutineAdapted);
+        Assert.False(routine.AdjustedByCoach);
+        Assert.Null(routine.AdjustmentNote);
+        var ex = Assert.Single(routine.Exercises);
+        Assert.Equal(squat.Id, ex.ExerciseId);
+        Assert.Equal("Sentadilla con barra", ex.Name);
+
+        // Si el PF vuelve a aprobar más adelante, pasa nuevamente a Approved y limpia el motivo de rechazo
+        var reApproved = await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            session.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Volvió la molestia, se aprueba prensa.",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id)));
+
+        Assert.Equal(approved.Id, reApproved.Id);
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Approved, reApproved.Status);
+        Assert.Null(reApproved.RejectionReason);
+        Assert.Single(reApproved.Items);
+    }
+
+    [Fact]
+    public async Task Given_NoPriorAdjustment_When_RejectAdjustment_Then_CreatesRejectedRecordWithoutReason()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        db.Exercises.Add(squat);
+
+        var session = CreateSessionWithExercise(squat, 75m);
+        db.TrainingSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var athleteId = Guid.NewGuid();
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Camila Ruiz"));
+
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            new TrainingSessionRepository(db),
+            new AthleteSessionAdjustmentRepository(db),
+            structureMock.Object,
+            new UnitOfWork(db),
+            new AthleteVariantRepository(db));
+
+        var result = await rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+            session.Id,
+            new RejectAthleteSessionAdjustmentRequest(athleteId)));
+
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, result.Status);
+        Assert.Equal(ArgentinaTime.Today, result.Date);
+        Assert.Empty(result.Items);
+        Assert.Null(result.Note);
+        Assert.Null(result.RejectionReason);
+        Assert.Null(result.LoadReductionPercentage);
+    }
+
+    [Fact]
+    public async Task Given_NonExistentSession_When_RejectAdjustment_Then_ThrowsNotFoundException()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            new TrainingSessionRepository(db),
+            new AthleteSessionAdjustmentRepository(db),
+            structureMock.Object,
+            new UnitOfWork(db));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+                Guid.NewGuid(),
+                new RejectAthleteSessionAdjustmentRequest(athleteId))));
+    }
+
+    [Fact]
+    [Trait("Category", "Isolation")]
+    public async Task Given_SessionOrAthleteFromAnotherPf_When_RejectAdjustment_Then_ThrowsNotFoundWithoutMutatingOtherPfData()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var otherPfId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+
+        Guid sessionId;
+        await using (var dbPfA = CreateInMemoryDb(dbName, PfId))
+        {
+            var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+            var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+            dbPfA.Exercises.AddRange(squat, legPress);
+
+            var session = CreateSessionWithExercise(squat, 75m);
+            dbPfA.TrainingSessions.Add(session);
+            sessionId = session.Id;
+
+            var existingApproved = AthleteSessionAdjustment.Create(
+                session.Id,
+                athleteId,
+                today,
+                JsonSerializer.Serialize(new[] { new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id) }),
+                "Ajuste del PF A");
+            dbPfA.AthleteSessionAdjustments.Add(existingApproved);
+            await dbPfA.SaveChangesAsync();
+        }
+
+        // PF B intenta rechazar la sesión del PF A -> NotFoundException por filtro global de PF
+        await using (var dbPfB = CreateInMemoryDb(dbName, otherPfId))
+        {
+            var structureMock = new Mock<IStructureClient>();
+            structureMock
+                .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StructureAthleteDto?)null);
+
+            var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+                new TrainingSessionRepository(dbPfB),
+                new AthleteSessionAdjustmentRepository(dbPfB),
+                structureMock.Object,
+                new UnitOfWork(dbPfB));
+
+            await Assert.ThrowsAsync<NotFoundException>(() =>
+                rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+                    sessionId,
+                    new RejectAthleteSessionAdjustmentRequest(athleteId, today, "Intento ajeno"))));
+        }
+
+        // PF A conserva intacto su ajuste Approved
+        await using (var dbPfAVerify = CreateInMemoryDb(dbName, PfId))
+        {
+            var saved = await dbPfAVerify.AthleteSessionAdjustments.FirstOrDefaultAsync(a => a.TrainingSessionId == sessionId);
+            Assert.NotNull(saved);
+            Assert.Equal(AthleteSessionAdjustmentStatuses.Approved, saved.Status);
+            Assert.Equal("Ajuste del PF A", saved.Note);
+        }
+    }
+
+    [Fact]
+    public async Task Given_MismatchedTrainingPlanOrNoteTooLong_When_RejectAdjustment_Then_ThrowsDomainException()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        db.Exercises.Add(squat);
+
+        var plan = TrainingPlan.Create("Fuerza base", "Objetivo");
+        var week = TrainingWeek.Create(1, plan.Id);
+        var session = TrainingSession.Create(week.Id, "Día 1", 1, DayOfWeek.Monday);
+        session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, session.Id, squat.Id));
+        week.AddSession(session);
+        plan.AddWeek(week);
+        db.TrainingPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var athleteId = Guid.NewGuid();
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            new TrainingSessionRepository(db),
+            new AthleteSessionAdjustmentRepository(db),
+            structureMock.Object,
+            new UnitOfWork(db));
+
+        // Plan distinto al de la sesión -> DomainException
+        await Assert.ThrowsAsync<DomainException>(() =>
+            rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+                session.Id,
+                new RejectAthleteSessionAdjustmentRequest(
+                    athleteId,
+                    ArgentinaTime.Today,
+                    "Motivo válido",
+                    Guid.NewGuid()))));
+
+        // Nota mayor a 1000 caracteres -> DomainException
+        var longNote = new string('a', AthleteSessionAdjustment.MaxNoteLength + 1);
+        await Assert.ThrowsAsync<DomainException>(() =>
+            rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+                session.Id,
+                new RejectAthleteSessionAdjustmentRequest(
+                    athleteId,
+                    ArgentinaTime.Today,
+                    longNote,
+                    plan.Id))));
+    }
+
+    [Fact]
+    public async Task Given_RejectedAdjustmentViaController_When_GetAthleteAdjustment_Then_ReturnsOkWithRejectedStatus()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        db.Exercises.Add(squat);
+
+        var session = CreateSessionWithExercise(squat, 75m);
+        db.TrainingSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var uow = new UnitOfWork(db);
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            structureMock.Object,
+            uow);
+
+        var controller = new TrainingSessionController(
+            new UpdateCoachNotesCommandHandler(sessionRepo, uow),
+            new GetTrainingSessionQueryHandler(sessionRepo),
+            adjustmentRepository: adjustmentRepo,
+            rejectAdjustmentHandler: rejectHandler);
+
+        var rejectAction = await controller.RejectAthleteAdjustments(
+            session.Id,
+            new RejectAthleteSessionAdjustmentRequest(athleteId, today, "Rechazado desde controller"));
+
+        var rejectOk = Assert.IsType<OkObjectResult>(rejectAction.Result);
+        var rejectDto = Assert.IsType<AthleteSessionAdjustmentResponseDto>(rejectOk.Value);
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, rejectDto.Status);
+        Assert.Null(rejectDto.Note);
+        Assert.Equal("Rechazado desde controller", rejectDto.RejectionReason);
+        Assert.Empty(rejectDto.Items);
+
+        var getAction = await controller.GetAthleteAdjustment(session.Id, athleteId, today);
+        var getOk = Assert.IsType<OkObjectResult>(getAction.Result);
+        var getDto = Assert.IsType<AthleteSessionAdjustmentResponseDto>(getOk.Value);
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, getDto.Status);
+        Assert.Null(getDto.Note);
+        Assert.Equal("Rechazado desde controller", getDto.RejectionReason);
+        Assert.Empty(getDto.Items);
+    }
+
+    [Fact]
+    public async Task Given_VariantApprovedOnEarlierDateInSessionA_When_RejectSessionBWithoutPriorAdjustment_Then_KeepsEarlierVariantActive()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var monday = ArgentinaTime.Today.AddDays(-2);
+        var wednesday = ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var plan = TrainingPlan.Create("Plan semanal", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+
+        var sessionA = TrainingSession.Create(week.Id, "Sesión A", 1, monday.DayOfWeek);
+        sessionA.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, sessionA.Id, squat.Id));
+        week.AddSession(sessionA);
+
+        var sessionB = TrainingSession.Create(week.Id, "Sesión B", 2, wednesday.DayOfWeek);
+        sessionB.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 70m, sessionB.Id, squat.Id));
+        week.AddSession(sessionB);
+
+        plan.AddWeek(week);
+        var assignment = PlanAssignment.Create(plan.Id, monday, athleteId: athleteId);
+
+        db.TrainingPlans.Add(plan);
+        db.PlanAssignments.Add(assignment);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+        structureMock
+            .Setup(c => c.GetAthleteCategoriesAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            exerciseRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        // El lunes el PF aprueba sentadilla -> prensa en la sesión A
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            sessionA.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                monday,
+                "Variante aprobada por lesión de rodilla.",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id)));
+
+        var variantFromMonday = await db.AthleteVariants.SingleAsync(v => v.AthleteId == athleteId);
+        Assert.True(variantFromMonday.IsActive);
+        Assert.Equal(monday, variantFromMonday.ValidFrom);
+
+        // El miércoles el PF rechaza una propuesta en la sesión B (que también tiene sentadilla) sin ajuste previo
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            sessionRepo,
+            adjustmentRepo,
+            structureMock.Object,
+            uow,
+            variantRepo);
+
+        var rejectedB = await rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+            sessionB.Id,
+            new RejectAthleteSessionAdjustmentRequest(
+                athleteId,
+                wednesday,
+                "No aplicar cambios nuevos hoy.",
+                plan.Id)));
+
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, rejectedB.Status);
+        Assert.Equal("No aplicar cambios nuevos hoy.", rejectedB.RejectionReason);
+
+        // La variante aprobada el lunes debe seguir activa
+        var variantAfterReject = await db.AthleteVariants.SingleAsync(v => v.Id == variantFromMonday.Id);
+        Assert.True(variantAfterReject.IsActive);
+        Assert.Null(variantAfterReject.ValidTo);
+
+        // La rutina del miércoles sigue protegiendo al atleta con Prensa de piernas
+        var queryHandler = new GetTodayRoutineQueryHandler(
+            new AthleteRecordRepository(db),
+            sessionRepo,
+            new LoadCalculatorEngine(),
+            structureMock.Object,
+            new ExerciseVideoRepository(db),
+            CreateEmptyPerformedSetRepo(),
+            adjustmentRepository: adjustmentRepo,
+            exerciseRepository: exerciseRepo,
+            athleteVariantRepository: variantRepo);
+
+        var routineWednesday = await queryHandler.Handle(new GetTodayRoutineQuery
+        {
+            AthleteId = athleteId,
+            Date = wednesday
+        });
+
+        Assert.True(routineWednesday.RoutineAdapted);
+        var ex = Assert.Single(routineWednesday.Exercises);
+        Assert.Equal(legPress.Id, ex.ExerciseId);
+        Assert.Equal("Prensa de piernas", ex.Name);
+    }
+
+    [Fact]
+    public async Task Given_VariantApprovedInSessionAToday_When_RejectSessionBTodayWithoutPriorAdjustment_Then_KeepsSessionAVariantActive()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var plan = TrainingPlan.Create("Plan doble turno", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+
+        var sessionA = TrainingSession.Create(week.Id, "Sesión A", 1, today.DayOfWeek);
+        sessionA.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, sessionA.Id, squat.Id));
+        week.AddSession(sessionA);
+
+        var sessionB = TrainingSession.Create(week.Id, "Sesión B", 2, today.DayOfWeek);
+        sessionB.AddPrescribedExercise(PrescribedExercise.Create(1, 3, 8, 65m, sessionB.Id, squat.Id));
+        week.AddSession(sessionB);
+
+        plan.AddWeek(week);
+        db.TrainingPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo, adjustmentRepo, exerciseRepo, structureMock.Object, uow, variantRepo);
+
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            sessionA.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                today,
+                "Aprobada en sesión A",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id)));
+
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            sessionRepo, adjustmentRepo, structureMock.Object, uow, variantRepo);
+
+        await rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+            sessionB.Id,
+            new RejectAthleteSessionAdjustmentRequest(athleteId, today, "Rechazada en sesión B", plan.Id)));
+
+        var savedVariant = await db.AthleteVariants.SingleAsync(v => v.AthleteId == athleteId);
+        Assert.True(savedVariant.IsActive);
+        Assert.Null(savedVariant.ValidTo);
+    }
+
+    [Fact]
+    public async Task Given_VariantApprovedOnEarlierDateReusedInSessionB_When_RejectSessionB_Then_KeepsEarlierVariantActive()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var db = CreateInMemoryDb(dbName, PfId);
+
+        var athleteId = Guid.NewGuid();
+        var monday = ArgentinaTime.Today.AddDays(-2);
+        var wednesday = ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        db.Exercises.AddRange(squat, legPress);
+
+        var plan = TrainingPlan.Create("Plan semanal", "Fuerza");
+        var week = TrainingWeek.Create(1, plan.Id);
+
+        var sessionA = TrainingSession.Create(week.Id, "Sesión A", 1, monday.DayOfWeek);
+        sessionA.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, sessionA.Id, squat.Id));
+        week.AddSession(sessionA);
+
+        var sessionB = TrainingSession.Create(week.Id, "Sesión B", 2, wednesday.DayOfWeek);
+        sessionB.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 6, 70m, sessionB.Id, squat.Id));
+        week.AddSession(sessionB);
+
+        plan.AddWeek(week);
+        db.TrainingPlans.Add(plan);
+        await db.SaveChangesAsync();
+
+        var sessionRepo = new TrainingSessionRepository(db);
+        var exerciseRepo = new ExerciseRepository(db);
+        var adjustmentRepo = new AthleteSessionAdjustmentRepository(db);
+        var variantRepo = new AthleteVariantRepository(db);
+        var uow = new UnitOfWork(db);
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        var applyHandler = new ApplyAthleteSessionAdjustmentCommandHandler(
+            sessionRepo, adjustmentRepo, exerciseRepo, structureMock.Object, uow, variantRepo);
+
+        // Lunes: crea variante sentadilla -> prensa con ValidFrom = monday
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            sessionA.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                monday,
+                "Aprobada el lunes",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id)));
+
+        // Miércoles: aprueba sesión B con el mismo reemplazo (reutiliza la variante del lunes)
+        await applyHandler.Handle(new ApplyAthleteSessionAdjustmentCommand(
+            sessionB.Id,
+            new ApplyAthleteSessionAdjustmentRequest(
+                athleteId,
+                wednesday,
+                "Confirmada el miércoles",
+                [new AthleteSessionAdjustmentItemDto(squat.Id, legPress.Id)],
+                plan.Id)));
+
+        // Miércoles: rechaza sesión B -> no debe desactivar la variante del lunes (ValidFrom != wednesday)
+        var rejectHandler = new RejectAthleteSessionAdjustmentCommandHandler(
+            sessionRepo, adjustmentRepo, structureMock.Object, uow, variantRepo);
+
+        var rejected = await rejectHandler.Handle(new RejectAthleteSessionAdjustmentCommand(
+            sessionB.Id,
+            new RejectAthleteSessionAdjustmentRequest(athleteId, wednesday, "Se desestima cambio específico del miércoles", plan.Id)));
+
+        Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, rejected.Status);
+        Assert.Equal("Confirmada el miércoles", rejected.Note);
+        Assert.Equal("Se desestima cambio específico del miércoles", rejected.RejectionReason);
+        Assert.Single(rejected.Items);
+
+        var variantFromMonday = await db.AthleteVariants.SingleAsync(v => v.AthleteId == athleteId);
+        Assert.Equal(monday, variantFromMonday.ValidFrom);
+        Assert.True(variantFromMonday.IsActive);
+        Assert.Null(variantFromMonday.ValidTo);
+    }
+
+    [Fact]
+    public async Task Given_ConcurrentRejectsWithoutPriorAdjustment_When_UniqueIndexViolated_Then_ThrowsConflictExceptionAndMiddlewareReturns409()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+        Guid sessionId;
+
+        await using (var setupDb = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            await setupDb.Database.EnsureCreatedAsync();
+
+            var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+            setupDb.Exercises.Add(squat);
+
+            var plan = TrainingPlan.Create("Plan concurrencia", "Fuerza");
+            var week = TrainingWeek.Create(1, plan.Id);
+            var session = TrainingSession.Create(week.Id, "Día 1", 1, today.DayOfWeek);
+            session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, session.Id, squat.Id));
+            week.AddSession(session);
+            plan.AddWeek(week);
+
+            setupDb.TrainingPlans.Add(plan);
+            await setupDb.SaveChangesAsync();
+            sessionId = session.Id;
+        }
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        // Request 1 persiste el primer rechazo sin ajuste previo
+        await using (var db1 = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            var handler1 = new RejectAthleteSessionAdjustmentCommandHandler(
+                new TrainingSessionRepository(db1),
+                new AthleteSessionAdjustmentRepository(db1),
+                structureMock.Object,
+                new UnitOfWork(db1),
+                new AthleteVariantRepository(db1));
+
+            var first = await handler1.Handle(new RejectAthleteSessionAdjustmentCommand(
+                sessionId,
+                new RejectAthleteSessionAdjustmentRequest(athleteId, today, "Primer rechazo")));
+
+            Assert.Equal(AthleteSessionAdjustmentStatuses.Rejected, first.Status);
+        }
+
+        // Request 2 simula la lectura concurrente previa al commit de Request 1 (existing == null) e intenta insertar duplicado
+        ConflictException? capturedConflict = null;
+        await using (var db2 = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            var realRepo = new AthleteSessionAdjustmentRepository(db2);
+            var racingRepoMock = new Mock<IAthleteSessionAdjustmentRepository>();
+            racingRepoMock
+                .Setup(r => r.GetBySessionAthleteAndDateAsync(sessionId, athleteId, today, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((AthleteSessionAdjustment?)null);
+            racingRepoMock
+                .Setup(r => r.AddAsync(It.IsAny<AthleteSessionAdjustment>(), It.IsAny<CancellationToken>()))
+                .Returns<AthleteSessionAdjustment, CancellationToken>((entity, ct) => realRepo.AddAsync(entity, ct));
+
+            var handler2 = new RejectAthleteSessionAdjustmentCommandHandler(
+                new TrainingSessionRepository(db2),
+                racingRepoMock.Object,
+                structureMock.Object,
+                new UnitOfWork(db2),
+                new AthleteVariantRepository(db2));
+
+            capturedConflict = await Assert.ThrowsAsync<ConflictException>(() =>
+                handler2.Handle(new RejectAthleteSessionAdjustmentCommand(
+                    sessionId,
+                    new RejectAthleteSessionAdjustmentRequest(athleteId, today, "Segundo rechazo simultáneo"))));
+        }
+
+        // ExceptionMiddleware traduce ConflictException a 409 Conflict (y no 500)
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddProblemDetails();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = services.BuildServiceProvider()
+        };
+        httpContext.Response.Body = new MemoryStream();
+        var middleware = new ExceptionMiddleware(_ => throw capturedConflict!, NullLogger<ExceptionMiddleware>.Instance);
+        await middleware.InvokeAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status409Conflict, httpContext.Response.StatusCode);
+
+        // Verificar que la base conservó una única fila activa sin duplicados
+        await using (var verifyDb = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            Assert.Equal(1, await verifyDb.AthleteSessionAdjustments.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Given_ConcurrentAppliesWithoutPriorAdjustment_When_UniqueIndexViolated_Then_ThrowsConflictExceptionAndMiddlewareReturns409()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var athleteId = Guid.NewGuid();
+        var today = ArgentinaTime.Today;
+        Guid sessionId;
+        Guid squatId;
+        Guid legPressId;
+
+        await using (var setupDb = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            await setupDb.Database.EnsureCreatedAsync();
+
+            var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+            var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+            setupDb.Exercises.AddRange(squat, legPress);
+
+            var plan = TrainingPlan.Create("Plan concurrencia apply", "Fuerza");
+            var week = TrainingWeek.Create(1, plan.Id);
+            var session = TrainingSession.Create(week.Id, "Día 1", 1, today.DayOfWeek);
+            session.AddPrescribedExercise(PrescribedExercise.Create(1, 4, 5, 75m, session.Id, squat.Id));
+            week.AddSession(session);
+            plan.AddWeek(week);
+
+            setupDb.TrainingPlans.Add(plan);
+            await setupDb.SaveChangesAsync();
+            sessionId = session.Id;
+            squatId = squat.Id;
+            legPressId = legPress.Id;
+        }
+
+        var structureMock = new Mock<IStructureClient>();
+        structureMock
+            .Setup(c => c.GetAthleteByIdAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(athleteId, "Lucas Gómez"));
+
+        // Request 1 persiste la primera aprobación sin ajuste previo
+        await using (var db1 = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            var handler1 = new ApplyAthleteSessionAdjustmentCommandHandler(
+                new TrainingSessionRepository(db1),
+                new AthleteSessionAdjustmentRepository(db1),
+                new ExerciseRepository(db1),
+                structureMock.Object,
+                new UnitOfWork(db1),
+                new AthleteVariantRepository(db1));
+
+            var first = await handler1.Handle(new ApplyAthleteSessionAdjustmentCommand(
+                sessionId,
+                new ApplyAthleteSessionAdjustmentRequest(
+                    athleteId,
+                    today,
+                    "Primera aprobación",
+                    [new AthleteSessionAdjustmentItemDto(squatId, legPressId)])));
+
+            Assert.Equal(AthleteSessionAdjustmentStatuses.Approved, first.Status);
+        }
+
+        // Request 2 simula la lectura concurrente previa al commit de Request 1 (existing == null) e intenta insertar duplicado
+        ConflictException? capturedConflict = null;
+        await using (var db2 = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            var realRepo = new AthleteSessionAdjustmentRepository(db2);
+            var racingRepoMock = new Mock<IAthleteSessionAdjustmentRepository>();
+            racingRepoMock
+                .Setup(r => r.GetBySessionAthleteAndDateAsync(sessionId, athleteId, today, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((AthleteSessionAdjustment?)null);
+            racingRepoMock
+                .Setup(r => r.AddAsync(It.IsAny<AthleteSessionAdjustment>(), It.IsAny<CancellationToken>()))
+                .Returns<AthleteSessionAdjustment, CancellationToken>((entity, ct) => realRepo.AddAsync(entity, ct));
+
+            var handler2 = new ApplyAthleteSessionAdjustmentCommandHandler(
+                new TrainingSessionRepository(db2),
+                racingRepoMock.Object,
+                new ExerciseRepository(db2),
+                structureMock.Object,
+                new UnitOfWork(db2),
+                new AthleteVariantRepository(db2));
+
+            capturedConflict = await Assert.ThrowsAsync<ConflictException>(() =>
+                handler2.Handle(new ApplyAthleteSessionAdjustmentCommand(
+                    sessionId,
+                    new ApplyAthleteSessionAdjustmentRequest(
+                        athleteId,
+                        today,
+                        "Segunda aprobación simultánea",
+                        [new AthleteSessionAdjustmentItemDto(squatId, legPressId)]))));
+        }
+
+        // ExceptionMiddleware traduce ConflictException a 409 Conflict (y no 500)
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddProblemDetails();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
+        httpContext.Response.Body = new MemoryStream();
+        var middleware = new ExceptionMiddleware(_ => throw capturedConflict!, NullLogger<ExceptionMiddleware>.Instance);
+        await middleware.InvokeAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status409Conflict, httpContext.Response.StatusCode);
+
+        // Verificar que la base conservó una única fila activa sin duplicados
+        await using (var verifyDb = new AppDbContext(options, new FakeCurrentUser(PfId)))
+        {
+            Assert.Equal(1, await verifyDb.AthleteSessionAdjustments.CountAsync());
+        }
+    }
+
+    private static IPerformedSetRepository CreateEmptyPerformedSetRepo()
+    {
+        var mock = new Mock<IPerformedSetRepository>();
+        mock.Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<DateOnly>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return mock.Object;
     }
 }

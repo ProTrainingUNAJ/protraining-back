@@ -11,4 +11,5 @@ public sealed record AthleteInjuryDto(
     DateTime EstimatedReturnDate,
     string Status,
     DateTime? ClearedAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int? PeakPain = null);

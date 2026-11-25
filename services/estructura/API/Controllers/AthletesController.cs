@@ -10,8 +10,15 @@ using Application.UseCases.Athletes.ListMedicalRecordAuditLogs;
 using Application.UseCases.Athletes.ReadMedicalRecord;
 using Application.UseCases.Athletes.RemoveAthleteCategory;
 using Application.UseCases.Athletes.UpdateAthlete;
+using Application.UseCases.Athletes.UpdateAthleteStatus;
+using Application.UseCases.Athletes.UpdateAthleteEmail;
+using Application.UseCases.Athletes.UpdateAthletePhone;
+using Application.UseCases.Athletes.UpdateAthletePhysicalProfile;
 using Application.UseCases.Athletes.UpdateHabitsPermission;
 using Application.UseCases.Athletes.UpdateMedicalRecord;
+using Application.UseCases.Athletes.UploadAthletePhoto;
+using Application.UseCases.Athletes.GetAthletePhoto;
+using Application.UseCases.Athletes.DeleteAthletePhoto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,7 +39,14 @@ public sealed class AthletesController(
     ListCategoriesByAthleteQueryHandler listCategoriesHandler,
     ReadMedicalRecordCommandHandler readMedicalRecordHandler,
     UpdateMedicalRecordCommandHandler updateMedicalRecordHandler,
-    ListMedicalRecordAuditLogsQueryHandler listMedicalRecordAuditLogsHandler) : ControllerBase
+    ListMedicalRecordAuditLogsQueryHandler listMedicalRecordAuditLogsHandler,
+    UploadAthletePhotoCommandHandler uploadPhotoHandler,
+    GetAthletePhotoQueryHandler getPhotoHandler,
+    DeleteAthletePhotoCommandHandler deletePhotoHandler,
+    UpdateAthleteStatusCommandHandler updateStatusHandler,
+    UpdateAthleteEmailCommandHandler updateEmailHandler,
+    UpdateAthletePhoneCommandHandler updatePhoneHandler,
+    UpdateAthletePhysicalProfileCommandHandler updatePhysicalProfileHandler) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AthleteDto>>> List(CancellationToken cancellationToken) =>
@@ -57,7 +71,8 @@ public sealed class AthletesController(
                 request.GuardianPhone,
                 request.AllowsPhysicalTraining,
                 request.AllowsHabitsRecommendations,
-                request.EmergencyContact),
+                request.EmergencyContact,
+                request.TelegramUsername),
             cancellationToken);
 
         return Created($"/api/v1/athletes/{athlete.Id}", athlete);
@@ -89,7 +104,43 @@ public sealed class AthletesController(
         UpdateAthleteRequest request,
         CancellationToken cancellationToken) =>
         Ok(await updateHandler.HandleAsync(
-            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact),
+            new UpdateAthleteCommand(id, request.Phone, request.EmergencyContact, request.TelegramUsername),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<AthleteDto>> UpdateStatus(
+        Guid id,
+        UpdateAthleteStatusRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateStatusHandler.HandleAsync(
+            new UpdateAthleteStatusCommand(id, request.Active),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/email")]
+    public async Task<ActionResult<AthleteDto>> UpdateEmail(
+        Guid id,
+        UpdateAthleteEmailRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updateEmailHandler.HandleAsync(
+            new UpdateAthleteEmailCommand(id, request.Email),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/phone")]
+    public async Task<ActionResult<AthleteDto>> UpdatePhone(
+        Guid id,
+        UpdateAthletePhoneRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updatePhoneHandler.HandleAsync(
+            new UpdateAthletePhoneCommand(id, request.Phone),
+            cancellationToken));
+
+    [HttpPatch("{id:guid}/physical-profile")]
+    public async Task<ActionResult<AthleteDto>> UpdatePhysicalProfile(
+        Guid id,
+        UpdatePhysicalProfileRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await updatePhysicalProfileHandler.HandleAsync(
+            new UpdateAthletePhysicalProfileCommand(id, request.WeightKg, request.AthleticGoal, request.BirthDate, request.Gender, request.HeightCm),
             cancellationToken));
 
     [HttpPost("{id:guid}/medical-record/access")]
@@ -156,4 +207,45 @@ public sealed class AthletesController(
         Guid id,
         CancellationToken cancellationToken) =>
         Ok(await listCategoriesHandler.HandleAsync(new ListCategoriesByAthleteQuery(id), cancellationToken));
+
+    [HttpPut("{id:guid}/photo")]
+    [RequestSizeLimit(256_000)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadPhoto(Guid id, IFormFile photo, CancellationToken cancellationToken)
+    {
+        if (photo is null || photo.Length == 0)
+        {
+            throw new Domain.Exceptions.DomainException("El archivo de imagen no puede estar vacío.");
+        }
+
+        if (photo.Length > Application.Common.WebpImageValidator.MaxSizeBytes)
+        {
+            throw new Domain.Exceptions.DomainException("La foto no puede superar los 200 KB.");
+        }
+
+        using var memoryStream = new MemoryStream();
+        await photo.CopyToAsync(memoryStream, cancellationToken);
+        var bytes = memoryStream.ToArray();
+
+        await uploadPhotoHandler.HandleAsync(
+            new UploadAthletePhotoCommand(id, bytes, photo.ContentType, photo.Length),
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    [HttpGet("{id:guid}/photo")]
+    public async Task<IActionResult> GetPhoto(Guid id, CancellationToken cancellationToken)
+    {
+        var photo = await getPhotoHandler.HandleAsync(new GetAthletePhotoQuery(id), cancellationToken);
+        Response.Headers.CacheControl = "private, max-age=86400, stale-while-revalidate=3600";
+        return File(photo.Data, photo.ContentType);
+    }
+
+    [HttpDelete("{id:guid}/photo")]
+    public async Task<IActionResult> DeletePhoto(Guid id, CancellationToken cancellationToken)
+    {
+        await deletePhotoHandler.HandleAsync(new DeleteAthletePhotoCommand(id), cancellationToken);
+        return NoContent();
+    }
 }

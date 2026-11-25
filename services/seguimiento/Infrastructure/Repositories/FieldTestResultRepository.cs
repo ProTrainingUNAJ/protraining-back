@@ -49,5 +49,46 @@ public sealed class FieldTestResultRepository(AppDbContext context) : IFieldTest
 
             return joined;
         });
+
+    public async Task<IReadOnlyList<AthleteBestMarkDto>> ListBestMarksByAthleteAsync(
+        Guid athleteId,
+        CancellationToken cancellationToken = default) =>
+        await PersistenceErrors.ExecuteAsync(async () =>
+        {
+            var rows = await context.FieldTestResults
+                .AsNoTracking()
+                .Where(r => r.AthleteId == athleteId)
+                .Join(
+                    context.CatalogTests.AsNoTracking()
+                        .Where(t => !string.IsNullOrWhiteSpace(t.TargetExerciseName)),
+                    r => r.CatalogTestId,
+                    t => t.Id,
+                    (r, t) => new
+                    {
+                        t.Id,
+                        t.Name,
+                        TargetExerciseName = t.TargetExerciseName!,
+                        t.MeasurementUnit,
+                        r.Value
+                    })
+                .ToListAsync(cancellationToken);
+            return rows
+                .GroupBy(x => (x.Id, x.Name, x.TargetExerciseName, x.MeasurementUnit))
+                .Select(g =>
+                {
+                    var isTimeUnit = g.Key.MeasurementUnit.Equals("s", StringComparison.OrdinalIgnoreCase)
+                                  || g.Key.MeasurementUnit.Equals("min", StringComparison.OrdinalIgnoreCase);
+                    var bestValue = isTimeUnit
+                        ? g.Min(x => x.Value)
+                        : g.Max(x => x.Value);
+                    return new AthleteBestMarkDto(
+                        g.Key.Id,
+                        g.Key.Name,
+                        g.Key.TargetExerciseName,
+                        bestValue,
+                        g.Key.MeasurementUnit);
+                })
+                .ToList();
+        });
 }
 

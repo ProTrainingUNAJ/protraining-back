@@ -82,6 +82,7 @@ public class RecordPerformedSetsCommandHandlerTests
         Assert.Equal(1, result.RecordedSetsCount);
         Assert.Equal(1, result.ProposalsGeneratedCount);
         Assert.NotNull(capturedProposal);
+        Assert.Equal(currentRecord.Id, capturedProposal.CurrentRecordId);
         Assert.Equal(100m, capturedProposal.CurrentWeight);
         Assert.Equal(107.5m, capturedProposal.ProposedWeight);
         Assert.Equal(90m, capturedProposal.PerformedWeight);
@@ -178,7 +179,7 @@ public class RecordPerformedSetsCommandHandlerTests
     [Fact]
     public async Task UpdatesPendingProposal_WhenHigher()
     {
-        var currentRecord = AthleteRecord.Create(_athleteId, _exerciseId, 100m, RecordSource.Tested, DateTime.UtcNow);
+        var currentRecord = AthleteRecord.Create(_athleteId, _exerciseId, 102.5m, RecordSource.Tested, DateTime.UtcNow);
         _athleteRecordRepoMock
             .Setup(r => r.GetActiveRecordAsync(_athleteId, _exerciseId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(currentRecord);
@@ -196,6 +197,8 @@ public class RecordPerformedSetsCommandHandlerTests
         var result = await handler.Handle(command);
 
         Assert.Equal(1, result.ProposalsGeneratedCount);
+        Assert.Equal(currentRecord.Id, existingPending.CurrentRecordId);
+        Assert.Equal(102.5m, existingPending.CurrentWeight);
         Assert.Equal(107.5m, existingPending.ProposedWeight);
         Assert.Equal(90m, existingPending.PerformedWeight);
         Assert.Equal(6, existingPending.PerformedReps);
@@ -260,7 +263,7 @@ public class RecordPerformedSetsCommandHandlerTests
     [Fact]
     public async Task Given_TimedPass_When_RecordingTimeSeconds_Then_PersistsPerformedSetWithTimeAndSetNumber()
     {
-        // KAN-457: Registrar el tiempo real de la pasada cronometrada
+        // Registrar el tiempo real de la pasada cronometrada
         IEnumerable<PerformedSet>? capturedSets = null;
         _performedSetRepoMock
             .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
@@ -287,6 +290,131 @@ public class RecordPerformedSetsCommandHandlerTests
         Assert.Equal(0m, set.Weight);
         Assert.Equal(0, set.Reps);
         _performedSetRepoMock.Verify(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_BodyweightSet_When_RecordingZeroWeight_Then_PersistsPerformedSetAndDoesNotTriggerEpley()
+    {
+        // Permitir series con peso corporal (0 kg) sin disparar cálculo de Epley
+        IEnumerable<PerformedSet>? capturedSets = null;
+        _performedSetRepoMock
+            .Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PerformedSet>, CancellationToken>((sets, _) => capturedSets = sets);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                Weight = 0m,
+                Reps = 12
+            }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(0, result.ProposalsGeneratedCount);
+        Assert.NotNull(capturedSets);
+        var set = Assert.Single(capturedSets);
+        Assert.Equal(0m, set.Weight);
+        Assert.Equal(12, set.Reps);
+        _proposalRepoMock.Verify(r => r.AddAsync(It.IsAny<RecordProposal>(), It.IsAny<CancellationToken>()), Times.Never);
+        _performedSetRepoMock.Verify(r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_NegativeWeight_When_RecordingSet_Then_ThrowsDomainException()
+    {
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                Weight = -5m,
+                Reps = 10
+            }
+        ]);
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => handler.Handle(command));
+        Assert.Equal("El peso no puede ser negativo.", ex.Message);
+    }
+
+    [Fact]
+    public async Task RecordsSets_WhenExerciseComesFromApprovedVariant()
+    {
+        var substituteId = Guid.NewGuid();
+        var today = Domain.Common.ArgentinaTime.Today;
+        var variant = AthleteVariant.Create(_athleteId, _exerciseId, substituteId, true, true, today.AddDays(-3));
+
+        var variantRepoMock = new Mock<IAthleteVariantRepository>();
+        variantRepoMock
+            .Setup(r => r.GetActiveApprovedByAthleteAsync(_athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([variant]);
+
+        var handler = new RecordPerformedSetsCommandHandler(
+            _structureClientMock.Object,
+            _sessionRepoMock.Object,
+            _athleteRecordRepoMock.Object,
+            _performedSetRepoMock.Object,
+            _proposalRepoMock.Object,
+            _unitOfWorkMock.Object,
+            variantRepository: variantRepoMock.Object);
+
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto { ExerciseId = substituteId, SetNumber = 1, Weight = 120m, Reps = 8 }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        _performedSetRepoMock.Verify(
+            r => r.AddRangeAsync(
+                It.Is<IEnumerable<PerformedSet>>(sets => sets.Any(s => s.ExerciseId == substituteId && s.Weight == 120m)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_ExistingTimedPass_When_CorrectingSameSetNumber_Then_UpdatesWithoutDuplicating()
+    {
+        // KAN-579: corregir la misma pasada no duplica
+        var existingSet = PerformedSet.Create(
+            athleteId: _athleteId,
+            sessionId: _session.Id,
+            exerciseId: _exerciseId,
+            date: Domain.Common.ArgentinaTime.Today,
+            weight: 0m,
+            reps: 0,
+            timeSeconds: 15.2m,
+            setNumber: 1);
+
+        _performedSetRepoMock
+            .Setup(r => r.GetByAthleteAndDateAsync(_athleteId, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([existingSet]);
+
+        var handler = CreateHandler();
+        var command = new RecordPerformedSetsCommand([
+            new PerformedSetInputDto
+            {
+                ExerciseId = _exerciseId,
+                SetNumber = 1,
+                TimeSeconds = 15.0m
+            }
+        ]);
+
+        var result = await handler.Handle(command);
+
+        Assert.Equal(1, result.RecordedSetsCount);
+        Assert.Equal(15.0m, existingSet.TimeSeconds);
+        _performedSetRepoMock.Verify(
+            r => r.AddRangeAsync(It.IsAny<IEnumerable<PerformedSet>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

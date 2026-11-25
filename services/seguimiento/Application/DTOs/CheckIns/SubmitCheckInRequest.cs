@@ -27,6 +27,8 @@ public sealed record SubmitCheckInRequest
 
     public bool IsSick { get; init; }
 
+    public IReadOnlyList<SubmitCheckInInjuryPainRequest>? Injuries { get; init; }
+
     public string? PainZones { get; init; }
 
     // Lesión activa marcada por el atleta: el semáforo del día queda en Rojo (KAN-364).

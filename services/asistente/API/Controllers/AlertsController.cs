@@ -1,4 +1,5 @@
 using Application.DTOs.Alerts;
+using Application.UseCases.Alerts.ApplyAlertAdjustment;
 using Application.UseCases.Alerts.CreatePreventiveAlert;
 using Application.UseCases.Alerts.GetAlertById;
 using Application.UseCases.Alerts.GetAlerts;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 /// <summary>
-/// Centro de Avisos Preventivos con propuestas de ajuste de carga para el Preparador Físico (#179 · KAN-474).
+/// Centro de Avisos Preventivos con propuestas de ajuste de carga para el Preparador Físico (#179 · KAN-474, #183 · KAN-478).
 /// </summary>
 [Authorize(Roles = "PreparadorFisico")]
 [ApiController]
@@ -18,7 +19,8 @@ public sealed class AlertsController(
     GetAlertsQueryHandler getAlertsHandler,
     GetAlertByIdQueryHandler getAlertByIdHandler,
     ReviewAlertCommandHandler reviewAlertHandler,
-    CreatePreventiveAlertCommandHandler createAlertHandler) : ControllerBase
+    CreatePreventiveAlertCommandHandler createAlertHandler,
+    ApplyAlertAdjustmentCommandHandler applyAlertHandler) : ControllerBase
 {
     /// <summary>
     /// Lista los avisos preventivos del PF actual, con filtros por estado de revisión y severidad.
@@ -42,6 +44,7 @@ public sealed class AlertsController(
     /// </summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(PreventiveAlertResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -70,11 +73,34 @@ public sealed class AlertsController(
     }
 
     /// <summary>
+    /// Aplica el ajuste sugerido por un aviso preventivo en Entrenamiento con un solo clic (#183 · KAN-478).
+    /// Con <c>nextSession=true</c> lo aplica a la próxima sesión del atleta en lugar de la de hoy.
+    /// </summary>
+    [HttpPost("{alertId:guid}/apply")]
+    [ProducesResponseType(typeof(ApplyAlertAdjustmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApplyAlertAdjustmentResponseDto>> Apply(
+        Guid alertId,
+        [FromQuery] bool nextSession = false,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await applyAlertHandler.HandleAsync(
+            new ApplyAlertAdjustmentCommand(alertId, nextSession),
+            cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Crea y persiste un nuevo aviso preventivo con propuesta de ajuste de carga.
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(PreventiveAlertResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<PreventiveAlertResponseDto>> Create(

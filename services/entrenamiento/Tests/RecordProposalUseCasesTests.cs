@@ -137,6 +137,177 @@ public class RecordProposalUseCasesTests
     }
 
     [Fact]
+    public async Task Approve_WhenCurrentRecordIdMatchesActiveRecord_UpdatesRecordAndMarksProposalApproved()
+    {
+        // KAN-566: Verificación por ID de récord activo
+        var exercise = await SeedExerciseAsync("Press de Banca");
+
+        Guid proposalId;
+        Guid recordId;
+        await using (var context = CreateContext())
+        {
+            var initialRecord = AthleteRecord.Create(_athleteId, exercise.Id, 90m, RecordSource.Tested, DateTime.UtcNow);
+            await context.AthleteRecords.AddAsync(initialRecord);
+            await context.SaveChangesAsync();
+            recordId = initialRecord.Id;
+
+            var proposal = RecordProposal.Create(_athleteId, exercise.Id, 90m, 97.5m, 85m, 6, recordId);
+            await context.RecordProposals.AddAsync(proposal);
+            await context.SaveChangesAsync();
+            proposalId = proposal.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            var result = await CreateApproveHandler(context).Handle(new ApproveRecordProposalCommand(proposalId));
+            Assert.Equal(97.5m, result.WeightOneRepMaxKg);
+            Assert.Equal("Epley", result.Origin);
+            Assert.True(result.IsCurrent);
+        }
+
+        await using (var verify = CreateContext())
+        {
+            var active = await verify.AthleteRecords.SingleAsync(r => r.IsActive);
+            Assert.Equal(97.5m, active.Weight);
+            Assert.Equal(RecordSource.Epley, active.Source);
+
+            var oldRecord = await verify.AthleteRecords.SingleAsync(r => r.Id == recordId);
+            Assert.False(oldRecord.IsActive);
+
+            var updatedProposal = await verify.RecordProposals.SingleAsync(p => p.Id == proposalId);
+            Assert.Equal(RecordProposalStatus.Approved, updatedProposal.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_WhenPfRecordedManualRecordWithSameWeight_ThrowsConflict409BecauseIdChanged()
+    {
+        // KAN-566: Caso crítico de negocio: el PF cargó a mano otro récord en el medio con el MISMO peso (100 kg)
+        // La propuesta tenía el ID del récord anterior, por lo que activeRecord.Id != proposal.CurrentRecordId
+        var exercise = await SeedExerciseAsync("Sentadilla");
+
+        Guid proposalId;
+        await using (var context = CreateContext())
+        {
+            var originalRecord = AthleteRecord.Create(_athleteId, exercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow.AddDays(-2));
+            await context.AthleteRecords.AddAsync(originalRecord);
+            await context.SaveChangesAsync();
+
+            // La propuesta se calculó teniendo originalRecord activo
+            var proposal = RecordProposal.Create(_athleteId, exercise.Id, 100m, 110m, 95m, 5, originalRecord.Id);
+            await context.RecordProposals.AddAsync(proposal);
+
+            // En el medio, el PF carga manualmente otro récord con el MISMO peso (100m)
+            originalRecord.Deactivate();
+            var manualRecord = AthleteRecord.Create(_athleteId, exercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow.AddDays(-1));
+            await context.AthleteRecords.AddAsync(manualRecord);
+
+            await context.SaveChangesAsync();
+            proposalId = proposal.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            // Debe fallar con 409 Conflict aunque el peso sea idéntico (100 kg)
+            var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+                CreateApproveHandler(context).Handle(new ApproveRecordProposalCommand(proposalId)));
+
+            Assert.Equal("El récord cambió; revisá la propuesta", ex.Message);
+        }
+
+        await using (var verify = CreateContext())
+        {
+            var proposal = await verify.RecordProposals.SingleAsync(p => p.Id == proposalId);
+            Assert.Equal(RecordProposalStatus.Pending, proposal.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_WhenActiveRecordIsMissing_ThrowsConflict409()
+    {
+        // KAN-566: Si el récord activo ya no existe en el sistema
+        var exercise = await SeedExerciseAsync("Sentadilla");
+
+        Guid proposalId;
+        await using (var context = CreateContext())
+        {
+            var originalRecord = AthleteRecord.Create(_athleteId, exercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+            originalRecord.Deactivate(); // Ya no hay ningún récord activo
+            var proposal = RecordProposal.Create(_athleteId, exercise.Id, 100m, 110m, 95m, 5, originalRecord.Id);
+            await context.AthleteRecords.AddAsync(originalRecord);
+            await context.RecordProposals.AddAsync(proposal);
+            await context.SaveChangesAsync();
+            proposalId = proposal.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+                CreateApproveHandler(context).Handle(new ApproveRecordProposalCommand(proposalId)));
+
+            Assert.Equal("El récord cambió; revisá la propuesta", ex.Message);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_WhenLegacyProposalWithNullCurrentRecordId_DoesNotThrowNullReferenceAndApprovesIfWeightMatches()
+    {
+        // KAN-566 (Anti-rebote PM): Propuesta previa con CurrentRecordId nulo no lanza NullReferenceException
+        var exercise = await SeedExerciseAsync("Sentadilla");
+
+        Guid proposalId;
+        await using (var context = CreateContext())
+        {
+            var initialRecord = AthleteRecord.Create(_athleteId, exercise.Id, 100m, RecordSource.Tested, DateTime.UtcNow);
+            // CurrentRecordId es nulo explícitamente (emulando datos previos a la migración)
+            var proposal = RecordProposal.Create(_athleteId, exercise.Id, 100m, 107.5m, 90m, 5, currentRecordId: null);
+            await context.AthleteRecords.AddAsync(initialRecord);
+            await context.RecordProposals.AddAsync(proposal);
+            await context.SaveChangesAsync();
+            proposalId = proposal.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            var result = await CreateApproveHandler(context).Handle(new ApproveRecordProposalCommand(proposalId));
+            Assert.Equal(107.5m, result.WeightOneRepMaxKg);
+            Assert.Equal("Epley", result.Origin);
+        }
+
+        await using (var verify = CreateContext())
+        {
+            var updatedProposal = await verify.RecordProposals.SingleAsync(p => p.Id == proposalId);
+            Assert.Equal(RecordProposalStatus.Approved, updatedProposal.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_WhenLegacyProposalWithNullCurrentRecordIdAndWeightChanged_ThrowsConflict409()
+    {
+        // KAN-566 (Anti-rebote PM): Propuesta previa con CurrentRecordId nulo pero cuyo peso cambió
+        var exercise = await SeedExerciseAsync("Sentadilla");
+
+        Guid proposalId;
+        await using (var context = CreateContext())
+        {
+            var initialRecord = AthleteRecord.Create(_athleteId, exercise.Id, 105m, RecordSource.Tested, DateTime.UtcNow);
+            var proposal = RecordProposal.Create(_athleteId, exercise.Id, 100m, 107.5m, 90m, 5, currentRecordId: null);
+            await context.AthleteRecords.AddAsync(initialRecord);
+            await context.RecordProposals.AddAsync(proposal);
+            await context.SaveChangesAsync();
+            proposalId = proposal.Id;
+        }
+
+        await using (var context = CreateContext())
+        {
+            var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+                CreateApproveHandler(context).Handle(new ApproveRecordProposalCommand(proposalId)));
+
+            Assert.Equal("El récord cambió; revisá la propuesta", ex.Message);
+        }
+    }
+
+    [Fact]
     public async Task Approve_WhenProposalNotPending_ThrowsConflict409()
     {
         var exercise = await SeedExerciseAsync("Sentadilla");

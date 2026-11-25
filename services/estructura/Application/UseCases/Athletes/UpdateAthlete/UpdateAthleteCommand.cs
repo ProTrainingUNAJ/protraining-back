@@ -8,7 +8,8 @@ namespace Application.UseCases.Athletes.UpdateAthlete;
 public sealed record UpdateAthleteCommand(
     Guid Id,
     string? Phone,
-    string? EmergencyContact);
+    string? EmergencyContact,
+    string? TelegramUsername = null);
 
 public sealed class UpdateAthleteCommandHandler(IAthleteRepository repository, IUnitOfWork unitOfWork)
 {
@@ -20,7 +21,7 @@ public sealed class UpdateAthleteCommandHandler(IAthleteRepository repository, I
         if (athlete is null)
             throw new AthleteNotFoundException();
 
-        athlete.UpdateContactInfo(command.Phone, command.EmergencyContact);
+        athlete.UpdateContactInfo(command.Phone, command.EmergencyContact, command.TelegramUsername);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return AthleteMappings.ToDto(athlete);

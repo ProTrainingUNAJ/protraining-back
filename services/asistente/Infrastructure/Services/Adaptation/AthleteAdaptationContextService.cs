@@ -1,3 +1,4 @@
+using Application.Common.Adaptation;
 using Application.DTOs.Adaptation;
 using Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,8 @@ namespace Infrastructure.Services.Adaptation;
 public sealed class AthleteAdaptationContextService(
     ISeguimientoClient seguimientoClient,
     ITrainingPlanServiceClient trainingClient,
-    ILogger<AthleteAdaptationContextService> logger) : IAthleteAdaptationContextService
+    ILogger<AthleteAdaptationContextService> logger,
+    AdaptationOptions? adaptationOptions = null) : IAthleteAdaptationContextService
 {
     public async Task<AthleteAdaptationContextDto> GetAsync(
         Guid athleteId,
@@ -74,6 +76,9 @@ public sealed class AthleteAdaptationContextService(
             injuries.Count,
             records.Count);
 
-        return new AthleteAdaptationContextDto(athleteId, injuries, records, result);
+        var conservativePercent = (adaptationOptions ?? new AdaptationOptions())
+            .GetEffectiveEstimatedRecordConservativePercent();
+
+        return new AthleteAdaptationContextDto(athleteId, injuries, records, result, conservativePercent);
     }
 }

@@ -23,8 +23,8 @@ public sealed class IntegracionModuloAiDirectoTests
     private static readonly Guid SentadillaId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     [Theory]
-    [InlineData("Ollama")]
-    [InlineData("Gemini")]
+    [InlineData("Agente (OpenAI)")]
+    [InlineData("Agente (Gemini)")]
     [InlineData("Reglas")]
     public async Task Given_ValidRequest_When_AiProviderResponds_Then_Returns_200Ok_And_Accurate_Provider(string providerName)
     {
@@ -185,23 +185,73 @@ public sealed class IntegracionModuloAiDirectoTests
     }
 
     [Fact]
-    public async Task Given_RealHttpOllamaServer_When_SuggestRoutineDirectly_Then_CompletesFullNetworkCycleAndAudits()
+    public async Task Given_RealHttpAgentServer_When_SuggestRoutineDirectly_Then_CompletesFullNetworkCycleAndAudits()
     {
-        // Arrange: Iniciar servidor HTTP real en loopback para simular Ollama en vivo (#086)
+        // Arrange: Iniciar servidor HTTP real en loopback para simular endpoint OpenAI compatible (#086)
         using var server = WireMock.Server.WireMockServer.Start();
-        const string routineJson = "{\"tituloPropuesto\":\"Fuerza Máxima Real\",\"resumenJustificacion\":\"Planificación directa\",\"ejercicios\":[{\"ejercicioNombre\":\"Sentadilla\",\"series\":4,\"repeticiones\":6,\"porcentajeSugerido\":85.0}]}";
+        var planContent = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            name = "Fuerza Máxima Real",
+            objective = "Fuerza Máxima",
+            justificationSummary = "Planificación directa",
+            weeks = new[]
+            {
+                new
+                {
+                    weekNumber = 1,
+                    name = "Semana 1",
+                    sessions = new[]
+                    {
+                        new
+                        {
+                            name = "Fuerza Máxima Real",
+                            dayOfWeek = "Monday",
+                            order = 1,
+                            coachNotes = "Cuidar la espalda",
+                            exercises = new[]
+                            {
+                                new
+                                {
+                                    exerciseId = Guid.NewGuid(),
+                                    exerciseName = "Sentadilla",
+                                    order = 1,
+                                    sets = 4,
+                                    reps = 6,
+                                    targetPercentage = 85.0m
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
         var payload = new
         {
-            model = "llama3.2:1b",
-            response = routineJson,
-            done = true,
-            prompt_eval_count = 45,
-            eval_count = 110
+            id = "chatcmpl-test",
+            choices = new[]
+            {
+                new
+                {
+                    index = 0,
+                    message = new
+                    {
+                        role = "assistant",
+                        content = planContent
+                    },
+                    finish_reason = "stop"
+                }
+            },
+            usage = new
+            {
+                prompt_tokens = 45,
+                completion_tokens = 110,
+                total_tokens = 155
+            }
         };
 
         server
-            .Given(WireMock.RequestBuilders.Request.Create().UsingPost().WithPath("/api/generate"))
+            .Given(WireMock.RequestBuilders.Request.Create().UsingPost().WithPath("/chat/completions"))
             .RespondWith(
                 WireMock.ResponseBuilders.Response.Create()
                     .WithStatusCode(200)
@@ -210,23 +260,26 @@ public sealed class IntegracionModuloAiDirectoTests
             );
 
         var auditMock = new Mock<IAiAuditService>();
-        var httpClient = new HttpClient { BaseAddress = new Uri(server.Url!) };
-        var options = Microsoft.Extensions.Options.Options.Create(new Infrastructure.Services.Ai.Ollama.OllamaOptions
+        var mcpMock = new Mock<IExerciseLibraryMcpClient>();
+        var options = new Infrastructure.Services.Ai.Agent.AgentProviderOptions
         {
-            BaseUrl = server.Url!,
-            Model = "llama3.2:1b",
+            Name = "OpenAI",
+            BaseUrl = $"{server.Url}/chat/completions",
+            Model = "gpt-4.1-mini",
+            ApiKey = "test-key",
             TimeoutSeconds = 15
-        });
+        };
 
-        var ollamaClient = new Infrastructure.Services.Ai.Ollama.OllamaClient(
-            httpClient,
+        var agentClient = new Infrastructure.Services.Ai.Agent.GenericAgentAiClient(
             options,
+            new HttpClient(),
+            mcpMock.Object,
             auditMock.Object,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<Infrastructure.Services.Ai.Ollama.OllamaClient>.Instance
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Infrastructure.Services.Ai.Agent.GenericAgentAiClient>.Instance
         );
 
         var resilientAiService = new Infrastructure.Services.Ai.ResilientAiService(
-            providers: [ollamaClient],
+            providers: [agentClient],
             semanticValidator: null,
             responseCache: null,
             logger: Microsoft.Extensions.Logging.Abstractions.NullLogger<Infrastructure.Services.Ai.ResilientAiService>.Instance
@@ -245,7 +298,7 @@ public sealed class IntegracionModuloAiDirectoTests
 
         var response = Assert.IsType<RoutineSuggestionResponseDto>(okResult.Value);
         Assert.Equal(TestAthleteId, response.AthleteId);
-        Assert.Equal("Ollama", response.ProviderUsed);
+        Assert.Equal("Agente (OpenAI)", response.ProviderUsed);
         Assert.Equal("Fuerza Máxima Real", response.ProposedTitle);
         Assert.Single(response.Exercises);
         Assert.Equal("Sentadilla", response.Exercises[0].ExerciseName);
@@ -254,7 +307,7 @@ public sealed class IntegracionModuloAiDirectoTests
 
         // Verifica que la llamada HTTP real haya sido registrada en la auditoría con sus tokens
         auditMock.Verify(a => a.LogAsync(It.Is<Domain.Entities.AiLog>(l =>
-            l.Provider == "Ollama" &&
+            l.Provider == "Agente (OpenAI)" &&
             l.IsValid &&
             l.PromptTokens == 45 &&
             l.CompletionTokens == 110

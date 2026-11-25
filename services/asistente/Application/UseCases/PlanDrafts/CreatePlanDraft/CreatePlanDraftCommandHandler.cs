@@ -1,6 +1,7 @@
 namespace Application.UseCases.PlanDrafts.CreatePlanDraft;
 
 using Application.Common.PlanDrafts;
+using Application.Common.PfDecisions;
 using Application.DTOs.PlanDrafts;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -15,7 +16,9 @@ public sealed class CreatePlanDraftCommandHandler(
     IStructureCalendarClient? calendarClient = null,
     IMatchDayLoadValidator? matchDayLoadValidator = null,
     IExerciseCatalogService? catalogService = null,
-    ILogger<CreatePlanDraftCommandHandler>? logger = null)
+    ILogger<CreatePlanDraftCommandHandler>? logger = null,
+    IPfDecisionRepository? pfDecisionRepository = null,
+    IAthleteAdaptationContextService? adaptationContextService = null)
 {
     public async Task<PlanDraftResponseDto> HandleAsync(
         CreatePlanDraftCommand command,
@@ -57,6 +60,41 @@ public sealed class CreatePlanDraftCommandHandler(
             DaysPerWeek = daysPerWeek,
             StartDate = startDate
         };
+
+        if (pfDecisionRepository != null)
+        {
+            var previousDecisions = await pfDecisionRepository.GetRecentAsync(
+                normalizedRequest.AthleteId,
+                cancellationToken: cancellationToken);
+            normalizedRequest = normalizedRequest with
+            {
+                PreviousPfDecisions = PfDecisionContextMapper.Map(previousDecisions)
+            };
+        }
+
+        // KAN-600: el agente tiene que conocer las lesiones y restricciones del atleta. Si Seguimiento o
+        // Entrenamiento no responden, el borrador se genera igual, sin ese contexto.
+        if (adaptationContextService != null && hasAthlete)
+        {
+            try
+            {
+                var adaptationContext = await adaptationContextService.GetAsync(
+                    request.AthleteId!.Value,
+                    cancellationToken);
+                normalizedRequest = normalizedRequest with { AdaptationContext = adaptationContext };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(
+                    ex,
+                    "No se pudo armar el contexto de lesiones y restricciones del atleta {AthleteId}. El borrador se genera sin ese contexto.",
+                    request.AthleteId);
+            }
+        }
 
         IReadOnlyList<DateOnly>? matchDates = null;
         var calendarReadFailed = false;
@@ -105,7 +143,8 @@ public sealed class CreatePlanDraftCommandHandler(
                         .SelectMany(w => w.Sessions ?? [])
                         .SelectMany(s => s.Exercises ?? [])
                         .Select(e => e.ExerciseId)
-                        .Where(id => id != Guid.Empty)
+                        .Where(id => id.HasValue && id.Value != Guid.Empty)
+                        .Select(id => id!.Value)
                         .Distinct()
                         .ToList();
 
@@ -147,7 +186,8 @@ public sealed class CreatePlanDraftCommandHandler(
         var warnings = new List<string>();
         if (calendarReadFailed)
         {
-            warnings.Add("No se pudo leer el calendario de partidos. El borrador se generó sin restricciones de calendario pre-partido.");
+            // Criterio de aceptación KAN-486: indicar explícitamente que no se pudo sincronizar el fixture
+            warnings.Add("No se pudo sincronizar el fixture (calendario de partidos). El borrador se generó sin restricciones de calendario pre-partido.");
         }
         if (corrections is { Count: > 0 })
         {

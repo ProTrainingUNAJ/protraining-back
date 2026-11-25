@@ -12,4 +12,7 @@ public sealed record SubmitCheckInCommand(
     int? EffortRate,
     string? PainZones,
     bool HasActiveInjury,
-    DateOnly? Date = null);    
+    DateOnly? Date = null,
+    IReadOnlyList<SubmitInjuryPain>? Injuries = null);
+
+public sealed record SubmitInjuryPain(Guid InjuryId, int? Level);    

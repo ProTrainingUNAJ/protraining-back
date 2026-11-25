@@ -7,6 +7,7 @@ public class RecordProposal : BaseEntity
 {
     public Guid AthleteId { get; private set; }
     public Guid ExerciseId { get; private set; }
+    public Guid? CurrentRecordId { get; private set; }
     public decimal CurrentWeight { get; private set; }
     public decimal ProposedWeight { get; private set; }
     public decimal PerformedWeight { get; private set; }
@@ -23,7 +24,8 @@ public class RecordProposal : BaseEntity
         decimal currentWeight,
         decimal proposedWeight,
         decimal performedWeight,
-        int performedReps)
+        int performedReps,
+        Guid? currentRecordId = null)
     {
         if (athleteId == Guid.Empty || exerciseId == Guid.Empty)
             throw new DomainException("El atleta y el ejercicio son obligatorios.");
@@ -44,6 +46,7 @@ public class RecordProposal : BaseEntity
         {
             AthleteId = athleteId,
             ExerciseId = exerciseId,
+            CurrentRecordId = currentRecordId,
             CurrentWeight = currentWeight,
             ProposedWeight = proposedWeight,
             PerformedWeight = performedWeight,
@@ -52,14 +55,23 @@ public class RecordProposal : BaseEntity
         };
     }
 
-    public void UpdateProposal(decimal proposedWeight, decimal performedWeight, int performedReps)
+    public void UpdateProposal(decimal proposedWeight, decimal performedWeight, int performedReps, Guid? currentRecordId = null, decimal? currentWeight = null)
     {
+        if (currentWeight.HasValue)
+        {
+            CurrentWeight = currentWeight.Value;
+        }
+
         if (proposedWeight <= CurrentWeight)
             throw new DomainException("El nuevo peso propuesto debe ser mayor al récord vigente.");
 
         ProposedWeight = proposedWeight;
         PerformedWeight = performedWeight;
         PerformedReps = performedReps;
+        if (currentRecordId.HasValue)
+        {
+            CurrentRecordId = currentRecordId.Value;
+        }
         Status = RecordProposalStatus.Pending;
     }
 

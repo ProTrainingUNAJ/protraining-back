@@ -25,6 +25,7 @@ public class RecordPerformedSetsCommandHandler
     private readonly IPerformedSetRepository _performedSetRepository;
     private readonly IRecordProposalRepository _recordProposalRepository;
     private readonly IAthleteSessionAdjustmentRepository? _adjustmentRepository;
+    private readonly IAthleteVariantRepository? _variantRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public RecordPerformedSetsCommandHandler(
@@ -34,7 +35,8 @@ public class RecordPerformedSetsCommandHandler
         IPerformedSetRepository performedSetRepository,
         IRecordProposalRepository recordProposalRepository,
         IUnitOfWork unitOfWork,
-        IAthleteSessionAdjustmentRepository? adjustmentRepository = null)
+        IAthleteSessionAdjustmentRepository? adjustmentRepository = null,
+        IAthleteVariantRepository? variantRepository = null)
     {
         _structureClient = structureClient;
         _trainingSessionRepository = trainingSessionRepository;
@@ -43,6 +45,7 @@ public class RecordPerformedSetsCommandHandler
         _recordProposalRepository = recordProposalRepository;
         _unitOfWork = unitOfWork;
         _adjustmentRepository = adjustmentRepository;
+        _variantRepository = variantRepository;
     }
 
     public async Task<RecordPerformedSetsResponseDto> Handle(RecordPerformedSetsCommand command, CancellationToken cancellationToken = default)
@@ -69,6 +72,22 @@ public class RecordPerformedSetsCommandHandler
 
         // Validar que los ejercicios pertenezcan a la sesión de hoy (considerando ajustes aprobados por el PF, KAN-452)
         var validExerciseIds = session.PrescribedExercises.Select(p => p.ExerciseId).ToHashSet();
+
+        if (_variantRepository != null)
+        {
+            var activeVariants = await _variantRepository.GetActiveApprovedByAthleteAsync(
+                athleteId,
+                today,
+                cancellationToken);
+
+            foreach (var variant in activeVariants)
+            {
+                if (variant.SubstituteExerciseId != Guid.Empty)
+                {
+                    validExerciseIds.Add(variant.SubstituteExerciseId);
+                }
+            }
+        }
 
         if (_adjustmentRepository != null)
         {
@@ -106,15 +125,25 @@ public class RecordPerformedSetsCommandHandler
             }
         }
 
+        var existingSets = await _performedSetRepository.GetByAthleteAndDateAsync(athleteId, today, cancellationToken) ?? [];
+        var existingByKey = existingSets.Where(s => s.SetNumber.HasValue).GroupBy(s => (s.ExerciseId, SetNumber: s.SetNumber!.Value)).ToDictionary(g => g.Key, g => g.First());
         var performedSets = new List<PerformedSet>();
+        int recordedCount = 0;
         int proposalsCount = 0;
 
         foreach (var item in command.Sets)
         {
             var weight = item.Weight ?? 0m;
-            var reps = item.Reps ?? 0;    
+            var reps = item.Reps ?? 0;
 
-            var performedSet = PerformedSet.Create(
+            if (item.SetNumber.HasValue && item.TimeSeconds.HasValue && existingByKey.TryGetValue((item.ExerciseId, item.SetNumber.Value), out var existingSet))
+            {
+                existingSet.UpdateTime(item.TimeSeconds.Value);
+                recordedCount++;
+            }
+            else
+            {
+                var performedSet = PerformedSet.Create(
                 athleteId: athleteId,
                 sessionId: session.Id,
                 exerciseId: item.ExerciseId,
@@ -124,10 +153,18 @@ public class RecordPerformedSetsCommandHandler
                 timeSeconds: item.TimeSeconds,
                 setNumber: item.SetNumber);
 
-            performedSets.Add(performedSet);
+                performedSets.Add(performedSet);
+
+                if (item.SetNumber.HasValue)
+                {
+                    existingByKey[(item.ExerciseId, item.SetNumber.Value)] = performedSet;
+                }
+                recordedCount++;
+            }
 
             // Epley solo aplica a ejercicios de sobrecarga/fuerza (no a carreras/tiempos)
-            if(!item.TimeSeconds.HasValue && weight > 0 && reps > 0){
+            if (!item.TimeSeconds.HasValue && weight > 0 && reps > 0)
+            {
                 // Algoritmo Epley y evaluación de propuesta
                 var proposed1Rm = EpleyCalculator.CalculateConservative1Rm(weight, reps);
                 if (proposed1Rm.HasValue)
@@ -143,7 +180,7 @@ public class RecordPerformedSetsCommandHandler
                             // Se reemplaza solo si la nueva es mayor
                             if (proposed1Rm.Value > existingPending.ProposedWeight)
                             {
-                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps);
+                                existingPending.UpdateProposal(proposed1Rm.Value, weight, reps, activeRecord.Id, activeRecord.Weight);
                                 await _recordProposalRepository.UpdateAsync(existingPending, cancellationToken);
                                 proposalsCount++;
                             }
@@ -156,7 +193,8 @@ public class RecordPerformedSetsCommandHandler
                                 currentWeight: activeRecord.Weight,
                                 proposedWeight: proposed1Rm.Value,
                                 performedWeight: weight,
-                                performedReps: reps);
+                                performedReps: reps,
+                                currentRecordId: activeRecord.Id);
 
                             await _recordProposalRepository.AddAsync(proposal, cancellationToken);
                             proposalsCount++;
@@ -165,13 +203,17 @@ public class RecordPerformedSetsCommandHandler
                 }
             }
         }
-
-        await _performedSetRepository.AddRangeAsync(performedSets, cancellationToken);
+        
+        if (performedSets.Count > 0)
+        {
+            await _performedSetRepository.AddRangeAsync(performedSets, cancellationToken);
+        }
+        
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
+        
         return new RecordPerformedSetsResponseDto
         {
-            RecordedSetsCount = performedSets.Count,
+            RecordedSetsCount = recordedCount,
             ProposalsGeneratedCount = proposalsCount
         };
     }

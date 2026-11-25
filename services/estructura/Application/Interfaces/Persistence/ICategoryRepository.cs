@@ -5,6 +5,8 @@ namespace Application.Interfaces.Persistence;
 public interface ICategoryRepository
 {
     Task<IReadOnlyList<Category>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<(Category Category, int AthletesCount)>> ListWithAthletesCountAsync(Guid? organizationId = null, CancellationToken cancellationToken = default);
+    Task<(Category Category, int AthletesCount)?> GetWithAthletesCountByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Category?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task AddAsync(Category category, CancellationToken cancellationToken = default);
     Task DeleteAsync(Category category, CancellationToken cancellationToken = default);

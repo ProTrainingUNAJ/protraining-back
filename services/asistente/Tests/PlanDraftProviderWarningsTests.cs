@@ -7,15 +7,16 @@ namespace Asistente.Tests;
 public sealed class PlanDraftProviderWarningsTests
 {
     [Fact]
-    public void ProviderWarnings_Ollama_HasNoWarning()
+    public void ProviderWarnings_OpenAi_HasNoWarning()
     {
-        Assert.Empty(PlanDraftMapper.ProviderWarnings("Ollama"));
+        Assert.Empty(PlanDraftMapper.ProviderWarnings("Agente (OpenAI)"));
+        Assert.Empty(PlanDraftMapper.ProviderWarnings("OpenAI"));
     }
 
     [Fact]
     public void ProviderWarnings_Gemini_ExplainsTheExternalFallbackWithoutPersonalData()
     {
-        var warning = Assert.Single(PlanDraftMapper.ProviderWarnings("Gemini"));
+        var warning = Assert.Single(PlanDraftMapper.ProviderWarnings("Agente (Gemini)"));
 
         Assert.Contains("respaldo externo (Gemini)", warning);
         Assert.Contains("sin nombres ni datos personales", warning);
@@ -28,5 +29,14 @@ public sealed class PlanDraftProviderWarningsTests
 
         Assert.Contains("reglas fijas de ProTraining", warning);
         Assert.Contains("Revisalo", warning);
+    }
+
+    [Fact]
+    public void ProviderWarnings_QuotaExceeded_ExplainsDailyLimitReached()
+    {
+        var warning = Assert.Single(PlanDraftMapper.ProviderWarnings("Reglas (Límite diario alcanzado)"));
+
+        Assert.Contains("límite de pedidos a la IA por hoy", warning);
+        Assert.Contains("reglas fijas de ProTraining", warning);
     }
 }

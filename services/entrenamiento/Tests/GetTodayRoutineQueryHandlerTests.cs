@@ -1,4 +1,5 @@
 using Application.DTOs.Memberships;
+using Application.DTOs.Tracking;
 using Application.Exceptions;
 using Application.Interfaces.Persistence;
 using Application.Interfaces.Services;
@@ -31,13 +32,14 @@ public class GetTodayRoutineQueryHandlerTests
             .ReturnsAsync(new Dictionary<Guid, string>());
 
         _performedSetRepoMock
-            .Setup(r => r.GetByAthleteAndDateAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(It.IsAny<Guid>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<PerformedSet>());
     }
 
     private GetTodayRoutineQueryHandler CreateHandler(
         IExerciseVideoRepository? videoRepo = null,
-        IExerciseMediaCatalog? mediaCatalog = null)
+        IExerciseMediaCatalog? mediaCatalog = null,
+        ITrackingClient? trackingClient = null)
     {
         return new(
             _athleteRecordRepoMock.Object,
@@ -46,7 +48,8 @@ public class GetTodayRoutineQueryHandlerTests
             _structureClientMock.Object,
             videoRepo ?? _videoRepoMock.Object,
             _performedSetRepoMock.Object,
-            exerciseMediaCatalog: mediaCatalog
+            exerciseMediaCatalog: mediaCatalog,
+            trackingClient: trackingClient
         );
     }
 
@@ -362,7 +365,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_AthleteRoutine_When_PFHasCustomVideo_Then_ResolvesPFVideo()
     {
-        // KAN-380: El atleta ve el video de su PF para el ejercicio prescrito
+        // El atleta ve el video de su PF para el ejercicio prescrito
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 5);
         var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
@@ -388,7 +391,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_AthleteRoutine_When_PFHasNoCustomVideo_Then_FallsBackToCatalogVideo()
     {
-        // KAN-380: Si el PF no cargó video propio, el atleta ve el del catálogo
+        // Si el PF no cargó video propio, el atleta ve el del catálogo
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 5);
         var exercise = Exercise.Create("Sentadilla Trasera", "Piernas", videoUrl: "https://www.youtube.com/watch?v=catalogVid");
@@ -414,7 +417,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_RoutineWithCatalogExercise_When_MediaCatalogHasIt_Then_ReturnsItsIllustrations()
     {
-        // KAN-549: el atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
+        // El atleta ve en su rutina la ilustración del catálogo (RepDB primero), no solo las fotos
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 12);
         var exercise = Exercise.Create("Sentadilla con barra", "Piernas",
@@ -441,7 +444,7 @@ public class GetTodayRoutineQueryHandlerTests
     [Fact]
     public async Task Given_RoutineWithPerformedSets_When_Queried_Then_ReturnsPerformedSetsWithTimeSeconds()
     {
-        // KAN-457: "Mi rutina" lee las series realizadas del back con time_seconds
+        // "Mi rutina" lee las series realizadas del back con time_seconds
         var athleteId = Guid.NewGuid();
         var date = new DateOnly(2026, 11, 11);
         var exercise = Exercise.Create("Pasadas 100m", "Velocidad");
@@ -463,7 +466,7 @@ public class GetTodayRoutineQueryHandlerTests
         );
 
         _performedSetRepoMock
-            .Setup(r => r.GetByAthleteAndDateAsync(athleteId, date, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByAthleteAndDateAsNoTrackingAsync(athleteId, date, It.IsAny<CancellationToken>()))
             .ReturnsAsync([performedSet]);
 
         var handler = CreateHandler();
@@ -473,5 +476,440 @@ public class GetTodayRoutineQueryHandlerTests
         var setDto = Assert.Single(exDto.PerformedSets);
         Assert.Equal(1, setDto.SetNumber);
         Assert.Equal(15.2m, setDto.TimeSeconds);
+    }
+
+    [Fact]
+    public async Task AthleteVariant_AppliesOnlyToAthleteWithApprovedVariant()
+    {
+        // DADO Lucas (variante aprobada Prensa de piernas 120 kg) y Mateo (sin variante, Sentadilla 80 kg)
+        // en la misma categoría CUANDO ambos consultan la rutina de hoy ENTONCES cada uno recibe su ejercicio y carga.
+        var lucasId = Guid.NewGuid();
+        var mateoId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var today = Domain.Common.ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        var session = CreateSessionWithExercise(squat, targetPercentage: 80m);
+
+        _structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(lucasId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(lucasId, "Lucas"));
+        _structureClientMock
+            .Setup(c => c.GetAthleteByIdAsync(mateoId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StructureAthleteDto(mateoId, "Mateo"));
+        _structureClientMock
+            .Setup(c => c.GetAthleteCategoriesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new AthleteCategoryDto(categoryId, Guid.NewGuid(), "Primera", null)]);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(
+                It.IsAny<Guid>(),
+                It.Is<IReadOnlyList<Guid>>(cats => cats.Contains(categoryId)),
+                today,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var lucasVariant = AthleteVariant.Create(
+            lucasId,
+            squat.Id,
+            legPress.Id,
+            isApproved: true,
+            isActive: true,
+            validFrom: today.AddDays(-7),
+            note: "Variante aprobada por molestia de rodilla");
+
+        var variantRepoMock = new Mock<IAthleteVariantRepository>();
+        variantRepoMock
+            .Setup(r => r.GetActiveApprovedByAthleteAsync(lucasId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([lucasVariant]);
+        variantRepoMock
+            .Setup(r => r.GetActiveApprovedByAthleteAsync(mateoId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var exerciseRepoMock = new Mock<IExerciseRepository>();
+        exerciseRepoMock
+            .Setup(r => r.ListByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(legPress.Id)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([legPress]);
+
+        // Lucas: 1RM 150 kg en Prensa de piernas al 80% = 120 kg
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(lucasId, legPress.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(lucasId, legPress.Id, 150m, RecordSource.Tested, DateTime.UtcNow));
+
+        // Mateo: 1RM 100 kg en Sentadilla al 80% = 80 kg
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(mateoId, squat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(mateoId, squat.Id, 100m, RecordSource.Tested, DateTime.UtcNow));
+
+        var handler = new GetTodayRoutineQueryHandler(
+            _athleteRecordRepoMock.Object,
+            _sessionRepoMock.Object,
+            _loadCalculatorEngine,
+            _structureClientMock.Object,
+            _videoRepoMock.Object,
+            _performedSetRepoMock.Object,
+            exerciseRepository: exerciseRepoMock.Object,
+            athleteVariantRepository: variantRepoMock.Object);
+
+        var lucasRoutine = await handler.Handle(new GetTodayRoutineQuery { AthleteId = lucasId, Date = today });
+        var mateoRoutine = await handler.Handle(new GetTodayRoutineQuery { AthleteId = mateoId, Date = today });
+
+        Assert.True(lucasRoutine.RoutineAdapted);
+        Assert.False(lucasRoutine.AdjustedByCoach);
+        var lucasEx = Assert.Single(lucasRoutine.Exercises);
+        Assert.Equal(legPress.Id, lucasEx.ExerciseId);
+        Assert.Equal("Prensa de piernas", lucasEx.Name);
+        Assert.Equal(120.0, lucasEx.WeightKg);
+        Assert.True(lucasEx.IsAdapted);
+        Assert.Equal("Sentadilla", lucasEx.OriginalExerciseName);
+        Assert.Equal("Variante aprobada por molestia de rodilla", lucasEx.AdaptationReason);
+
+        Assert.False(mateoRoutine.RoutineAdapted);
+        var mateoEx = Assert.Single(mateoRoutine.Exercises);
+        Assert.Equal(squat.Id, mateoEx.ExerciseId);
+        Assert.Equal("Sentadilla", mateoEx.Name);
+        Assert.Equal(80.0, mateoEx.WeightKg);
+        Assert.False(mateoEx.IsAdapted);
+        Assert.Null(mateoEx.OriginalExerciseName);
+        Assert.Null(mateoEx.AdaptationReason);
+    }
+
+    [Fact]
+    public async Task DailyAdjustment_OverridesAthleteVariant()
+    {
+        var athleteId = Guid.NewGuid();
+        var today = Domain.Common.ArgentinaTime.Today;
+
+        var squat = Exercise.Create("Sentadilla", "Piernas");
+        var legPress = Exercise.Create("Prensa de piernas", "Piernas");
+        var hackSquat = Exercise.Create("Sentadilla Hack", "Piernas");
+        var session = CreateSessionWithExercise(squat, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var variant = AthleteVariant.Create(athleteId, squat.Id, legPress.Id, true, true, today.AddDays(-5));
+        var variantRepoMock = new Mock<IAthleteVariantRepository>();
+        variantRepoMock
+            .Setup(r => r.GetActiveApprovedByAthleteAsync(athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([variant]);
+
+        var adjustment = AthleteSessionAdjustment.Create(
+            session.Id,
+            athleteId,
+            today,
+            System.Text.Json.JsonSerializer.Serialize(
+                new[] { new Application.DTOs.TrainingSessions.AthleteSessionAdjustmentItemDto(squat.Id, hackSquat.Id) },
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }),
+            "Ajuste puntual de hoy");
+
+        var adjustmentRepoMock = new Mock<IAthleteSessionAdjustmentRepository>();
+        adjustmentRepoMock
+            .Setup(r => r.GetBySessionAthleteAndDateAsNoTrackingAsync(session.Id, athleteId, today, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(adjustment);
+
+        var exerciseRepoMock = new Mock<IExerciseRepository>();
+        exerciseRepoMock
+            .Setup(r => r.ListByIdsAsync(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(hackSquat.Id)), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([hackSquat]);
+
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, hackSquat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(athleteId, hackSquat.Id, 100m, RecordSource.Tested, DateTime.UtcNow));
+
+        var handler = new GetTodayRoutineQueryHandler(
+            _athleteRecordRepoMock.Object,
+            _sessionRepoMock.Object,
+            _loadCalculatorEngine,
+            _structureClientMock.Object,
+            _videoRepoMock.Object,
+            _performedSetRepoMock.Object,
+            adjustmentRepository: adjustmentRepoMock.Object,
+            exerciseRepository: exerciseRepoMock.Object,
+            athleteVariantRepository: variantRepoMock.Object);
+
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = today });
+
+        Assert.True(result.RoutineAdapted);
+        Assert.True(result.AdjustedByCoach);
+        var ex = Assert.Single(result.Exercises);
+        Assert.Equal(hackSquat.Id, ex.ExerciseId);
+        Assert.Equal("Sentadilla Hack", ex.Name);
+        Assert.Equal(80.0, ex.WeightKg);
+        Assert.True(ex.IsAdapted);
+        Assert.Equal("Sentadilla", ex.OriginalExerciseName);
+        Assert.Equal("Ajuste puntual de hoy", ex.AdaptationReason);
+    }
+
+    [Fact]
+    public async Task Given_AtletaConTestCarrera100m14sYPasadasAl90_When_ConsultaRutina_Then_DevuelveMeta15Punto6SinUsarRecord()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // Aunque exista un récord viejo cargado a mano, los ejercicios Distance/Time no deben usarlo.
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, pasadas.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(athleteId, pasadas.Id, 20m, RecordSource.Tested, DateTime.UtcNow));
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackingBestMarkDto(Guid.NewGuid(), "Carrera 100 m", "Pasadas", 14m, "s")]);
+
+        var handler = CreateHandler(trackingClient: trackingMock.Object);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Equal(15.6, ex.TargetTimeSeconds);
+        Assert.Equal(14.0, ex.BestMarkSeconds);
+        Assert.Null(ex.Current1RmKg);
+        trackingMock.Verify(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Given_AtletaSinTestEnSeguimiento_When_ConsultaRutinaConPasadas_Then_DevuelveSinMeta()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var handler = CreateHandler(trackingClient: trackingMock.Object);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Null(ex.TargetTimeSeconds);
+        Assert.Null(ex.BestMarkSeconds);
+    }
+
+    [Fact]
+    public async Task Given_SeguimientoCaido_When_ConsultaRutinaConPasadas_Then_RespondeRutinaSinMeta()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 19);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Time);
+        var session = CreateSessionWithExercise(pasadas, targetPercentage: 90m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        // TrackingClient degradado (null o lista vacía cuando Seguimiento no responde)
+        var handler = CreateHandler(trackingClient: null);
+        var result = await handler.Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var ex = Assert.Single(result.Exercises);
+        Assert.Null(ex.TargetTimeSeconds);
+        Assert.Null(ex.BestMarkSeconds);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioDeFuerzaSinPorcentajeRmConRpe_When_ConsultaRutina_Then_NoCalcula100PorCientoNiMarcaComoReferencia()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var squat = Exercise.Create("Sentadilla con barra", "Piernas");
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Día 1", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Fuerza Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 4,
+            reps: "6",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: squat.Id,
+            intensityType: IntensityType.RPE,
+            targetRpe: 8m,
+            trainingSessionId: session.Id);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [squat]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        _athleteRecordRepoMock
+            .Setup(r => r.GetActiveRecordAsync(athleteId, squat.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AthleteRecord.Create(athleteId, squat.Id, 140m, RecordSource.Tested, DateTime.UtcNow));
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Null(item.WeightKg);
+        Assert.Null(item.BarWeight);
+        Assert.Null(item.WeightPerSide);
+        Assert.Null(item.Current1RmKg);
+        Assert.False(item.IsReference);
+        Assert.Equal(0.0, item.Percentage);
+        Assert.Equal(IntensityType.RPE, item.IntensityType);
+        Assert.Equal(8m, item.TargetRpe);
+        _athleteRecordRepoMock.Verify(r => r.GetActiveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioDeTipoReps_When_ConsultaRutina_Then_NoCalculaCargaNiMarcaComoReferencia()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var mobility = Exercise.Create("Movilidad de cadera", "Core", exerciseType: ExerciseType.Reps);
+        var session = CreateSessionWithExercise(mobility, targetPercentage: 80m);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(ExerciseType.Reps, item.ExerciseType);
+        Assert.Null(item.WeightKg);
+        Assert.Null(item.BarWeight);
+        Assert.Null(item.WeightPerSide);
+        Assert.Null(item.Current1RmKg);
+        Assert.False(item.IsReference);
+        _athleteRecordRepoMock.Verify(r => r.GetActiveRecordAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioTimeConTargetTimeSecondsYSinTest_When_ConsultaRutina_Then_DevuelveMetaDelPfEIsReferenceFalse()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var trote = Exercise.Create("Trote suave 5 min", "Cardio", exerciseType: ExerciseType.Time);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Entrada en calor", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Activación", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 1,
+            reps: "1",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: trote.Id,
+            trainingSessionId: session.Id,
+            targetTimeSeconds: 300m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [trote]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        var result = await CreateHandler(trackingClient: trackingMock.Object)
+            .Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(300.0, item.TargetTimeSeconds);
+        Assert.False(item.IsReference);
+        Assert.Equal(0.0, item.Percentage);
+        Assert.Null(item.WeightKg);
+        trackingMock.Verify(c => c.GetAthleteBestMarksAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioTimeConTargetTimeSecondsYConTest_When_ConsultaRutina_Then_PriorizaMetaDelPfSobreTest()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Time);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Velocidad", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 3,
+            reps: "1",
+            targetPercentage: 90m,
+            trainingBlockId: block.Id,
+            exerciseId: pasadas.Id,
+            trainingSessionId: session.Id,
+            targetTimeSeconds: 20m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [pasadas]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var trackingMock = new Mock<ITrackingClient>();
+        trackingMock
+            .Setup(c => c.GetAthleteBestMarksAsync(athleteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Application.DTOs.Tracking.TrackingBestMarkDto(Guid.NewGuid(), "Carrera 100 m", "Pasadas", 14m, "s")]);
+
+        var result = await CreateHandler(trackingClient: trackingMock.Object)
+            .Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(20.0, item.TargetTimeSeconds);
+        Assert.False(item.IsReference);
+    }
+
+    [Fact]
+    public async Task Given_EjercicioDistanceConTargetDistanceMeters_When_ConsultaRutina_Then_DevuelveDistanciaDelPfEIsReferenceFalse()
+    {
+        var athleteId = Guid.NewGuid();
+        var date = new DateOnly(2026, 11, 22);
+        var pasadas = Exercise.Create("Pasadas", "Velocidad", exerciseType: ExerciseType.Distance);
+
+        var session = TrainingSession.Create(Guid.NewGuid(), "Velocidad", 1, date.DayOfWeek);
+        var block = TrainingBlock.Create(session.Id, "Principal", 1);
+        var prescribed = PrescribedExercise.Create(
+            order: 1,
+            sets: 4,
+            reps: "1",
+            targetPercentage: null,
+            trainingBlockId: block.Id,
+            exerciseId: pasadas.Id,
+            trainingSessionId: session.Id,
+            targetDistanceMeters: 400m);
+
+        typeof(PrescribedExercise).GetProperty(nameof(PrescribedExercise.Exercise))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(prescribed, [pasadas]);
+        block.AddPrescribedExercise(prescribed);
+        session.AddBlock(block);
+
+        _sessionRepoMock
+            .Setup(r => r.GetByAthleteIdAsync(athleteId, It.IsAny<IReadOnlyList<Guid>>(), date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var result = await CreateHandler().Handle(new GetTodayRoutineQuery { AthleteId = athleteId, Date = date });
+
+        var item = Assert.Single(result.Exercises);
+        Assert.Equal(400.0, item.TargetDistanceMeters);
+        Assert.False(item.IsReference);
+        Assert.Null(item.WeightKg);
     }
 }

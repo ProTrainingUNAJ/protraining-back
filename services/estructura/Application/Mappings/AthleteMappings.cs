@@ -27,8 +27,18 @@ public static class AthleteMappings
                     athlete.DigitalConsent.GuardianEmail,
                     athlete.DigitalConsent.GuardianPhone,
                     athlete.DigitalConsent.AllowsPhysicalTraining,
-                    athlete.DigitalConsent.AllowsHabitsRecommendations)
-                : null);
+                    athlete.DigitalConsent.AllowsHabitsRecommendations,
+                    athlete.DigitalConsent.AllowsProfilePhoto)
+                : null,
+            athlete.HasPhoto,
+            athlete.PhotoUpdatedAt,
+            athlete.TelegramUsername,
+            athlete.WeightKg,
+            Domain.Entities.AthleticGoalLabels.ToLabel(athlete.AthleticGoal),
+            athlete.PhysicalProfileUpdatedAt,
+            athlete.BirthDate,
+            athlete.Gender,
+            athlete.HeightCm);
 
     public static MedicalRecordDto ToMedicalRecordDto(Guid athleteId, MedicalRecord? record) =>
         record is null

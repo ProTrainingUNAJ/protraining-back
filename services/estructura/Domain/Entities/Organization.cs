@@ -7,6 +7,8 @@ public sealed class Organization : BaseEntity
 {
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
+    public bool HasPhoto { get; private set; }
+    public DateTime? PhotoUpdatedAt { get; private set; }
 
     private Organization() { }
 
@@ -16,6 +18,18 @@ public sealed class Organization : BaseEntity
         organization.Rename(name);
         organization.Description = CleanDescription(description);
         return organization;
+    }
+
+    public void SetPhotoUpdated(DateTime timestamp)
+    {
+        HasPhoto = true;
+        PhotoUpdatedAt = timestamp;
+    }
+
+    public void RemovePhoto()
+    {
+        HasPhoto = false;
+        PhotoUpdatedAt = null;
     }
 
     public void Rename(string? name)

@@ -4,14 +4,14 @@ using Application.Mappings;
 
 namespace Application.UseCases.Categories.ListCategories;
 
-public sealed record ListCategoriesQuery(Guid OrganizationId);
+public sealed record ListCategoriesQuery(Guid? OrganizationId = null);
 
 public sealed class ListCategoriesQueryHandler(ICategoryRepository repository)
 {
     public async Task<IReadOnlyList<CategoryDto>> HandleAsync(
         ListCategoriesQuery query,
         CancellationToken cancellationToken = default) =>
-        (await repository.ListByOrganizationAsync(query.OrganizationId, cancellationToken))
-            .Select(CategoryMappings.ToDto)
+        (await repository.ListWithAthletesCountAsync(query.OrganizationId, cancellationToken))
+            .Select(r => CategoryMappings.ToDto(r.Category, r.AthletesCount))
             .ToList();
 }

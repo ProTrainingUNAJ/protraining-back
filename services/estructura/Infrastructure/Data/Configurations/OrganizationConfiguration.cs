@@ -19,6 +19,14 @@ public sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organiz
             .HasColumnName("description")
             .HasMaxLength(500);
 
+        builder.Property(organization => organization.HasPhoto)
+            .HasColumnName("has_photo")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(organization => organization.PhotoUpdatedAt)
+            .HasColumnName("photo_updated_at");
+
         // Unique per PF, ignoring soft-deleted rows.
         builder.HasIndex(organization => new { organization.PfId, organization.Name })
             .IsUnique()

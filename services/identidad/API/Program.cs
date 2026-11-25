@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using API.Extensions;
 using API.HealthChecks;
 using API.Middleware;
@@ -8,9 +9,12 @@ using Application.UseCases.Auth.GoogleLogin;
 using Application.UseCases.Auth.Login;
 using Application.UseCases.Auth.Refresh;
 using Application.UseCases.Auth.UpdatePhone;
+using Application.UseCases.Users.UpdateHabitsRecommendations;
+using Application.UseCases.Users.GetPfHabitsRecommendations;
 using Application.UseCases.Health.GetHealth;
 using Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Application.UseCases.Auth.ChangePassword;
@@ -55,6 +59,41 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 // Retries, timeouts and circuit breaker for every registered HttpClient.
 builder.Services.ConfigureHttpClientDefaults(http => http.AddProTrainingResilience());
 
+// Rate Limiting para protección contra abuso en endpoints de autenticación y registro (#KAN-601)
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, _) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await Results.Problem(
+            statusCode: StatusCodes.Status429TooManyRequests,
+            title: "Demasiadas solicitudes.",
+            detail: "Has superado el límite de intentos permitidos. Por favor, intentá nuevamente en 15 minutos."
+        ).ExecuteAsync(context.HttpContext);
+    };
+
+    options.AddPolicy("AuthRateLimit", httpContext =>
+    {
+        var clientIp = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: clientIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+});
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IForgotPasswordRateLimiter, Infrastructure.Services.ForgotPasswordRateLimiter>();
+
 // Cliente HTTP hacia Estructura para validar invitaciones (KAN-397)
 var structureBaseUrl = builder.Configuration["Services:Estructura:BaseUrl"] ?? "http://localhost:8082";
 builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
@@ -65,13 +104,33 @@ builder.Services.AddHttpClient<IStructureClient, StructureClient>(client =>
 builder.Services.AddScoped<GetHealthQueryHandler>();
 builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<GoogleLoginUseCase>();
+builder.Services.AddScoped<LinkGoogleAccountUseCase>();
+builder.Services.AddScoped<UnlinkGoogleAccountUseCase>();
+builder.Services.AddScoped<GetGoogleLinkStatusUseCase>();
 builder.Services.AddScoped<RefreshUseCase>();
 builder.Services.AddScoped<UpdateWhatsAppPhoneUseCase>();
 builder.Services.AddScoped<GetPfContactUseCase>();
+builder.Services.AddScoped<UpdateHabitsRecommendationsUseCase>();
+builder.Services.AddScoped<GetPfHabitsRecommendationsUseCase>();
 builder.Services.AddScoped<RegisterByInvitationUseCase>();
+builder.Services.AddScoped<Application.UseCases.Auth.RegisterPf.RegisterPfUseCase>();
+builder.Services.AddScoped<Application.UseCases.Auth.ConfirmEmail.ConfirmEmailUseCase>();
+builder.Services.AddScoped<Application.UseCases.Auth.ResendConfirmation.ResendConfirmationUseCase>();
 builder.Services.AddScoped<ChangePasswordUseCase>();
 builder.Services.AddScoped<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
 builder.Services.AddScoped<ResetAthletePasswordUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateProfile.UpdateProfileUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateMyTelegram.UpdateMyTelegramUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.DeactivateAccount.DeactivateAccountUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserStatus.UpdateAthleteUserStatusUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserEmail.UpdateAthleteUserEmailUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.UpdateAthleteUserPhone.UpdateAthleteUserPhoneUseCase>();
+builder.Services.AddScoped<Application.UseCases.Users.PurgeAthlete.PurgeAthleteCommandHandler>();
+
+builder.Services.AddScoped<Application.UseCases.Users.UploadUserPhoto.UploadUserPhotoCommandHandler>();
+builder.Services.AddScoped<Application.UseCases.Users.GetUserPhoto.GetUserPhotoQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Users.GetPfPhoto.GetPfPhotoQueryHandler>();
+builder.Services.AddScoped<Application.UseCases.Users.DeleteUserPhoto.DeleteUserPhotoCommandHandler>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
@@ -102,7 +161,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseProTrainingForwardedHeaders();
+
 app.UseCors(ServiceCollectionExtensions.CorsPolicyName);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
