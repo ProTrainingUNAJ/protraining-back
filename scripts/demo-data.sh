@@ -634,7 +634,9 @@ upload_athlete_photo() {
     fi
   fi
 
-  [[ -n "$temp_file" ]] && rm -f "$temp_file"
+  # Con un if y no con "[[ ]] && rm": si no hubo archivo temporal, el [[ ]] da falso y,
+  # como última línea, haría que la función devuelva 1 y set -e cortaría el seed.
+  if [[ -n "$temp_file" ]]; then rm -f "$temp_file"; fi
 }
 
 load_athlete_photos() {
