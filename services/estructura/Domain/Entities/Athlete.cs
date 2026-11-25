@@ -333,6 +333,12 @@ public sealed class Athlete : BaseEntity
         }
     }
 
+    public void SetBirthDate(DateOnly birthDate, DateOnly referenceDate)
+    {
+        IsMinor = IsMinorOn(birthDate, referenceDate);
+        BirthDate = birthDate;
+    }
+
     public void SetActive(bool active) => Active = active;
 
     public void UpdateEmail(string newEmail)

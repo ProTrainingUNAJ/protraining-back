@@ -107,6 +107,7 @@ public sealed class AcceptCategoryInvitationCommandHandler(
                     command.EmergencyContact);
             }
 
+            athlete.SetBirthDate(command.BirthDate, today);
             athlete.LinkAccount(accountId);
             await athleteRepository.AddAsync(athlete, cancellationToken);
         }
