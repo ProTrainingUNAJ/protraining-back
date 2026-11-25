@@ -20,4 +20,5 @@ public sealed record AthleteDto(
     string? AthleticGoal = null,
     DateTime? PhysicalProfileUpdatedAt = null,
     DateOnly? BirthDate = null,
-    string? Gender = null);
+    string? Gender = null,
+    decimal? HeightCm = null);

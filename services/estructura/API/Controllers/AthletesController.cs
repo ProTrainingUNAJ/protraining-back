@@ -140,7 +140,7 @@ public sealed class AthletesController(
         UpdatePhysicalProfileRequest request,
         CancellationToken cancellationToken) =>
         Ok(await updatePhysicalProfileHandler.HandleAsync(
-            new UpdateAthletePhysicalProfileCommand(id, request.WeightKg, request.AthleticGoal, request.BirthDate, request.Gender),
+            new UpdateAthletePhysicalProfileCommand(id, request.WeightKg, request.AthleticGoal, request.BirthDate, request.Gender, request.HeightCm),
             cancellationToken));
 
     [HttpPost("{id:guid}/medical-record/access")]

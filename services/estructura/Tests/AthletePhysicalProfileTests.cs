@@ -167,4 +167,89 @@ public sealed class AthletePhysicalProfileTests
             new UpdateMyPhysicalProfileCommand(70m, AthleticGoalLabels.GainMuscle)));
         unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public void UpdatePhysicalProfile_SetsHeightCmWeightAndGoal()
+    {
+        var athlete = BuildAthlete();
+
+        athlete.UpdatePhysicalProfile(75.5m, 178.4m, AthleticGoalLabels.Performance);
+
+        Assert.Equal(75.5m, athlete.WeightKg);
+        Assert.Equal(178.4m, athlete.HeightCm);
+        Assert.Equal(AthleticGoal.Performance, athlete.AthleticGoal);
+        Assert.NotNull(athlete.PhysicalProfileUpdatedAt);
+    }
+
+    [Theory]
+    [InlineData(49)]
+    [InlineData(0)]
+    [InlineData(-10)]
+    [InlineData(261)]
+    public void UpdatePhysicalProfile_InvalidHeight_Throws(double height)
+    {
+        var athlete = BuildAthlete();
+
+        var ex = Assert.Throws<DomainException>(() =>
+            athlete.UpdatePhysicalProfile(70m, (decimal)height, AthleticGoalLabels.GainMuscle));
+
+        Assert.Contains("estatura", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ToDto_ExposesHeightCm()
+    {
+        var athlete = BuildAthlete();
+        athlete.UpdatePhysicalProfile(80m, 182.5m, AthleticGoalLabels.Maintain);
+
+        var dto = AthleteMappings.ToDto(athlete);
+
+        Assert.Equal(80m, dto.WeightKg);
+        Assert.Equal(182.5m, dto.HeightCm);
+        Assert.Equal(AthleticGoalLabels.Maintain, dto.AthleticGoal);
+    }
+
+    [Fact]
+    public async Task PfCommand_PersistsHeightCm()
+    {
+        var athlete = BuildAthlete();
+        var repository = new Mock<IAthleteRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+        repository.Setup(r => r.GetByIdAsync(athlete.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athlete);
+
+        var handler = new UpdateAthletePhysicalProfileCommandHandler(repository.Object, unitOfWork.Object);
+
+        var result = await handler.HandleAsync(new UpdateAthletePhysicalProfileCommand(
+            athlete.Id, 72m, AthleticGoalLabels.GainMuscle, null, null, 176m));
+
+        Assert.Equal(72m, result.WeightKg);
+        Assert.Equal(176m, result.HeightCm);
+        Assert.Equal(AthleticGoalLabels.GainMuscle, result.AthleticGoal);
+        unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MyCommand_PersistsHeightCm()
+    {
+        var accountId = Guid.NewGuid();
+        var athlete = BuildAthlete();
+        var currentUser = new Mock<ICurrentUser>();
+        var repository = new Mock<IAthleteRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+        currentUser.Setup(u => u.UserId).Returns(accountId);
+        repository.Setup(r => r.GetByAccountIdAsync(accountId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(athlete);
+
+        var handler = new UpdateMyPhysicalProfileCommandHandler(
+            currentUser.Object, repository.Object, unitOfWork.Object);
+
+        var result = await handler.HandleAsync(
+            new UpdateMyPhysicalProfileCommand(74m, AthleticGoalLabels.GainMuscle, null, null, 175.5m));
+
+        Assert.Equal(74m, result.WeightKg);
+        Assert.Equal(175.5m, result.HeightCm);
+        Assert.Equal(AthleticGoalLabels.GainMuscle, result.AthleticGoal);
+        unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

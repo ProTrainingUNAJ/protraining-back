@@ -12,6 +12,7 @@ public sealed class Athlete : BaseEntity
     public string Phone { get; private set; } = string.Empty;
     public string? TelegramUsername { get; private set; }
     public decimal? WeightKg { get; private set; }
+    public decimal? HeightCm { get; private set; }
     public AthleticGoal? AthleticGoal { get; private set; }
     public DateTime? PhysicalProfileUpdatedAt { get; private set; }
     public DateOnly? BirthDate { get; private set; }
@@ -276,14 +277,17 @@ public sealed class Athlete : BaseEntity
     }
 
     /// <summary>
-    /// Actualiza el perfil físico usado por las recomendaciones de hábitos.
-    /// null en peso/objetivo significa "sin dato": nunca se inventa un valor por defecto.
+    /// Actualiza el perfil físico usado por las recomendaciones de hábitos y cálculo de IMC.
+    /// null en peso/estatura/objetivo significa "sin dato": nunca se inventa un valor por defecto.
     /// </summary>
-    public void UpdatePhysicalProfile(decimal? weightKg, string? athleticGoalLabel)
+    public void UpdatePhysicalProfile(decimal? weightKg, decimal? heightCm, string? athleticGoalLabel)
     {
-        // Validar todo antes de mutar: un objetivo inválido no debe dejar el peso a medias.
+        // Validar todo antes de mutar: un objetivo o estatura inválida no debe dejar el estado a medias.
         if (weightKg.HasValue && (weightKg.Value <= 0 || weightKg.Value > 400))
             throw new DomainException("El peso corporal debe estar entre 0 y 400 kg.");
+
+        if (heightCm.HasValue && (heightCm.Value < 50 || heightCm.Value > 260))
+            throw new DomainException("La estatura del atleta debe estar entre 50 y 260 cm.");
 
         if (!AthleticGoalLabels.TryParse(athleticGoalLabel, out var goal))
             throw new DomainException(
@@ -292,9 +296,15 @@ public sealed class Athlete : BaseEntity
         WeightKg = weightKg.HasValue
             ? decimal.Round(weightKg.Value, 2, MidpointRounding.AwayFromZero)
             : null;
+        HeightCm = heightCm.HasValue
+            ? decimal.Round(heightCm.Value, 1, MidpointRounding.AwayFromZero)
+            : null;
         AthleticGoal = goal;
         PhysicalProfileUpdatedAt = DateTime.UtcNow;
     }
+
+    public void UpdatePhysicalProfile(decimal? weightKg, string? athleticGoalLabel) =>
+        UpdatePhysicalProfile(weightKg, HeightCm, athleticGoalLabel);
 
     public void UpdatePersonalInfo(DateOnly? birthDate, string? gender)
     {
